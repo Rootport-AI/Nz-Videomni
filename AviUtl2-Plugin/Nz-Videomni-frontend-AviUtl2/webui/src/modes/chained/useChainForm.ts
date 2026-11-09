@@ -689,6 +689,21 @@ export interface UseChainFormResult {
    * stage-2 comfort guide); the four LTX seam fields are left out of the
    * request. */
   fixedOverlapFrames: number | null;
+  /** §1-120: the long-audio card runs in the "distribute to each clip" mode
+   * (`constraints.chain.sourceAudio` published — MiniMax H3). While `true`
+   * the LTX long-A2V machinery stays out of the way: no auto-fit (on attach
+   * or by ↔️), no attach-time "too long" detach, no LTX audio gates
+   * (`audioTooLong` / `audioTooShortForChain` / `audioTooShort` /
+   * `chainLayoutInvalid`), no leftover note, no 🎵 card badges, and no
+   * chain-wide `source_audio` in the request (H3 refuses it). The upload, its
+   * length probe and `audioUploading` / `audioNotReady` /
+   * `audioConflictsWithSourceVideo` are kept. */
+  chainAudioDistribution: boolean;
+  /** §1-120: sets the clip list to `lengths` (existing clips keep their id,
+   * prompt, images and `intact` flag and only change `numFrames`; missing
+   * clips are appended as new intact cards; extra clips are cut from the
+   * back). Returns the resulting clip ids in order. */
+  applyClipLengths: (lengths: readonly number[]) => string[];
   /** 台帳 §1-121: `true` while the loaded base model has no keyframe strength
    * (`UseChainFormDeps.hiddenPanels.startImageStrength`) — clip 0's images go
    * out without `strength`. Read by Batch i2v-long too, whose rows put their
@@ -1251,6 +1266,8 @@ export function useChainForm(
   const generalMultiple = rules.dimensionMultiple;
   const fixedFps = fixedFrameRate(rules);
   const fixedOverlapFrames = rules.chain?.overlapFrames ?? null;
+  /** §1-120: see {@link UseChainFormResult.chainAudioDistribution}. */
+  const chainAudioDistribution = rules.chain?.sourceAudio != null;
   const unavailablePanels = deps.unavailablePanels;
   // 台帳 §1-121: the hidden panels (see `UseChainFormDeps.hiddenPanels`).
   const endSourceHidden = deps.hiddenPanels?.endSource ?? false;
@@ -1504,6 +1521,22 @@ export function useChainForm(
   const removeClip = useCallback((id: string) => {
     setClips((prev) => (prev.length <= 1 ? prev : prev.filter((clip) => clip.id !== id)));
   }, []);
+
+  // §1-120: the distribution's re-layout. Computed from the CURRENT `clips`
+  // (not inside an updater) so the new ids can be returned synchronously —
+  // the same arrangement as `adjustClipsForAudio`.
+  const applyClipLengths = useCallback(
+    (lengths: readonly number[]): string[] => {
+      const next = lengths.map((numFrames, index) => {
+        const existing = clips[index];
+        if (!existing) return makeClip(numFrames);
+        return existing.numFrames === numFrames ? existing : { ...existing, numFrames };
+      });
+      setClips(next);
+      return next.map((clip) => clip.id);
+    },
+    [clips],
+  );
 
   // §1-16: a REAL change to a card's prompt marks it as touched, irreversibly
   // (`intact: false`) — the auto-fit resolver must then leave it alone entirely.
@@ -1964,7 +1997,11 @@ export function useChainForm(
         setAudioProbeFailed(true);
         return;
       }
-      if (audioLatentsAvailable(durationSec) > maxChainAudioLatents(common.frameRate, overlapFrames)) {
+      // §1-120: the LTX chain's ceiling does not apply to the distribute mode.
+      if (
+        !chainAudioDistribution &&
+        audioLatentsAvailable(durationSec) > maxChainAudioLatents(common.frameRate, overlapFrames)
+      ) {
         setAudioAttachError("tooLong");
         setAudioDurationSec(null);
         setAudioProbeFailed(false);
@@ -2026,12 +2063,24 @@ export function useChainForm(
       // re-probes instead of silently never probing at all.
       if (!settled) probedAudioIdRef.current = null;
     };
-  }, [audioStatus, audioId, audioFilePath, nativeBridge, audioClear, common.frameRate, overlapFrames]);
+  }, [
+    audioStatus,
+    audioId,
+    audioFilePath,
+    nativeBridge,
+    audioClear,
+    common.frameRate,
+    overlapFrames,
+    chainAudioDistribution,
+  ]);
 
   /** "↔️ 再生時間の自動調整". The plan is computed from the CURRENT `clips`
    * closure (not inside a `setClips` updater) so the toast event can be published
    * as an ordinary side effect rather than from inside a state reducer. */
   const adjustClipsForAudio = useCallback(() => {
+    // §1-120: the distribute mode lays the clips out itself (the screen's
+    // "distribute" button); the LTX resolver never runs there.
+    if (chainAudioDistribution) return;
     if (audioDurationSec === null) return;
     const plan = planAudioFit({
       clips: clips.map((clip) => ({ id: clip.id, numFrames: clip.numFrames, intact: isClipIntact(clip) })),
@@ -2059,7 +2108,15 @@ export function useChainForm(
     // Published even for an unchanged plan: "already fits" / "nothing I may
     // move" are results the user asked for and deserve a toast.
     setAudioFitEvent({ id: audioFitCounterRef.current, outcome: plan.outcome, durationSec: audioDurationSec });
-  }, [audioDurationSec, clips, common.frameRate, overlapFrames, addedClipFrames, stage2WindowGeometry]);
+  }, [
+    chainAudioDistribution,
+    audioDurationSec,
+    clips,
+    common.frameRate,
+    overlapFrames,
+    addedClipFrames,
+    stage2WindowGeometry,
+  ]);
 
   // Auto-fit ONCE per attached track, the moment its length is known. Swapping
   // the audio yields a new `audio_id` and fires again — exactly once for that
@@ -2068,11 +2125,18 @@ export function useChainForm(
   // surprise re-layout of the clip list.
   useEffect(() => {
     if (audioStatus !== "ready" || !audioId) return;
+    // §1-120: in the distribute mode the screen runs its own once-per-track
+    // distribution. The id is marked as consumed here so a switch to LTX with
+    // the same track attached does not re-lay the clips out behind the user.
+    if (chainAudioDistribution) {
+      autoFitDoneForAudioIdRef.current = audioId;
+      return;
+    }
     if (audioDurationSec === null) return;
     if (autoFitDoneForAudioIdRef.current === audioId) return;
     autoFitDoneForAudioIdRef.current = audioId;
     adjustClipsForAudio();
-  }, [audioStatus, audioId, audioDurationSec, adjustClipsForAudio]);
+  }, [chainAudioDistribution, audioStatus, audioId, audioDurationSec, adjustClipsForAudio]);
 
   // ── §1-15 参照動画: the rest of the slot (the upload itself and the control
   // selection were declared at the top of this hook — see there for why) ──────
@@ -2732,7 +2796,9 @@ export function useChainForm(
    * whenever nothing is attached, the upload isn't ready, or no probe could
    * measure it (`audioProbeFailed`). An unmeasurable track is never blocked
    * here — the server's preflight decides. */
-  const audioLengthKnown = audioReady && !audioProbeFailed ? audioDurationSec : null;
+  // §1-120: the LTX gates below never fire in the distribute mode (the screen
+  // composes its own), which is what reading the length as unknown achieves.
+  const audioLengthKnown = audioReady && !audioProbeFailed && !chainAudioDistribution ? audioDurationSec : null;
   const audioAvailableLatents = audioLengthKnown === null ? null : audioLatentsAvailable(audioLengthKnown);
   /** Audio-latent frames the CURRENT clip list consumes (`null` = impossible
    * geometry, which `chainLayoutInvalid`/`clipTooShortForOverlap` already cover). */
@@ -2758,7 +2824,9 @@ export function useChainForm(
    * rejects plain chains too, but widening this gate is a separate ledger item
    * — here it exists so the ↔️ button can never hand over a 422. */
   const chainLayoutInvalid =
-    audioReady && chainLayoutError(clipNumFramesList, common.frameRate, overlapFrames, stage2WindowGeometry) !== null;
+    !chainAudioDistribution &&
+    audioReady &&
+    chainLayoutError(clipNumFramesList, common.frameRate, overlapFrames, stage2WindowGeometry) !== null;
 
   /** Leftover tail, in seconds — a note, never a gate. */
   const audioSurplusSec =
@@ -2777,9 +2845,12 @@ export function useChainForm(
 
   /** Per-clip slice of the track, for the cards' "🎵 担当時間帯" badges. */
   const audioSegmentWindowsForClips = useMemo(() => {
+    // §1-120: the distribute mode draws its windows inside each clip's
+    // Reference accordion instead (no 🎵 on the card).
+    if (chainAudioDistribution) return null;
     if (!hasSourceAudio || audioDurationSec === null) return null;
     return audioSegmentWindows(clips.map((clip) => clip.numFrames), common.frameRate, overlapFrames);
-  }, [hasSourceAudio, audioDurationSec, clips, common.frameRate, overlapFrames]);
+  }, [chainAudioDistribution, hasSourceAudio, audioDurationSec, clips, common.frameRate, overlapFrames]);
 
   // ── §1-15 参照動画: the cross-field gates ──────────────────────────────────
   // The final `loras[]` this form would send: Chain's own control selection
@@ -3111,7 +3182,9 @@ export function useChainForm(
       // (`audioConflictsWithSourceVideo`), so this is the defensive second line:
       // a request built while both slots are filled drops the audio rather than
       // sending a body the server would 422.
-      sourceAudio: audioId && !hasSourceVideo ? { audioId } : null,
+      // §1-120: never chain-wide in the distribute mode — the audio rides each
+      // clip's own `source_audio` (added by the screen), and H3 refuses this one.
+      sourceAudio: audioId && !hasSourceVideo && !chainAudioDistribution ? { audioId } : null,
       endSource,
       ...(loras.length > 0 ? { loras } : {}),
       // `!= null` (not truthiness) on the strengths: `0.0` is a valid, distinct
@@ -3161,6 +3234,7 @@ export function useChainForm(
     fixedOverlapFrames,
     sampling,
     omitStartImageStrength,
+    chainAudioDistribution,
   ]);
 
   return {
@@ -3196,6 +3270,8 @@ export function useChainForm(
     setEndSourceStrength,
     minFramesForOverlap,
     fixedOverlapFrames,
+    chainAudioDistribution,
+    applyClipLengths,
     omitStartImageStrength,
     clipFrameLimits: { min: clipMin, max: clipMax, step: clipGrid.step },
     fixedFrameRate: fixedFps,

@@ -1,0 +1,42 @@
+{
+  "endpoint": "POST /api/v1/generate/chain",
+  "body": {
+    "prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+    "width": 1344,
+    "height": 768,
+    "seed": 42,
+    "attention_backend": "sage",
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "clips": [
+      {
+        "num_frames": 209,
+        "source_audio": {
+          "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+          "strength": 0.5,
+          "offset_frames": 0
+        }
+      },
+      {
+        "num_frames": 209,
+        "source_audio": {
+          "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+          "strength": 0.5,
+          "offset_frames": 187
+        }
+      },
+      {
+        "num_frames": 209,
+        "source_audio": {
+          "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+          "strength": 0.5,
+          "offset_frames": 374
+        }
+      }
+    ],
+    "embed_mp4_metadata": false
+  },
+  "note": "GA3: 3×209・1344×768・sage・strength 0.5・offset 0・187・374・LoRA なし・20 ステップ（目視用）",
+  "remark": "送った本文。サーバーが受けた本文は metadata.json の request"
+}

@@ -7,7 +7,7 @@ import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import type { UseKeyframesResult } from "../single/useKeyframes";
 import { BatchTable } from "./BatchTable";
 import { useBatchForm } from "./useBatchForm";
-import type { BatchGenerationValues } from "./useBatchForm";
+import type { BatchEngineRules, BatchGenerationValues } from "./useBatchForm";
 import "./BatchSection.css";
 
 export interface BatchSectionProps {
@@ -56,6 +56,8 @@ export interface BatchSectionProps {
    * contains `chain` or `a2v` — `shell/featureScope.ts`'s `FEATURE_UI` table,
    * read through `batchA2vDisabledFor`. The whole panel greys then, i2v rows
    * included (they would reach `POST /generate`, but share the panel).
+   * §1-126: never on an engine publishing `constraints.source_audio` (MiniMax
+   * H3), whose rows all go to the single `POST /generate`.
    *
    * Rides the SAME `disabled` flag the runner state
    * already sets (no new mechanism, no new control), plus one explanation line
@@ -65,6 +67,10 @@ export interface BatchSectionProps {
    * The server stays the enforcement: this flag only spares the user a request
    * that was going to be refused. */
   unavailable?: boolean;
+  /** §1-126: the loaded engine's rules while it takes A2V on the single
+   * `/generate` route (MiniMax H3) — see `UseBatchFormDeps.engine`. Omitted
+   * (LTX) = the panel as before. */
+  engine?: BatchEngineRules | undefined;
 }
 
 /**
@@ -96,6 +102,7 @@ export function BatchSection({
   acceleration,
   serverBusy = false,
   unavailable = false,
+  engine,
 }: BatchSectionProps) {
   const strings = useStrings();
   const t = strings.batch;
@@ -104,6 +111,7 @@ export function BatchSection({
     ...(nag !== undefined ? { nag } : {}),
     ...(acceleration !== undefined ? { acceleration } : {}),
     serverBusy,
+    ...(engine !== undefined ? { engine } : {}),
   });
 
   // A row's `stat` is only safe to hand-edit (folder pickers, scan, row
@@ -222,7 +230,7 @@ export function BatchSection({
         {/* U4 guards. Only resolutionOffGrid still blocks `canStart`; the
             fpsMismatch and IC-LoRA-active notes are informational only
             (fpsMismatch is auto-corrected by the start-time re-judgment). */}
-        {!form.resolutionValid && <p className="warning-banner">{t.resolutionOffGrid}</p>}
+        {!form.resolutionValid && <p className="warning-banner">{t.resolutionOffGrid(engine?.dimensionMultiple ?? 64)}</p>}
         {/* i2v guard: DURATION is sent verbatim as every row's `num_frames`,
             so an off-grid hand-typed value would 422 the whole run. Reuses
             Create's own wording, the same way `nagNegativeEmpty` is borrowed

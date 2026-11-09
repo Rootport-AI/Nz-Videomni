@@ -55,7 +55,11 @@ describe("mockBridge — MiniMax H3", () => {
     expect(h3?.unsupported_features).toEqual(expect.arrayContaining(["end_source", "a2v"]));
     expect(h3?.unsupported_features).not.toContain("v2v");
     expect(h3?.unsupported_features).not.toContain("chain_start_image");
-    expect(h3?.constraints?.chain).toEqual({ overlap_frames: 22 });
+    // §1-120: the per-clip A2V of the chain (its Strength slider).
+    expect(h3?.constraints?.chain).toEqual({
+      overlap_frames: 22,
+      source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    });
     expect(h3?.unsupported_features).not.toContain("multi_keyframes");
     const ltx = blocks.find((b) => b.id === "LTX23");
     expect(ltx?.constraints).toMatchObject({
@@ -183,6 +187,66 @@ describe("mockBridge — MiniMax H3", () => {
     expect(res.status).toBe(202);
   });
 
+  // §1-127: `nag` on H3 closes the NAG METHOD only — a VSF negative prompt
+  // is accepted on `/generate` and `/generate/chain` alike, and the NAG
+  // method (named, or left to the server's default) is refused as `nag`.
+  describe("§1-127 negative prompt on MiniMax H3: VSF only", () => {
+    const NEG = { nag_enabled: true, negative_prompt: "blurry" };
+    const H3_SAMPLING = { num_inference_steps: 20, shift_video: 12, shift_audio: 3 };
+
+    async function h3Bridge(): Promise<Bridge> {
+      const bridge = createMockBridge({ delayMs: 0 });
+      expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+      return bridge;
+    }
+
+    function expectNagRefusal(res: Awaited<ReturnType<typeof generate>>) {
+      expect(res.status).toBe(422);
+      const error = (res.body as { error: { code: string; message: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message).toContain("'nag'");
+    }
+
+    it.each([
+      ["omitted", {}],
+      ['"nag"', { neg_method: "nag" }],
+    ] as const)("POST /generate refuses the NAG method (%s) as 'nag'", async (_label, method) => {
+      expectNagRefusal(await generate(await h3Bridge(), { ...BODY, ...H3_SAMPLING, ...NEG, ...method }));
+    });
+
+    it("POST /generate accepts the VSF method", async () => {
+      const res = await generate(await h3Bridge(), { ...BODY, ...H3_SAMPLING, ...NEG, neg_method: "vsf", vsf_scale: 3 });
+      expect(res.status).toBe(202);
+    });
+
+    it.each([
+      ["omitted", {}],
+      ['"nag"', { neg_method: "nag" }],
+    ] as const)("POST /generate/chain refuses the NAG method (%s) as 'nag'", async (_label, method) => {
+      expectNagRefusal(await chain(await h3Bridge(), { ...H3_SAMPLING, ...NEG, ...method }));
+    });
+
+    it("POST /generate/chain accepts the VSF method", async () => {
+      const res = await chain(await h3Bridge(), { ...H3_SAMPLING, ...NEG, neg_method: "vsf", vsf_scale: 3 });
+      expect(res.status).toBe(202);
+    });
+
+    it("LTX 2.3 keeps accepting the NAG method on both routes", async () => {
+      const single = await generate(createMockBridge({ delayMs: 0 }), {
+        ...BODY,
+        num_frames: 121,
+        ...NEG,
+        neg_method: "nag",
+      });
+      expect(single.status).toBe(202);
+      const chained = await chain(createMockBridge({ delayMs: 0 }), { ...NEG, neg_method: "nag" }, [
+        { num_frames: 121 },
+        { num_frames: 121 },
+      ]);
+      expect(chained.status).toBe(202);
+    });
+  });
+
   // §1-107: the Ref2VA reference limits are H3's own.
   it("publishes `reference` for MiniMax H3 only (LTX publishes none)", async () => {
     const blocks = await listModels(createMockBridge({ delayMs: 0 }));
@@ -269,6 +333,50 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await load(fresh, "MiniMaxH3")).status).toBe(200);
     expect((await chain(fresh, {}, [{ num_frames: 124, references: [] }, { num_frames: 124 }])).status).toBe(202);
     expect((await chain(bridge, {}, [{ num_frames: 124 }, { num_frames: 124, references }])).status).toBe(202);
+  });
+
+  // §1-120: a clip's own `source_audio` on POST /generate/chain.
+  it("refuses a clip's `source_audio` on LTX with 422 FEATURE_UNSUPPORTED; H3 checks its shape and the V2V clash", async () => {
+    const sourceAudio = { audio_id: "mock-audio-1", strength: 0.5, offset_frames: 102 };
+    for (const id of ["LTX23", "LTX25"]) {
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const res = await chain(bridge, {}, [{ num_frames: 121 }, { num_frames: 121, source_audio: sourceAudio }]);
+      expect(res.status, id).toBe(422);
+      const error = (res.body as { error: { code: string; message: string } }).error;
+      expect(error.code, id).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message, id).toContain("'source_audio'");
+    }
+
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const bad: unknown[] = [
+      { audio_id: "", strength: 0.5, offset_frames: 0 },
+      { audio_id: "a", strength: 1.5, offset_frames: 0 },
+      { audio_id: "a", strength: 0.5, offset_frames: -1 },
+      { audio_id: "a", strength: 0.5, offset_frames: 1.5 },
+      "nope",
+    ];
+    for (const spec of bad) {
+      const res = await chain(bridge, {}, [{ num_frames: 124, source_audio: spec }, { num_frames: 124 }]);
+      expect(res.status, JSON.stringify(spec)).toBe(422);
+      expect((res.body as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    }
+    // Exclusive with a V2V source.
+    const v2v = await chain(bridge, { source_video: { video_id: "vid", context_frames: 22 } }, [
+      { num_frames: 124, source_audio: sourceAudio },
+    ]);
+    expect(v2v.status).toBe(422);
+    // The chain-wide `source_audio` stays refused (`a2v`).
+    const top = await chain(bridge, { source_audio: { audio_id: "aud" } });
+    expect(top.status).toBe(422);
+    expect((top.body as { error: { message: string } }).error.message).toContain("'a2v'");
+    // The defaults may be left out; the request is stored as sent.
+    const ok = await chain(bridge, {}, [
+      { num_frames: 124, source_audio: { audio_id: "mock-audio-1" } },
+      { num_frames: 124, source_audio: sourceAudio },
+    ]);
+    expect(ok.status).toBe(202);
   });
 
   it("publishes `transformer_role` for the active H3 from the selected transformer's name (null otherwise)", async () => {

@@ -80,6 +80,21 @@ def generate_chain(
     for clip_index, clip in enumerate(request.clips):
         check_references_exist(context, clip.references, clip_index=clip_index)
 
+    # A clip's own A2V (MiniMax H3, 台帳 §1-120): every clip's audio_id must
+    # resolve (404 naming clips[i].source_audio), then each distinct upload is
+    # measured once and each clip's span checked (422 SOURCE_AUDIO_TOO_SHORT /
+    # SOURCE_AUDIO_SILENT, the single A2V's codes) BEFORE a job is reserved. An
+    # LTX engine never gets here (its CHAIN_REJECT_TABLE refused the field).
+    if any(clip.source_audio is not None for clip in request.clips):
+        for clip_index, clip in enumerate(request.clips):
+            if clip.source_audio is None:
+                continue
+            try:
+                context.audio_upload_store.path_for(clip.source_audio.audio_id)
+            except APIError:
+                raise source_audio_not_found(clip.source_audio.audio_id, clip_index=clip_index)
+        context.pipeline_manager.preflight_chain_clip_source_audio(request.clips, request.frame_rate)
+
     # V2V continuation: resolve the source video (404) and preflight it (422 for
     # too-short) BEFORE reserving a job — same up-front-failure discipline as the
     # conditioning-image check above (precedent api/generate.py).

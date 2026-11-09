@@ -85,11 +85,16 @@ def source_video_too_short(detail: str | None = None) -> APIError:
     )
 
 
-def source_audio_not_found(audio_id: str) -> APIError:
+def source_audio_not_found(audio_id: str, clip_index: int | None = None) -> APIError:
     """A2V: the ``source_audio.audio_id`` does not resolve to a stored upload.
     Mirrors :func:`source_video_not_found` (404) with its own stable code so a
-    client can distinguish the audio-to-video source from a continuation video."""
-    return APIError("SOURCE_AUDIO_NOT_FOUND", f"source_audio.audio_id not found: {audio_id}", 404)
+    client can distinguish the audio-to-video source from a continuation video.
+
+    ``clip_index`` (``/generate/chain``'s per-clip A2V, MiniMax H3) names the
+    clip: the message then reads ``clips[i].source_audio.audio_id not found: …``
+    (the :func:`reference_not_found` precedent). Left out, it is unchanged."""
+    field = "source_audio" if clip_index is None else f"clips[{clip_index}].source_audio"
+    return APIError("SOURCE_AUDIO_NOT_FOUND", f"{field}.audio_id not found: {audio_id}", 404)
 
 
 def reference_not_found(

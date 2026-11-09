@@ -51,10 +51,11 @@ import type { ConditioningImage, CropOutput } from "../../api/types";
 import { BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { dedupeLoraSpecs } from "../../lora/controlLoras";
-import { parseLoraPrompt } from "../../lora/loraTags";
+import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
-import { DEFAULT_STRENGTH } from "../single/keyframeUtils";
+import { DEFAULT_STRENGTH, omitStrength } from "../single/keyframeUtils";
+import type { SamplingValues } from "../single/samplingValues";
 import { buildA2vChainPayload, composeRowPrompt, resolveConditioningImages } from "./buildA2vChainPayload";
 import type { PromptMode } from "./buildA2vChainPayload";
 import { buildI2vGeneratePayload } from "./buildI2vGeneratePayload";
@@ -90,7 +91,20 @@ export type BatchRunnerState = "idle" | "running" | "stopping";
  * prompt + Add/Replace mode `composeRowPrompt` combines with each row's own
  * `prompt` column. Frozen for the whole run at `start()` time (mirrors
  * `batch.py`'s `BatchSnapshot` — "immune to later UI edits"). */
-export interface BatchRunnerSettings {
+export type BatchRunnerSettings = BatchRunnerCommonSettings & BatchRunnerRoute;
+
+/** §1-126: where an a2v row goes. `route: "generate"` (MiniMax H3,
+ * `constraints.source_audio` published) = the single `POST /generate` with the
+ * row's audio as `source_audio`, whose `strength` is then required (Create's
+ * A2V card value, frozen at `start()`); omitted or `"chain"` =
+ * `POST /generate/chain`, the LTX path, body unchanged. i2v rows always go to
+ * `/generate`. */
+export type BatchRunnerRoute =
+  | { route?: "chain" | undefined; sourceAudioStrength?: undefined }
+  | { route: "generate"; sourceAudioStrength: number };
+
+/** {@link BatchRunnerSettings} without the route pair. */
+export interface BatchRunnerCommonSettings {
   /** The Create screen's card prompt, RAW — `<lora:>` tags included. There is
    * no frozen `loras[]` beside it: a row's tags and the card's have to meet in
    * one parse, so this class's `processRow` composes first and parses the
@@ -127,6 +141,15 @@ export interface BatchRunnerSettings {
    * server-default backend, adds nothing to any row's payload (via
    * `buildA2vChainPayload`'s own `accelerationRequestFields` call). */
   acceleration?: AccelerationSettings;
+  /** §1-126: leave `strength` out of every conditioning image (the engine has
+   * no keyframe strength — Create's `strengthOmitted`). Both modes. */
+  omitImageStrength?: boolean;
+  /** §1-126: leave `audio_strength` out of every LoRA (the engine's LoRAs have
+   * one strength — Create's `loraAudioHidden`). Both modes on `/generate`. */
+  omitLoraAudioStrength?: boolean;
+  /** §1-126: Create's three sampling values, sent on every `/generate` row
+   * (MiniMax H3). Omitted = none (LTX). */
+  sampling?: SamplingValues;
 }
 
 export interface BatchRunnerStartParams {
@@ -367,8 +390,35 @@ export class BatchRunner {
       const composed = composeRowPrompt(settings.promptCommon, row.prompt, settings.promptMode);
       const parsed = parseLoraPrompt(composed);
       const loras = dedupeLoraSpecs(parsed.loras);
+      // §1-126 (MiniMax H3): the two omissions Create's own `/generate` submit
+      // applies, for the `/generate` rows only (i2v, and a2v on the
+      // `"generate"` route). An LTX run sets neither, so its bodies are as before.
+      const generateLoras = settings.omitLoraAudioStrength ? omitLoraAudioStrength(loras) : loras;
+      const generateImages = settings.omitImageStrength ? omitStrength(conditioningImages) : conditioningImages;
+      const generateCommon = {
+        prompt: parsed.strippedPrompt,
+        width: settings.width,
+        height: settings.height,
+        cropOutput: settings.cropOutput,
+        numFrames: row.frames,
+        frameRate: settings.frameRate,
+        seed: settings.seed,
+        ...(settings.sampling ? { sampling: settings.sampling } : {}),
+        ...(settings.nag ? { nag: settings.nag } : {}),
+        ...(settings.acceleration ? { acceleration: settings.acceleration } : {}),
+        ...(generateLoras.length > 0 ? { loras: generateLoras } : {}),
+        conditioningImages: generateImages,
+      };
       const { payload, path } =
-        params.mode === "a2v"
+        params.mode === "a2v" && settings.route === "generate"
+          ? {
+              payload: buildI2vGeneratePayload({
+                ...generateCommon,
+                sourceAudio: { audioId, strength: settings.sourceAudioStrength },
+              }) as unknown as object,
+              path: "/api/v1/generate",
+            }
+          : params.mode === "a2v"
           ? {
               payload: buildA2vChainPayload({
                 audioId,
@@ -391,19 +441,7 @@ export class BatchRunner {
               path: "/api/v1/generate/chain",
             }
           : {
-              payload: buildI2vGeneratePayload({
-                prompt: parsed.strippedPrompt,
-                width: settings.width,
-                height: settings.height,
-                cropOutput: settings.cropOutput,
-                numFrames: row.frames,
-                frameRate: settings.frameRate,
-                seed: settings.seed,
-                ...(settings.nag ? { nag: settings.nag } : {}),
-                ...(settings.acceleration ? { acceleration: settings.acceleration } : {}),
-                ...(loras.length > 0 ? { loras } : {}),
-                conditioningImages,
-              }) as unknown as object,
+              payload: buildI2vGeneratePayload(generateCommon) as unknown as object,
               path: "/api/v1/generate",
             };
 

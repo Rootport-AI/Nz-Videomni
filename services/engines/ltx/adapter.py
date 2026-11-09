@@ -157,6 +157,15 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "references": "参照素材（Ref2VA）は MiniMax H3 専用です。",
 }
 
+#: The chain twin of :data:`H3_ONLY_REFUSALS`, read by both LTX families'
+#: ``reject_chain``: on the chain schema ``source_audio`` names a clip's own
+#: A2V (``clips[i].source_audio``, 台帳 §1-120), so its sentence differs from
+#: the single path's. The single ``reject_unsupported`` keeps the table above.
+H3_ONLY_CHAIN_REFUSALS: dict[str, str] = {
+    **H3_ONLY_REFUSALS,
+    "source_audio": "クリップごとの A2V は MiniMax H3 専用です。LTX の A2V は Chained の音声で使えます。",
+}
+
 #: The ignore half of the four-way classification: fields 2.3's
 #: :meth:`_RealBackend.generate` never forwards to the worker, with the reason.
 #: DECLARATIVE ONLY — unlike the 2.5 adapter's table, nothing logs these (adding
@@ -248,6 +257,11 @@ CHAIN_REJECT_TABLE: tuple[
     # (the prompts, lengths and clip-0 images) — the same overlap LTX 2.5's
     # audit allows (2.3 has no such audit).
     ("clips", "references", lambda r: any(clip.references for clip in r.clips)),
+    # MiniMax H3 only (a clip's own A2V, 台帳 §1-120). A clip's default is None.
+    # LAST, for the same reason; the feature name is the single path's
+    # ``source_audio`` (already published), the sentence the chain's
+    # (:data:`H3_ONLY_CHAIN_REFUSALS`).
+    ("clips", "source_audio", lambda r: any(clip.source_audio is not None for clip in r.clips)),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
@@ -320,13 +334,13 @@ def reject_chain(request: GenerateChainRequest) -> None:
 
     The chain twin of :func:`reject_unsupported`, with the same table discipline
     and the same first-offender rule; see :data:`CHAIN_REJECT_TABLE`. A MiniMax
-    H3 feature gets its own message (:data:`H3_ONLY_REFUSALS`), as on the single
-    path.
+    H3 feature gets its own message (:data:`H3_ONLY_CHAIN_REFUSALS`), as on the
+    single path.
     """
     for field, feature, is_non_default in CHAIN_REJECT_TABLE:
         if is_non_default(request):
-            if feature in H3_ONLY_REFUSALS:
-                raise feature_unsupported(feature, detail=H3_ONLY_REFUSALS[feature])
+            if feature in H3_ONLY_CHAIN_REFUSALS:
+                raise feature_unsupported(feature, detail=H3_ONLY_CHAIN_REFUSALS[feature])
             raise feature_unsupported(
                 feature,
                 detail=(

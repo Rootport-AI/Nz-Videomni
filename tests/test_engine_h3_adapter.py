@@ -7,8 +7,10 @@ This one runs in the app venv, like every other adapter test.
 Pinned here, none of it needing a GPU or a weight file:
 
 1. the four-way audit of ``GenerateRequest`` against the adapter's tables
-   (``conditioning_images`` is the one field that is both honoured and refused —
-   key frames on any frame run, a strength does not);
+   (``conditioning_images`` and ``nag_enabled`` are the fields that are both
+   honoured and refused — key frames on any frame run, a strength does not;
+   the VSF negative prompt runs, the NAG method does not; on the chain path
+   ``clips`` and ``nag_enabled`` are, the same way);
 2. the refusals and ``UNSUPPORTED_FEATURES`` (both reject tables' names +
    ``fused_gguf_dequant_kernel`` + ``lora_audio_strength``);
 3. the numeric rules and the ``constraints`` block GET /models publishes, for
@@ -65,9 +67,10 @@ _CLASSIFICATIONS = {
     "governed by another field (GOVERNED_FIELDS)": lambda: set(h3.GOVERNED_FIELDS),
 }
 
-#: The one field allowed in two tables: honoured (the key frames) AND refused
-#: (a strength).
-_ALLOWED_OVERLAP = {"conditioning_images"}
+#: The fields allowed in two tables: honoured AND refused in part
+#: (``conditioning_images``: the key frames run, a strength does not;
+#: ``nag_enabled``: the VSF method runs, the NAG method does not).
+_ALLOWED_OVERLAP = {"conditioning_images", "nag_enabled"}
 
 
 def test_the_four_tables_together_are_exactly_the_schema():
@@ -82,7 +85,7 @@ def test_the_four_tables_together_are_exactly_the_schema():
     assert not classified - fields, f"unknown field(s): {sorted(classified - fields)}"
 
 
-def test_the_four_tables_overlap_only_on_conditioning_images():
+def test_the_four_tables_overlap_only_on_the_allowed_fields():
     seen: dict[str, str] = {}
     overlaps: set[str] = set()
     for label, produce in _CLASSIFICATIONS.items():
@@ -175,6 +178,24 @@ def test_keyframe_strength_message_says_h3_has_none():
     with pytest.raises(APIError) as ei:
         h3.reject_unsupported(_request(conditioning_images=[{"image_id": "a", "frame_idx": 17, "strength": 0.5}]))
     assert ei.value.detail == "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
+
+
+def test_vsf_negative_prompt_is_accepted():
+    h3.reject_unsupported(_request(nag_enabled=True, negative_prompt="blurry", neg_method="vsf"))
+
+
+@pytest.mark.parametrize("method", [{"neg_method": "nag"}, {}], ids=["explicit-nag", "default"])
+def test_nag_method_is_refused_as_nag(method):
+    request = _request(nag_enabled=True, negative_prompt="blurry", **method)
+    assert request.neg_method == "nag"
+    with pytest.raises(APIError) as ei:
+        h3.reject_unsupported(request)
+    err = ei.value
+    assert err.code == "FEATURE_UNSUPPORTED" and err.status_code == 422
+    assert "'nag'" in err.message
+    assert err.detail.startswith(
+        "MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）"
+    )
 
 
 def test_t2v_and_keyframe_i2v_are_accepted():
@@ -294,7 +315,11 @@ H3_CONSTRAINTS = {
     "keyframes": {"step": 1, "offset": 0},
     "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
     # The chain's fixed overlap (台帳 §1-106, 裁定 84-3). H3 only: LTX has no key.
-    "chain": {"overlap_frames": 22},
+    # ``source_audio``: a chain clip's own A2V Strength (台帳 §1-120).
+    "chain": {
+        "overlap_frames": 22,
+        "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
+    },
     "prompt_token_limit": None,
     "reference": {
         "max_images": 9,
@@ -698,6 +723,32 @@ def test_generate_refuses_as_the_backstop(tmp_path):
         be.generate(_validated(nag_enabled=True, negative_prompt="x"), tmp_path / "job", seed=1)
 
 
+def test_generate_payload_sends_the_vsf_negative_prompt(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    req = _validated(
+        nag_enabled=True, negative_prompt="black hair, cars", neg_method="vsf", vsf_scale=3,
+        nag_scale=7.0, nag_tau=2.0, nag_alpha=0.5,
+    )
+    be.generate(req, tmp_path / "job", seed=1)
+    (payload,) = captured
+    # Before output_path, like the other optional job keys.
+    keys = list(payload)
+    assert keys.index("nag") == keys.index("output_path") - 1
+    # Only the three VSF keys: the NAG strengths are inert under VSF.
+    assert payload["nag"] == {"negative_prompt": "black hair, cars", "method": "vsf", "vsf_scale": 3.0}
+    assert isinstance(payload["nag"]["vsf_scale"], float)
+
+
+def test_generate_payload_has_no_nag_key_without_nag_enabled(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    be.generate(_validated(negative_prompt="blurry", neg_method="vsf"), tmp_path / "job", seed=1)
+    (payload,) = captured
+    assert "nag" not in payload
+    assert list(payload) == GOLDEN_GENERATE_KEYS_H3
+
+
 # --------------------------------------------------------------------------- #
 # 5) HTTP, three families
 # --------------------------------------------------------------------------- #
@@ -834,6 +885,31 @@ def test_h3_refuses_over_http_before_any_lookup(three_family_client, feature):
     assert error["code"] == "FEATURE_UNSUPPORTED"
     assert error["detail"].startswith("MiniMax H3 ")
     assert len(three_family_client.get("/api/v1/jobs").json()) == before
+
+
+def test_h3_accepts_a_vsf_negative_prompt_over_http(three_family_client):
+    _activate(three_family_client, "MiniMaxH3")
+    body = {
+        "prompt": PROMPT, "width": 640, "height": 384, "num_frames": 124,
+        "nag_enabled": True, "negative_prompt": "blurry", "neg_method": "vsf",
+    }
+    r = three_family_client.post("/api/v1/generate", json=body)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert three_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+
+
+def test_h3_accepts_a_vsf_negative_prompt_on_a_chain_over_http(three_family_client):
+    _activate(three_family_client, "MiniMaxH3")
+    body = {
+        "prompt": PROMPT, "width": 640, "height": 384,
+        "clips": [{"num_frames": 124}, {"num_frames": 124}, {"num_frames": 124}],
+        "nag_enabled": True, "negative_prompt": "blurry", "neg_method": "vsf",
+    }
+    r = three_family_client.post("/api/v1/generate/chain", json=body)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert three_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
 
 
 def _write_h3_lora(path: Path, *, foreign: bool = False) -> Path:
@@ -1103,9 +1179,11 @@ _CHAIN_CLASSIFICATIONS = {
     "governed (CHAIN_GOVERNED_FIELDS)": lambda: set(h3.CHAIN_GOVERNED_FIELDS),
 }
 
-#: The one chain field allowed in two tables: honoured (the prompts, lengths,
-#: clip 0's key frames and references) AND refused (a key frame's strength).
-_ALLOWED_CHAIN_OVERLAP = {"clips"}
+#: The chain fields allowed in two tables: honoured AND refused in part
+#: (``clips``: the prompts, lengths, clip 0's key frames and references run, a
+#: key frame's strength does not; ``nag_enabled``: the VSF method runs, the NAG
+#: method does not).
+_ALLOWED_CHAIN_OVERLAP = {"clips", "nag_enabled"}
 
 
 def test_the_four_chain_tables_together_are_exactly_the_chain_schema():
@@ -1120,7 +1198,7 @@ def test_the_four_chain_tables_together_are_exactly_the_chain_schema():
     assert not classified - fields, f"unknown field(s): {sorted(classified - fields)}"
 
 
-def test_the_four_chain_tables_overlap_only_on_clips():
+def test_the_four_chain_tables_overlap_only_on_the_allowed_fields():
     seen: dict[str, str] = {}
     overlaps: set[str] = set()
     for label, produce in _CHAIN_CLASSIFICATIONS.items():
@@ -1188,6 +1266,23 @@ def test_every_chain_refusal_raises_feature_unsupported_naming_h3(feature):
     assert "MiniMax H3" in ei.value.detail
 
 
+def test_chain_accepts_a_vsf_negative_prompt():
+    engines.reject_chain("h3", _chain(nag_enabled=True, negative_prompt="blurry", neg_method="vsf"))
+
+
+@pytest.mark.parametrize("method", [{"neg_method": "nag"}, {}], ids=["explicit-nag", "default"])
+def test_chain_nag_method_is_refused_as_nag(method):
+    chain = _chain(nag_enabled=True, negative_prompt="blurry", **method)
+    assert chain.neg_method == "nag"
+    with pytest.raises(APIError) as ei:
+        engines.reject_chain("h3", chain)
+    err = ei.value
+    assert err.code == "FEATURE_UNSUPPORTED" and err.status_code == 422
+    assert "'nag'" in err.message
+    # The single path's sentence: the same fact, the same words.
+    assert err.detail == h3._refusal_detail("nag_enabled", "nag")
+
+
 def test_every_chain_refusal_is_published():
     """The ``tests/test_ltx25_api_guard.py`` rule: a name the 422 uses must be
     in ``unsupported_features``, or a control stays open that always fails."""
@@ -1216,9 +1311,7 @@ def test_chain_lora_audio_strength_is_nulled():
 
 
 def test_chain_constraints_publish_the_fixed_overlap_from_the_geometry():
-    assert engines.request_constraints("h3")["chain"] == {
-        "overlap_frames": h3_chain_math.H3_CHAIN_OVERLAP_FRAMES
-    }
+    assert engines.request_constraints("h3")["chain"]["overlap_frames"] == h3_chain_math.H3_CHAIN_OVERLAP_FRAMES
     assert "chain" not in engines.request_constraints("ltx")
     assert "chain" not in engines.request_constraints("ltx25")
 
@@ -1421,6 +1514,38 @@ def test_generate_chain_retake_needs_the_cut_window(tmp_path):
     with pytest.raises(RuntimeError, match="no retake window"):
         be.generate_chain(_retake_chain(), tmp_path / "job", seed=1)
     assert captured == []
+
+
+def test_generate_chain_payload_sends_the_vsf_negative_prompt(tmp_path):
+    """The single path's ``nag`` block (台帳 §1-127), after ``clips`` / ``source`` /
+    ``retake`` and before ``keep_resident``; only with ``nag_enabled``."""
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    vsf = {"nag_enabled": True, "negative_prompt": "blurry", "neg_method": "vsf", "vsf_scale": 3}
+    be.generate_chain(_validated_chain(**vsf), tmp_path / "job", seed=42)
+    payload = captured[0]
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3 + ["nag"]
+    assert payload["nag"] == {"negative_prompt": "blurry", "method": "vsf", "vsf_scale": 3.0}
+    assert isinstance(payload["nag"]["vsf_scale"], float)
+    # keep_resident still rides last, only when True.
+    captured.clear()
+    be.generate_chain(_validated_chain(keep_resident=True, **vsf), tmp_path / "job", seed=42)
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_H3 + ["nag", "keep_resident"]
+    # A retake carries it the same way (clip 0 is the retake's one clip).
+    captured.clear()
+    window = tmp_path / "job" / "_retake_window.mp4"
+    chain = _validated_chain(
+        clips=[{"num_frames": 124}],
+        retake={"video_id": "vid-1", "window_start_sec": 0.0},
+        **vsf,
+    )
+    be.generate_chain(chain, tmp_path / "job", seed=42, retake_window_path=window)
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_H3_RETAKE + ["nag"]
+    assert captured[0]["nag"] == {"negative_prompt": "blurry", "method": "vsf", "vsf_scale": 3.0}
+    # A negative prompt without nag_enabled is inert: no key.
+    captured.clear()
+    be.generate_chain(_validated_chain(negative_prompt="blurry"), tmp_path / "job", seed=42)
+    assert list(captured[0]) == GOLDEN_CHAIN_KEYS_H3
 
 
 def test_validate_chain_retake_writes_the_h3_defaults_back():

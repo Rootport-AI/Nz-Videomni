@@ -125,6 +125,14 @@ export interface ReferenceAttachOptions {
   durationSec?: number;
 }
 
+/** §1-120: an already-uploaded file for {@link ReferenceSlotsApi.adopt}. */
+export interface ReferenceAdoptFile {
+  id: string;
+  fileName: string;
+  filePath: string;
+  durationSec: number | null;
+}
+
 /** What `useReferenceSlots(rules)` returns — the Reference accordion's props
  * read only this. */
 export interface ReferenceSlotsApi {
@@ -140,6 +148,10 @@ export interface ReferenceSlotsApi {
     fileName: string,
     opts?: ReferenceAttachOptions,
   ): Promise<void>;
+  /** §1-120: puts an already-uploaded file into the slot as ready, without
+   * uploading (replacing what was there; an upload still in flight for the
+   * slot is dropped). Only the Chained screen's distribution calls it. */
+  adopt(kind: ReferenceKind, slot: number, file: ReferenceAdoptFile): void;
   /** `ui.pickFile` then {@link attach}; a CANCELLED dialog does nothing. */
   pick(kind: ReferenceKind, slot: number): Promise<void>;
   /** Empties the slot (numbers are not packed); an "Audio to video" check
@@ -213,6 +225,18 @@ export type ReferenceAction =
       trimFailed: boolean;
     }
   | { type: "attachFail"; kind: ReferenceKind; slot: number; errorCode: string }
+  | {
+      /** §1-120: puts an ALREADY-uploaded file into the slot as `ready`
+       * (no `uploading` step, no upload) — the Chained screen's distribution
+       * of the long audio to every clip. */
+      type: "adopt";
+      kind: ReferenceKind;
+      slot: number;
+      id: string;
+      fileName: string;
+      filePath: string;
+      durationSec: number | null;
+    }
   | { type: "clear"; kind: ReferenceKind; slot: number }
   | { type: "setEnabled"; enabled: boolean }
   | { type: "setA2vSlot"; slot: number | null }
@@ -274,6 +298,18 @@ export function referenceReducer(state: ReferenceState, action: ReferenceAction)
       return replaceSlot(state, action.kind, action.slot, (s) =>
         s.status !== "uploading" ? s : { ...s, status: "error", errorCode: action.errorCode },
       );
+    case "adopt": {
+      const addedAt = nextAddedAt(state);
+      return replaceSlot(state, action.kind, action.slot, (s) => ({
+        ...emptySlot(s.kind, s.slot),
+        status: "ready",
+        id: action.id,
+        fileName: action.fileName,
+        filePath: action.filePath,
+        durationSec: action.kind === "picture" ? null : action.durationSec,
+        addedAt,
+      }));
+    }
     case "clear":
       return replaceSlot(state, action.kind, action.slot, (s) => emptySlot(s.kind, s.slot));
     case "setEnabled":

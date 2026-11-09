@@ -1,0 +1,1256 @@
+[
+  {
+    "at": "2026-11-09T09:26:59+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.16,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:26:59+09:00",
+    "tool": "load_pipeline",
+    "args": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "seconds": 4.27,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default",
+        "text_encoder": "default",
+        "video_vae": "default",
+        "audio": "default"
+      },
+      "finished": true
+    }
+  },
+  {
+    "at": "2026-11-09T09:27:03+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:27:03+09:00",
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 124
+        },
+        {
+          "num_frames": 124,
+          "prompt": "She turns and walks slowly along the street, humming a tune."
+        },
+        {
+          "num_frames": 124,
+          "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+        }
+      ],
+      "width": 640,
+      "height": 384,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "embed_mp4_metadata": false
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "status": "running",
+      "created_at": "2026-11-09T00:27:03Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T09:27:03+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 25.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:27:33+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 10.02,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:27:48+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 40.02,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:28:33+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:29:18+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 40.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:30:03+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 20.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:30:28+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:31:13+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:31:58+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:32:48+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 30.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:33:23+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 5.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:33:28+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc0\\after",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc0\\after\\737f8771-f97f-48e1-818b-09fc991511e2.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\737f8771-f97f-48e1-818b-09fc991511e2\\output.mp4",
+      "size_bytes": 1706119,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T09:33:28+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "737f8771-f97f-48e1-818b-09fc991511e2"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\737f8771-f97f-48e1-818b-09fc991511e2\\output.mp4",
+      "exists": true,
+      "size_bytes": 1706119,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T09:33:28+09:00",
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 56
+        },
+        {
+          "num_frames": 56,
+          "prompt": "She turns and walks slowly along the street, humming a tune."
+        }
+      ],
+      "width": 512,
+      "height": 288,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "negative_prompt": "blurry, low quality",
+      "vsf_scale": 3.0
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+      "status": "running",
+      "created_at": "2026-11-09T00:33:28Z",
+      "num_clips": 2,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T09:33:28+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:34:13+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 5.02,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:34:23+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:35:08+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 20.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:35:28+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc1\\vsf",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc1\\vsf\\e6167ba0-8730-468d-9e33-5ef4e699d143.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\e6167ba0-8730-468d-9e33-5ef4e699d143\\output.mp4",
+      "size_bytes": 229009,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T09:35:28+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\e6167ba0-8730-468d-9e33-5ef4e699d143\\output.mp4",
+      "exists": true,
+      "size_bytes": 229009,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T09:35:28+09:00",
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 56
+        },
+        {
+          "num_frames": 56,
+          "prompt": "She turns and walks slowly along the street, humming a tune."
+        }
+      ],
+      "width": 512,
+      "height": 288,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "nag_enabled": true,
+      "neg_method": "nag",
+      "negative_prompt": "blurry, low quality",
+      "vsf_scale": 3.0
+    },
+    "seconds": 0.0,
+    "ok": false,
+    "error": "Error executing tool submit_chain: FEATURE_UNSUPPORTED: 'nag' is not supported by the selected base model (選択中のベースモデルでは使えない機能です) — MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）。"
+  },
+  {
+    "at": "2026-11-09T09:35:28+09:00",
+    "tool": "list_models",
+    "args": {},
+    "seconds": 0.06,
+    "ok": true,
+    "result": {
+      "categories": {
+        "transformer": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            },
+            {
+              "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta4_int8",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3185154",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "minimax_h3_ref2va_pruned_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+              "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            }
+          ]
+        },
+        "text_encoder": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "video_vae": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "audio": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        }
+      },
+      "active_base_model": "MiniMaxH3",
+      "base_models": [
+        {
+          "id": "LTX23",
+          "display_name": "LTX 2.3",
+          "engine_family": "ltx",
+          "active": false,
+          "installed": true,
+          "present": true,
+          "missing_categories": [],
+          "unsupported_features": [
+            "keep_resident_embeddings",
+            "alpha_gen",
+            "vram16_mode",
+            "source_audio",
+            "references"
+          ],
+          "constraints": {
+            "num_frames": {
+              "step": 8,
+              "offset": 1,
+              "min": 9,
+              "max": 481
+            },
+            "dimension_multiple": 64,
+            "frame_rate": {
+              "min": 1.0,
+              "max": 60.0
+            },
+            "sampling": null,
+            "keyframes": {
+              "step": 8,
+              "offset": 1
+            },
+            "prompt_token_limit": 1024
+          },
+          "category_order": [
+            "transformer",
+            "text_encoder",
+            "video_vae",
+            "audio"
+          ],
+          "transformer_weight_class": null,
+          "transformer_role": null,
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "10Eros-v1.2-Q4_K_M",
+                  "path": "models/LTX23/Weights/10Eros-v1.2-Q4_K_M.gguf",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "Sulphur-2-base-distil-Q6_K",
+                  "path": "models/LTX23/Weights/Sulphur-2-base-distil-Q6_K.gguf",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise",
+                  "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_int8mixedtensorwise.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot",
+                  "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx-2.3-22b-distilled-1.1_w4a8",
+                  "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_w4a8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "sulphur_distil_fp8mixed",
+                  "path": "models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "LTX25",
+          "display_name": "LTX 2.5",
+          "engine_family": "ltx25",
+          "active": false,
+          "installed": true,
+          "present": true,
+          "missing_categories": [],
+          "unsupported_features": [
+            "two_stage_hq",
+            "prune_vaed",
+            "vram16_mode",
+            "source_audio",
+            "references"
+          ],
+          "constraints": {
+            "num_frames": {
+              "step": 8,
+              "offset": 1,
+              "min": 9,
+              "max": 481
+            },
+            "dimension_multiple": 64,
+            "frame_rate": {
+              "min": 1.0,
+              "max": 60.0
+            },
+            "sampling": null,
+            "keyframes": {
+              "step": 8,
+              "offset": 1
+            },
+            "prompt_token_limit": 1024
+          },
+          "category_order": [
+            "transformer",
+            "text_encoder",
+            "video_vae",
+            "audio"
+          ],
+          "transformer_weight_class": null,
+          "transformer_role": null,
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot",
+                  "path": "models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx25_uncensored_v1.1-fp8_scaled",
+                  "path": "models/LTX25/Weights/ltx25_uncensored_v1.1-fp8_scaled.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW",
+                  "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K",
+                  "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K.gguf",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "MiniMaxH3",
+          "display_name": "MiniMax H3",
+          "engine_family": "h3",
+          "active": true,
+          "installed": true,
+          "present": true,
+          "missing_categories": [],
+          "unsupported_features": [
+            "reference_video",
+            "nag",
+            "two_stage_hq",
+            "guidance_scale",
+            "outpaint",
+            "inpaint",
+            "alpha_gen",
+            "prune_vaed",
+            "keep_resident_embeddings",
+            "keyframe_strength",
+            "a2v",
+            "end_source",
+            "fused_gguf_dequant_kernel",
+            "lora_audio_strength"
+          ],
+          "constraints": {
+            "num_frames": {
+              "step": 17,
+              "offset": 5,
+              "min": 22,
+              "max": 481
+            },
+            "dimension_multiple": 32,
+            "frame_rate": {
+              "min": 24.0,
+              "max": 24.0
+            },
+            "sampling": {
+              "num_inference_steps": {
+                "min": 1,
+                "max": 50,
+                "step": 1,
+                "default": 20
+              },
+              "shift_video": {
+                "min": 1,
+                "max": 20,
+                "step": 0.1,
+                "default": 12
+              },
+              "shift_audio": {
+                "min": 1,
+                "max": 20,
+                "step": 0.1,
+                "default": 3
+              }
+            },
+            "keyframes": {
+              "step": 1,
+              "offset": 0
+            },
+            "prompt_token_limit": null,
+            "source_audio": {
+              "strength": {
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.5
+              }
+            },
+            "reference": {
+              "max_images": 9,
+              "max_videos": 3,
+              "max_audios": 3,
+              "max_total": 12,
+              "video_total_sec": 15.0,
+              "audio_total_sec": 15.0,
+              "clip_min_sec": 2.0
+            },
+            "chain": {
+              "overlap_frames": 22
+            },
+            "retake": {
+              "audio_strength": {
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.5
+              }
+            }
+          },
+          "category_order": [
+            "transformer",
+            "text_encoder",
+            "video_vae",
+            "audio"
+          ],
+          "transformer_weight_class": null,
+          "transformer_role": "fl2va",
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta4_int8",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3185154",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                  "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "at": "2026-11-09T09:35:28+09:00",
+    "tool": "upload_video",
+    "args": {
+      "file_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc0\\after\\737f8771-f97f-48e1-818b-09fc991511e2.mp4",
+      "max_frames": 100000
+    },
+    "seconds": 0.62,
+    "ok": true,
+    "result": {
+      "video_id": "85d0fabd-58cd-48d2-b7e1-0f8461b65aa7",
+      "original_filename": "737f8771-f97f-48e1-818b-09fc991511e2.mp4",
+      "stored_path": "uploads/videos/85d0fabd-58cd-48d2-b7e1-0f8461b65aa7/input.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 1706119,
+      "trimmed": false,
+      "frame_count": 328,
+      "fps": 24.0
+    }
+  },
+  {
+    "at": "2026-11-09T09:35:29+09:00",
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 73
+        }
+      ],
+      "width": 640,
+      "height": 384,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "retake_video_id": "85d0fabd-58cd-48d2-b7e1-0f8461b65aa7",
+      "retake_window_start_sec": 0.5,
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "negative_prompt": "blurry, low quality",
+      "vsf_scale": 3.0
+    },
+    "seconds": 0.25,
+    "ok": true,
+    "result": {
+      "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3",
+      "status": "running",
+      "created_at": "2026-11-09T00:35:29Z",
+      "num_clips": 1,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T09:35:29+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 15.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:35:49+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:36:34+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:37:24+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc2\\retake",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc2\\retake\\bdddf34f-9bdd-4303-99de-7a392b86e1d3.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\bdddf34f-9bdd-4303-99de-7a392b86e1d3\\output.mp4",
+      "size_bytes": 381541,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T09:37:24+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\bdddf34f-9bdd-4303-99de-7a392b86e1d3\\output.mp4",
+      "exists": true,
+      "size_bytes": 381541,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T09:37:24+09:00",
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 124
+        },
+        {
+          "num_frames": 124,
+          "prompt": "She turns and walks slowly along the street, humming a tune."
+        },
+        {
+          "num_frames": 124,
+          "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+        }
+      ],
+      "width": 640,
+      "height": 384,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "embed_mp4_metadata": false
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "status": "running",
+      "created_at": "2026-11-09T00:37:24Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T09:37:24+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:38:09+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:38:54+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:39:39+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:40:24+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.01,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:41:09+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 25.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:41:39+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 24.99,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:42:09+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:42:59+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:43:44+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc3\\off",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc3\\off\\c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb\\output.mp4",
+      "size_bytes": 1706119,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T09:43:44+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\c2c6b3f7-3d72-451c-bfb7-5e1ae846baeb\\output.mp4",
+      "exists": true,
+      "size_bytes": 1706119,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T09:43:44+09:00",
+    "tool": "unload_pipeline",
+    "args": {},
+    "seconds": 0.84,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": false,
+      "state": "unloaded"
+    }
+  }
+]

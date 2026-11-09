@@ -2,6 +2,8 @@
 
 A clip may carry its own Ref2VA references (台帳 §1-109): they go through the
 single job's reference stage for that clip only; a clip without any runs as before.
+It may also carry its own A2V source audio (台帳 §1-120): the single A2V job's
+per-row mask on the clip's new audio rows, its fixed head unchanged.
 
 Video-to-video and a start image (台帳 §1-121): an input video's last 22
 frames (cut by the app, ``H3ChainSpec.source``) are encoded and become clip
@@ -32,6 +34,7 @@ import dataclasses
 import functools
 import hashlib
 import math
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -44,6 +47,7 @@ from h3_chain_math import (
     H3_AUDIO_SAMPLES_PER_FRAME,
     H3_CHAIN_OVERLAP_FRAMES,
     H3ChainLayout,
+    clip_audio_start_sample,
     compute_h3_chain_layout,
 )
 
@@ -52,15 +56,28 @@ CHAIN_INJECT_CLEAN = 1.0
 
 
 @dataclass(frozen=True)
+class H3ChainClipAudio:
+    """A clip's own A2V source audio (台帳 §1-120): the file, its strength (0..1;
+    the A2V rows' mask value is ``1 - strength``) and ``offset_frames``, the
+    clip's start on the audio's timeline in frames (the waveform is read from
+    sample :func:`h3_chain_math.clip_audio_start_sample` of it)."""
+
+    path: str
+    strength: float
+    offset_frames: int = 0
+
+
+@dataclass(frozen=True)
 class H3ChainClipSpec:
     """One clip: its whole prompt, its frame count, its own Ref2VA references
-    (台帳 §1-109; empty = none) and its key frames (clip 0 only, 台帳 §1-121;
-    empty = none)."""
+    (台帳 §1-109; empty = none), its key frames (clip 0 only, 台帳 §1-121;
+    empty = none) and its own A2V source audio (台帳 §1-120; None = none)."""
 
     prompt: str
     num_frames: int
     references: tuple[P.H3ReferenceInput, ...] = ()
     images: tuple[P.H3ImageInput, ...] = ()
+    source_audio: H3ChainClipAudio | None = None
 
 
 @dataclass(frozen=True)
@@ -166,6 +183,43 @@ def retake_fix(clean_v: torch.Tensor, clean_a: torch.Tensor | None, layout: H3Ch
     return video_fix, (full_a, per_a)
 
 
+def clip_audio_a2v_fix(carried, clean_a2v: torch.Tensor, ka: int, s: float):
+    """``audio_fix`` for a clip with its own A2V source audio (台帳 §1-120).
+
+    ``carried``: the audio half of :func:`carry_fix`, ``(clean_a, per_a)`` for
+    a clip with a fixed head, or None (clip 0: no head). ``clean_a2v``: the
+    clip's source audio encoded, ``[2, 32, A]``. The clean is the carried head
+    ``clean_a[:, :, :ka]`` followed by ``clean_a2v[:, :, ka:]`` (just
+    ``clean_a2v`` without a head); the values are 0 on the head (fixed, as
+    before) and ``1 - s`` on the rest (the single A2V job's value). Not called
+    at ``s = 0`` (nothing is encoded, as in a single job). CPU float32.
+    Raises ValueError on a shape mismatch.
+    """
+    if clean_a2v.dim() != 3:
+        raise ValueError(f"clip A2V: clean audio must be [channels, 32, A] ({list(clean_a2v.shape)})")
+    a_lat = int(clean_a2v.shape[2])
+    ka = int(ka)
+    if not 0 <= ka <= a_lat:
+        raise ValueError(f"clip A2V: fixed head ka={ka} out of [0, {a_lat}]")
+    a2v = clean_a2v.to(torch.float32)
+    if carried is None:
+        if ka:
+            raise ValueError(f"clip A2V: fixed head ka={ka} without a carried audio head")
+        clean = a2v.contiguous()
+    else:
+        head = carried[0]
+        if tuple(head.shape) != tuple(a2v.shape) or len(carried[1]) != a_lat:
+            raise ValueError(
+                f"clip A2V: carried audio {list(head.shape)} / {len(carried[1])} values, "
+                f"expected {list(a2v.shape)}"
+            )
+        clean = a2v.contiguous() if ka == 0 else torch.cat(
+            [head[:, :, :ka].to(torch.float32), a2v[:, :, ka:]], dim=2,
+        ).contiguous()
+    per_a = [0.0] * ka + [1.0 - float(s)] * (a_lat - ka)
+    return clean, per_a
+
+
 def clip_requests(spec: H3ChainSpec) -> list[P.H3GenerateRequest]:
     """Clip i's request: ``base`` with its prompt, frames, references, key frames,
     ``seed + i`` and ``keep_resident=True``."""
@@ -189,6 +243,7 @@ def _check_spec(spec: H3ChainSpec) -> None:
     for i, clip in enumerate(spec.clips):
         if i > 0 and clip.images:
             raise ValueError(f"連結のキーフレーム（冒頭画像）はクリップ 0 にだけ付けられます（clips[{i}]）")
+        _check_clip_audio(spec, i, clip.source_audio)
     retake = spec.retake
     if retake is not None:
         if spec.source is not None:
@@ -211,6 +266,27 @@ def _check_spec(spec: H3ChainSpec) -> None:
         raise ValueError(
             f"入力動画から引き継ぐフレーム数は {H3_CHAIN_OVERLAP_FRAMES} 固定です（{source.context_frames}）"
         )
+
+
+def _check_clip_audio(spec: H3ChainSpec, i: int, audio: H3ChainClipAudio | None) -> None:
+    """A clip's own A2V source audio (台帳 §1-120), in the single job's wording
+    (``validate_request``) with the clip's index. None = nothing to check."""
+    if audio is None:
+        return
+    if spec.source is not None:
+        raise ValueError(f"クリップの音声（A2V）と入力動画の続き（V2V）は同時には使えません（clips[{i}]）")
+    if spec.retake is not None:
+        raise ValueError(f"クリップの音声（A2V）と Retake は同時には使えません（clips[{i}]）")
+    if not str(audio.path or "").strip():
+        raise ValueError(f"音声のファイルのパスが空です（clips[{i}]）")
+    if not os.path.isfile(str(audio.path)):
+        raise ValueError(f"音声のファイルが見つかりません（clips[{i}]: {audio.path}）")
+    s = audio.strength
+    if isinstance(s, bool) or not isinstance(s, (int, float)) or not (math.isfinite(s) and 0.0 <= s <= 1.0):
+        raise ValueError(f"音声の強度は 0〜1 にしてください（clips[{i}]: {s!r}）")
+    o = audio.offset_frames
+    if isinstance(o, bool) or not isinstance(o, int) or o < 0:
+        raise ValueError(f"音声の開始フレーム（offset_frames）は 0 以上の整数にしてください（clips[{i}]: {o!r}）")
 
 
 def _load_key_frames(req: P.H3GenerateRequest):
@@ -319,6 +395,20 @@ def run_chain_h3(
     encoded in clip 0's ``source_encode`` phase, fixed at its head and tail
     (:func:`retake_fix`, self-checked bit for bit after the denoise) and
     decoded whole (``trim_head=0``); ``chain`` gains ``retake``.
+
+    With ``spec.base.negative_prompt`` (VSF, 台帳 §1-127) clip 0's text encoder
+    also encodes the negative prompt (one more ``encode`` step, before the key
+    frames' or the input video's), every clip's denoise uses those hidden
+    states, and each clip record gains ``vsf`` (the single job's ``h3.vsf``).
+
+    A clip with its own source audio (``H3ChainClipSpec.source_audio``, 台帳
+    §1-120) reads its waveform on the CPU before its text encoder, from sample
+    ``clip_audio_start_sample(offset_frames)`` (an audio latent boundary), and
+    above strength 0 encodes it in an ``audio_encode`` phase (the ``encode``
+    stage's last step, after the references); its new audio rows take the
+    value ``1 - strength`` (:func:`clip_audio_a2v_fix`), its fixed head stays
+    the previous tail. The clip record gains ``a2v``; the chain always decodes
+    its audio (no original waveform is muxed).
     """
     if pipe._dit_cfg is None:
         raise RuntimeError("generate before load")
@@ -346,6 +436,10 @@ def run_chain_h3(
         requests = clip_requests(spec)
         for req in requests:
             P.validate_request(req)
+        # VSF (台帳 §1-127): every clip inherits the base's negative prompt; it is
+        # encoded once, on clip 0, and its hidden states are reused by every clip.
+        has_neg = bool(base.negative_prompt.strip())
+        negative_hidden = None
         n = len(requests)
         k = layout.overlap_latents
         video_cat = audio_cat = prev_video = None
@@ -378,6 +472,7 @@ def run_chain_h3(
             retake_runtime["source_had_audio"] = src_wave is not None
             retake_runtime["muxed_original_waveform"] = float(retake.audio_strength) == 1.0 and src_wave is not None
         for i, req in enumerate(requests):
+            has_neg_i = has_neg and i == 0   # the negative's text encoder forward: clip 0 only
             from_source = i == 0 and source is not None
             from_retake = i == 0 and retake is not None
             ka = layout.audio_overlap_latents[i - 1] if i else 0   # clip 0 with a source: set by its encode
@@ -409,20 +504,67 @@ def run_chain_h3(
                     media = pipe._read_references(req)
                     if media:
                         vision_images = []
-                    # The key frames' VAE step (4th of the encode stage) also counts the
+                    # The clip's own A2V source audio (台帳 §1-120): read on the CPU
+                    # before its text encoder, as in a single A2V job, from the audio
+                    # latent boundary of its offset; none = as before.
+                    clip_audio = spec.clips[i].source_audio
+                    wave = None
+                    clip_a2v: dict | None = None
+                    s_i = 0.0
+                    if clip_audio is not None:
+                        from engine_h3.source_audio import load_source_waveform  # noqa: PLC0415
+
+                        s_i = float(clip_audio.strength)
+                        a_lat_i = int(layout.clip_audio_latents[i])
+                        start = clip_audio_start_sample(int(clip_audio.offset_frames))
+                        required = round(int(req.num_frames) * P.AUDIO_SAMPLE_RATE / int(req.frame_rate))
+                        wave, wave_info = load_source_waveform(
+                            clip_audio.path, keep_samples=required,
+                            read_samples=a_lat_i * P.AUDIO_HOP + P.AUDIO_SAMPLE_RATE, start_samples=start,
+                        )
+                        clip_a2v = {
+                            "mask_value": 1.0 - s_i,
+                            "audio_latents": a_lat_i,
+                            "fixed_head_latents": int(ka),
+                            "start_sample": int(start),
+                            "required_samples": int(required),
+                            "encoded_samples": 0,
+                            "channels_used": wave_info.get("channels_used"),
+                            "resampler": wave_info.get("resampler"),
+                            "encoder_tensors": None,
+                            "audio_output": "decoded",   # a chain always decodes (no original waveform muxed)
+                        }
+                    # Strength 0 is mask value 1 on every new row: no effect, so nothing is encoded.
+                    encode_audio_i = wave is not None and s_i > 0.0
+                    if not encode_audio_i:
+                        wave = None
+                    # The key frames' VAE step (4th of the encode stage, 5th after clip 0's negative) also counts the
                     # input video's encode (V2V or a retake window); they never meet in one clip.
                     has_cond = bool(canvases) or from_source or from_retake
-                    encode_total = P.encode_steps(has_cond=has_cond, has_audio=False, has_refs=bool(media))
+                    encode_total = P.encode_steps(
+                        has_cond=has_cond, has_audio=encode_audio_i, has_refs=bool(media), has_neg=has_neg_i,
+                    )
+                    # Only clip 0 of a VSF chain passes the key: every other call is the same as before.
+                    neg_kw = {"negative_prompt": req.negative_prompt} if has_neg_i else {}
+                    # Only an A2V clip passes has_audio: every other call is the same as before.
+                    audio_kw = {"has_audio": True} if encode_audio_i else {}
                     with phases.phase("encode") as entry:
-                        hidden, tags = pipe._encode(
+                        encoded = pipe._encode(
                             req.prompt, phases, images=vision_images, has_cond=has_cond,
-                            refs=pipe._te_references(media),
+                            refs=pipe._te_references(media), **neg_kw, **audio_kw,
                         )
+                        if has_neg_i:
+                            hidden, tags, negative_hidden = encoded
+                        else:
+                            hidden, tags = encoded
+                        del encoded
                         entry["text_tokens"] = int(hidden.shape[0])
+                        if has_neg_i:
+                            entry["negative_tokens"] = int(negative_hidden.shape[0])
                     cond_clean = None
                     if canvases:
                         with phases.phase("image_encode") as entry:
-                            cond_clean = pipe._encode_image(canvases, entry, 4, encode_total)
+                            cond_clean = pipe._encode_image(canvases, entry, 4 + int(has_neg_i), encode_total)
                             entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
                             entry["canvas"] = [int(req.width), int(req.height)]
                             entry["source_size"] = source_size
@@ -430,7 +572,9 @@ def run_chain_h3(
                     if from_source:
                         with phases.phase("source_encode") as entry:
                             entry["source_size"] = src_info["source_size"]
-                            src_video, src_audio = pipe._encode_source_tail(src_frames, src_wave, entry, 4, encode_total)
+                            src_video, src_audio = pipe._encode_source_tail(
+                                src_frames, src_wave, entry, 4 + int(has_neg_i), encode_total,
+                            )
                             ka = int(entry["freeze_ka"])
                         src_frames = src_wave = None
                         v2v_runtime["freeze_ka"] = ka
@@ -443,7 +587,9 @@ def run_chain_h3(
                     if from_retake:
                         with phases.phase("source_encode") as entry:
                             entry["source_size"] = src_info["source_size"]
-                            src_video, src_audio = pipe._encode_source_tail(src_frames, src_wave, entry, 4, encode_total)
+                            src_video, src_audio = pipe._encode_source_tail(
+                                src_frames, src_wave, entry, 4 + int(has_neg_i), encode_total,
+                            )
                         src_frames = None
                         if not retake_runtime["muxed_original_waveform"]:
                             src_wave = None   # kept only to be muxed at strength 1.0
@@ -461,12 +607,31 @@ def run_chain_h3(
                             # reference), dropped once its references are encoded.
                             enc = pipe._build_video_encoder() if any(m["kind"] != "audio" for m in media) else None
                             te_refs = phases.data["encode"].get("te_read", {}).get("references", [])
-                            ref_rows = pipe._encode_references(media, entry, encode_total, encode_total, enc, te_refs)
+                            # The references' step is the stage's last, or the one before
+                            # the clip's source audio (an A2V clip, 台帳 §1-120).
+                            ref_rows = pipe._encode_references(
+                                media, entry, encode_total - int(encode_audio_i), encode_total, enc, te_refs,
+                            )
                             enc = None
                             P._free_cuda()
                         media = None   # encoded: drop the read media before the denoise, as a single job
                         counts = {kind: sum(1 for s, _r in ref_rows if s.kind == kind) for kind in P.REFERENCE_KINDS}
                         ref_counts = {"pictures": counts["picture"], "videos": counts["video"], "audios": counts["audio"]}
+                    if encode_audio_i:
+                        # The clip's source audio: the stage's last step, after the references
+                        # (the single A2V job's order); its encoder is built and dropped here.
+                        with phases.phase("audio_encode") as entry:
+                            clean_a2v = pipe._encode_audio(
+                                wave, int(layout.clip_audio_latents[i]), entry, encode_total, encode_total,
+                            ).cpu()
+                        clip_a2v["encoded_samples"] = entry["encoded_samples"]
+                        clip_a2v["encoder_tensors"] = entry["encoder_tensors"]
+                        carried = audio_fix
+                        audio_fix = clip_audio_a2v_fix(carried, clean_a2v, ka, s_i)
+                        del clean_a2v, carried
+                    wave = None
+                    # The clip's own VSF report (the single job's ``h3.vsf``), only for a VSF chain.
+                    clip_vsf: dict | None = {} if has_neg else None
                     with phases.phase("denoise") as entry:
                         video, audio, prefetch_used = pipe._denoise(
                             req, hidden, tags, phases, entry,
@@ -474,6 +639,8 @@ def run_chain_h3(
                             lora_report=lora_report if i == 0 else None,
                             video_fix=video_fix, audio_fix=audio_fix, refs=ref_rows,
                             video_inject_clean=CHAIN_INJECT_CLEAN,
+                            negative_hidden=negative_hidden if has_neg else None,
+                            vsf_scale=float(req.vsf_scale), vsf_report=clip_vsf,
                         )
                     video, audio = video.cpu(), audio.cpu()
             finally:
@@ -505,6 +672,8 @@ def run_chain_h3(
                     seconds[name] = phases.data[name].get("seconds")
             if ref_counts is not None:
                 seconds["reference_encode"] = phases.data.get("reference_encode", {}).get("seconds")
+            if "audio_encode" in phases.data:   # only for a clip whose own source audio was encoded
+                seconds["audio_encode"] = phases.data["audio_encode"].get("seconds")
             seconds["denoise"] = phases.data.get("denoise", {}).get("seconds")
             record = {
                 "prompt_sha256": _sha_text(req.prompt),
@@ -514,6 +683,10 @@ def run_chain_h3(
             }
             if ref_counts is not None:
                 record["references"] = ref_counts   # only for a clip with references
+            if clip_a2v is not None:
+                record["a2v"] = clip_a2v   # only for a clip with its own source audio (台帳 §1-120)
+            if has_neg:
+                record["vsf"] = clip_vsf   # only for a VSF chain: the single job's h3.vsf
             clip_records.append(record)
             if i == 0:
                 video_cat, audio_cat = video, audio   # with a source: its head is already in it
@@ -527,7 +700,7 @@ def run_chain_h3(
                 f"chain: concatenated latents {list(video_cat.shape)} / {list(audio_cat.shape)}, expected "
                 f"{layout.total_latent_frames} video / {layout.total_audio_latents} audio latents"
             )
-        del prev_video
+        del prev_video, negative_hidden   # the negative's hidden states, reused by every clip
         if not keep:
             # As a single job without the key: its denoise drops the DiT before
             # the decode; every clip here kept it (keep=True), so let it go now.

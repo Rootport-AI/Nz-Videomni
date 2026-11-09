@@ -33,16 +33,14 @@ export interface NagAccordionControls {
 export interface NagAccordionProps {
   nag: NagSettings;
   controls: NagAccordionControls;
-  /** The loaded base model's engine cannot run NAG/VSF
-   * (`featureScope.nagDisabledFor`). The accordion stays visible but GREYED —
-   * every control disabled, a note on top, no ON badge — and the shell sends
-   * none of its fields meanwhile (`nagSettings.effectiveNag`), so a NAG left
-   * on from another base model neither 422s a job nor hides out of reach. The
-   * user's settings are kept as they are for when a NAG-capable base model
-   * comes back. Omitted = available. */
-  unavailable?: boolean | undefined;
+  /** The loaded base model's engine cannot run the NAG method
+   * (`featureScope.nagMethodDisabledFor`). Only the NAG radio greys, with a
+   * hint on its label; the checkbox, the text, the VSF radio and the sliders
+   * stay as they are. The shell moves the method to VSF at the same time, so
+   * a NAG chosen on another base model cannot 422 a job. Omitted = available. */
+  nagMethodUnavailable?: boolean | undefined;
   /** §1-111: token count of the negative prompt text and the engine's limit
-   * (`TokenCounter`). Shown even while the field is greyed (incl. H3). */
+   * (`TokenCounter`). Shown even while the field is greyed. */
   tokenCount?: number | null | undefined;
   tokenLimit?: number | null | undefined;
 }
@@ -50,8 +48,7 @@ export interface NagAccordionProps {
 /**
  * The shared "Negative Prompt" accordion (D4), rendered ONCE by `AppShell`
  * directly below `PromptBar` and outside every mode tab — Create/Chain/Batch
- * all read the identical `NagSettings` (`shell/useNagSettings.ts`, through
- * `nagSettings.effectiveNag`) this way,
+ * all read the identical `NagSettings` (`shell/useNagSettings.ts`) this way,
  * mirroring `PromptBar` itself. Presentation-only: every value comes from
  * `nag`, every mutation goes through `controls` — this component owns no
  * state of its own.
@@ -60,21 +57,24 @@ export interface NagAccordionProps {
  * the summary shows nothing extra while off, and only the ON badge while
  * `nag.enabled` (never any other indicator).
  */
-export function NagAccordion({ nag, controls, unavailable = false, tokenCount, tokenLimit }: NagAccordionProps) {
+export function NagAccordion({
+  nag,
+  controls,
+  nagMethodUnavailable = false,
+  tokenCount,
+  tokenLimit,
+}: NagAccordionProps) {
   const strings = useStrings();
   const t = strings.nag;
-  // While the engine cannot run NAG every control greys,
-  // including the ones that are otherwise always operable (checkbox, radios).
-  const off = !nag.enabled || unavailable;
+  const off = !nag.enabled;
 
   return (
     <details className="form-accordion nag-accordion">
       <summary className="form-accordion-summary">
         {t.heading}
-        {nag.enabled && !unavailable && <span className="nag-on-badge">{t.onBadge}</span>}
+        {nag.enabled && <span className="nag-on-badge">{t.onBadge}</span>}
       </summary>
-      <div className={`form-accordion-body${unavailable ? " field-reserved" : ""}`}>
-        {unavailable && <p className="warning-banner">{t.unavailableOnBaseModel}</p>}
+      <div className="form-accordion-body">
         {/* No visible label (2026-07-28 slim-down: `PROMPT`-style items
             already say what this field is via the accordion heading itself,
             so a repeated "NEGATIVE PROMPT" caption above the textarea was
@@ -106,26 +106,32 @@ export function NagAccordion({ nag, controls, unavailable = false, tokenCount, t
             (2026-07-29, owner-confirmed design: picking a method is a
             declaration of "what to use next", not a live parameter — it's
             harmless to change while off, unlike the textarea/sliders below
-            which soft-disable). `name="nag-method"` must stay unique
-            app-wide — a duplicate radio `name` elsewhere in the mounted tree
-            would silently link the two groups (DEVLOG §45's name-collision
-            precedent). */}
+            which soft-disable). The one exception is the NAG radio while the
+            engine has no NAG method (`nagMethodUnavailable`): it greys, and
+            the shell has already moved the method to VSF.
+            `name="nag-method"` must stay unique app-wide — a duplicate radio
+            `name` elsewhere in the mounted tree would silently link the two
+            groups (DEVLOG §45's name-collision precedent). */}
         <div className="nag-toggle-row">
           <label className="field field-inline">
             <input
               type="checkbox"
               checked={nag.enabled}
-              disabled={unavailable}
               onChange={(e) => controls.setEnabled(e.target.checked)}
             />
             <span className="field-label">{t.enableLabel}</span>
           </label>
-          <label className="field field-inline">
+          {/* `title` on the wrapping `<label>` for the same reason as the
+              VSF radio's below. */}
+          <label
+            className="field field-inline"
+            title={nagMethodUnavailable ? t.methodNagUnavailableHint : undefined}
+          >
             <input
               type="radio"
               name="nag-method"
               checked={nag.method === "nag"}
-              disabled={unavailable}
+              disabled={nagMethodUnavailable}
               onChange={() => controls.setMethod("nag")}
             />
             <span>{t.methodNag}</span>
@@ -140,7 +146,6 @@ export function NagAccordion({ nag, controls, unavailable = false, tokenCount, t
               type="radio"
               name="nag-method"
               checked={nag.method === "vsf"}
-              disabled={unavailable}
               onChange={() => controls.setMethod("vsf")}
             />
             <span>{t.methodVsf}</span>

@@ -51,33 +51,61 @@ def _resample(resampler, frame) -> list[np.ndarray]:
     return [f.to_ndarray() for f in out if f is not None]
 
 
-def collect_resampled(frames, resampler, *, read_samples: int) -> list[np.ndarray]:
+def collect_resampled(frames, resampler, *, read_samples: int, skip_samples: int = 0) -> list[np.ndarray]:
     """Push ``frames`` through ``resampler`` until ``read_samples`` are in hand, then flush.
 
     Returns the planar float32 chunks [C, n] in order (their total can exceed
     ``read_samples``; the caller cuts). The flush always runs, also after an
     early stop, so the samples swresample holds back are not lost.
+
+    ``skip_samples``: the first that many resampled (32 kHz) samples are
+    dropped AFTER the conversion (read and thrown away, not seeked: the chunks
+    of the skipped stretch are not kept), and ``read_samples`` counts from
+    there. 0 (the default) keeps everything, as before.
     """
     chunks: list[np.ndarray] = []
     total = 0
+    to_skip = skip_samples
+
+    def keep(arr: np.ndarray) -> None:
+        nonlocal total, to_skip
+        if to_skip:
+            if arr.shape[1] <= to_skip:
+                to_skip -= arr.shape[1]
+                return
+            arr = arr[:, to_skip:]
+            to_skip = 0
+        chunks.append(arr)
+        total += arr.shape[1]
+
     for frame in frames:
         for arr in _resample(resampler, frame):
-            chunks.append(arr)
-            total += arr.shape[1]
+            keep(arr)
         if total >= read_samples:
             break
-    chunks.extend(_resample(resampler, None))
+    for arr in _resample(resampler, None):
+        keep(arr)
     return chunks
 
 
-def load_source_waveform(path: str, *, keep_samples: int, read_samples: int) -> tuple[torch.Tensor, dict]:
+def load_source_waveform(
+    path: str, *, keep_samples: int, read_samples: int, start_samples: int = 0,
+) -> tuple[torch.Tensor, dict]:
     """Decode ``path`` -> (waveform float32 [2, N] at 32 kHz, info).
 
     ``N`` is ``min(available, read_samples)``, or ``keep_samples`` when the
     file falls short of it by at most :data:`SHORTFALL_TOLERANCE` samples
     (zero-padded). ``info`` reports ``source_sample_rate``, ``source_channels``,
     ``decoded_samples`` (after the cap, before padding), ``padded_samples``,
-    ``channels_used`` ("mono->stereo" / "stereo" / "first2") and ``resampler``.
+    ``channels_used`` ("mono->stereo" / "stereo" / "first2"), ``resampler``
+    and ``start_samples``.
+
+    ``start_samples`` (a chain clip's own audio, 台帳 §1-120): the waveform
+    starts at that 32 kHz sample; the file is decoded from its head and the
+    samples before it are thrown away after the conversion (no seek), so the
+    result equals the whole decode's ``[:, start:start + N]``. Every count
+    above (``available``, the shortfall) is then counted from the start. 0
+    (the default) is the whole file from its head, as before.
     """
     import av
     from av.audio.resampler import AudioResampler
@@ -87,6 +115,8 @@ def load_source_waveform(path: str, *, keep_samples: int, read_samples: int) -> 
             f"音声の読み込み: keep_samples={keep_samples} / read_samples={read_samples} が不正です"
             "（1 ≦ keep_samples ≦ read_samples が必要です）"
         )
+    if isinstance(start_samples, bool) or not isinstance(start_samples, int) or start_samples < 0:
+        raise ValueError(f"音声の読み込み: start_samples={start_samples!r} が不正です（0 以上の整数が必要です）")
     try:
         container = av.open(str(path))
     except (av.error.FFmpegError, OSError) as exc:
@@ -99,10 +129,17 @@ def load_source_waveform(path: str, *, keep_samples: int, read_samples: int) -> 
         source_channels = int(stream.codec_context.layout.nb_channels)
         resampler = AudioResampler(format="fltp", layout=None, rate=C.AUDIO_SAMPLE_RATE)
         try:
-            chunks = collect_resampled(container.decode(stream), resampler, read_samples=read_samples)
+            chunks = collect_resampled(
+                container.decode(stream), resampler, read_samples=read_samples, skip_samples=start_samples,
+            )
         except av.error.FFmpegError as exc:
             raise ValueError(f"音声の復号に失敗しました（{path}）: {exc}") from exc
 
+    if start_samples and not any(c.shape[1] for c in chunks):
+        raise ValueError(
+            f"開始位置（{start_samples} サンプル＝{start_samples / C.AUDIO_SAMPLE_RATE:.3f} 秒）"
+            f"が音声の長さを超えています（{path}）"
+        )
     if not chunks:
         raise ValueError(f"音声を 1 サンプルも読めませんでした（{path}）")
     pcm = np.concatenate(chunks, axis=1)[:, :read_samples].astype(np.float32, copy=False)
@@ -135,5 +172,6 @@ def load_source_waveform(path: str, *, keep_samples: int, read_samples: int) -> 
         "padded_samples": int(padded),
         "channels_used": channels_used,
         "resampler": "pyav",
+        "start_samples": int(start_samples),
     }
     return wave, info

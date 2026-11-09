@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 import chain_math
+import h3_chain_math
 from api.errors import (
     end_source_too_short,
     gpu_oom,
@@ -1414,22 +1415,7 @@ class PipelineManager:
         (422 SOURCE_AUDIO_SILENT, ``video_io.audio_is_digitally_silent``;
         unmeasurable passes) → length (422 SOURCE_AUDIO_TOO_SHORT).
         """
-        src_path = self.audio_upload_store.path_for(source_audio.audio_id)
-        if not video_io.has_audio_stream(src_path):
-            raise source_audio_too_short(
-                detail=(
-                    f"アップロードされた音声（{source_audio.audio_id}）に"
-                    "読み取れる音声の流れがありません。"
-                )
-            )
-        if video_io.audio_is_digitally_silent(src_path):
-            raise source_audio_silent(
-                detail=(
-                    f"アップロードされた音声（{source_audio.audio_id}）の"
-                    "音声トラックは無音です（全サンプルが 0）。"
-                )
-            )
-        facts = _probe_source_audio(src_path)
+        facts = self._measure_h3_source_audio(source_audio.audio_id)
         duration = facts["duration_sec"]
         needed = num_frames / float(frame_rate)
         if duration is not None and duration + 0.001 < needed:
@@ -1440,6 +1426,74 @@ class PipelineManager:
                 )
             )
         return facts
+
+    def _measure_h3_source_audio(self, audio_id: str, where: str = "") -> dict:
+        """The MiniMax H3 A2V source audio's shared measurement: no audio stream
+        (422 SOURCE_AUDIO_TOO_SHORT) → a digitally silent track (422
+        SOURCE_AUDIO_SILENT; unmeasurable passes) → the ffprobe facts
+        ``{"duration_sec", "sample_rate", "channels"}`` (each ``None`` when
+        unmeasured). ``where`` is put in front of each detail (``""`` for a
+        single ``/generate``, whose sentences are unchanged; ``clips[i].source_audio: ``
+        for a chain clip's own A2V). The caller has already 404'd an unknown id."""
+        src_path = self.audio_upload_store.path_for(audio_id)
+        if not video_io.has_audio_stream(src_path):
+            raise source_audio_too_short(
+                detail=(
+                    f"{where}アップロードされた音声（{audio_id}）に"
+                    "読み取れる音声の流れがありません。"
+                )
+            )
+        if video_io.audio_is_digitally_silent(src_path):
+            raise source_audio_silent(
+                detail=(
+                    f"{where}アップロードされた音声（{audio_id}）の"
+                    "音声トラックは無音です（全サンプルが 0）。"
+                )
+            )
+        return _probe_source_audio(src_path)
+
+    def preflight_chain_clip_source_audio(self, clips, frame_rate: float) -> dict[str, dict]:
+        """Validate every chain clip's own source audio (MiniMax H3, 台帳 §1-120)
+        BEFORE a job is created.
+
+        ``clips`` are the request's :class:`ChainClip` list; the endpoint has
+        already 404'd every unknown ``audio_id``. Each distinct id is measured
+        ONCE (:meth:`_measure_h3_source_audio`, in the first clip's name that
+        uses it: no stream / silent → 422). Then each clip needs the audio to
+        reach its end: ``duration + 0.001 >= (clip_audio_start_sample(offset_frames)
+        + round(num_frames * 32000 / frame_rate)) / 32000`` -- the engine's
+        own start sample and sample count (the 1 ms is its 32-sample pad), so a
+        request this passes the engine's length guard passes too. Otherwise 422
+        SOURCE_AUDIO_TOO_SHORT with a ``clips[i].source_audio: `` detail. An
+        unmeasurable duration is left to the engine's guard. Returns the facts
+        per id.
+        """
+        facts_by_id: dict[str, dict] = {}
+        for i, clip in enumerate(clips):
+            spec = clip.source_audio
+            if spec is None:
+                continue
+            where = f"clips[{i}].source_audio: "
+            if spec.audio_id not in facts_by_id:
+                facts_by_id[spec.audio_id] = self._measure_h3_source_audio(spec.audio_id, where)
+            duration = facts_by_id[spec.audio_id]["duration_sec"]
+            if duration is None:
+                continue
+            offset = int(spec.offset_frames)
+            frames = int(clip.num_frames)
+            end_samples = h3_chain_math.clip_audio_start_sample(offset) + round(
+                frames * h3_chain_math.H3_AUDIO_SAMPLE_RATE / float(frame_rate)
+            )
+            needed = end_samples / h3_chain_math.H3_AUDIO_SAMPLE_RATE
+            if duration + 0.001 < needed:
+                raise source_audio_too_short(
+                    detail=(
+                        f"{where}音声が {duration:.3f} 秒しかありません。開始 {offset} フレームから "
+                        f"{frames} フレーム（{frame_rate:g} fps）を使うには、{needed:.3f} 秒以上の"
+                        "音声が必要です。"
+                    )
+                )
+        return facts_by_id
 
     # -------------------------------------------------------- run chain job
 
@@ -1576,6 +1630,34 @@ class PipelineManager:
                     ] if clip.references else None
                     for clip in chain.clips
                 ]
+            # A clip's own A2V (MiniMax H3 only, 台帳 §1-120; both LTX families'
+            # CHAIN_REJECT_TABLE refused ``clips[i].source_audio``). The API layer
+            # checked every id exists and is long enough; this resolves each one
+            # for the runner hop (one path or None per clip) and records the
+            # app's side of metadata["a2v"]["clips"] (ffprobe once per id). Only
+            # when some clip has one: the keyword is H3Runner's alone.
+            clip_a2v_provenance = None
+            if any(clip.source_audio is not None for clip in chain.clips):
+                runner_extra["clip_source_audio_paths"] = [
+                    self.audio_upload_store.path_for(clip.source_audio.audio_id)
+                    if clip.source_audio is not None else None
+                    for clip in chain.clips
+                ]
+                probed: dict[str, dict] = {}
+                clip_a2v_provenance = []
+                for clip, path in zip(chain.clips, runner_extra["clip_source_audio_paths"]):
+                    spec = clip.source_audio
+                    if spec is None:
+                        clip_a2v_provenance.append(None)
+                        continue
+                    if spec.audio_id not in probed:
+                        probed[spec.audio_id] = _probe_source_audio(path)
+                    clip_a2v_provenance.append({
+                        "source_audio_id": spec.audio_id,
+                        "strength": float(spec.strength),
+                        "offset_frames": int(spec.offset_frames),
+                        "source": dict(probed[spec.audio_id]),
+                    })
 
             # Console job-info line (owner requirement): base weight + LoRAs +
             # shared prompt (a clip's own prompt, where set, is appended to it for
@@ -1769,6 +1851,7 @@ class PipelineManager:
                     end_source_provenance=end_source_provenance,
                     reference_provenance=reference_provenance,
                     references_provenance=references_provenance,
+                    clip_a2v_provenance=clip_a2v_provenance,
                     attention_used=outcome.attention_used,
                     block_swap_prefetch_used=outcome.block_swap_prefetch_used,
                     keep_resident_used=outcome.keep_resident_used,
@@ -1839,6 +1922,7 @@ class PipelineManager:
         fused_gguf_dequant_kernel_used=None, vae_mode_used=None,
         vram16_mode_used=None,
         peak_vram_reserved_mb=None,
+        clip_a2v_provenance=None,
     ) -> None:
         cm = chain_meta or {}
         # The overlap and the stage-2 window as the ENGINE ran them: the chain
@@ -1982,6 +2066,26 @@ class PipelineManager:
                 )
                 clip_blocks.append({**(engine_counts or {}), "inputs": inputs})
             metadata["references"] = {"clips": clip_blocks}
+        # A clip's own A2V (additive, MiniMax H3 only, 台帳 §1-120): one entry per
+        # clip -- the ENGINE's record (``done.chain.clips[i].a2v``: mask_value,
+        # audio_latents, fixed_head_latents, start_sample, required_samples,
+        # encoded_samples, channels_used, resampler, encoder_tensors,
+        # audio_output) merged with the APP's provenance (source_audio_id,
+        # strength, offset_frames, source) -- or None for a clip without one. A
+        # chain where no clip has one carries no such block. Not the LTX chain's
+        # top-level ``a2v`` (``a2v_provenance`` above), which an H3 chain never
+        # has (its CHAIN_REJECT_TABLE refuses the top-level source_audio).
+        if clip_a2v_provenance is not None:
+            engine_clips = cm.get("clips") or []
+            a2v_blocks: list[dict | None] = []
+            for i, provenance in enumerate(clip_a2v_provenance):
+                if provenance is None:
+                    a2v_blocks.append(None)
+                    continue
+                engine_clip = engine_clips[i] if i < len(engine_clips) else None
+                engine_a2v = engine_clip.get("a2v") if isinstance(engine_clip, dict) else None
+                a2v_blocks.append({**(engine_a2v or {}), **provenance})
+            metadata["a2v"] = {"clips": a2v_blocks}
         # Clip-wise IC-LoRA reference (additive): only present when a reference
         # video was actually used, so a normal (or style-loras-only) chain
         # carries no ``ic_lora`` key. Mirrors _write_metadata's single-generate

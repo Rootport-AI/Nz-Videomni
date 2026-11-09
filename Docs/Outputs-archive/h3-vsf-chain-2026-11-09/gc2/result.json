@@ -1,0 +1,127 @@
+{
+  "gate": "gc2",
+  "label": "after",
+  "started_at": "2026-11-09T09:35:28+09:00",
+  "checks": {
+    "job_completed": {
+      "pass": true,
+      "actual": "completed",
+      "expected": "completed"
+    },
+    "is_retake": {
+      "pass": true,
+      "actual": {
+        "retake": true,
+        "request.retake": {
+          "video_id": "85d0fabd-58cd-48d2-b7e1-0f8461b65aa7",
+          "window_start_sec": 0.5,
+          "head_px": 22,
+          "tail_px": 22,
+          "regenerate_audio": true,
+          "audio_strength": 0.5
+        }
+      },
+      "expected": "metadata.retake か request.retake がある"
+    },
+    "clips[0].vsf_has_keys_and_scale_3": {
+      "pass": true,
+      "actual": {
+        "rows": [
+          41,
+          46
+        ],
+        "scale": 3.0,
+        "m_neg": 0.004977448376099655,
+        "m_text": 0.012681804944544897
+      },
+      "expected": {
+        "keys": [
+          "rows",
+          "scale",
+          "m_neg",
+          "m_text"
+        ],
+        "scale": 3.0
+      }
+    },
+    "log_neg_vsf_scale_3": {
+      "pass": true,
+      "actual": [
+        "[h3_worker] generate_chain: seed=42 640x384 clips=[73] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=True prefetch=True vram16=True loras=[] retake=('_retake_window.mp4', 0.5) neg=vsf(scale=3.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\bdddf34f-9bdd-4303-99de-7a392b86e1d3\\output.mp4"
+      ],
+      "expected": "generate_chain: の行に neg=vsf(scale=3.0)"
+    }
+  },
+  "material": {
+    "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc0\\after\\737f8771-f97f-48e1-818b-09fc991511e2.mp4",
+    "source": "gc0（この回）",
+    "sha256": "4a98be0884ae7129e34f58578a3fe7ca3117ca5a764545cbac404e12a70cbec5"
+  },
+  "upload": {
+    "video_id": "85d0fabd-58cd-48d2-b7e1-0f8461b65aa7",
+    "original_filename": "737f8771-f97f-48e1-818b-09fc991511e2.mp4",
+    "stored_path": "uploads/videos/85d0fabd-58cd-48d2-b7e1-0f8461b65aa7/input.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 1706119,
+    "trimmed": false,
+    "frame_count": 328,
+    "fps": 24.0
+  },
+  "geometry": {
+    "window_end_sec": 3.5416666666666665,
+    "material_seconds": 13.666666666666666
+  },
+  "job_id": "bdddf34f-9bdd-4303-99de-7a392b86e1d3",
+  "status": "completed",
+  "error": null,
+  "sha256": "5e8b897f6772201931f4a65700d00cbebd6a9000b8e995556ce0b0c9a19bc6a3",
+  "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc2\\retake\\bdddf34f-9bdd-4303-99de-7a392b86e1d3.mp4",
+  "seconds_wall": 115.3,
+  "generation_time_seconds": 110.55,
+  "peak_vram_reserved_mb": 5398,
+  "peak_vram_mb": 5064,
+  "chain_log_lines": [
+    "[h3_worker] generate_chain: seed=42 640x384 clips=[73] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=True prefetch=True vram16=True loras=[] retake=('_retake_window.mp4', 0.5) neg=vsf(scale=3.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\bdddf34f-9bdd-4303-99de-7a392b86e1d3\\output.mp4"
+  ],
+  "clips_vsf": [
+    {
+      "rows": [
+        41,
+        46
+      ],
+      "scale": 3.0,
+      "m_neg": 0.004977448376099655,
+      "m_text": 0.012681804944544897
+    }
+  ],
+  "metadata_retake": {
+    "window_px": 73,
+    "head_px": 22,
+    "tail_px": 22,
+    "n_head_v": 7,
+    "n_tail_v": 7,
+    "n_head_a": 36,
+    "n_tail_a": 36,
+    "free_middle_px": [
+      22,
+      51
+    ],
+    "audio_strength": 0.5,
+    "source_had_audio": true,
+    "audio_frozen": true,
+    "muxed_original_waveform": false,
+    "decoded_frames_px": 73,
+    "retake_video_id": "85d0fabd-58cd-48d2-b7e1-0f8461b65aa7",
+    "source_fps": 24.0,
+    "resampled": false,
+    "window_start_sec": 0.5,
+    "window_start_frame": 12,
+    "written_frames": 73,
+    "upload_has_audio": true
+  },
+  "vsf_log_lines": [
+    "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[41,46) scale=3.0 m_neg=0.004977 m_text=0.012682"
+  ],
+  "pass": true,
+  "finished_at": "2026-11-09T09:37:24+09:00"
+}

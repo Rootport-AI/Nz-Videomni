@@ -518,12 +518,10 @@ def test_the_reject_table_and_this_suite_cover_the_same_fields():
 # --------------------------------------------------------------------------- #
 
 
-#: 拒否表の欄 -> 機能名(LTX 2.5 の表)。
-_CHAIN_FEATURE_OF = {f: feat for f, feat, _p in ltx25.CHAIN_REJECT_TABLE}
-
-
-@pytest.mark.parametrize("field", sorted(CHAIN_OVERRIDES))
-def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, field):
+#: ``CHAIN_OVERRIDES`` は機能名を鍵にする(``clips`` を読む行が 2 つある:
+#: ``references`` と ``source_audio``)。
+@pytest.mark.parametrize("feature", sorted(CHAIN_OVERRIDES))
+def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, feature):
     """chain系の拒否は**フィールド単位**である(§3-102)。V2V・A2V・Retake・
     End source・LoRA・参照動画・NAG・加速系はどれもこの一つの入口から来るので、
     表の各行がHTTPの入口で本当に効いていることを一件ずつ見る。
@@ -533,17 +531,16 @@ def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, 
     _activate(two_family_client, "LTX25")
     before = _job_count(two_family_client)
 
-    body = _chain_body(**CHAIN_OVERRIDES[field])
+    body = _chain_body(**CHAIN_OVERRIDES[feature])
     r = two_family_client.post("/api/v1/generate/chain", json=body)
 
-    assert r.status_code == 422, f"{field}: {r.text}"
+    assert r.status_code == 422, f"{feature}: {r.text}"
     error = r.json()["error"]
     assert error["code"] == "FEATURE_UNSUPPORTED"
-    # 表は欄の名前で引く。機能名が欄の名前と違う行(``clips`` の ``references``)
-    # があるので、H3 専用かどうかは機能名で判定する。
-    feature = _CHAIN_FEATURE_OF[field]
-    if feature in ltx23.H3_ONLY_REFUSALS:
-        assert error["detail"] == ltx23.H3_ONLY_REFUSALS[feature]
+    assert f"'{feature}'" in error["message"]
+    # H3 専用かどうかは機能名で判定する(連結用の文の表)。
+    if feature in ltx23.H3_ONLY_CHAIN_REFUSALS:
+        assert error["detail"] == ltx23.H3_ONLY_CHAIN_REFUSALS[feature]
     else:
         assert "LTX 2.3" in error["detail"]
     assert _job_count(two_family_client) == before
@@ -551,13 +548,10 @@ def test_ltx25_refuses_every_field_in_the_chain_reject_table(two_family_client, 
 
 
 @pytest.mark.parametrize(
-    "field",
-    sorted(
-        field for field in CHAIN_OVERRIDES
-        if _CHAIN_FEATURE_OF[field] not in ltx23.H3_ONLY_REFUSALS
-    ),
+    "feature",
+    sorted(feature for feature in CHAIN_OVERRIDES if feature not in ltx23.H3_ONLY_CHAIN_REFUSALS),
 )
-def test_ltx23_accepts_every_chain_field_the_2_5_engine_refuses(two_family_client, field):
+def test_ltx23_accepts_every_chain_field_the_2_5_engine_refuses(two_family_client, feature):
     """対の検証。ガードが系統を見ずに効いていたら、ここが落ちる。
     MiniMax H3 専用の機能(``H3_ONLY_REFUSALS``)は両方の LTX が断るので対象外。
 
@@ -565,7 +559,7 @@ def test_ltx23_accepts_every_chain_field_the_2_5_engine_refuses(two_family_clien
     見るのは「機能が無いから拒否された」という**別の理由**で落ちていないこと。"""
     _activate(two_family_client, "LTX23")
 
-    body = _chain_body(**CHAIN_OVERRIDES[field])
+    body = _chain_body(**CHAIN_OVERRIDES[feature])
     r = two_family_client.post("/api/v1/generate/chain", json=body)
 
     if r.status_code >= 400:
@@ -575,8 +569,8 @@ def test_ltx23_accepts_every_chain_field_the_2_5_engine_refuses(two_family_clien
 def test_the_chain_reject_table_and_this_suite_cover_the_same_fields():
     """パラメトライズはその入力表と同じ精度しか持たない。表が育ったら、
     ここが落ちてこのファイルの更新を強制する。"""
-    assert set(CHAIN_OVERRIDES) == {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
-    assert set(CHAIN_OVERRIDES) <= set(GenerateChainRequest.model_fields)
+    assert set(CHAIN_OVERRIDES) == {feat for _f, feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE} <= set(GenerateChainRequest.model_fields)
 
 
 def test_ltx25_runs_a_plain_chained_job(two_family_client):
@@ -1116,7 +1110,7 @@ def test_switching_back_to_2_3_lifts_the_chain_refusals(two_family_client):
     題材はモードではないので「素材の切り出し」のような往復は無いが、見たいのは
     系統の切り替えに追随することだけである。相方の要らないフィールドなので、
     本体は素のchainに1値を足しただけになる。"""
-    body = _chain_body(**CHAIN_OVERRIDES["vae_mode"])
+    body = _chain_body(**CHAIN_OVERRIDES["prune_vaed"])
     _activate(two_family_client, "LTX25")
     assert two_family_client.post("/api/v1/generate/chain", json=body).status_code == 422
     _activate(two_family_client, "LTX23")

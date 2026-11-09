@@ -243,6 +243,10 @@ class H3GenerateRequest:
     source_audio: H3AudioInput | None = None
     #: Ref2VA (台帳 §1-107): the reference media; () = no reference rows (as before).
     references: tuple[H3ReferenceInput, ...] = ()
+    #: VSF (台帳 §1-127): the negative prompt; "" = none (as before).
+    negative_prompt: str = ""
+    #: VSF: the negative rows' V are multiplied by ``-vsf_scale`` (0..10).
+    vsf_scale: float = 1.5
 
 
 # --------------------------------------------------------------------------- #
@@ -330,6 +334,12 @@ def validate_request(req: H3GenerateRequest) -> None:
             sec = ref.max_sec
             if isinstance(sec, bool) or not isinstance(sec, (int, float)) or not (math.isfinite(sec) and sec > 0):
                 raise ValueError(f"参照の切り詰めの秒数は正の有限の値にしてください（{kind} {slot}: {sec!r}）")
+    try:
+        vsf_scale = float(req.vsf_scale)
+    except (TypeError, ValueError):
+        raise ValueError(f"VSF の強さは数値で渡してください（{req.vsf_scale!r}）") from None
+    if not (math.isfinite(vsf_scale) and 0.0 <= vsf_scale <= 10.0):
+        raise ValueError(f"VSF の強さは 0〜10 にしてください（{req.vsf_scale}）")
 
 
 def require_fp32_matmul() -> None:
@@ -420,11 +430,12 @@ def noisy_condition(cond_clean: torch.Tensor, frame_rows: int, generator: torch.
     return KEYFRAME_NOISE_AUG * clean + (1.0 - KEYFRAME_NOISE_AUG) * noise
 
 
-def encode_steps(*, has_cond: bool, has_audio: bool, has_refs: bool = False) -> int:
-    """The ``encode`` stage's step count: the text encoder's 3, then one for the key
-    frames' VAE encode (any key frame), one for the references' encode (Ref2VA)
-    and one for the source audio's encode (A2V), in that order."""
-    return 3 + int(bool(has_cond)) + int(bool(has_refs)) + int(bool(has_audio))
+def encode_steps(*, has_cond: bool, has_audio: bool, has_refs: bool = False, has_neg: bool = False) -> int:
+    """The ``encode`` stage's step count: the text encoder's 3 (4 with a negative
+    prompt, VSF), then one for the key frames' VAE encode (any key frame), one
+    for the references' encode (Ref2VA) and one for the source audio's encode
+    (A2V), in that order."""
+    return 3 + int(bool(has_neg)) + int(bool(has_cond)) + int(bool(has_refs)) + int(bool(has_audio))
 
 
 def modality_rows(layout, text_tags: torch.Tensor) -> torch.Tensor:
@@ -721,6 +732,7 @@ class H3Pipeline:
         phases = _Phases(cuda=self.device.type == "cuda")
         ok = False
         lora_report: list[dict] = []
+        vsf_report: dict = {}
         a2v: dict = {}
         references_summary: dict | None = None
         try:
@@ -778,14 +790,28 @@ class H3Pipeline:
                 })
             # Strength 0 is mask value 1 everywhere: no effect, so nothing is encoded.
             encode_audio = wave is not None and strength > 0.0
-            encode_total = encode_steps(has_cond=bool(canvases), has_audio=encode_audio, has_refs=bool(ref_media))
+            # VSF (台帳 §1-127): a negative prompt adds one text encoder forward.
+            has_neg = bool(req.negative_prompt.strip())
+            encode_total = encode_steps(
+                has_cond=bool(canvases), has_audio=encode_audio, has_refs=bool(ref_media), has_neg=has_neg,
+            )
+            negative_hidden = None
+            # Only a VSF job passes the key: every other job's call is the same as before.
+            neg_kw = {"negative_prompt": req.negative_prompt} if has_neg else {}
             with torch.no_grad():
                 with phases.phase("encode") as entry:
-                    text_hidden, text_tags = self._encode(
+                    encoded = self._encode(
                         req.prompt, phases, images=vision_images, has_cond=bool(canvases),
-                        has_audio=encode_audio, refs=self._te_references(ref_media),
+                        has_audio=encode_audio, refs=self._te_references(ref_media), **neg_kw,
                     )
+                    if has_neg:
+                        text_hidden, text_tags, negative_hidden = encoded
+                    else:
+                        text_hidden, text_tags = encoded
+                    del encoded
                     entry["text_tokens"] = int(text_hidden.shape[0])
+                    if has_neg:
+                        entry["negative_tokens"] = int(negative_hidden.shape[0])
                 cond_clean = None
                 ref_rows = None
                 # ONE video encoder for the key frames and the picture / video
@@ -798,7 +824,7 @@ class H3Pipeline:
                     with phases.phase("image_encode") as entry:
                         if visual_refs:
                             video_enc = self._build_video_encoder()
-                        cond_clean = self._encode_image(canvases, entry, 4, encode_total, enc=video_enc)
+                        cond_clean = self._encode_image(canvases, entry, 4 + int(has_neg), encode_total, enc=video_enc)
                         entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
                         entry["canvas"] = [int(req.width), int(req.height)]
                         entry["source_size"] = source_size
@@ -808,7 +834,7 @@ class H3Pipeline:
                         if visual_refs and video_enc is None:
                             video_enc = self._build_video_encoder()
                         te_refs = phases.data["encode"].get("te_read", {}).get("references", [])
-                        index = 3 + int(bool(cond_clean is not None)) + 1
+                        index = 3 + int(bool(cond_clean is not None)) + 1 + int(has_neg)
                         ref_rows = self._encode_references(ref_media, entry, index, encode_total, video_enc, te_refs)
                         video_enc = None
                         _free_cuda()
@@ -830,8 +856,9 @@ class H3Pipeline:
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
                         lora_report=lora_report, audio_fix=audio_fix, refs=ref_rows,
+                        negative_hidden=negative_hidden, vsf_scale=float(req.vsf_scale), vsf_report=vsf_report,
                     )
-                del text_hidden, text_tags, cond_clean, audio_fix, ref_rows
+                del text_hidden, text_tags, cond_clean, audio_fix, ref_rows, negative_hidden
                 _free_cuda()
                 with phases.phase("decode") as entry:
                     # Strength 1.0 keeps the audio latents as they are: the mp4
@@ -862,6 +889,8 @@ class H3Pipeline:
             h3["a2v"] = a2v             # only for an A2V job, the same way
         if references_summary is not None:
             h3["references"] = references_summary   # only for a Ref2VA job, the same way
+        if req.negative_prompt.strip():
+            h3["vsf"] = vsf_report      # only for a VSF job, the same way
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -899,15 +928,21 @@ class H3Pipeline:
 
     def _encode(
         self, prompt: str, phases: _Phases, images=(), *, has_cond: bool, has_audio: bool = False,
-        refs=None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """The text encoder's one forward. ``images``: the canvases the vision
-        tower reads (the first / last key frame); ``has_cond``: whether the job
-        has any key frame at all; ``has_audio``: whether it encodes a source
-        audio (A2V); ``refs``: the Ref2VA references as the text encoder takes
-        them (``RefMedia``, in presentation order; None / empty = none, and then
-        the encoder is called exactly as before). Together they decide the
-        stage's step count.
+        refs=None, negative_prompt: str | None = None,
+    ) -> tuple[torch.Tensor, ...]:
+        """The text encoder's one forward (two with a negative prompt).
+        ``images``: the canvases the vision tower reads (the first / last key
+        frame); ``has_cond``: whether the job has any key frame at all;
+        ``has_audio``: whether it encodes a source audio (A2V); ``refs``: the
+        Ref2VA references as the text encoder takes them (``RefMedia``, in
+        presentation order; None / empty = none, and then the encoder is called
+        exactly as before). Together they decide the stage's step count.
+
+        ``negative_prompt`` (VSF, 台帳 §1-127): None = none, and the result is
+        ``(hidden, tags)`` as before; otherwise a second forward on the text
+        alone (no image, no reference) follows the positive one and the result
+        is ``(hidden, tags, negative_hidden)``. Its read report is kept under
+        ``te_read_negative``; ``te_read`` stays the positive forward's.
 
         The result is returned on the CPU, so no text encoder tensor stays in a
         GPU segment; the denoise moves it with ``.to(dev)`` when it uses it."""
@@ -916,12 +951,14 @@ class H3Pipeline:
         images = list(images)
         refs = list(refs or ())
         te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
-        # A job with any key frame adds a 4th step to the same stage: the key
-        # frames' VAE encode (also when none of them goes to the vision tower,
-        # so a middle-only job never shows 3/3 then 4/4); a Ref2VA job adds one
-        # for the references' encode, an A2V job one more after it, the source
-        # audio's encode.
-        total = encode_steps(has_cond=has_cond, has_audio=has_audio, has_refs=bool(refs))
+        # A job with any key frame adds a further step to the same stage: the
+        # key frames' VAE encode (also when none of them goes to the vision
+        # tower, so a middle-only job never shows 3/3 then 4/4); a Ref2VA job
+        # adds one for the references' encode, an A2V job one more after it,
+        # the source audio's encode.
+        has_neg = negative_prompt is not None
+        neg_hidden = None
+        total = encode_steps(has_cond=has_cond, has_audio=has_audio, has_refs=bool(refs), has_neg=has_neg)
         self._progress("encode", 0, total)
         try:
             info = te.load()
@@ -935,17 +972,25 @@ class H3Pipeline:
             hidden, tags = hidden.to("cpu"), tags.to("cpu")
             phases.data["encode"]["te_read"] = te.read_report
             self._progress("encode", 2, total)
+            if has_neg:
+                neg_hidden, _ = te.encode(negative_prompt)
+                neg_hidden = neg_hidden.to("cpu")
+                phases.data["encode"]["te_read_negative"] = te.read_report
+                self._progress("encode", 3, total)
         finally:
             te.release()
             del te
             _free_cuda()
         phases.mark("encode", "after_release")
-        self._progress("encode", 3, total)
+        self._progress("encode", 3 + int(has_neg), total)
         self._log(
             f"encode: {hidden.shape[0]} text tokens"
             + (f" (with {len(images)} key frame vision block(s))" if images else "")
             + (f" (with {len(refs)} reference(s))" if refs else "")
+            + (f" (negative prompt: {neg_hidden.shape[0]} tokens)" if has_neg else "")
         )
+        if has_neg:
+            return hidden, tags, neg_hidden
         return hidden, tags
 
     def _build_video_encoder(self):
@@ -1393,6 +1438,7 @@ class H3Pipeline:
         self, req, text_hidden, text_tags, phases: _Phases, entry: dict,
         cond_clean=None, cond_frame_idx=(), keep=False, lora_report=None,
         audio_fix=None, video_fix=None, refs=None, video_inject_clean: float | None = None,
+        negative_hidden=None, vsf_scale: float = 1.5, vsf_report: dict | None = None,
     ):
         """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, one mask
         value per audio latent / per latent frame)`` for a stream whose rows are
@@ -1409,7 +1455,14 @@ class H3Pipeline:
         picture / video rows form ``ref_video`` and get ``0.999 * clean + 0.001 *
         noise`` with one draw per reference AFTER the video, audio and condition
         draws; the audio rows form ``ref_audio`` and are not mixed. Both go to
-        the DiT unchanged at every step."""
+        the DiT unchanged at every step.
+
+        ``negative_hidden`` (VSF, 台帳 §1-127): the negative prompt's text
+        encoder rows (None = none, and the job is the same as before). They are
+        refined on their own and appended to the text rows, ``[positive (L_pos) |
+        negative (n)]``, tagged as text; every block multiplies their V by
+        ``-vsf_scale``. ``vsf_report``: filled with ``rows`` / ``scale`` and the
+        step-0 measurement ``m_neg`` / ``m_text`` (``engine_h3.vsf.H3VsfProbe``)."""
         from engine_h3.denoise_mask import (  # noqa: PLC0415
             AUDIO_TIME_CAP,
             VIDEO_TIME_CAP,
@@ -1428,6 +1481,7 @@ class H3Pipeline:
             unpatchify_video,
         )
         from engine_h3.rope import build_coords, rope_tables  # noqa: PLC0415
+        from engine_h3.vsf import H3Vsf, H3VsfProbe, probe_query_rows  # noqa: PLC0415
 
         dev = self.device
         steps = int(req.num_inference_steps)
@@ -1488,6 +1542,15 @@ class H3Pipeline:
             phases.mark("denoise", "after_place")
 
             text_refined = dit.refine_text(text_hidden.to(dev))
+            # VSF: the negative rows are refined on their own (before VRAM 16GB
+            # mode evicts the text modules) and appended to the text rows as text.
+            L_pos = int(text_refined.shape[0])
+            n_neg = 0 if negative_hidden is None else int(negative_hidden.shape[0])
+            if n_neg:
+                neg_refined = dit.refine_text(negative_hidden.to(dev))
+                text_refined = torch.cat([text_refined, neg_refined])
+                del neg_refined
+                text_tags = torch.cat([text_tags, torch.ones(n_neg, dtype=torch.long, device=text_tags.device)])
             if vram16 is not None:
                 vram16_entry["text_modules"] = self._evict_text_modules(dit, keep)
             L = int(text_refined.shape[0])
@@ -1502,6 +1565,11 @@ class H3Pipeline:
             rope_cos, rope_sin = rope_tables(coords, dit.rope_inv_freq)
             rope_cos, rope_sin = rope_cos.to(dev), rope_sin.to(dev)
             modality = modality_rows(layout, text_tags.to(dev))
+            vsf = H3Vsf(slice(L_pos, L), float(vsf_scale)) if n_neg else None
+            vsf_probe = (
+                H3VsfProbe(probe_query_rows(layout.video), neg_rows=vsf.rows, text_rows=slice(0, L_pos))
+                if vsf is not None else None
+            )
 
             # Noise: ONE CPU generator, float32, video first then audio (the
             # draw order is part of what "same seed" means for this engine).
@@ -1552,6 +1620,9 @@ class H3Pipeline:
                 # Only for a Ref2VA job: every other job's sequence record is unchanged.
                 entry["sequence"]["ref_video"] = ref_video_n
                 entry["sequence"]["ref_audio"] = ref_audio_n
+            if n_neg:
+                # Only for a VSF job; "text" above counts the negative rows too.
+                entry["sequence"]["negative"] = n_neg
             m_per_step: list[int] = []
             attention = self._attention_for(req)
             self._progress("stage1_denoise", 0, steps)
@@ -1588,8 +1659,22 @@ class H3Pipeline:
                     attention_backend=attention,
                     vram16=vram16,
                     tokens_box=box,
+                    vsf=vsf,
+                    vsf_probe=vsf_probe if i == 0 else None,
                 )
                 del tokens
+                if vsf_probe is not None and i == 0:
+                    measured = vsf_probe.result()
+                    vsf_probe = None
+                    logger.info(
+                        "H3 VSF: rows=[%d,%d) scale=%s m_neg=%.6f m_text=%.6f",
+                        L_pos, L, float(vsf_scale), measured["m_neg"], measured["m_text"],
+                    )
+                    if vsf_report is not None:
+                        vsf_report.update({
+                            "rows": [L_pos, L], "scale": float(vsf_scale),
+                            "m_neg": measured["m_neg"], "m_text": measured["m_text"],
+                        })
                 if vram16 is not None:
                     _vram16_release(dev)
                 v_video = unpatchify_video(v_video_rows.to(dev), t_lat, gh, gw)

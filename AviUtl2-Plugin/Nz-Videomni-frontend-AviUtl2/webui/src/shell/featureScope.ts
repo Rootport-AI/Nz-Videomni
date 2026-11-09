@@ -51,7 +51,7 @@ export type UiTarget =
   | "createSection.a2v"
   | "createSection.keyframeStrength"
   | "promptBar.loraAudioStrength"
-  | "shell.nag"
+  | "nagAccordion.methodNag"
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings"
   | "settingsRow.vram16"
@@ -140,11 +140,10 @@ interface FeatureUiEntry {
  *       submit into `POST /generate/chain`, so a base model that cannot chain
  *       cannot run it either. Greyed — unless the engine publishes
  *       `constraints.source_audio` (`a2vRouteFor` then routes the card to `/generate`).
- *     - `nag` closes the shared Negative Prompt accordion. Greyed rather than
- *       hidden, and the shell stops sending its fields at the same time
- *       (`nagSettings.effectiveNag`) — hiding alone would strand a NAG left
- *       enabled on another base model, 422-ing every job with no control left
- *       to turn it off.
+ *     - `nag` closes the NAG method only: the shared Negative Prompt
+ *       accordion greys its NAG radio alone (the checkbox, the text and the
+ *       VSF radio stay operable), and the shell moves the method to VSF at
+ *       the same time, so a NAG chosen on another base model cannot 422 a job.
  *     - `keyframe_strength` HIDES each keyframe card's strength row, and the
  *       shell stops sending `strength` at the same time
  *       (`keyframeUtils.omitStrength`): the engine has no keyframe strength,
@@ -196,7 +195,7 @@ export const FEATURE_UI = {
   end_source: { hides: ["chainPanel.endSource"] },
   chain_start_image: { disables: ["chainPanel.startImage", "chainSection.batchI2vLong"] },
   reference_video: { hides: ["chainPanel.reference", "createSection.referenceVideo"] },
-  nag: { disables: ["shell.nag"] },
+  nag: { disables: ["nagAccordion.methodNag"] },
   keyframe_strength: { hides: ["createSection.keyframeStrength", "chainPanel.startImageStrength"] },
   lora_audio_strength: { disables: ["promptBar.loraAudioStrength"] },
   prune_vaed: { disables: ["settingsRow.vae"], resets: "vaeMode" },
@@ -327,8 +326,15 @@ export function disabledModesFor(unsupportedFeatures: readonly string[]): AppMod
  * ride {@link disabledModesFor}, but `chain` and `a2v` both list it in
  * {@link FEATURE_UI} and the table's disjunction is what used to be a
  * hand-written `||` here.
+ *
+ * §1-126: `singleA2vAvailable` (= `constraints.singleSourceAudio` is published
+ * — MiniMax H3) opens the panel whatever the feature list says: every row of
+ * such an engine goes to the single `/generate` route (an a2v row with its
+ * `source_audio`), never to a chain. Omitted = `false`, the behaviour before
+ * §1-126.
  */
-export function batchA2vDisabledFor(unsupportedFeatures: readonly string[]): boolean {
+export function batchA2vDisabledFor(unsupportedFeatures: readonly string[], singleA2vAvailable = false): boolean {
+  if (singleA2vAvailable) return false;
   return disabledUiTargets(unsupportedFeatures).has("createSection.batchA2v");
 }
 
@@ -365,12 +371,22 @@ export interface ChainPanelsDisabled {
  * whole tab through {@link disabledModesFor}, so the table gives `chain` no
  * `chainPanel.*` target and this function cannot duplicate a decision already
  * made one level up.
+ *
+ * §1-120: `chainSourceAudioAvailable` (= `constraints.chain.sourceAudio` is
+ * published — MiniMax H3) reopens the A2V panel even though the engine still
+ * declares `a2v` (the chain-wide `source_audio` stays refused; the panel then
+ * distributes the long audio to the clips' own A2V instead). The `a2v` name
+ * keeps closing Batch A2V — that is decided elsewhere. Omitted = `false`, the
+ * behaviour before §1-120.
  */
-export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): ChainPanelsDisabled {
+export function chainPanelsDisabledFor(
+  unsupportedFeatures: readonly string[],
+  chainSourceAudioAvailable = false,
+): ChainPanelsDisabled {
   const disabled = disabledUiTargets(unsupportedFeatures);
   return {
     v2v: disabled.has("chainPanel.v2v"),
-    a2v: disabled.has("chainPanel.a2v"),
+    a2v: disabled.has("chainPanel.a2v") && !chainSourceAudioAvailable,
     endSource: disabled.has("chainPanel.endSource"),
     reference: disabled.has("chainPanel.reference"),
     startImage: disabled.has("chainPanel.startImage"),
@@ -538,12 +554,12 @@ export function singleSectionsHiddenFor(unsupportedFeatures: readonly string[]):
   };
 }
 
-/** Whether the shared Negative Prompt (NAG/VSF) accordion is closed
- * (`nag`). The shell greys it AND stops its fields from riding on any request
- * (`nagSettings.effectiveNag`), so a NAG left on from another base model can
- * neither 422 a job nor be stuck on screen. `false` for the ordinary case. */
-export function nagDisabledFor(unsupportedFeatures: readonly string[]): boolean {
-  return disabledUiTargets(unsupportedFeatures).has("shell.nag");
+/** Whether the Negative Prompt accordion's NAG method is closed (`nag`). The
+ * accordion greys its NAG radio alone AND the shell moves the method to VSF,
+ * so a NAG chosen on another base model cannot 422 a job. `false` for the
+ * ordinary case. */
+export function nagMethodDisabledFor(unsupportedFeatures: readonly string[]): boolean {
+  return disabledUiTargets(unsupportedFeatures).has("nagAccordion.methodNag");
 }
 
 /** Whether each LoRA chip's audio toggle (🎥 / 🔊 / audio value) is hidden

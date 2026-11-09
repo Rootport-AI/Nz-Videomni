@@ -1,0 +1,3453 @@
+{
+  "script": "h3_chain_a2v_gate.py",
+  "jobs": {
+    "ga0": {
+      "label": "ga0",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga0",
+      "note": "GA0: G-C0 と同じ連結生成（音声なし）",
+      "endpoint": "POST /api/v1/generate/chain",
+      "body": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "seed": 42,
+        "attention_backend": "sdpa",
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "clips": [
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She turns and walks slowly along the street, humming a tune."
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+          }
+        ],
+        "embed_mp4_metadata": false
+      },
+      "started_at": "2026-11-09T20:18:07+09:00",
+      "status": "completed",
+      "error": null,
+      "submit": {
+        "http": 202,
+        "body": {
+          "job_id": "c0ff1e42-09cb-4037-9143-0c4805fd6e2a",
+          "status": "running",
+          "created_at": "2026-11-09T11:18:07Z",
+          "num_clips": 3
+        }
+      },
+      "job_id": "c0ff1e42-09cb-4037-9143-0c4805fd6e2a",
+      "poll_samples": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "progress": 0.05,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 10.0,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "encode",
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 40.0,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 50.0,
+          "status": "running",
+          "progress": 0.078,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 60.0,
+          "status": "running",
+          "progress": 0.107,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 70.0,
+          "status": "running",
+          "progress": 0.135,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 80.0,
+          "status": "running",
+          "progress": 0.163,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 90.0,
+          "status": "running",
+          "progress": 0.192,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 100.0,
+          "status": "running",
+          "progress": 0.22,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 110.1,
+          "status": "running",
+          "progress": 0.248,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 120.1,
+          "status": "running",
+          "progress": 0.277,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 16,
+          "total_steps": 20
+        },
+        {
+          "t": 130.1,
+          "status": "running",
+          "progress": 0.305,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 18,
+          "total_steps": 20
+        },
+        {
+          "t": 140.1,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "encode",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 160.1,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 170.1,
+          "status": "running",
+          "progress": 0.362,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 180.1,
+          "status": "running",
+          "progress": 0.39,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 190.1,
+          "status": "running",
+          "progress": 0.418,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 200.1,
+          "status": "running",
+          "progress": 0.447,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 210.1,
+          "status": "running",
+          "progress": 0.475,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 220.1,
+          "status": "running",
+          "progress": 0.503,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 230.1,
+          "status": "running",
+          "progress": 0.532,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 240.1,
+          "status": "running",
+          "progress": 0.546,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 250.1,
+          "status": "running",
+          "progress": 0.574,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 260.1,
+          "status": "running",
+          "progress": 0.603,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 270.1,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "encode",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 290.1,
+          "status": "running",
+          "progress": 0.631,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 20
+        },
+        {
+          "t": 300.1,
+          "status": "running",
+          "progress": 0.659,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 20
+        },
+        {
+          "t": 310.1,
+          "status": "running",
+          "progress": 0.688,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 320.1,
+          "status": "running",
+          "progress": 0.716,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 330.1,
+          "status": "running",
+          "progress": 0.744,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 340.1,
+          "status": "running",
+          "progress": 0.772,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 350.1,
+          "status": "running",
+          "progress": 0.801,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 360.1,
+          "status": "running",
+          "progress": 0.829,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 370.1,
+          "status": "running",
+          "progress": 0.858,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 380.1,
+          "status": "running",
+          "progress": 0.886,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 390.1,
+          "status": "running",
+          "progress": 0.93,
+          "stage": "decode",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 420.2,
+          "status": "completed",
+          "progress": 1.0,
+          "stage": null,
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        }
+      ],
+      "job_final": {
+        "job_id": "c0ff1e42-09cb-4037-9143-0c4805fd6e2a",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 3,
+        "clip_count": 3,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T11:18:07Z",
+        "started_at": "2026-11-09T11:18:07Z",
+        "completed_at": "2026-11-09T11:24:57Z",
+        "error": null,
+        "request": {
+          "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "vram16_mode": true,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/c0ff1e42-09cb-4037-9143-0c4805fd6e2a/video",
+          "duration_seconds": 13.667,
+          "resolution": "640x384",
+          "file_size_bytes": 1706119,
+          "generation_time_seconds": 410.38,
+          "seed_used": 42,
+          "output_path": "outputs/c0ff1e42-09cb-4037-9143-0c4805fd6e2a/output.mp4",
+          "metadata_path": "outputs/c0ff1e42-09cb-4037-9143-0c4805fd6e2a/metadata.json"
+        }
+      },
+      "seconds_wall": 420.2,
+      "gpu_sampler": {
+        "interval_s": 3.0,
+        "samples": 139,
+        "max_memory_used_mib": 6567,
+        "first_mib": 1201,
+        "error": null
+      },
+      "chain_log_lines": [
+        "[h3_worker] generate_chain: seed=42 640x384 clips=[124, 124, 124] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=False prefetch=True vram16=True loras=[] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\c0ff1e42-09cb-4037-9143-0c4805fd6e2a\\output.mp4"
+      ],
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\c0ff1e42-09cb-4037-9143-0c4805fd6e2a\\output.mp4",
+      "sha256": "4a98be0884ae7129e34f58578a3fe7ca3117ca5a764545cbac404e12a70cbec5",
+      "finished_at": "2026-11-09T20:25:07+09:00"
+    },
+    "ga1": {
+      "label": "ga1",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga1",
+      "note": "GA1: GA0 と同じ本文の全クリップに source_audio（strength 0.0・offset S_i）",
+      "endpoint": "POST /api/v1/generate/chain",
+      "body": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "seed": 42,
+        "attention_backend": "sdpa",
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "clips": [
+          {
+            "num_frames": 124,
+            "source_audio": {
+              "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+              "strength": 0.0,
+              "offset_frames": 0
+            }
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She turns and walks slowly along the street, humming a tune.",
+            "source_audio": {
+              "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+              "strength": 0.0,
+              "offset_frames": 102
+            }
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>",
+            "source_audio": {
+              "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+              "strength": 0.0,
+              "offset_frames": 204
+            }
+          }
+        ],
+        "embed_mp4_metadata": false
+      },
+      "started_at": "2026-11-09T20:26:03+09:00",
+      "status": "completed",
+      "error": null,
+      "submit": {
+        "http": 202,
+        "body": {
+          "job_id": "b834fa6d-d08d-4177-9c06-4bebdda666c7",
+          "status": "running",
+          "created_at": "2026-11-09T11:26:04Z",
+          "num_clips": 3
+        }
+      },
+      "job_id": "b834fa6d-d08d-4177-9c06-4bebdda666c7",
+      "poll_samples": [
+        {
+          "t": 0.9,
+          "status": "running",
+          "progress": 0.02,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 10.9,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "encode",
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 30.9,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 40.9,
+          "status": "running",
+          "progress": 0.078,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 51.0,
+          "status": "running",
+          "progress": 0.107,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 61.0,
+          "status": "running",
+          "progress": 0.135,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 71.0,
+          "status": "running",
+          "progress": 0.163,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 81.0,
+          "status": "running",
+          "progress": 0.192,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 91.0,
+          "status": "running",
+          "progress": 0.22,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 101.0,
+          "status": "running",
+          "progress": 0.248,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 111.0,
+          "status": "running",
+          "progress": 0.277,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 16,
+          "total_steps": 20
+        },
+        {
+          "t": 121.0,
+          "status": "running",
+          "progress": 0.305,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 18,
+          "total_steps": 20
+        },
+        {
+          "t": 131.0,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "encode",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 151.0,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 161.0,
+          "status": "running",
+          "progress": 0.362,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 171.0,
+          "status": "running",
+          "progress": 0.39,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 181.0,
+          "status": "running",
+          "progress": 0.404,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 191.0,
+          "status": "running",
+          "progress": 0.432,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 201.0,
+          "status": "running",
+          "progress": 0.461,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 211.0,
+          "status": "running",
+          "progress": 0.489,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 221.0,
+          "status": "running",
+          "progress": 0.517,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 231.0,
+          "status": "running",
+          "progress": 0.546,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 241.0,
+          "status": "running",
+          "progress": 0.574,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 251.0,
+          "status": "running",
+          "progress": 0.603,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 261.0,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "encode",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 281.0,
+          "status": "running",
+          "progress": 0.631,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 20
+        },
+        {
+          "t": 291.1,
+          "status": "running",
+          "progress": 0.659,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 20
+        },
+        {
+          "t": 301.1,
+          "status": "running",
+          "progress": 0.688,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 311.1,
+          "status": "running",
+          "progress": 0.716,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 321.1,
+          "status": "running",
+          "progress": 0.744,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 331.1,
+          "status": "running",
+          "progress": 0.772,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 341.1,
+          "status": "running",
+          "progress": 0.801,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 351.1,
+          "status": "running",
+          "progress": 0.829,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 361.1,
+          "status": "running",
+          "progress": 0.858,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 371.1,
+          "status": "running",
+          "progress": 0.886,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 381.1,
+          "status": "running",
+          "progress": 0.93,
+          "stage": "decode",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 401.1,
+          "status": "completed",
+          "progress": 1.0,
+          "stage": null,
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        }
+      ],
+      "job_final": {
+        "job_id": "b834fa6d-d08d-4177-9c06-4bebdda666c7",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 3,
+        "clip_count": 3,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T11:26:04Z",
+        "started_at": "2026-11-09T11:26:04Z",
+        "completed_at": "2026-11-09T11:32:41Z",
+        "error": null,
+        "request": {
+          "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "vram16_mode": true,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/b834fa6d-d08d-4177-9c06-4bebdda666c7/video",
+          "duration_seconds": 13.667,
+          "resolution": "640x384",
+          "file_size_bytes": 1706119,
+          "generation_time_seconds": 397.2,
+          "seed_used": 42,
+          "output_path": "outputs/b834fa6d-d08d-4177-9c06-4bebdda666c7/output.mp4",
+          "metadata_path": "outputs/b834fa6d-d08d-4177-9c06-4bebdda666c7/metadata.json"
+        }
+      },
+      "seconds_wall": 401.1,
+      "gpu_sampler": {
+        "interval_s": 3.0,
+        "samples": 132,
+        "max_memory_used_mib": 6561,
+        "first_mib": 1141,
+        "error": null
+      },
+      "chain_log_lines": [
+        "[h3_worker] generate_chain: seed=42 640x384 clips=[124, 124, 124] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=False prefetch=True vram16=True loras=[] a2v=[('input.wav', 0.0, 0), ('input.wav', 0.0, 102), ('input.wav', 0.0, 204)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\b834fa6d-d08d-4177-9c06-4bebdda666c7\\output.mp4"
+      ],
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\b834fa6d-d08d-4177-9c06-4bebdda666c7\\output.mp4",
+      "sha256": "4a98be0884ae7129e34f58578a3fe7ca3117ca5a764545cbac404e12a70cbec5",
+      "finished_at": "2026-11-09T20:32:44+09:00"
+    },
+    "ga2": {
+      "label": "ga2",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga2",
+      "note": "GA2: [124, 141, 124]・strength 1.0・offset 0・102・221",
+      "endpoint": "POST /api/v1/generate/chain",
+      "body": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "seed": 42,
+        "attention_backend": "sdpa",
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "clips": [
+          {
+            "num_frames": 124,
+            "source_audio": {
+              "audio_id": "92eff686-82c0-47f5-ba79-3ae2b26df9f5",
+              "strength": 1.0,
+              "offset_frames": 0
+            }
+          },
+          {
+            "num_frames": 141,
+            "prompt": "She turns and walks slowly along the street, humming a tune.",
+            "source_audio": {
+              "audio_id": "92eff686-82c0-47f5-ba79-3ae2b26df9f5",
+              "strength": 1.0,
+              "offset_frames": 102
+            }
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>",
+            "source_audio": {
+              "audio_id": "92eff686-82c0-47f5-ba79-3ae2b26df9f5",
+              "strength": 1.0,
+              "offset_frames": 221
+            }
+          }
+        ],
+        "embed_mp4_metadata": false
+      },
+      "started_at": "2026-11-09T20:33:26+09:00",
+      "status": "completed",
+      "error": null,
+      "submit": {
+        "http": 202,
+        "body": {
+          "job_id": "75c4c1ea-3b56-4a23-b0df-34d6ac41c119",
+          "status": "running",
+          "created_at": "2026-11-09T11:33:26Z",
+          "num_clips": 3
+        }
+      },
+      "job_id": "75c4c1ea-3b56-4a23-b0df-34d6ac41c119",
+      "poll_samples": [
+        {
+          "t": 0.2,
+          "status": "running",
+          "progress": 0.02,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 10.2,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "encode",
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 30.2,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 40.2,
+          "status": "running",
+          "progress": 0.078,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 50.2,
+          "status": "running",
+          "progress": 0.107,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 60.2,
+          "status": "running",
+          "progress": 0.135,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 70.2,
+          "status": "running",
+          "progress": 0.163,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 80.2,
+          "status": "running",
+          "progress": 0.192,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 90.3,
+          "status": "running",
+          "progress": 0.22,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 100.3,
+          "status": "running",
+          "progress": 0.248,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 110.3,
+          "status": "running",
+          "progress": 0.291,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 120.3,
+          "status": "running",
+          "progress": 0.319,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 130.3,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "encode",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 150.3,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 160.3,
+          "status": "running",
+          "progress": 0.362,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 170.3,
+          "status": "running",
+          "progress": 0.39,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 180.3,
+          "status": "running",
+          "progress": 0.404,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 190.3,
+          "status": "running",
+          "progress": 0.432,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 200.3,
+          "status": "running",
+          "progress": 0.461,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 210.3,
+          "status": "running",
+          "progress": 0.475,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 220.3,
+          "status": "running",
+          "progress": 0.503,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 230.3,
+          "status": "running",
+          "progress": 0.532,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 240.3,
+          "status": "running",
+          "progress": 0.56,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 16,
+          "total_steps": 20
+        },
+        {
+          "t": 250.3,
+          "status": "running",
+          "progress": 0.574,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 260.3,
+          "status": "running",
+          "progress": 0.603,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 270.3,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "encode",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 290.3,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 300.3,
+          "status": "running",
+          "progress": 0.645,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 310.3,
+          "status": "running",
+          "progress": 0.688,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 320.3,
+          "status": "running",
+          "progress": 0.716,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 330.4,
+          "status": "running",
+          "progress": 0.744,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 340.4,
+          "status": "running",
+          "progress": 0.772,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 350.4,
+          "status": "running",
+          "progress": 0.801,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 360.4,
+          "status": "running",
+          "progress": 0.829,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 370.4,
+          "status": "running",
+          "progress": 0.858,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 380.4,
+          "status": "running",
+          "progress": 0.886,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 390.4,
+          "status": "running",
+          "progress": 0.93,
+          "stage": "decode",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 410.4,
+          "status": "completed",
+          "progress": 1.0,
+          "stage": null,
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        }
+      ],
+      "job_final": {
+        "job_id": "75c4c1ea-3b56-4a23-b0df-34d6ac41c119",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 3,
+        "clip_count": 3,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T11:33:26Z",
+        "started_at": "2026-11-09T11:33:26Z",
+        "completed_at": "2026-11-09T11:40:14Z",
+        "error": null,
+        "request": {
+          "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sdpa",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "vram16_mode": true,
+          "width": 640,
+          "height": 384,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/75c4c1ea-3b56-4a23-b0df-34d6ac41c119/video",
+          "duration_seconds": 14.375,
+          "resolution": "640x384",
+          "file_size_bytes": 1819761,
+          "generation_time_seconds": 407.32,
+          "seed_used": 42,
+          "output_path": "outputs/75c4c1ea-3b56-4a23-b0df-34d6ac41c119/output.mp4",
+          "metadata_path": "outputs/75c4c1ea-3b56-4a23-b0df-34d6ac41c119/metadata.json"
+        }
+      },
+      "seconds_wall": 410.4,
+      "gpu_sampler": {
+        "interval_s": 3.0,
+        "samples": 135,
+        "max_memory_used_mib": 6566,
+        "first_mib": 1162,
+        "error": null
+      },
+      "chain_log_lines": [
+        "[h3_worker] generate_chain: seed=42 640x384 clips=[124, 141, 124] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=False prefetch=True vram16=True loras=[] a2v=[('input.wav', 1.0, 0), ('input.wav', 1.0, 102), ('input.wav', 1.0, 221)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\75c4c1ea-3b56-4a23-b0df-34d6ac41c119\\output.mp4"
+      ],
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\75c4c1ea-3b56-4a23-b0df-34d6ac41c119\\output.mp4",
+      "sha256": "33390e019120f5525816e02e7da19a4df4c5ae0535654c768db851257d3b5880",
+      "finished_at": "2026-11-09T20:40:17+09:00"
+    },
+    "ga3": {
+      "label": "ga3",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga3",
+      "note": "GA3: 3×209・1344×768・sage・strength 0.5・offset 0・187・374・LoRA なし・20 ステップ（目視用）",
+      "endpoint": "POST /api/v1/generate/chain",
+      "body": {
+        "prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "width": 1344,
+        "height": 768,
+        "seed": 42,
+        "attention_backend": "sage",
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "clips": [
+          {
+            "num_frames": 209,
+            "source_audio": {
+              "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+              "strength": 0.5,
+              "offset_frames": 0
+            }
+          },
+          {
+            "num_frames": 209,
+            "source_audio": {
+              "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+              "strength": 0.5,
+              "offset_frames": 187
+            }
+          },
+          {
+            "num_frames": 209,
+            "source_audio": {
+              "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+              "strength": 0.5,
+              "offset_frames": 374
+            }
+          }
+        ],
+        "embed_mp4_metadata": false
+      },
+      "started_at": "2026-11-09T20:40:57+09:00",
+      "status": "completed",
+      "error": null,
+      "submit": {
+        "http": 202,
+        "body": {
+          "job_id": "a6b93e39-95e1-4576-9800-0880fe887dc1",
+          "status": "running",
+          "created_at": "2026-11-09T11:40:57Z",
+          "num_clips": 3
+        }
+      },
+      "job_id": "a6b93e39-95e1-4576-9800-0880fe887dc1",
+      "poll_samples": [
+        {
+          "t": 0.2,
+          "status": "running",
+          "progress": 0.02,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 10.2,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "encode",
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 30.2,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 70.2,
+          "status": "running",
+          "progress": 0.064,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 20
+        },
+        {
+          "t": 120.2,
+          "status": "running",
+          "progress": 0.078,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 160.2,
+          "status": "running",
+          "progress": 0.092,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 20
+        },
+        {
+          "t": 200.3,
+          "status": "running",
+          "progress": 0.107,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 240.3,
+          "status": "running",
+          "progress": 0.121,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 280.3,
+          "status": "running",
+          "progress": 0.135,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 320.3,
+          "status": "running",
+          "progress": 0.149,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 370.3,
+          "status": "running",
+          "progress": 0.163,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 410.3,
+          "status": "running",
+          "progress": 0.177,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 450.3,
+          "status": "running",
+          "progress": 0.192,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 490.4,
+          "status": "running",
+          "progress": 0.206,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 530.4,
+          "status": "running",
+          "progress": 0.22,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 580.4,
+          "status": "running",
+          "progress": 0.234,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 620.4,
+          "status": "running",
+          "progress": 0.248,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 660.4,
+          "status": "running",
+          "progress": 0.263,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 710.4,
+          "status": "running",
+          "progress": 0.277,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 16,
+          "total_steps": 20
+        },
+        {
+          "t": 750.4,
+          "status": "running",
+          "progress": 0.291,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 790.5,
+          "status": "running",
+          "progress": 0.305,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 18,
+          "total_steps": 20
+        },
+        {
+          "t": 830.5,
+          "status": "running",
+          "progress": 0.319,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 880.5,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "encode",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 900.5,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 940.5,
+          "status": "running",
+          "progress": 0.348,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 20
+        },
+        {
+          "t": 980.5,
+          "status": "running",
+          "progress": 0.362,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 1030.5,
+          "status": "running",
+          "progress": 0.376,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 20
+        },
+        {
+          "t": 1070.5,
+          "status": "running",
+          "progress": 0.39,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 1110.5,
+          "status": "running",
+          "progress": 0.404,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 1150.6,
+          "status": "running",
+          "progress": 0.418,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 1200.6,
+          "status": "running",
+          "progress": 0.432,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 1240.6,
+          "status": "running",
+          "progress": 0.447,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 1280.6,
+          "status": "running",
+          "progress": 0.461,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 1320.6,
+          "status": "running",
+          "progress": 0.475,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 1370.7,
+          "status": "running",
+          "progress": 0.489,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 1410.7,
+          "status": "running",
+          "progress": 0.503,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 1450.7,
+          "status": "running",
+          "progress": 0.517,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 1490.7,
+          "status": "running",
+          "progress": 0.532,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 1540.7,
+          "status": "running",
+          "progress": 0.546,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 1580.8,
+          "status": "running",
+          "progress": 0.56,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 16,
+          "total_steps": 20
+        },
+        {
+          "t": 1620.8,
+          "status": "running",
+          "progress": 0.574,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 1660.8,
+          "status": "running",
+          "progress": 0.588,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 18,
+          "total_steps": 20
+        },
+        {
+          "t": 1700.8,
+          "status": "running",
+          "progress": 0.603,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 1740.8,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "encode",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 1760.8,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 20
+        },
+        {
+          "t": 1810.9,
+          "status": "running",
+          "progress": 0.631,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 20
+        },
+        {
+          "t": 1850.9,
+          "status": "running",
+          "progress": 0.645,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 20
+        },
+        {
+          "t": 1890.9,
+          "status": "running",
+          "progress": 0.659,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 20
+        },
+        {
+          "t": 1930.9,
+          "status": "running",
+          "progress": 0.673,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 4,
+          "total_steps": 20
+        },
+        {
+          "t": 1971.0,
+          "status": "running",
+          "progress": 0.688,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 5,
+          "total_steps": 20
+        },
+        {
+          "t": 2011.0,
+          "status": "running",
+          "progress": 0.702,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 6,
+          "total_steps": 20
+        },
+        {
+          "t": 2051.0,
+          "status": "running",
+          "progress": 0.716,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 7,
+          "total_steps": 20
+        },
+        {
+          "t": 2091.0,
+          "status": "running",
+          "progress": 0.73,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 8,
+          "total_steps": 20
+        },
+        {
+          "t": 2131.0,
+          "status": "running",
+          "progress": 0.744,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 9,
+          "total_steps": 20
+        },
+        {
+          "t": 2171.1,
+          "status": "running",
+          "progress": 0.758,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 10,
+          "total_steps": 20
+        },
+        {
+          "t": 2211.1,
+          "status": "running",
+          "progress": 0.772,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 11,
+          "total_steps": 20
+        },
+        {
+          "t": 2251.1,
+          "status": "running",
+          "progress": 0.787,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 12,
+          "total_steps": 20
+        },
+        {
+          "t": 2291.2,
+          "status": "running",
+          "progress": 0.801,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 13,
+          "total_steps": 20
+        },
+        {
+          "t": 2341.2,
+          "status": "running",
+          "progress": 0.815,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 14,
+          "total_steps": 20
+        },
+        {
+          "t": 2381.2,
+          "status": "running",
+          "progress": 0.829,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 15,
+          "total_steps": 20
+        },
+        {
+          "t": 2421.2,
+          "status": "running",
+          "progress": 0.843,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 16,
+          "total_steps": 20
+        },
+        {
+          "t": 2461.2,
+          "status": "running",
+          "progress": 0.858,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 17,
+          "total_steps": 20
+        },
+        {
+          "t": 2501.3,
+          "status": "running",
+          "progress": 0.872,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 18,
+          "total_steps": 20
+        },
+        {
+          "t": 2541.3,
+          "status": "running",
+          "progress": 0.886,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 19,
+          "total_steps": 20
+        },
+        {
+          "t": 2581.3,
+          "status": "running",
+          "progress": 0.93,
+          "stage": "decode",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 2741.4,
+          "status": "completed",
+          "progress": 1.0,
+          "stage": null,
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        }
+      ],
+      "job_final": {
+        "job_id": "a6b93e39-95e1-4576-9800-0880fe887dc1",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 3,
+        "clip_count": 3,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T11:40:57Z",
+        "started_at": "2026-11-09T11:40:57Z",
+        "completed_at": "2026-11-09T12:26:35Z",
+        "error": null,
+        "request": {
+          "prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 209,
+          "frame_rate": 24.0,
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/a6b93e39-95e1-4576-9800-0880fe887dc1/video",
+          "duration_seconds": 24.292,
+          "resolution": "1344x768",
+          "file_size_bytes": 3763421,
+          "generation_time_seconds": 2737.45,
+          "seed_used": 42,
+          "output_path": "outputs/a6b93e39-95e1-4576-9800-0880fe887dc1/output.mp4",
+          "metadata_path": "outputs/a6b93e39-95e1-4576-9800-0880fe887dc1/metadata.json"
+        }
+      },
+      "seconds_wall": 2741.4,
+      "gpu_sampler": {
+        "interval_s": 3.0,
+        "samples": 903,
+        "max_memory_used_mib": 9162,
+        "first_mib": 1186,
+        "error": null
+      },
+      "chain_log_lines": [
+        "[h3_worker] generate_chain: seed=42 1344x768 clips=[209, 209, 209] steps=20 shift=12.0/3.0 attention=sage keep_resident=False prefetch=True vram16=True loras=[] a2v=[('input.wav', 0.5, 0), ('input.wav', 0.5, 187), ('input.wav', 0.5, 374)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\a6b93e39-95e1-4576-9800-0880fe887dc1\\output.mp4"
+      ],
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\a6b93e39-95e1-4576-9800-0880fe887dc1\\output.mp4",
+      "sha256": "10abf332684f83c953e27623951d3c2a62d273ab28a15eeed5549cda0de44316",
+      "finished_at": "2026-11-09T21:26:39+09:00"
+    },
+    "ga3t": {
+      "label": "ga3t",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga3t",
+      "note": "GA3T: 3×209・1344×768・sage・strength 0.5・offset 0・187・374・Turbo LoRA 0.8・4 ステップ（目視用）",
+      "endpoint": "POST /api/v1/generate/chain",
+      "body": {
+        "prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "width": 1344,
+        "height": 768,
+        "seed": 42,
+        "attention_backend": "sage",
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "clips": [
+          {
+            "num_frames": 209,
+            "source_audio": {
+              "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+              "strength": 0.5,
+              "offset_frames": 0
+            }
+          },
+          {
+            "num_frames": 209,
+            "source_audio": {
+              "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+              "strength": 0.5,
+              "offset_frames": 187
+            }
+          },
+          {
+            "num_frames": 209,
+            "source_audio": {
+              "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+              "strength": 0.5,
+              "offset_frames": 374
+            }
+          }
+        ],
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-09T21:27:31+09:00",
+      "status": "completed",
+      "error": null,
+      "submit": {
+        "http": 202,
+        "body": {
+          "job_id": "a8a282ca-7ae5-4785-8921-bee0a7afdb4f",
+          "status": "running",
+          "created_at": "2026-11-09T12:27:32Z",
+          "num_clips": 3
+        }
+      },
+      "job_id": "a8a282ca-7ae5-4785-8921-bee0a7afdb4f",
+      "poll_samples": [
+        {
+          "t": 0.6,
+          "status": "running",
+          "progress": 0.02,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 10.6,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "encode",
+          "clip": null,
+          "clip_count": null,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 30.6,
+          "status": "running",
+          "progress": 0.05,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 4
+        },
+        {
+          "t": 80.7,
+          "status": "running",
+          "progress": 0.121,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 4
+        },
+        {
+          "t": 140.7,
+          "status": "running",
+          "progress": 0.192,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 4
+        },
+        {
+          "t": 190.7,
+          "status": "running",
+          "progress": 0.263,
+          "stage": "stage1_denoise",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 4
+        },
+        {
+          "t": 240.7,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "encode",
+          "clip": 1,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 260.8,
+          "status": "running",
+          "progress": 0.333,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 4
+        },
+        {
+          "t": 310.8,
+          "status": "running",
+          "progress": 0.404,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 4
+        },
+        {
+          "t": 360.8,
+          "status": "running",
+          "progress": 0.475,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 4
+        },
+        {
+          "t": 410.8,
+          "status": "running",
+          "progress": 0.546,
+          "stage": "stage1_denoise",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 4
+        },
+        {
+          "t": 460.8,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "encode",
+          "clip": 2,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 490.9,
+          "status": "running",
+          "progress": 0.617,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 0,
+          "total_steps": 4
+        },
+        {
+          "t": 540.9,
+          "status": "running",
+          "progress": 0.688,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 1,
+          "total_steps": 4
+        },
+        {
+          "t": 590.9,
+          "status": "running",
+          "progress": 0.758,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 2,
+          "total_steps": 4
+        },
+        {
+          "t": 640.9,
+          "status": "running",
+          "progress": 0.829,
+          "stage": "stage1_denoise",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": 3,
+          "total_steps": 4
+        },
+        {
+          "t": 691.0,
+          "status": "running",
+          "progress": 0.93,
+          "stage": "decode",
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        },
+        {
+          "t": 851.0,
+          "status": "completed",
+          "progress": 1.0,
+          "stage": null,
+          "clip": 3,
+          "clip_count": 3,
+          "current_step": null,
+          "total_steps": null
+        }
+      ],
+      "job_final": {
+        "job_id": "a8a282ca-7ae5-4785-8921-bee0a7afdb4f",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": 3,
+        "clip_count": 3,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T12:27:32Z",
+        "started_at": "2026-11-09T12:27:32Z",
+        "completed_at": "2026-11-09T12:41:39Z",
+        "error": null,
+        "request": {
+          "prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": false,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 209,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/a8a282ca-7ae5-4785-8921-bee0a7afdb4f/video",
+          "duration_seconds": 24.292,
+          "resolution": "1344x768",
+          "file_size_bytes": 6134169,
+          "generation_time_seconds": 847.48,
+          "seed_used": 42,
+          "output_path": "outputs/a8a282ca-7ae5-4785-8921-bee0a7afdb4f/output.mp4",
+          "metadata_path": "outputs/a8a282ca-7ae5-4785-8921-bee0a7afdb4f/metadata.json"
+        }
+      },
+      "seconds_wall": 851.0,
+      "gpu_sampler": {
+        "interval_s": 3.0,
+        "samples": 281,
+        "max_memory_used_mib": 9564,
+        "first_mib": 1154,
+        "error": null
+      },
+      "chain_log_lines": [
+        "[h3_worker] generate_chain: seed=42 1344x768 clips=[209, 209, 209] steps=4 shift=12.0/3.0 attention=sage keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] a2v=[('input.wav', 0.5, 0), ('input.wav', 0.5, 187), ('input.wav', 0.5, 374)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\a8a282ca-7ae5-4785-8921-bee0a7afdb4f\\output.mp4"
+      ],
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\outputs\\a8a282ca-7ae5-4785-8921-bee0a7afdb4f\\output.mp4",
+      "sha256": "a269d1c1a348a41e2e81afe4af3dd2254f4666b916dc4d195c1c211e5c6a392e",
+      "finished_at": "2026-11-09T21:41:42+09:00"
+    }
+  },
+  "gates": {
+    "GA0": {
+      "pass": true,
+      "result": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga0\\result.json",
+      "failed": []
+    },
+    "GA1": {
+      "pass": true,
+      "result": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga1\\result.json",
+      "failed": []
+    },
+    "GA2": {
+      "pass": true,
+      "result": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga2\\result.json",
+      "failed": []
+    },
+    "GA3": {
+      "pass": true,
+      "result": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga3\\result.json",
+      "failed": []
+    },
+    "GA3T": {
+      "pass": true,
+      "result": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\ga3t\\result.json",
+      "failed": []
+    }
+  },
+  "runs": [
+    {
+      "started_at": "2026-11-09T20:17:43+09:00",
+      "args": {
+        "gate": "GA0",
+        "label": "run",
+        "expect_sha": null,
+        "audio": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "ga3_prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "port": 18699,
+        "keep_server": false,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 7200.0,
+        "dry_run": false
+      },
+      "api_key_sent": false,
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 55000,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\state.h3chaina2v.json",
+        "config_overrides": {
+          "vram_live": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          },
+          "vram_temp": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          }
+        },
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\server.log",
+        "started_at": "2026-11-09T20:17:45+09:00",
+        "stop": {
+          "at": "2026-11-09T20:25:07+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 33184,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 27724,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "status_before": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18699,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          }
+        },
+        "status_polls": 1,
+        "response": {
+          "http": 200,
+          "body": {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            }
+          }
+        },
+        "last_status": {
+          "pipeline_loaded": true,
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          }
+        },
+        "seconds": 18.5
+      },
+      "finished_at": "2026-11-09T20:25:09+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-09T20:25:54+09:00",
+      "args": {
+        "gate": "GA1",
+        "label": "run",
+        "expect_sha": null,
+        "audio": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "ga3_prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "port": 18699,
+        "keep_server": false,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 7200.0,
+        "dry_run": false
+      },
+      "api_key_sent": false,
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 40856,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\state.h3chaina2v.json",
+        "config_overrides": {
+          "vram_live": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          },
+          "vram_temp": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          }
+        },
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\server.log",
+        "started_at": "2026-11-09T20:25:56+09:00",
+        "stop": {
+          "at": "2026-11-09T20:32:44+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 50596,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 43736,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "status_before": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18699,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          }
+        },
+        "status_polls": 1,
+        "response": {
+          "http": 200,
+          "body": {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            }
+          }
+        },
+        "last_status": {
+          "pipeline_loaded": true,
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          }
+        },
+        "seconds": 3.2
+      },
+      "audio_upload": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "sha256": "90e7ca094b20edab0ffa3af36817a609cdb749839da32d673dadbfa5068df9e7",
+        "size_bytes": 5444482,
+        "http": 200,
+        "response": {
+          "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+          "original_filename": "ref-voice-patra001.wav",
+          "stored_path": "uploads/audios/8eec929e-9359-43e8-bdb4-22d54f5c960d/input.wav",
+          "content_type": "audio/wav",
+          "size_bytes": 5444482
+        }
+      },
+      "finished_at": "2026-11-09T20:32:46+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-09T20:33:18+09:00",
+      "args": {
+        "gate": "GA2",
+        "label": "run",
+        "expect_sha": null,
+        "audio": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "ga3_prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "port": 18699,
+        "keep_server": false,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 7200.0,
+        "dry_run": false
+      },
+      "api_key_sent": false,
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 34480,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\state.h3chaina2v.json",
+        "config_overrides": {
+          "vram_live": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          },
+          "vram_temp": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          }
+        },
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\server.log",
+        "started_at": "2026-11-09T20:33:20+09:00",
+        "stop": {
+          "at": "2026-11-09T20:40:17+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 54220,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 45684,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "status_before": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18699,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          }
+        },
+        "status_polls": 1,
+        "response": {
+          "http": 200,
+          "body": {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            }
+          }
+        },
+        "last_status": {
+          "pipeline_loaded": true,
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          }
+        },
+        "seconds": 3.0
+      },
+      "audio_upload": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "sha256": "90e7ca094b20edab0ffa3af36817a609cdb749839da32d673dadbfa5068df9e7",
+        "size_bytes": 5444482,
+        "http": 200,
+        "response": {
+          "audio_id": "92eff686-82c0-47f5-ba79-3ae2b26df9f5",
+          "original_filename": "ref-voice-patra001.wav",
+          "stored_path": "uploads/audios/92eff686-82c0-47f5-ba79-3ae2b26df9f5/input.wav",
+          "content_type": "audio/wav",
+          "size_bytes": 5444482
+        }
+      },
+      "finished_at": "2026-11-09T20:40:18+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-09T20:40:49+09:00",
+      "args": {
+        "gate": "GA3",
+        "label": "run",
+        "expect_sha": null,
+        "audio": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "ga3_prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "port": 18699,
+        "keep_server": false,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 7200.0,
+        "dry_run": false
+      },
+      "api_key_sent": false,
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 58916,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\state.h3chaina2v.json",
+        "config_overrides": {
+          "vram_live": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          },
+          "vram_temp": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          }
+        },
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\server.log",
+        "started_at": "2026-11-09T20:40:51+09:00",
+        "stop": {
+          "at": "2026-11-09T21:26:39+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 27420,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 58292,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "status_before": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18699,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          }
+        },
+        "status_polls": 1,
+        "response": {
+          "http": 200,
+          "body": {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            }
+          }
+        },
+        "last_status": {
+          "pipeline_loaded": true,
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          }
+        },
+        "seconds": 3.0
+      },
+      "audio_upload": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "sha256": "90e7ca094b20edab0ffa3af36817a609cdb749839da32d673dadbfa5068df9e7",
+        "size_bytes": 5444482,
+        "http": 200,
+        "response": {
+          "audio_id": "dafa5696-4484-4f99-bad0-29e2b3bc9bc2",
+          "original_filename": "ref-voice-patra001.wav",
+          "stored_path": "uploads/audios/dafa5696-4484-4f99-bad0-29e2b3bc9bc2/input.wav",
+          "content_type": "audio/wav",
+          "size_bytes": 5444482
+        }
+      },
+      "finished_at": "2026-11-09T21:26:41+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-09T21:27:22+09:00",
+      "args": {
+        "gate": "GA3T",
+        "label": "run",
+        "expect_sha": null,
+        "audio": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "ga3_prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+        "port": 18699,
+        "keep_server": false,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 7200.0,
+        "dry_run": false
+      },
+      "api_key_sent": false,
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 10272,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\state.h3chaina2v.json",
+        "config_overrides": {
+          "vram_live": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          },
+          "vram_temp": {
+            "block_swap": true,
+            "block_swap_blocks_on_gpu": 8
+          }
+        },
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\server.log",
+        "started_at": "2026-11-09T21:27:24+09:00",
+        "stop": {
+          "at": "2026-11-09T21:41:42+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 62704,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 34548,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-chain-a2v-2026-11-09\\_rt\\config.h3chaina2v.yaml"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "status_before": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18699,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          }
+        },
+        "status_polls": 1,
+        "response": {
+          "http": 200,
+          "body": {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            }
+          }
+        },
+        "last_status": {
+          "pipeline_loaded": true,
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          }
+        },
+        "seconds": 3.0
+      },
+      "audio_upload": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\ref-voice-patra001.wav",
+        "sha256": "90e7ca094b20edab0ffa3af36817a609cdb749839da32d673dadbfa5068df9e7",
+        "size_bytes": 5444482,
+        "http": 200,
+        "response": {
+          "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+          "original_filename": "ref-voice-patra001.wav",
+          "stored_path": "uploads/audios/97598ea8-fe65-4189-a81c-e47d2d69e0a3/input.wav",
+          "content_type": "audio/wav",
+          "size_bytes": 5444482
+        }
+      },
+      "finished_at": "2026-11-09T21:41:44+09:00",
+      "exit_code": 0
+    }
+  ]
+}

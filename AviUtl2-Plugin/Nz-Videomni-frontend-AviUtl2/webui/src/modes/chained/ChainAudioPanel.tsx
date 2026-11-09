@@ -41,6 +41,26 @@ export interface ChainAudioPanelProps {
    * removed here (it blocks Generate with `materialInClosedPanel` meanwhile).
    * Omitted -> open. */
   unavailable?: boolean | undefined;
+  /** §1-120: the distribute mode (MiniMax H3 with
+   * `constraints.chain.source_audio`). When given, the ↔️ button and the
+   * "added clip length" slider are not drawn; a Strength slider and the
+   * "distribute to each clip" button are drawn instead. Omitted = the LTX card,
+   * byte for byte. */
+  h3?: ChainAudioPanelH3 | undefined;
+}
+
+/** §1-120: see {@link ChainAudioPanelProps.h3}. */
+export interface ChainAudioPanelH3 {
+  strength: number;
+  strengthRange: { min: number; max: number; step: number };
+  onStrengthChange: (value: number) => void;
+  onDistribute: () => void;
+  /** Extra stop for the button beyond the card's own (in flight, uploading,
+   * not ready, a source video attached). */
+  distributeDisabled?: boolean | undefined;
+  /** Seconds of the audio past the end of the chain while 17 frames or more
+   * are left, else `null` (no note). */
+  unusedTailSec: number | null;
 }
 
 /**
@@ -69,6 +89,7 @@ export function ChainAudioPanel({
   nativeBridge,
   showHeading = true,
   unavailable = false,
+  h3,
 }: ChainAudioPanelProps) {
   // §1-106: clear reads `inFlight` only.
   const disabled = inFlight || unavailable;
@@ -108,7 +129,24 @@ export function ChainAudioPanel({
   let noteText: string;
   /** `"error"` paints the line red (`.field-hint-error`), `"warning"` amber. */
   let noteKind: "plain" | "warning" | "error" = "plain";
-  if (form.audioAttachError === "tooLong") {
+  if (h3) {
+    // §1-120: the distribute mode's own order — the V2V clash, an unmeasurable
+    // length, the unused tail — then the LTX card's "no audio attached" line,
+    // else a blank line (the slot stays mounted). No attach error here: the
+    // distribute mode never detaches a long audio.
+    if (form.hasSourceVideo && form.hasSourceAudio) {
+      noteText = t.conflictsWithSourceVideo;
+      noteKind = "warning";
+    } else if (form.audioProbeFailed) {
+      noteText = t.h3.probeFailed;
+    } else if (h3.unusedTailSec !== null) {
+      noteText = t.h3.unusedTailNote(h3.unusedTailSec.toFixed(1));
+    } else if (!form.hasSourceAudio) {
+      noteText = t.none;
+    } else {
+      noteText = " ";
+    }
+  } else if (form.audioAttachError === "tooLong") {
     // The ceiling depends on the CURRENT frame rate / seam width, so it is
     // derived rather than hard-coded — `Math.floor` keeps the spoken number
     // safely inside the real limit.
@@ -201,9 +239,41 @@ export function ChainAudioPanel({
             <p className="field-hint">{formatSecondsLabel(form.audioDurationSec)}</p>
           )}
 
+          {/* §1-120: the distribute mode's Strength slider and button, in
+              place of the LTX ↔️ button and slider below. */}
+          {h3 && (
+            <>
+              <label className="kfc-field">
+                <span className="kfc-field-label">{strings.single.sourceAudio.strengthLabel}</span>
+                <input
+                  type="range"
+                  min={h3.strengthRange.min}
+                  max={h3.strengthRange.max}
+                  step={h3.strengthRange.step}
+                  value={h3.strength}
+                  disabled={disabled}
+                  aria-label={strings.single.sourceAudio.strengthLabel}
+                  data-testid="chain-audio-strength"
+                  onChange={(e) => h3.onStrengthChange(Number(e.target.value))}
+                />
+                <span className="kfc-hint" data-testid="chain-audio-strength-value">
+                  {h3.strength.toFixed(2)}
+                </span>
+              </label>
+              <button
+                type="button"
+                className="secondary-button chain-audio-distribute"
+                disabled={disabled || uploading || !ready || form.hasSourceVideo || h3.distributeDisabled === true}
+                onClick={h3.onDistribute}
+              >
+                {t.h3.distributeButton}
+              </button>
+            </>
+          )}
           {/* ↔️ auto-fit. Needs a READY upload and a measured length: without one
               `adjustClipsForAudio` is a documented no-op, so the button would
               look broken rather than unavailable. */}
+          {!h3 && (
           <button
             type="button"
             className="secondary-button chain-audio-adjust"
@@ -212,7 +282,9 @@ export function ChainAudioPanel({
           >
             {t.adjustButton}
           </button>
+          )}
 
+          {!h3 && (
           <label className="field field-inline chain-audio-added-frames">
             <span className="field-label">{t.addedClipFramesLabel}</span>
             <input
@@ -226,6 +298,7 @@ export function ChainAudioPanel({
             />
             <span className="field-hint">{form.addedClipFrames}</span>
           </label>
+          )}
         </div>
       </div>
 

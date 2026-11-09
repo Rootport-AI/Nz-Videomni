@@ -368,6 +368,24 @@ export interface ChainClip {
    * element shape as {@link GenerateRequest.references}). Omitted when the
    * clip has none — LTX refuses any non-empty list with 422. */
   references?: ReferenceInputBody[];
+  /** §1-120: this clip's own A2V source audio (MiniMax H3 only — published
+   * through `constraints.chain.source_audio`). Placed after `references`.
+   * Omitted when the clip declares no A2V. LTX refuses it with 422
+   * `FEATURE_UNSUPPORTED` (feature `source_audio`); exclusive with
+   * `source_video`. */
+  source_audio?: ChainClipSourceAudio;
+}
+
+/** §1-120: one clip's A2V source audio on a MiniMax H3 chain. `offset_frames`
+ * is the clip's start on the long audio (S_i, in pixel frames at the chain's
+ * fps) when the slot holds the distributed long audio, 0 for an audio the user
+ * put into the clip by hand. */
+export interface ChainClipSourceAudio {
+  audio_id: string;
+  /** 0..1 (server default 0.5). */
+  strength: number;
+  /** Integer ≥ 0 (server default 0). */
+  offset_frames: number;
 }
 
 /** V2V continuation source (Docs/API_REFERENCE.md §5.2 `SourceVideoSpec`).
@@ -1353,8 +1371,13 @@ export interface BaseModelConstraints {
   /** §1-106: present only for an engine whose chain seams are fixed by the
    * server (MiniMax H3: `{ overlap_frames: 22 }`, in PIXEL frames). Absent =
    * the Chained screen keeps its own seam-blend controls (LTX, or a backend
-   * that predates the key). */
-  chain?: { overlap_frames: number } | null;
+   * that predates the key). §1-120: `source_audio` (MiniMax H3 only) opens
+   * the per-clip A2V of the chain (the long-audio card's "distribute" mode)
+   * with its Strength slider's range, step and default. */
+  chain?: {
+    overlap_frames: number;
+    source_audio?: { strength: SamplingParamConstraint } | null;
+  } | null;
   /** §1-123: present only for an engine whose Retake takes a middle-audio
    * Strength (MiniMax H3), with the slider's range, step and default. Its
    * presence switches the Retake screen into that engine's shape (Strength

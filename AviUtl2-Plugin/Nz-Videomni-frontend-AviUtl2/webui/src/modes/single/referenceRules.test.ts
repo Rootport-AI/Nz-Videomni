@@ -81,6 +81,37 @@ describe("referenceRules — state", () => {
     expect(s.slots.video[1]?.status).toBe("empty");
   });
 
+  it("§1-120 adopt: an uploaded id goes straight to ready, with a new input-order number", () => {
+    let s = put(enabled(), "picture", 1);
+    s = run(s, {
+      type: "adopt",
+      kind: "audio",
+      slot: 2,
+      id: "long",
+      fileName: "long.wav",
+      filePath: "C:\\long.wav",
+      durationSec: 30,
+    });
+    expect(s.slots.audio[1]).toMatchObject({
+      status: "ready",
+      id: "long",
+      fileName: "long.wav",
+      filePath: "C:\\long.wav",
+      durationSec: 30,
+      addedAt: 2,
+      errorCode: null,
+      trimFailed: false,
+    });
+    // Replaces whatever the slot held (an error included).
+    s = run(
+      s,
+      { type: "attachStart", kind: "audio", slot: 3, filePath: "C:\\x.wav", fileName: "x.wav" },
+      { type: "attachFail", kind: "audio", slot: 3, errorCode: "UPLOAD_FAILED" },
+      { type: "adopt", kind: "audio", slot: 3, id: "long", fileName: "long.wav", filePath: "C:\\long.wav", durationSec: null },
+    );
+    expect(s.slots.audio[2]).toMatchObject({ status: "ready", id: "long", durationSec: null, errorCode: null });
+  });
+
   it("clearing the checked audio slot keeps the tick (§1-117)", () => {
     let s = run(put(enabled(), "audio", 2), { type: "setA2vSlot", slot: 2 });
     expect(s.a2vSlot).toBe(2);

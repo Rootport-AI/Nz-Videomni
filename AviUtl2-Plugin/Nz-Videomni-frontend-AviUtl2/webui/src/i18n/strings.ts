@@ -564,18 +564,15 @@ export const en = {
    * `onBadge` is intentionally identical in both languages (owner decision). */
   nag: {
     heading: "Negative Prompt",
-    /** Shown inside the greyed accordion while the loaded
-     * base model's engine cannot run NAG/VSF (`nag` in its
-     * `unsupported_features`). Nothing from this panel is sent meanwhile;
-     * the sentence only says the base model does not support it (owner
-     * wording, 2026-10-31). */
-    unavailableOnBaseModel: "Negative prompts are not supported on this base model.",
     onBadge: "【🔴ON】",
     textLabel: "Negative prompt",
     enableLabel: "non-CFG Negative",
     methodNag: "NAG",
     methodVsf: "VSF",
     methodVsfHint: "Practical range is 1.5-5. Note: 0 does not disable VSF - uncheck the non-CFG Negative box to turn it off.",
+    /** `title` of the greyed NAG radio while the loaded base model's engine
+     * cannot run the NAG method (`nag` in its `unsupported_features`). */
+    methodNagUnavailableHint: "The NAG method is not available on this base model (only VSF is).",
     scaleLabel: "NAG scale",
     vsfScaleLabel: "VSF scale",
     advancedHeading: "Advanced",
@@ -645,6 +642,15 @@ export const en = {
       label: (startSec: string, endSec: string): string => `🎵 Audio ${startSec}s – ${endSec}s`,
       tooltip:
         "The part of the audio this clip covers. It overlaps slightly with the neighbouring clip (the crossfade at the seam).",
+    },
+    /** §1-120 (MiniMax H3): the badge on the Audios card that holds the
+     * distributed long audio, inside a clip's Reference accordion — the part
+     * of the long audio this clip uses (`S_i / fps` to `(S_i + F_i) / fps`,
+     * recomputed from the clip lengths on every render). Seconds arrive
+     * already rounded to two decimals. */
+    clipReferenceA2vWindow: {
+      label: (startSec: string, endSec: string): string => `🎵 Window ${startSec}s – ${endSec}s`,
+      tooltip: (overlapFrames: number): string => `Overlaps the neighbouring clip by ${overlapFrames} frames.`,
     },
     minClipsError: (min: number): string => `At least ${min} clips are required (no source video attached).`,
     maxClipsReached: (max: number): string => `Maximum ${max} clips reached.`,
@@ -912,6 +918,49 @@ export const en = {
         noFlexibleClips:
           "Couldn't adjust. Every clip has been edited by hand, so there is no card left to change. Add a clip.",
       },
+      /** §1-120: the distribute mode (MiniMax H3 with
+       * `constraints.chain.source_audio`) — the audio is put, uncut, into one
+       * Audios card of every clip's Reference accordion. `distributeButton` is
+       * named in `longTooShortWarning` and two Generate reasons, so all of
+       * them change together. */
+      h3: {
+        distributeButton: "Distribute to each clip",
+        probeFailed:
+          "Couldn't read the audio length. Distributing puts the audio into each clip without changing the clip lengths (the server checks the length instead).",
+        unusedTailNote: (unusedSeconds: string): string =>
+          `The video is not long enough, so about ${unusedSeconds}s at the end of the audio won't be used.`,
+        /** On the clip's Audios card holding the long audio, when the clip ends
+         * past the audio's end. */
+        longTooShortWarning: "The audio is too short. Press \"Distribute to each clip\".",
+        toast: {
+          distributed: (durationSec: number): string =>
+            `Distributed the ${durationSec.toFixed(2)}s audio to each clip.`,
+          distributedUnknownLength:
+            "Distributed the audio to each clip (its length is unknown, so the clip lengths were left as they are).",
+          tooShortForChain:
+            "The audio is too short for Chained (at least 2 clips are needed). Use A2V on Single for short audio.",
+          /** Clips with no free Audios card: nothing was overwritten. */
+          noFreeSlot: (clipNumbers: readonly number[]): string =>
+            clipNumbers.length === 1
+              ? `Clip ${clipNumbers[0]} has no free audio card, so the audio was not put there. That clip's references are sent as they are.`
+              : `Clips ${clipNumbers.join(", ")} have no free audio card, so the audio was not put there. Those clips' references are sent as they are.`,
+        },
+      },
+      /** §1-120: the y/n shown only when the distribution shortens or removes a
+       * clip the user has edited. Clip numbers are 1-based. */
+      confirm: {
+        title: "Change the clips?",
+        body: (shrunk: readonly { clip: number; from: number; to: number }[], removed: readonly number[]): string => {
+          const parts: string[] = [];
+          for (const s of shrunk) parts.push(`clip ${s.clip} will be shortened from ${s.from} to ${s.to} frames`);
+          if (removed.length === 1) parts.push(`clip ${removed[0]} will be removed`);
+          else if (removed.length > 1) parts.push(`clips ${removed.join(", ")} will be removed`);
+          const text = parts.length > 1 ? `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}` : (parts[0] ?? "");
+          return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+        },
+        confirmLabel: "Yes",
+        cancelLabel: "No",
+      },
     },
     /** §1-15 (clip-wise IC-LoRA reference), plan F3/F7: Chain's own reference-
      * video card (`modes/chained/ChainReferencePanel.tsx`) — ONE video attached
@@ -1030,6 +1079,21 @@ export const en = {
       audioTooLong: "The audio is too long for Chained. Use a shorter file.",
       chainLayoutInvalid:
         "This clip layout doesn't align with the audio timeline at this frame rate. Press ↔️Adjust the duration, or change a clip length.",
+      /** §1-120 (MiniMax H3's distribute mode), composed by `ChainedScreen`
+       * (`h3ChainAudio.h3ChainA2vReasons`). The V2V clash reuses
+       * `audioConflictsWithSourceVideo` verbatim so the note shows one line. */
+      chainA2vReferencesOff: "An audio file is attached. Turn References on.",
+      chainA2vNotDistributed:
+        "The audio has not been distributed to the clips. Press \"Distribute to each clip\", or remove the audio with 🔁.",
+      chainA2vAudioTooShort: "The audio is too short. Press \"Distribute to each clip\".",
+      clipA2vAudioTooShort: (clipNumbers: readonly number[]): string =>
+        clipNumbers.length === 1
+          ? `The audio of clip ${clipNumbers[0]} is too short. Use a longer audio, or lower the frame count.`
+          : `The audio of clips ${clipNumbers.join(", ")} is too short. Use longer audio, or lower the frame counts.`,
+      clipA2vAudioMissing: (clipNumbers: readonly number[]): string =>
+        clipNumbers.length === 1
+          ? `Clip ${clipNumbers[0]}: attach the audio to use for Audio to video.`
+          : `Clips ${clipNumbers.join(", ")}: attach the audio to use for Audio to video.`,
       /** §1-15 参照動画: the Chain-specific reference lines. The "choose a
        * control LoRA" / "attach a reference video" / "wait for the upload"
        * cases reuse `create.generateReasons` verbatim (same rule, same
@@ -1181,7 +1245,8 @@ export const en = {
     stopButton: "Stop",
     /** U4 guard 1: the shared width/height (owned by the Create form now) must
      * be multiples of 64, or every row 422s. Blocks Start. */
-    resolutionOffGrid: "Width and height must be multiples of 64. Fix the size on the Create form above before starting.",
+    resolutionOffGrid: (multiple: number): string =>
+      `Width and height must be multiples of ${multiple}. Fix the size on the Create form above before starting.`,
     /** U4 guard 2: the FPS and DURATION in effect at scan time were baked into
      * each row's frame count — if either changed since, the rows are stale.
      * Blocks Start. */
@@ -2811,13 +2876,13 @@ export const ja: Strings = {
   },
   nag: {
     heading: "ネガティブプロンプト",
-    unavailableOnBaseModel: "このベースモデルでは、ネガティブプロンプトは未対応です。",
     onBadge: "【🔴ON】",
     textLabel: "ネガティブプロンプト",
     enableLabel: "non-CFG Negative",
     methodNag: "NAG",
     methodVsf: "VSF",
     methodVsfHint: "実用域はscale 1.5〜5。0にしても無効にはなりません（無効化はチェックを外してください）。",
+    methodNagUnavailableHint: "このベースモデルでは NAG 方式は使えません（VSF 方式だけ使えます）。",
     scaleLabel: "NAG scale",
     vsfScaleLabel: "VSF scale",
     advancedHeading: "詳細設定",
@@ -2861,6 +2926,10 @@ export const ja: Strings = {
     clipAudioWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当時間帯 ${startSec}〜${endSec}秒`,
       tooltip: "このクリップが担当する音声の区間です。隣のクリップと少し重なります（継ぎ目のクロスフェード）。",
+    },
+    clipReferenceA2vWindow: {
+      label: (startSec: string, endSec: string): string => `🎵 担当区間 ${startSec}〜${endSec}秒`,
+      tooltip: (overlapFrames: number): string => `隣のクリップと ${overlapFrames} フレーム重なります。`,
     },
     minClipsError: (min: number): string => `最低 ${min} 本のクリップが必要です（元動画が未指定のため）。`,
     maxClipsReached: (max: number): string => `クリップは最大 ${max} 本までです。`,
@@ -2931,7 +3000,7 @@ export const ja: Strings = {
     },
     sourceAudio: {
       heading: "音声から動画（A2V）",
-      note: "音声を1本添付すると、各クリップに担当区間が自動で割り当てられます。ソース動画（V2V）とは併用できません。",
+      note: "音声を1本添付すると、各クリップに担当区間が自動で割り当てられます。V2V（動画の続きの生成）とは併用できません。",
       audioPlaceholderAlt: "音声ファイル",
       chooseButton: "音声ファイルを選ぶ…",
       changeButton: "音声ファイルを変更…",
@@ -2956,6 +3025,34 @@ export const ja: Strings = {
           "調整できませんでした。音声に対してクリップ構成が長すぎるか、追加クリップの長さが大きすぎます。クリップを減らすか、追加クリップの長さを下げてください。",
         noFlexibleClips:
           "調整できませんでした。すべてのクリップが手動編集済みのため、変更できるカードがありません。クリップを追加してください。",
+      },
+      h3: {
+        distributeButton: "各クリップに割り当て",
+        probeFailed:
+          "音声の長さを取得できませんでした。割り当てはクリップの長さを変えずに音声だけを入れます（長さはサーバー側で検査されます）。",
+        unusedTailNote: (unusedSeconds: string): string =>
+          `動画の尺が足りないため、音声の末尾 約${unusedSeconds}秒は使われません。`,
+        longTooShortWarning: "音声が短すぎます。『各クリップに割り当て』を押してください。",
+        toast: {
+          distributed: (durationSec: number): string => `音声（${durationSec.toFixed(2)}秒）を各クリップに割り当てました。`,
+          distributedUnknownLength:
+            "音声を各クリップに割り当てました（長さが分からないため、クリップの長さは変えていません）。",
+          tooShortForChain:
+            "音声が短すぎて Chained では使えません（2 クリップ以上が必要です）。短い音声は Single の A2V で生成してください。",
+          noFreeSlot: (clipNumbers: readonly number[]): string =>
+            `クリップ ${clipNumbers.join("・")} には空きの音声カードが無いため、音声を入れられませんでした。${clipNumbers.length === 1 ? "このクリップ" : "これらのクリップ"}の参照はそのまま送られます。`,
+        },
+      },
+      confirm: {
+        title: "クリップを変更しますか？",
+        body: (shrunk: readonly { clip: number; from: number; to: number }[], removed: readonly number[]): string => {
+          const shrunkText = shrunk.map((s) => `クリップ ${s.clip} を ${s.from} → ${s.to} フレーム`).join("に、");
+          const removedText = removed.length > 0 ? `クリップ ${removed.join("・")} を削除します。` : "";
+          if (shrunkText === "") return removedText;
+          return removedText === "" ? `${shrunkText}に縮めます。` : `${shrunkText}に縮め、${removedText}`;
+        },
+        confirmLabel: "はい",
+        cancelLabel: "いいえ",
       },
     },
     referenceVideo: {
@@ -3001,6 +3098,14 @@ export const ja: Strings = {
       audioTooLong: "音声が長すぎます。短い音声を使ってください。",
       chainLayoutInvalid:
         "このフレームレートではクリップ構成が音声タイムラインと整合しません。↔️再生時間の自動調整を押すか、クリップの長さを変えてください。",
+      chainA2vReferencesOff: "音声ファイルが入力済みです。Reference をオンにしてください。",
+      chainA2vNotDistributed:
+        "音声がクリップに割り当てられていません。『各クリップに割り当て』を押すか、🔁 で音声を外してください。",
+      chainA2vAudioTooShort: "音声が短すぎます。『各クリップに割り当て』を押してください。",
+      clipA2vAudioTooShort: (clipNumbers: readonly number[]): string =>
+        `クリップ ${clipNumbers.join("・")} の音声が短すぎます。音声を長くするかフレーム数を減らしてください。`,
+      clipA2vAudioMissing: (clipNumbers: readonly number[]): string =>
+        `クリップ ${clipNumbers.join("・")}：Audio to video に使う音声を入力してください。`,
       referenceNotReady: "参照動画を添付し直してください（アップロードに失敗しました）。",
       referenceTrimFailed: "参照動画を添付し直してください（範囲の切り出しに失敗しました）。",
       referenceConflictsWithSourceVideo:
@@ -3092,7 +3197,8 @@ export const ja: Strings = {
     runningButton: "実行中…",
     stoppingButton: "停止処理中…",
     stopButton: "停止",
-    resolutionOffGrid: "幅と高さは64の倍数にしてください。開始する前に、上の「作る」フォームでサイズを修正してください。",
+    resolutionOffGrid: (multiple: number): string =>
+      `幅と高さは${multiple}の倍数にしてください。開始する前に、上の「作る」フォームでサイズを修正してください。`,
     fpsMismatch: "FPSまたはDURATIONがスキャン時と異なります。フレーム数はバッチ開始時に現在の値で自動的に再計算されます。",
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",

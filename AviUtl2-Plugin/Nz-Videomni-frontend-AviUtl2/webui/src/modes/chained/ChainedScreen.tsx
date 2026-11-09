@@ -34,6 +34,7 @@ import { rekeySourceLocation } from "../../timeline/sourceLocationMap";
 import { decideSourceTrim } from "../../timeline/sourceTrim";
 import type { SourceTrimDecision } from "../../timeline/sourceTrim";
 import { tailAlignedStartFrame } from "../../timeline/tailAlign";
+import { ConfirmDialog } from "../../shell/ConfirmDialog";
 import { extractAudioFailureNote, extractObjectAudio } from "../../timeline/extractObjectAudio";
 import { fileNameFromPath } from "../single/keyframeUtils";
 import {
@@ -49,6 +50,7 @@ import { GenerateReasonsNote } from "../single/GenerateReasonsNote";
 import { PresetDropdown } from "../single/PresetDropdown";
 import { RepeatCountField } from "../single/RepeatCountField";
 import { submissionFingerprint } from "../single/repeatRun";
+import type { ReferenceAccordionA2v } from "../single/ReferenceAccordion";
 import { useGenerationSubmit } from "../single/useGeneration";
 import { useConfig } from "../single/useConfig";
 import { useRepeatRun, useRepeatRunDriver } from "../single/useRepeatRun";
@@ -70,6 +72,20 @@ import { ClipReferences } from "./ClipReferences";
 import type { ClipReferenceEntry } from "./ClipReferences";
 import { buildChainReasonMessages } from "./generateReasonMessages";
 import {
+  audioFramesOf,
+  chainTotal,
+  clipA2vTooShort,
+  clipSourceAudioBody,
+  declaredA2vCardOf,
+  declaredA2vSlotOf,
+  h3ChainA2vReasons,
+  holdsLongAudio,
+  pickDistributionSlot,
+  planH3AudioDistribution,
+} from "./h3ChainAudio";
+import type { H3AudioDistributionPlan, H3ChainA2vReasonClip } from "./h3ChainAudio";
+import {
+  clipStartFrames,
   MAX_CHAIN_TOTAL_FRAMES,
   MAX_OVERLAP_FRAMES,
   MAX_OVERLAP_STRENGTH,
@@ -496,13 +512,21 @@ function ChainedScreenBody({
     });
   }, [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, constraints]);
 
+  /** §1-120 (plan §10): #18 on MiniMax H3's assign mode. The long audio is
+   * assigned to the clips from the default lengths, as with 📁, so clip 0 never
+   * takes the seed's comfort-ceiling length (and the `project` size policy does
+   * not re-derive it either, below). */
+  const h3LongA2vAssign = initialIntent?.intent === "audio-to-long-a2v" && constraints?.chain?.sourceAudio != null;
+
   const initialCommon = useMemo(() => {
     if (!initialIntent || !seed) return {};
     return {
       width: seed.derived.width,
       height: seed.derived.height,
       ...(seed.frameRate != null ? { frameRate: seed.frameRate } : {}),
-      ...(seed.numFrames != null ? { numFrames: seed.numFrames } : {}),
+      // §1-120: on H3's assign mode clip 0 starts at the config default (the
+      // LTX long-a2v re-lays every clip through its auto-fit; H3's does not).
+      ...(seed.numFrames != null && !h3LongA2vAssign ? { numFrames: seed.numFrames } : {}),
       // X4: #1 extend-video attaches a source video (V2V, 1-clip floor), but the
       // source is still idle at mount, so open the clip list at a single clip
       // instead of the scratch 2-clip minimum — otherwise a stray 2nd clip card
@@ -520,7 +544,7 @@ function ChainedScreenBody({
         ? { forceSingleClip: true }
         : {}),
     };
-  }, [initialIntent, seed]);
+  }, [initialIntent, seed, h3LongA2vAssign]);
 
   const form = useChainForm(
     config,
@@ -649,8 +673,25 @@ function ChainedScreenBody({
   const referenceUploading = isH3 && referencesOn && referenceView.uploading;
   /** Ruling: the "no references" notice shows only when EVERY clip has no
    * card in use. */
+  // §1-120: a clip declaring "Audio to video" uses its audio (other cards are
+  // left out), so the notices read A2V as active only while no clip WITHOUT
+  // A2V has a card — a chain without any A2V reads exactly as before.
+  const referenceA2vActive = useMemo(() => {
+    let anyA2v = false;
+    let plainClipHasCards = false;
+    for (const entry of Object.values(clipReferences)) {
+      if (declaredA2vSlotOf(entry) !== null) anyA2v = true;
+      else if (entry.summary.filled.total > 0) plainClipHasCards = true;
+    }
+    return anyA2v && !plainClipHasCards;
+  }, [clipReferences]);
   const referenceNoticeCodes = isH3
-    ? referenceNotices({ role, enabled: referencesOn, a2vActive: false, usedCount: referenceView.usedCount })
+    ? referenceNotices({
+        role,
+        enabled: referencesOn,
+        a2vActive: referenceA2vActive,
+        usedCount: referenceView.usedCount,
+      })
     : [];
 
   // §1-111: per-clip token counts (shared + own prompt, composed by the
@@ -730,6 +771,310 @@ function ChainedScreenBody({
     }
   }, [form.audioFitEvent, strings, toasts]);
 
+  // ── §1-120: MiniMax H3's long A2V — the long audio distributed to every
+  // clip's own Audios card (plan §7). Everything here is closed on
+  // `h3Distribution` (the server publishes `constraints.chain.source_audio`
+  // and the clips have Reference cards), except the 🔁 clean-up effect below.
+  const chainSourceAudio = constraints?.chain?.sourceAudio ?? null;
+  // Premise: a server that publishes `chain.source_audio` (H3) also publishes
+  // `reference`, so `isH3` holds and every clip has cards to distribute into.
+  const h3Distribution = form.chainAudioDistribution && chainSourceAudio !== null && isH3;
+  const a2vStrengthRule = chainSourceAudio?.strength ?? null;
+  const a2vStrengthDefault = a2vStrengthRule?.default ?? 0.5;
+  /** The long-audio card's Strength, copied into every clip on distribution. */
+  const [longAudioStrength, setLongAudioStrength] = useState(a2vStrengthDefault);
+  /** Each clip's own Strength (its Audios card's slider), by clip id. */
+  const [clipA2vStrength, setClipA2vStrength] = useState<Record<string, number>>({});
+  const longAudio = form.sourceAudio.state;
+  const longAudioId = longAudio.id;
+  const longAudioReadyId = longAudio.status === "ready" ? longAudio.id : null;
+  const overlapForDistribution = form.fixedOverlapFrames ?? 0;
+  const clipFps = form.common.frameRate;
+  /** `A` of the plan: the long audio's length in frames, `null` when unknown. */
+  const longAudioFrames =
+    longAudioReadyId !== null && !form.audioProbeFailed && form.audioDurationSec !== null
+      ? audioFramesOf(form.audioDurationSec, clipFps)
+      : null;
+  const clipStarts = useMemo(
+    () => clipStartFrames(clips.map((clip) => clip.numFrames), overlapForDistribution),
+    [clips, overlapForDistribution],
+  );
+
+  const clipReferencesRef = useRef(clipReferences);
+  clipReferencesRef.current = clipReferences;
+
+  /** The injection waiting for every target clip's cards to register. */
+  const [pendingDistribution, setPendingDistribution] = useState<{
+    audioId: string;
+    fileName: string;
+    filePath: string;
+    durationSec: number | null;
+    strength: number;
+    clipIds: string[];
+  } | null>(null);
+  /** The y/n waiting on a plan that shortens or removes a clip the user edited. */
+  const [distributionConfirm, setDistributionConfirm] = useState<H3AudioDistributionPlan | null>(null);
+
+  const applyClipLengths = form.applyClipLengths;
+  const clipIdList = useMemo(() => clips.map((clip) => clip.id), [clips]);
+  const audioDurationForDistribution =
+    !form.audioProbeFailed && form.audioDurationSec !== null ? form.audioDurationSec : null;
+  const longAudioFileName = longAudio.fileName ?? "";
+  const longAudioFilePath = longAudio.filePath ?? "";
+  const applyDistribution = useCallback(
+    (plan: H3AudioDistributionPlan | null) => {
+      if (longAudioReadyId === null) return;
+      const clipIds = plan ? applyClipLengths(plan.frames) : clipIdList;
+      setReferencesOn(true);
+      setPendingDistribution({
+        audioId: longAudioReadyId,
+        fileName: longAudioFileName,
+        filePath: longAudioFilePath,
+        durationSec: audioDurationForDistribution,
+        strength: longAudioStrength,
+        clipIds,
+      });
+      const toast = strings.chained.sourceAudio.h3.toast;
+      toasts.push({
+        kind: "success",
+        message:
+          audioDurationForDistribution !== null
+            ? toast.distributed(audioDurationForDistribution)
+            : toast.distributedUnknownLength,
+      });
+    },
+    [
+      longAudioReadyId,
+      applyClipLengths,
+      clipIdList,
+      longAudioFileName,
+      longAudioFilePath,
+      audioDurationForDistribution,
+      longAudioStrength,
+      strings,
+      toasts,
+    ],
+  );
+
+  const { step: clipGridStep, offset: clipGridOffset } = (constraints ?? LTX_GENERATION_CONSTRAINTS).frameGrid;
+  const intactList = useMemo(() => clips.map((clip) => clip.intact !== false), [clips]);
+  const distribute = useCallback(() => {
+    if (!h3Distribution || longAudioReadyId === null || hasSourceVideo) return;
+    if (audioDurationForDistribution === null) {
+      // The length is unknown: inject only, the server's preflight decides.
+      applyDistribution(null);
+      return;
+    }
+    const plan = planH3AudioDistribution({
+      clipFrames: clips.map((clip) => clip.numFrames),
+      intact: intactList,
+      audioSec: audioDurationForDistribution,
+      fps: clipFps,
+      grid: { step: clipGridStep, offset: clipGridOffset, min: clipFrameMin, max: clipFrameMax },
+      overlap: overlapForDistribution,
+      laterMin: form.minFramesForOverlap,
+      addedMaxSec: 10,
+      maxClips: form.maxClips,
+      minClips: form.minClips,
+    });
+    if (plan.outcome === "tooShortForChain") {
+      toasts.push({ kind: "warning", message: strings.chained.sourceAudio.h3.toast.tooShortForChain });
+      return;
+    }
+    if (plan.needsConfirm) {
+      setDistributionConfirm(plan);
+      return;
+    }
+    applyDistribution(plan);
+  }, [
+    h3Distribution,
+    longAudioReadyId,
+    hasSourceVideo,
+    audioDurationForDistribution,
+    applyDistribution,
+    clips,
+    intactList,
+    clipFps,
+    clipGridStep,
+    clipGridOffset,
+    clipFrameMin,
+    clipFrameMax,
+    overlapForDistribution,
+    form.minFramesForOverlap,
+    form.maxClips,
+    form.minClips,
+    toasts,
+    strings,
+  ]);
+
+  // The injection, once every target clip has registered its cards (a clip
+  // just added registers in its own layout effect). No upload: the long
+  // audio's id goes into each clip as a ready card. A clip with no free audio
+  // card (and no declared A2V card to replace) is left as it is.
+  useEffect(() => {
+    if (pendingDistribution === null) return;
+    const entries = pendingDistribution.clipIds.map((id) => clipReferences[id]);
+    if (entries.some((entry) => entry === undefined)) return;
+    const noSlot: number[] = [];
+    const strengths: Record<string, number> = {};
+    pendingDistribution.clipIds.forEach((clipId, index) => {
+      const entry = entries[index];
+      if (!entry) return;
+      const slot = pickDistributionSlot(entry, pendingDistribution.audioId);
+      if (slot === null) {
+        noSlot.push(index + 1);
+        return;
+      }
+      entry.ops.adopt("audio", slot, {
+        id: pendingDistribution.audioId,
+        fileName: pendingDistribution.fileName,
+        filePath: pendingDistribution.filePath,
+        durationSec: pendingDistribution.durationSec,
+      });
+      entry.ops.setA2vSlot(slot);
+      strengths[clipId] = pendingDistribution.strength;
+    });
+    setClipA2vStrength((prev) => ({ ...prev, ...strengths }));
+    setPendingDistribution(null);
+    if (noSlot.length > 0) {
+      toasts.push({ kind: "warning", message: strings.chained.sourceAudio.h3.toast.noFreeSlot(noSlot) });
+    }
+  }, [pendingDistribution, clipReferences, toasts, strings]);
+
+  // Once per long audio, the moment its length is known (or known to be
+  // unknowable) — every attach route (📁, drop, #18) goes through
+  // `attachAudioByPath`, so this one effect covers them all. Outside the
+  // distribute mode the ref follows the current id, so an audio attached on LTX
+  // is not distributed by a later switch to H3.
+  const autoDistributedForIdRef = useRef<string | null>(null);
+  const audioLengthSettled = form.audioDurationSec !== null || form.audioProbeFailed;
+  useEffect(() => {
+    if (!h3Distribution) {
+      autoDistributedForIdRef.current = longAudioReadyId;
+      return;
+    }
+    if (longAudioReadyId === null || !audioLengthSettled) return;
+    if (autoDistributedForIdRef.current === longAudioReadyId) return;
+    autoDistributedForIdRef.current = longAudioReadyId;
+    distribute();
+  }, [h3Distribution, longAudioReadyId, audioLengthSettled, distribute]);
+
+  // 🔁 (or 📁 with another file): the cards holding the previous long audio are
+  // emptied and their "Audio to video" check is removed (`clear` keeps the
+  // check, which would otherwise stop Generate as an empty declaration).
+  // Deliberately NOT closed on H3: a long audio removed on the LTX screen must
+  // not survive in the cards as a hand-put audio (offset 0) back on H3.
+  const prevLongAudioIdRef = useRef<string | null>(longAudioId);
+  useEffect(() => {
+    const prev = prevLongAudioIdRef.current;
+    prevLongAudioIdRef.current = longAudioId;
+    if (prev === null || prev === longAudioId) return;
+    for (const entry of Object.values(clipReferencesRef.current)) {
+      const declared = declaredA2vSlotOf(entry);
+      for (const slot of entry.slots.audio) {
+        if (slot.id !== prev) continue;
+        entry.ops.clear("audio", slot.slot);
+        if (declared === slot.slot) entry.ops.setA2vSlot(null);
+      }
+    }
+  }, [longAudioId]);
+
+  /** The reasons this screen adds to Generate's note in the distribute mode. */
+  const h3A2v = useMemo(() => {
+    if (!h3Distribution) return { codes: [] as string[], tooShortClips: [] as number[], missingClips: [] as number[] };
+    const reasonClips: H3ChainA2vReasonClip[] = clips.map((clip, index) => {
+      const entry = clipReferences[clip.id];
+      const slot = declaredA2vCardOf(entry);
+      return {
+        numFrames: clip.numFrames,
+        start: clipStarts[index] ?? 0,
+        a2v: slot ? { status: slot.status, id: slot.id, durationSec: slot.durationSec } : null,
+        holdsLongAudio: entry !== undefined && longAudioReadyId !== null && holdsLongAudio(entry, longAudioReadyId),
+      };
+    });
+    return h3ChainA2vReasons({
+      clips: reasonClips,
+      referencesOn,
+      longAudioReadyId,
+      audioFrames: longAudioFrames,
+      hasSourceVideo,
+      fps: clipFps,
+    });
+  }, [
+    h3Distribution,
+    clips,
+    clipReferences,
+    clipStarts,
+    longAudioReadyId,
+    referencesOn,
+    longAudioFrames,
+    hasSourceVideo,
+    clipFps,
+  ]);
+  const h3A2vBlocked = h3A2v.codes.length > 0;
+
+  /** The Audios cards' A2V side for one clip (distribute mode only). */
+  const singleTooShortWarning = strings.single.sourceAudio.tooShortWarning;
+  const a2vFor = (clipId: string, index: number): ReferenceAccordionA2v | undefined => {
+    if (!h3Distribution || a2vStrengthRule === null) return undefined;
+    const clip = clips[index];
+    const entry = clipReferences[clipId];
+    const start = clipStarts[index] ?? 0;
+    const numFrames = clip?.numFrames ?? 0;
+    const tooShort = clipA2vTooShort({
+      card: declaredA2vCardOf(entry),
+      start,
+      numFrames,
+      longAudioId: longAudioReadyId,
+      longAudioFrames,
+      fps: clipFps,
+    });
+    const tooShortWarning =
+      tooShort === "long"
+        ? strings.chained.sourceAudio.h3.longTooShortWarning
+        : tooShort === "hand"
+          ? singleTooShortWarning(numFrames / clipFps)
+          : null;
+    return {
+      available: true,
+      strength: clipA2vStrength[clipId] ?? a2vStrengthDefault,
+      onStrengthChange: (value: number) => setClipA2vStrength((prev) => ({ ...prev, [clipId]: value })),
+      strengthMin: a2vStrengthRule.min,
+      strengthMax: a2vStrengthRule.max,
+      strengthStep: a2vStrengthRule.step,
+      tooShortWarning,
+      window:
+        longAudioReadyId !== null
+          ? {
+              audioId: longAudioReadyId,
+              label: strings.chained.clipReferenceA2vWindow.label(
+                (start / clipFps).toFixed(2),
+                ((start + numFrames) / clipFps).toFixed(2),
+              ),
+              tooltip: strings.chained.clipReferenceA2vWindow.tooltip(overlapForDistribution),
+            }
+          : null,
+    };
+  };
+
+  /** The panel's unused-tail note: 17 frames (one grid step) or more left. */
+  const chainOutputFrames = chainTotal(
+    clips.map((clip) => clip.numFrames),
+    overlapForDistribution,
+  );
+  const unusedTailFrames = longAudioFrames !== null ? longAudioFrames - chainOutputFrames : null;
+  const h3AudioPanel = h3Distribution && a2vStrengthRule !== null
+    ? {
+        strength: longAudioStrength,
+        strengthRange: { min: a2vStrengthRule.min, max: a2vStrengthRule.max, step: a2vStrengthRule.step },
+        onStrengthChange: setLongAudioStrength,
+        onDistribute: distribute,
+        distributeDisabled: pendingDistribution !== null,
+        unusedTailSec:
+          unusedTailFrames !== null && unusedTailFrames >= clipGridStep ? unusedTailFrames / clipFps : null,
+      }
+    : undefined;
+
   // W7 `project` policy: read the AviUtl2 project's own resolution/fps via
   // `getEditInfo` ONCE on this prefilling remount and overwrite the common
   // width/height/frameRate. A consumed ref limits it to a single run; a
@@ -764,7 +1109,9 @@ function ChainedScreenBody({
         // `resolvePrefillSeed` seeded it; every other engine keeps the legacy
         // table. Leaves the seed in place when the ceiling can't be resolved
         // (null).
-        if (sizePolicy === "project") {
+        // §1-120 (plan §10): not on H3's assign mode — clip 0 keeps the default
+        // length the audio is assigned from (and stays intact for the y/n rule).
+        if (sizePolicy === "project" && !h3LongA2vAssign) {
           const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
           let target: number | null;
           if (rowsBudget !== null) {
@@ -1104,6 +1451,11 @@ function ChainedScreenBody({
   const buildRequest = form.buildRequest;
   const formClips = form.clips;
   const referenceBodies = referenceView.bodies;
+  // §1-120: in the distribute mode (no source video) each clip whose declared
+  // "Audio to video" card is ready also gets its own `source_audio`, after
+  // `references` — the long audio with `offset_frames = S_i`, a hand-put audio
+  // with 0 (`clipSourceAudioBody`). FL2VA included (A2V works there).
+  const sendClipAudio = h3Distribution && !hasSourceVideo;
   const buildSubmission = useCallback((): GenerateChainRequest => {
     const built = buildRequest();
     const withLoras =
@@ -1114,10 +1466,30 @@ function ChainedScreenBody({
       clips: withLoras.clips.map((clip, i) => {
         const clipId = formClips[i]?.id;
         const references = clipId !== undefined ? referenceBodies[clipId] : undefined;
-        return references && references.length > 0 ? { ...clip, references } : clip;
+        const withReferences = references && references.length > 0 ? { ...clip, references } : clip;
+        const entry = clipId !== undefined && sendClipAudio ? clipReferences[clipId] : undefined;
+        if (!entry || clipId === undefined) return withReferences;
+        const sourceAudio = clipSourceAudioBody(entry, {
+          longAudioId,
+          start: clipStarts[i] ?? 0,
+          strength: clipA2vStrength[clipId] ?? a2vStrengthDefault,
+        });
+        return sourceAudio ? { ...withReferences, source_audio: sourceAudio } : withReferences;
       }),
     };
-  }, [buildRequest, loraAudioHidden, referencesOn, formClips, referenceBodies]);
+  }, [
+    buildRequest,
+    loraAudioHidden,
+    referencesOn,
+    formClips,
+    referenceBodies,
+    sendClipAudio,
+    clipReferences,
+    longAudioId,
+    clipStarts,
+    clipA2vStrength,
+    a2vStrengthDefault,
+  ]);
 
   const inFlightRef = useRef(false);
   const handleGenerate = useCallback(async () => {
@@ -1175,7 +1547,7 @@ function ChainedScreenBody({
   useRepeatRunDriver(repeat, {
     jobs: jobsCtx.jobs,
     submitPhase: submitState.phase,
-    canSubmit: form.isValid && !referenceUploading,
+    canSubmit: form.isValid && !referenceUploading && !h3A2vBlocked,
     getFingerprint: getRequestFingerprint,
     send: sendRepeat,
     onSettingsChanged: onRepeatSettingsChanged,
@@ -1200,6 +1572,8 @@ function ChainedScreenBody({
     minClips: form.minClips,
     stage2MaxContextFrames: form.stage2MaxContextFrames,
     fixedOverlapFrames: form.fixedOverlapFrames,
+    clipA2vAudioTooShortClips: h3A2v.tooShortClips,
+    clipA2vAudioMissingClips: h3A2v.missingClips,
   });
 
   // W3 レイアウト再構成 (2026-08-11): the reference-video (§1-15) and A2V
@@ -1377,6 +1751,7 @@ function ChainedScreenBody({
             nativeBridge,
             register: registerClipReferences,
             unregister: unregisterClipReferences,
+            a2vFor,
           }}
         />
 
@@ -1443,6 +1818,7 @@ function ChainedScreenBody({
               unavailable={a2vUnavailable}
               nativeBridge={nativeBridge}
               showHeading={false}
+              h3={h3AudioPanel}
             />
           </div>
         </details>
@@ -1552,7 +1928,7 @@ function ChainedScreenBody({
       <div className="generation-column">
         <GenerateButtonBar
           label={repeating ? strings.repeatRun.stopButton(repeat.remaining) : generateLabel}
-          disabled={repeating ? false : submitting || serverBusy || !form.isValid || referenceUploading}
+          disabled={repeating ? false : submitting || serverBusy || !form.isValid || referenceUploading || h3A2vBlocked}
           onGenerate={
             repeating
               ? repeat.stop
@@ -1575,7 +1951,11 @@ function ChainedScreenBody({
           }
         />
         <GenerateReasonsNote
-          reasons={referenceUploading ? [...form.validityReasons, "referenceCardUploading"] : form.validityReasons}
+          reasons={[
+            ...form.validityReasons,
+            ...(referenceUploading ? ["referenceCardUploading"] : []),
+            ...h3A2v.codes,
+          ]}
           messages={generateReasonMessages}
         />
         {/* §1-109: H3 only, informational like Create's — one paragraph per
@@ -1605,6 +1985,25 @@ function ChainedScreenBody({
         loraRefreshKey={loraRefreshKey}
       />
     )}
+    {/* §1-120: only when the distribution shortens or removes a clip the user
+        edited. "No" cancels the whole distribution (nothing is injected). */}
+    {distributionConfirm && (
+      <ConfirmDialog
+        title={strings.chained.sourceAudio.confirm.title}
+        body={strings.chained.sourceAudio.confirm.body(
+          distributionConfirm.shrunk.map((s) => ({ clip: s.index + 1, from: s.from, to: s.to })),
+          distributionConfirm.removed.map((index) => index + 1),
+        )}
+        confirmLabel={strings.chained.sourceAudio.confirm.confirmLabel}
+        cancelLabel={strings.chained.sourceAudio.confirm.cancelLabel}
+        onConfirm={() => {
+          const plan = distributionConfirm;
+          setDistributionConfirm(null);
+          applyDistribution(plan);
+        }}
+        onCancel={() => setDistributionConfirm(null)}
+      />
+    )}
     </>
   );
 }
@@ -1621,6 +2020,9 @@ interface ClipsSectionReferences {
   nativeBridge?: NativeBridge | undefined;
   register: (clipId: string, entry: ClipReferenceEntry) => void;
   unregister: (clipId: string) => void;
+  /** §1-120: the Audios cards' A2V side for one clip, or `undefined` (no box —
+   * LTX, or a backend without `constraints.chain.source_audio`). */
+  a2vFor: (clipId: string, index: number) => ReferenceAccordionA2v | undefined;
 }
 
 function ClipsSection({
@@ -1692,6 +2094,7 @@ function ClipsSection({
                   nativeBridge={references.nativeBridge}
                   disabled={disabled}
                   onAppendTag={(tag) => form.setClipPrompt(clip.id, appendReferenceTag(clip.prompt, tag))}
+                  a2v={references.a2vFor(clip.id, index)}
                   register={references.register}
                   unregister={references.unregister}
                 />

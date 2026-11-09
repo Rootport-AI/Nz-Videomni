@@ -24,7 +24,7 @@ facts that are genuinely different:
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
 mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
-is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, ``generate_chain`` also forwards ``clip_reference_paths``, and the categories are the same four words.
+is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, ``generate_chain`` also forwards ``clip_reference_paths`` and ``clip_source_audio_paths``, and the categories are the same four words.
 
 THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
 paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
@@ -37,7 +37,8 @@ key would mean "the load value", not "off"), ``vram16_mode`` (always sent: the
 worker's own default is off, the app's is on), ``source_audio``
 (``{path, strength}``; single-generate A2V only — an absent key is "no source
 audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
-absent key is "no references") and ``keep_resident`` (only when asked for — an
+absent key is "no references"), ``nag`` (``{negative_prompt, method,
+vsf_scale}``; VSF only) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
@@ -197,6 +198,11 @@ REQUEST_RULES = RequestRules(
     # waveform back. Published as constraints["retake"]; an omitted value
     # becomes the default (validate_chain).
     retake_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
+    # A chain clip's own A2V (``clips[i].source_audio.strength``, 台帳 §1-120):
+    # mask value 1 - s on the clip's new audio rows (the chain always decodes).
+    # Published as constraints["chain"]["source_audio"]: the operation panel's
+    # signal to open the long audio's distribution.
+    chain_source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -242,15 +248,17 @@ def _keyframe_strength(r: GenerateRequest) -> bool:
 #: The 422 half: ``(field, feature, is_non_default)``, first offender wins. Every
 #: predicate tests "differs from the default" (for ``strength`` the default is
 #: ``None``: the operation panel omits it when the family has none, and any
-#: value is refused), so a plain T2V / keyframe I2V request passes.
+#: value is refused; ``nag_enabled`` is refused only with ``neg_method`` other
+#: than ``"vsf"``), so a plain T2V / keyframe I2V request passes.
 #:
-#: ``conditioning_images`` appears ONCE here and is also HONOURED: the
-#: keyframes (any frame, up to the schema's count cap) are what this engine
-#: does with it, and this row refuses what it cannot (a strength). The audit
-#: test allows exactly this overlap.
+#: ``conditioning_images`` and ``nag_enabled`` each appear ONCE here and are
+#: also HONOURED: the keyframes (any frame, up to the schema's count cap) and
+#: the VSF negative prompt are what this engine does with them, and these rows
+#: refuse what it cannot (a strength; the NAG method). The audit test allows
+#: exactly these overlaps.
 REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
-    ("nag_enabled", "nag", lambda r: r.nag_enabled),
+    ("nag_enabled", "nag", lambda r: r.nag_enabled and r.neg_method != "vsf"),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
     ("outpaint", "outpaint", lambda r: r.outpaint is not None),
@@ -294,20 +302,25 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # Ref2VA: the uploads' paths + kind / slot / max_sec reach the worker
         # as the ``references`` payload key.
         "references",
+        # The VSF negative prompt: the ``nag`` payload key ({negative_prompt,
+        # method, vsf_scale}); the NAG method is refused above.
+        "nag_enabled",
+        "negative_prompt",
+        "neg_method",
+        "vsf_scale",
         "crop_output",
         "embed_mp4_metadata",
     }
 )
 
 #: ``field -> the field that governs it``: sub-parameters inert unless their
-#: governor is non-default, and every governor here is refused above. The two
+#: governor is non-default, and every governor here is in the reject table
+#: above (``nag_enabled`` only for the NAG method: the NAG strengths are inert
+#: under VSF). The two
 #: IC-LoRA strengths are the REFERENCE VIDEO's (what they scale), so
 #: ``reference_video_id`` governs them: sent with ``loras`` alone they are
 #: inert here.
 GOVERNED_FIELDS: dict[str, str] = {
-    "negative_prompt": "nag_enabled",
-    "neg_method": "nag_enabled",
-    "vsf_scale": "nag_enabled",
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
@@ -331,16 +344,20 @@ GOVERNED_FIELDS: dict[str, str] = {
 
 #: The 422 half: ``(field, feature, is_non_default)``, first offender wins, the
 #: same "differs from the default" discipline as :data:`REJECT_TABLE`.
+#: ``nag_enabled`` is refused only with ``neg_method`` other than "vsf" (the
+#: single path's row): the VSF negative prompt rides the chain too, so it is
+#: also HONOURED.
 #: ``clips`` is also HONOURED (the prompts, lengths, clip 0's key frames and
-#: per-clip references): the audit allows exactly this overlap, as it allows
-#: ``conditioning_images`` on the single path. Its row here refuses only a
-#: key frame's ``strength`` (the single path's ``keyframe_strength``, same
-#: sentence), last so every other feature is named first.
+#: per-clip references): the audit allows exactly these two overlaps, as it
+#: allows ``conditioning_images`` and ``nag_enabled`` on the single path.
+#: Its ``clips`` row here refuses only a key frame's ``strength`` (the single
+#: path's ``keyframe_strength``, same sentence), last so every other feature
+#: is named first.
 CHAIN_REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateChainRequest], bool]], ...] = (
     ("source_audio", "a2v", lambda r: r.source_audio is not None),
     ("end_source", "end_source", lambda r: r.end_source is not None),
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
-    ("nag_enabled", "nag", lambda r: r.nag_enabled),
+    ("nag_enabled", "nag", lambda r: r.nag_enabled and r.neg_method != "vsf"),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
@@ -368,9 +385,14 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: alone also the top-level ``prompt``; ``source_video`` becomes the top-level
 #: ``source`` with the app-cut tail's path; ``retake`` becomes the top-level
 #: ``retake`` with the app-cut window's path and the audio Strength;
-#: ``loras`` arrive resolved as ``lora_paths``), except
+#: ``loras`` arrive resolved as ``lora_paths``; ``nag_enabled`` /
+#: ``negative_prompt`` / ``neg_method`` / ``vsf_scale`` become the top-level
+#: ``nag`` key, only with ``nag_enabled``), except
 #: ``crop_output`` (the app-side centre-crop) and ``embed_mp4_metadata`` (the
-#: app-side recipe embed).
+#: app-side recipe embed). ``clips`` also carries each clip's own
+#: ``source_audio`` (a clip's A2V, 台帳 §1-120): it becomes that clip's
+#: ``source_audio`` ``{path, strength, offset_frames}``; the top-level
+#: ``source_audio`` stays refused (``a2v`` above).
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -389,18 +411,22 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "attention_backend",
         "block_swap_prefetch",
         "vram16_mode",
+        # The VSF negative prompt: the ``nag`` payload key ({negative_prompt,
+        # method, vsf_scale}); the NAG method is refused above.
+        "nag_enabled",
+        "negative_prompt",
+        "neg_method",
+        "vsf_scale",
         "crop_output",
         "embed_mp4_metadata",
     }
 )
 
-#: ``field -> the field that governs it``: the single path's eight, each
-#: inert unless its governor is non-default, and every governor here is in
-#: :data:`CHAIN_REJECT_TABLE`.
+#: ``field -> the field that governs it``: the single path's five, each inert
+#: unless its governor is non-default, and every governor here is in
+#: :data:`CHAIN_REJECT_TABLE` (``nag_enabled`` only for the NAG method: the
+#: NAG strengths are inert under VSF).
 CHAIN_GOVERNED_FIELDS: dict[str, str] = {
-    "negative_prompt": "nag_enabled",
-    "neg_method": "nag_enabled",
-    "vsf_scale": "nag_enabled",
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
@@ -458,6 +484,8 @@ LORA_VERDICT = _h3_lora_verdict
 def _refusal_detail(field: str, feature: str) -> str:
     if feature == "keyframe_strength":
         return "MiniMax H3 にはキーフレームの強度がありません（strength は指定しないでください）。"
+    if feature == "nag":
+        return "MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）。"
     return (
         f"MiniMax H3 は {feature} に対応していません"
         f"（リクエストの {field} が既定値ではありません）。"
@@ -472,8 +500,8 @@ def reject_unsupported(request: GenerateRequest) -> None:
 
 
 def _chain_refusal_detail(field: str, feature: str) -> str:
-    if feature == "keyframe_strength":
-        # The single path's sentence: the same fact, the same words.
+    if feature in ("keyframe_strength", "nag"):
+        # The single path's sentences: the same fact, the same words.
         return _refusal_detail(field, feature)
     return (
         f"MiniMax H3 の連結生成（Chained）は {feature} に対応していません"
@@ -666,6 +694,37 @@ def _clip_reference_payloads(
         _reference_payload(clip, paths) if clip.references else []
         for clip, paths in zip(chain.clips, clip_reference_paths)
     ]
+
+
+def _clip_source_audio_payloads(
+    chain: GenerateChainRequest, clip_source_audio_paths: list[Path | None] | None
+) -> list[dict | None]:
+    """Each clip's own ``source_audio`` (台帳 §1-120) with the resolved path, as
+    the worker takes it: ``{path, strength, offset_frames}``; ``None`` for a
+    clip without one. ``clip_source_audio_paths`` is one path (or ``None``) per
+    clip (``None`` = no clip has one); a count that does not match, or a clip
+    with ``source_audio`` and no path, raises ``RuntimeError``."""
+    if clip_source_audio_paths is None:
+        clip_source_audio_paths = [None for _ in chain.clips]
+    if len(clip_source_audio_paths) != len(chain.clips):
+        raise RuntimeError(
+            f"MiniMax H3: {len(chain.clips)} clip(s) in the chain but "
+            f"{len(clip_source_audio_paths)} source audio path(s) resolved"
+        )
+    out: list[dict | None] = []
+    for i, (clip, path) in enumerate(zip(chain.clips, clip_source_audio_paths)):
+        spec = clip.source_audio
+        if spec is None:
+            out.append(None)
+            continue
+        if path is None:
+            raise RuntimeError(f"MiniMax H3: clips[{i}].source_audio requested but its audio was not resolved")
+        out.append({
+            "path": str(path),
+            "strength": float(spec.strength),
+            "offset_frames": int(spec.offset_frames),
+        })
+    return out
 
 
 def _reference_counts(request: GenerateRequest) -> dict[str, int]:
@@ -879,6 +938,14 @@ class _RealBackendH3(_RealBackend):
         # references: only for a Ref2VA job (an absent key = none).
         if references:
             payload["references"] = references
+        # nag: only for a VSF negative-prompt job (an absent key = none);
+        # reject_unsupported has already held neg_method to "vsf".
+        if request.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": request.negative_prompt,
+                "method": request.neg_method,
+                "vsf_scale": float(request.vsf_scale),
+            }
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -947,9 +1014,17 @@ class _RealBackendH3(_RealBackend):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
+        clip_source_audio_paths: list[Path | None] | None = None,
     ) -> GenerationOutcome:
         """A T2V / V2V / i2v / Retake chain via the worker's ``generate_chain`` op
         (裁定 84; 台帳 §1-121, §1-123).
+
+        ``clip_source_audio_paths`` (H3-only, 台帳 §1-120): each clip's own
+        ``source_audio`` resolved by the audio store, one path or ``None`` per
+        clip (``None`` = no clip has one); a clip with one carries
+        ``source_audio`` ``{path, strength, offset_frames}`` after its
+        ``references`` (:func:`_clip_source_audio_payloads`). The top-level
+        keys are unchanged.
 
         THE CALL SHAPE IS LTX's thirteen keywords (``PipelineManager.run_chain_job``
         passes them to every runner) plus the H3-only ``clip_reference_paths``
@@ -980,6 +1055,8 @@ class _RealBackendH3(_RealBackend):
         also carries ``source`` (``{path, context_frames}``) after ``clips``;
         with a retake it carries ``retake`` (``{path, audio_strength}``; the
         app-cut window, :class:`PipelineManager`'s ``_retake_window.mp4``).
+        ``nag`` rides only with ``nag_enabled``; :func:`reject_chain` has
+        already held ``neg_method`` to "vsf".
         Key set and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` (and its V2V,
         key-frame and Retake (``GOLDEN_CHAIN_KEYS_H3_RETAKE``) variants) in tests/test_engine_h3_adapter.py.
         """
@@ -1026,6 +1103,10 @@ class _RealBackendH3(_RealBackend):
         for entry, references in zip(clips, _clip_reference_payloads(chain, clip_reference_paths)):
             if references:
                 entry["references"] = references
+        # source_audio: only on a clip that has its own (an absent key = none), last.
+        for entry, audio in zip(clips, _clip_source_audio_payloads(chain, clip_source_audio_paths)):
+            if audio is not None:
+                entry["source_audio"] = audio
         if chain.source_video is not None and source_tail_path is None:
             raise RuntimeError("MiniMax H3: source_video requested but no source tail was cut")
         if chain.retake is not None and retake_window_path is None:
@@ -1073,6 +1154,14 @@ class _RealBackendH3(_RealBackend):
             payload["retake"] = {
                 "path": str(retake_window_path),
                 "audio_strength": float(chain.retake.audio_strength),
+            }
+        # nag: only for a VSF negative-prompt job (an absent key = none);
+        # reject_chain has already held neg_method to "vsf".
+        if chain.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": chain.negative_prompt,
+                "method": chain.neg_method,
+                "vsf_scale": float(chain.vsf_scale),
             }
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -1259,6 +1348,7 @@ class _MockBackendH3(_MockBackend):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
+        clip_source_audio_paths: list[Path | None] | None = None,
     ) -> GenerationOutcome:
         """A synthetic H3 chain: ONE mp4 of the whole timeline (``F_total`` =
         the clips minus 22 per seam, ``h3_chain_math``) and the layout as
@@ -1278,12 +1368,20 @@ class _MockBackendH3(_MockBackend):
         ``clip_reference_paths`` gets the real backend's resolution check, and
         a clip with references records their counts as
         ``done.chain.clips[i].references`` (``{pictures, videos, audios}``), as
-        the real worker does."""
+        the real worker does.
+        ``clip_source_audio_paths`` gets the real backend's resolution check
+        too, and a clip with its own source audio records
+        ``done.chain.clips[i].a2v`` (台帳 §1-120) with what the geometry decides
+        (``mask_value``, ``audio_latents``, ``fixed_head_latents``,
+        ``start_sample``, ``required_samples``), ``channels_used`` from an
+        ffprobe of the upload (once per file), ``None`` for what only a real
+        encode can tell, ``audio_output: "decoded"`` and ``mock: true``."""
         if not self._loaded:
             self.load()
 
         chain = chain_request
         clip_references = _clip_reference_payloads(chain, clip_reference_paths)
+        clip_audios = _clip_source_audio_payloads(chain, clip_source_audio_paths)
         seed = int(seed) if seed is not None else resolve_seed(chain.seed)
         layout = h3_chain_math.compute_h3_chain_layout(
             [c.num_frames for c in chain.clips],
@@ -1352,6 +1450,27 @@ class _MockBackendH3(_MockBackend):
         for i, references in enumerate(clip_references):
             if references:
                 done_chain["clips"][i]["references"] = _reference_counts(chain.clips[i])
+        probed: dict[str, str | None] = {}
+        for i, audio in enumerate(clip_audios):
+            if audio is None:
+                continue
+            if audio["path"] not in probed:
+                _sample_rate, channels = video_io.probe_audio_stream(Path(audio["path"]))
+                probed[audio["path"]] = _mock_channels_used(channels)
+            frames_i = int(layout.clip_frames[i])
+            done_chain["clips"][i]["a2v"] = {
+                "mask_value": 1.0 - float(audio["strength"]),
+                "audio_latents": int(layout.clip_audio_latents[i]),
+                "fixed_head_latents": int(layout.audio_overlap_latents[i - 1]) if i else 0,
+                "start_sample": h3_chain_math.clip_audio_start_sample(int(audio["offset_frames"])),
+                "required_samples": round(frames_i * h3_chain_math.H3_AUDIO_SAMPLE_RATE / int(chain.frame_rate)),
+                "encoded_samples": None,
+                "channels_used": probed[audio["path"]],
+                "resampler": None,
+                "encoder_tensors": None,
+                "audio_output": "decoded",
+                "mock": True,
+            }
         v2v_layout = done_chain.pop("v2v", None)
         retake_layout = done_chain.pop("retake", None)
         done_chain["h3"] = {
@@ -1485,15 +1604,18 @@ class H3Runner(LTXRunner):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
+        clip_source_audio_paths: list[Path | None] | None = None,
     ) -> GenerationOutcome:
         """``LTXRunner.generate_chain`` (the thirteen keywords every runner
         takes) plus ``clip_reference_paths`` (each clip's resolved Ref2VA
         uploads, one path list per clip in request order; ``None`` when no
-        clip has references), passed to the backend. The thirteen-keyword
+        clip has references) and ``clip_source_audio_paths`` (each clip's own
+        resolved source audio, one path or ``None`` per clip; ``None`` when no
+        clip has one, 台帳 §1-120), passed to the backend. The thirteen-keyword
         contract of ``LTXRunner.generate_chain`` itself is unchanged:
-        ``PipelineManager.run_chain_job`` adds the keyword only when a clip has
-        references, and only an H3 chain can (both LTX families refuse
-        ``clips[i].references``)."""
+        ``PipelineManager.run_chain_job`` adds each keyword only when a clip has
+        references / its own source audio, and only an H3 chain can (both LTX
+        families refuse ``clips[i].references`` and ``clips[i].source_audio``)."""
         if self._backend is None or not self._backend.loaded:
             self.load()
         assert self._backend is not None
@@ -1513,4 +1635,5 @@ class H3Runner(LTXRunner):
             reference_video_path=reference_video_path,
             seed=seed,
             clip_reference_paths=clip_reference_paths,
+            clip_source_audio_paths=clip_source_audio_paths,
         )

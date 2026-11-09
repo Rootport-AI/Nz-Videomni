@@ -50,6 +50,7 @@ function makeApi(state: ReferenceState, overrides: Partial<ReferenceSlotsApi> = 
     rules: RULES,
     attach: vi.fn().mockResolvedValue(undefined),
     pick: vi.fn().mockResolvedValue(undefined),
+    adopt: vi.fn(),
     clear: vi.fn(),
     attachToFirstEmpty: vi.fn().mockReturnValue(1),
     setEnabled: vi.fn(),
@@ -441,6 +442,49 @@ describe("ReferenceAccordion", () => {
       a2v: undefined,
     });
     expect(screen.queryByText("【🔴ON】")).toBeNull();
+  });
+
+  // §1-120: a Chained clip on MiniMax H3 with `constraints.chain.source_audio`.
+  it("embedded with a2v: Audio to video and Strength are drawn (still no Enable); the ON badge follows a declared A2V", () => {
+    const base = enabled(createInitialState(RULES));
+    const declared = { ...base, a2vSlot: 2 };
+    renderAccordion(makeApi(declared), { embedded: true });
+    expect(screen.queryByRole("checkbox", { name: /enable/i })).toBeNull();
+    expect(screen.getAllByRole("checkbox", { name: "Audio to video" })).toHaveLength(3);
+    expect(screen.getByTestId("source-audio-strength")).toBeInTheDocument();
+    // Nothing counted, but an A2V card is declared (even empty): ON.
+    expect(screen.getByText("【🔴ON】")).toBeInTheDocument();
+  });
+
+  it("embedded with a2v: the window badge sits on the card holding that audio id only", () => {
+    let state = enabled(createInitialState(RULES));
+    state = referenceReducer(state, {
+      type: "adopt",
+      kind: "audio",
+      slot: 1,
+      id: "long",
+      fileName: "long.wav",
+      filePath: "C:\\long.wav",
+      durationSec: 30,
+    });
+    state = fill(state, "audio", 2, 5);
+    renderAccordion(makeApi({ ...state, a2vSlot: 1 }), {
+      embedded: true,
+      a2v: {
+        available: true,
+        strength: 0.5,
+        onStrengthChange: vi.fn(),
+        strengthMin: 0,
+        strengthMax: 1,
+        strengthStep: 0.05,
+        tooShortWarning: null,
+        window: { audioId: "long", label: "🎵 Window 0.00s – 9.42s", tooltip: "Overlaps" },
+      },
+    });
+    const badge = within(screen.getByTestId("ref-slot-audio-1")).getByTestId("ref-a2v-window");
+    expect(badge).toHaveTextContent("🎵 Window 0.00s – 9.42s");
+    expect(badge).toHaveAttribute("title", "Overlaps");
+    expect(within(screen.getByTestId("ref-slot-audio-2")).queryByTestId("ref-a2v-window")).toBeNull();
   });
 
   it("not embedded (the default): Enable, the ON badge and Audio to video are drawn as before", () => {

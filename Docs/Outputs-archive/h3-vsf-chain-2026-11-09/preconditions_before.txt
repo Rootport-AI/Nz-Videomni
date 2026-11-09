@@ -1,0 +1,84 @@
+点検: before
+date: 2026-11-09 09:26:41
+
+== git branch --show-current
+dev
+== git rev-parse HEAD
+a44ed19022d8d29285d4600b54b55b6e53808d58
+== git log --oneline -1
+a44ed19 H3 VSF: 連結（Chained）と Retake にネガティブプロンプトを配線（負の符号化はジョブで 1 回・クリップごとに h3.vsf。台帳 §1-127）
+== git status --short (empty below = clean)
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/_rt/
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g0_off/g0_off.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g0_on/g0_on.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g1_off/g1_off.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g1_on/g1_on.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g2/vsf/02e6b267-563f-418e-82f1-39e2e537a416.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g3/off/eba8da8c-53c9-400c-be24-60c1b36f5422.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/g3/vsf/da3863ee-e2d9-416b-9ce6-b294669d48c2.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/B0/d53489ac-a861-40c2-9c5d-183715959014.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/B1/1ba203a1-03c2-4eee-8dd5-0b06486e4664.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/B2/90fd1d73-2657-4840-afb6-375c49bfd924.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/B3/4ee35ae6-d00e-4fee-8946-c97147cc3183.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/B4/f63be9af-f2c1-45dc-9563-2a1145b13a69.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/T0/81da1187-3b48-49ff-b47f-d6a9d823d0f6.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/T1/969f1362-1ff5-4094-9470-690ac5d7b42a.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/T2/950f4d93-1dad-4fa7-9394-1c8edca223f2.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/T3/015c7613-2f5b-4625-8a16-b67658aee46c.mp4
+?? Docs/Outputs-archive/h3-vsf-2026-11-09/visual/T4/f9333245-8404-414e-8a4e-065e9f43997c.mp4
+?? Docs/Outputs-archive/h3-vsf-chain-2026-11-09/
+== nvidia-smi --query-gpu=memory.used,memory.total --format=csv
+memory.used [MiB], memory.total [MiB]
+743 MiB, 16376 MiB
+== python processes (Get-CimInstance; empty = none)
+pid=58896 ppid=52616 python.exe
+    S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Scripts\python.exe Docs/Outputs-archive/h3-vsf-chain-2026-11-09/preconditions.py before
+pid=60352 ppid=58896 python.exe  [この点検そのもの]
+    "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.python\cpython-3.12.9-windows-x86_64-none\python.exe" Docs/Outputs-archive/h3-vsf-chain-2026-11-09/preconditions.py before
+== worker processes (engine.worker / engine_h3.worker; empty = none)
+== AviUtl2 (aviutl2.exe; empty = not running)
+== nvidia-smi (full)
+Mon Nov  9 09:26:42 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 610.88                 KMD Version: 610.88        CUDA UMD Version: 13.3     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4070 ...  WDDM  |   00000000:01:00.0  On |                  N/A |
+|  0%   43C    P8             10W /  285W |     743MiB /  16376MiB |      3%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            2452    C+G   ...al\Programs\Notion\Notion.exe      N/A      |
+|    0   N/A  N/A            4456    C+G   ...ms\Microsoft VS Code\Code.exe      N/A      |
+|    0   N/A  N/A            5092    C+G   ...y\StartMenuExperienceHost.exe      N/A      |
+|    0   N/A  N/A            8188    C+G   ...__kzh8wxbdkxb8p\DCv2\DCv2.exe      N/A      |
+|    0   N/A  N/A            9068    C+G   ...ntrolPanel\SystemSettings.exe      N/A      |
+|    0   N/A  N/A           11716    C+G   ...indows\System32\ShellHost.exe      N/A      |
+|    0   N/A  N/A           12880    C+G   ...2txyewy\CrossDeviceResume.exe      N/A      |
+|    0   N/A  N/A           13512    C+G   ..._cw5n1h2txyewy\SearchHost.exe      N/A      |
+|    0   N/A  N/A           13824    C+G   ...cw5n1h2txyewy\WidgetBoard.exe      N/A      |
+|    0   N/A  N/A           14260    C+G   ...lus\logioptionsplus_agent.exe      N/A      |
+|    0   N/A  N/A           17164    C+G   ....0.4314.58\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           18472    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           19316    C+G   ...App_cw5n1h2txyewy\LockApp.exe      N/A      |
+|    0   N/A  N/A           20284    C+G   ...IA app\CEF\NVIDIA Overlay.exe      N/A      |
+|    0   N/A  N/A           22792    C+G   ...5n1h2txyewy\TextInputHost.exe      N/A      |
+|    0   N/A  N/A           24644    C+G   ...xyewy\ShellExperienceHost.exe      N/A      |
+|    0   N/A  N/A           25452    C+G   ...se 3 Host\Razer Synapse 3.exe      N/A      |
+|    0   N/A  N/A           26220    C+G   ....0.4314.58\msedgewebview2.exe      N/A      |
+|    0   N/A  N/A           26800    C+G   ...4__8wekyb3d8bbwe\ms-teams.exe      N/A      |
+|    0   N/A  N/A           31180    C+G   ...em32\ApplicationFrameHost.exe      N/A      |
+|    0   N/A  N/A           42176    C+G   ...\cef.win64\steamwebhelper.exe      N/A      |
+|    0   N/A  N/A           54292    C+G   ...ed_copilot\copilotapphost.exe      N/A      |
+|    0   N/A  N/A           62328    C+G   ...ot\Application\copilotapp.exe      N/A      |
++-----------------------------------------------------------------------------------------+
+
+判定: 問題なし（終了コード 0）

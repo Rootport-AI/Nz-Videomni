@@ -16,7 +16,7 @@ import {
   chainPanelsHiddenFor,
   disabledModesFor,
   editSubTabsDisabledFor,
-  nagDisabledFor,
+  nagMethodDisabledFor,
   singleSectionsDisabledFor,
   singleSectionsHiddenFor,
 } from "./featureScope";
@@ -26,8 +26,6 @@ import {
   LTX_GENERATION_CONSTRAINTS,
   resolveGenerationConstraints,
 } from "./generationConstraints";
-import { effectiveNag, NAG_OFF } from "./nagSettings";
-import type { NagSettings } from "./nagSettings";
 
 // MiniMax H3 第 2 弾 (2026-10-17): the served `constraints` block, the grid
 // helpers that take it, the "no comfort profile" test and the feature names H3
@@ -254,7 +252,7 @@ describe("MiniMax H3's feature names on screen", () => {
       a2v: false,
       keyframeStrength: true,
     });
-    expect(nagDisabledFor(H3_UNSUPPORTED)).toBe(true);
+    expect(nagMethodDisabledFor(H3_UNSUPPORTED)).toBe(true);
     // 台帳 §1-121: both of those Create parts are HIDDEN, not greyed.
     expect(singleSectionsHiddenFor(H3_UNSUPPORTED)).toEqual({ referenceVideo: true, keyframeStrength: true });
   });
@@ -291,21 +289,9 @@ describe("MiniMax H3's feature names on screen", () => {
         a2v: false,
         keyframeStrength: false,
       });
-      expect(nagDisabledFor(list)).toBe(false);
+      expect(nagMethodDisabledFor(list)).toBe(false);
       expect(singleSectionsHiddenFor(list)).toEqual({ referenceVideo: false, keyframeStrength: false });
       expect(chainPanelsHiddenFor(list)).toEqual({ endSource: false, reference: false, startImageStrength: false });
     }
-  });
-});
-
-describe("effectiveNag", () => {
-  const on: NagSettings = { ...NAG_OFF, enabled: true, text: "blurry" };
-
-  it("returns the user's settings while NAG is available (same object)", () => {
-    expect(effectiveNag(on, true)).toBe(on);
-  });
-
-  it("returns NAG_OFF while the engine cannot run NAG", () => {
-    expect(effectiveNag(on, false)).toBe(NAG_OFF);
   });
 });

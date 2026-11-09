@@ -10,10 +10,10 @@ three processes can import another's stack.
 The protocol is the one the LTX workers speak, so the app-side plumbing
 (``@@LTX@@`` line reader, progress fractions, the error path) is shared. Only
 small control JSON crosses the pipe; the mp4 is written by this process to
-``output_path``. Nothing LTX-specific is carried over: no IC-LoRA / NAG / VSF
-branches; the chain (``generate_chain``) is this engine's own
-(``engine_h3.chain_h3``, Docs/MINIMAX_H3_DESIGN.md 裁定 84), not the LTX
-chain's. ``keep_resident`` follows the LTX contract (kept while the key is
+``output_path``. Nothing LTX-specific is carried over: no IC-LoRA / NAG
+branches (the negative prompt is VSF only, this engine's own, 台帳 §1-127);
+the chain (``generate_chain``) is this engine's own (``engine_h3.chain_h3``,
+Docs/MINIMAX_H3_DESIGN.md 裁定 84), not the LTX chain's. ``keep_resident`` follows the LTX contract (kept while the key is
 true, released by a job without it).
 
 Bootstrap (mirrors engine25/worker.py):
@@ -43,7 +43,7 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras], [source_audio], [references]}
+   [vram16_mode], [loras], [source_audio], [references], [nag]}
       One T2V, I2V or A2V job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -65,12 +65,16 @@ Protocol (one JSON object per line; parent -> worker):
       video / audio; ``slot`` the n of ``<Picture n>`` etc., 1 or more, distinct
       per kind; ``max_sec`` absent / null = only the 15 s cap;
       ``engine_h3.pipeline_h3.H3ReferenceInput``). Unknown inner keys are
-      logged once and ignored. A failure is reported with ``error`` and the
-      process stays alive.
+      logged once and ignored.
+      ``nag`` (VSF, 台帳 §1-127): absent / null = no negative prompt, else
+      ``{"negative_prompt", "method", "vsf_scale"}`` (``method`` must be "vsf";
+      ``negative_prompt`` a non-empty string; ``vsf_scale`` 0..10, defaults to
+      1.5; ``engine_h3.vsf``). Unknown inner keys are logged once and ignored.
+      A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
-   [loras], [source], [retake]}
+   [loras], [source], [retake], [nag]}
       One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
       of ``{"prompt", "num_frames", [references], [images]}`` (2..24 clips, 1..24
       with a ``source``, exactly 1 with a ``retake``; each prompt is the clip's whole text, the top-level
@@ -92,7 +96,8 @@ Protocol (one JSON object per line; parent -> worker):
       original by ``audio_strength`` (0..1; 1.0 muxes the original waveform);
       the whole window is the mp4 (unknown inner keys logged as
       ``retake.<key>``). The other keys mean what they mean for
-      ``generate`` and apply to every clip (the LoRA too). The top-level
+      ``generate`` and apply to every clip (the LoRA too; ``nag`` is read once
+      for the chain: clip 0 encodes the negative and every clip reuses it). The top-level
       ``images`` / ``source_audio`` / ``references`` and any other key are
       logged and ignored, as are unknown keys inside a clip. A failure is
       reported with ``error`` and the process stays alive.
@@ -109,7 +114,7 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             otherwise, so a single job's lines are unchanged)
             (there is no stage2: the app adapter, services/engines/h3/adapter.py,
             reads these with ``_read_worker_events(one_stage=True)``, as Alpha
-            Gen does; ``encode`` counts 3 steps, +1 when the job has any
+            Gen does; ``encode`` counts 3 steps, +1 with a negative prompt (``nag``; on a chain's clip 0 only), +1 when the job has any
             key frame (on a chain's clip 0, also a ``source``), +1 when it has references, +1 when it encodes a source_audio
             (strength > 0); the reference and the audio encodings are one
             ``encode`` step each, and ``reference_encode`` / ``audio_encode`` are only phase names in
@@ -119,7 +124,9 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, h3: {phases, quant_backends, [loras], [a2v], [references]}}
+             images_used, h3: {phases, quant_backends, [loras], [a2v], [references], [vsf]}}
+            (``h3.vsf`` only for a job with a negative prompt: rows [start, stop],
+            scale, m_neg, m_text; ``engine_h3.vsf``)
             (``h3.loras`` only for a job with LoRA: one entry per file, its
             name, strength, layout, dtype, pairs_applied and skipped;
             ``h3.a2v`` only for an A2V job, passed through from the pipeline:
@@ -136,7 +143,8 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             prompt_sha256 / seconds / latents_sha256 / head_equals_prev_tail,
             plus, for a clip with references only, ``references``
             ({pictures, videos, audios} counts) and ``seconds.reference_encode``,
-            and ``h3``: overlap_frames / inject_clean / decode; with a
+            plus, for a chain with a negative prompt only, ``vsf`` (the
+            clip's ``h3.vsf``), and ``h3``: overlap_frames / inject_clean / decode; with a
             ``source``, also ``v2v``: the LTX chain's sixteen keys, whose
             ``audio_handle_filename`` names the ``<stem>_audio_handle.wav``
             written next to the mp4; with a ``retake``, also ``retake``: the
@@ -251,7 +259,7 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode", "loras", "source_audio", "references",
+    "vram16_mode", "loras", "source_audio", "references", "nag",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -261,15 +269,19 @@ _LORA_FIELDS = frozenset({"path", "strength"})
 _SOURCE_AUDIO_FIELDS = frozenset({"path", "strength"})
 #: The keys of one ``references`` entry this engine reads (Ref2VA, 台帳 §1-107).
 _REFERENCE_FIELDS = frozenset({"kind", "path", "slot", "max_sec"})
+#: The keys of ``nag`` this engine reads (VSF, 台帳 §1-127).
+_NAG_FIELDS = frozenset({"negative_prompt", "method", "vsf_scale"})
 #: The generate_chain payload's keys this engine reads (台帳 §1-106): the single
 #: job's, less what is per clip or unused (the frame count, the key frames and
-#: references are per clip), plus ``clips``, the input video ``source`` (台帳 §1-121) and ``retake`` (台帳 §1-123).
+#: references are per clip; ``nag`` is read as the single job reads it), plus
+#: ``clips``, the input video ``source`` (台帳 §1-121) and ``retake`` (台帳 §1-123).
 _CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {
     "clips", "source", "retake",
 }
 #: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109;
-#: ``images``: 台帳 §1-121, clip 0 only).
-_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references"})
+#: ``images``: 台帳 §1-121, clip 0 only; ``source_audio``: 台帳 §1-120, the
+#: clip's own A2V audio, the single job's keys plus ``offset_frames``).
+_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references", "source_audio"})
 #: The keys of ``source`` this engine reads (台帳 §1-121).
 _SOURCE_FIELDS = frozenset({"path", "context_frames"})
 #: The keys of ``retake`` this engine reads (台帳 §1-123; the 22-frame head and tail are fixed, not sent).
@@ -443,6 +455,39 @@ def _source_audio(msg: dict) -> tuple:
     return H3AudioInput(path=path, strength=float(strength)), ignored
 
 
+def _nag(msg: dict) -> tuple:
+    """``nag`` -> ``(negative_prompt, vsf_scale, ignored inner keys)`` (VSF, 台帳 §1-127).
+
+    Absent / null = no negative prompt (``("", 1.5, [])``). Otherwise an object
+    with ``method`` "vsf" (this engine has no NAG), a non-empty string
+    ``negative_prompt`` and an absent / null (= 1.5) or finite-number
+    ``vsf_scale`` in 0..10.
+    """
+    import math  # noqa: PLC0415
+
+    raw = msg.get("nag")
+    if raw is None:
+        return "", 1.5, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"nag はオブジェクトで渡してください（{type(raw).__name__}）")
+    method = raw.get("method")
+    if method != "vsf":
+        raise ValueError(f"MiniMax H3 のネガティブプロンプトは VSF 方式だけです（method={method!r}）")
+    prompt = raw.get("negative_prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError(f"nag には空でない文字列の negative_prompt が必要です（{prompt!r}）")
+    scale = raw.get("vsf_scale")
+    if scale is None:
+        scale = 1.5
+    elif (
+        isinstance(scale, bool) or not isinstance(scale, (int, float))
+        or not math.isfinite(scale) or not 0.0 <= scale <= 10.0
+    ):
+        raise ValueError(f"nag の vsf_scale は 0〜10 の有限の数値で渡してください（{scale!r}）")
+    ignored = sorted(k for k in raw if k not in _NAG_FIELDS)
+    return prompt, float(scale), ignored
+
+
 def _references(msg: dict) -> tuple[tuple, list[str]]:
     """``references`` -> ``(H3ReferenceInput, ...)`` and the ignored inner keys.
 
@@ -485,7 +530,7 @@ def _references(msg: dict) -> tuple[tuple, list[str]]:
 
 def _generate_request(
     msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
-    references: tuple | None = None,
+    references: tuple | None = None, *, negative_prompt: str = "", vsf_scale: float = 1.5,
 ):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
@@ -496,6 +541,9 @@ def _generate_request(
     ``source_audio``: the already parsed ``H3AudioInput``; ``None`` falls back to
     parsing the message (a message without the key stays T2V / I2V).
     ``references``: the already parsed references; ``None`` parses the message.
+    ``negative_prompt`` / ``vsf_scale``: the ``nag`` already parsed by
+    :func:`_nag` in ``_do_generate`` / ``_do_generate_chain`` (never read from
+    the message here); the defaults are "none".
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -529,6 +577,8 @@ def _generate_request(
         loras=loras,
         source_audio=source_audio,
         references=references,
+        negative_prompt=negative_prompt,
+        vsf_scale=vsf_scale,
     )
 
 
@@ -540,12 +590,17 @@ def _do_generate(msg: dict) -> None:
     loras, lora_ignored = _loras(msg)
     source_audio, audio_ignored = _source_audio(msg)
     references, ref_ignored = _references(msg)
+    negative_prompt, vsf_scale, nag_ignored = _nag(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
     ignored += [f"source_audio.{k}" for k in audio_ignored]
     ignored += [f"references[].{k}" for k in ref_ignored]
-    req = _generate_request(msg, images=images, loras=loras, source_audio=source_audio, references=references)
+    ignored += [f"nag.{k}" for k in nag_ignored]
+    req = _generate_request(
+        msg, images=images, loras=loras, source_audio=source_audio, references=references,
+        negative_prompt=negative_prompt, vsf_scale=vsf_scale,
+    )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     req.attention_backend = effective
@@ -563,6 +618,7 @@ def _do_generate(msg: dict) -> None:
             f"references={[(r.kind, r.slot, Path(r.path).name, r.max_sec) for r in req.references]} "
             if req.references else ""
         )
+        + (f"neg=vsf(scale={req.vsf_scale}) " if req.negative_prompt else "neg=off ")
         + f"-> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
@@ -580,7 +636,8 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
     Each entry's ``references`` is read by :func:`_references` (its ignored
     inner keys come back as ``references[].<key>``) and its ``images`` by
     :func:`_images` (``images[].<key>``); which clip may carry images is the
-    chain's ``_check_spec``.
+    chain's ``_check_spec``. Its ``source_audio`` is read by
+    :func:`_chain_clip_source_audio` (``source_audio.<key>``).
     """
     from engine_h3.chain_h3 import H3ChainClipSpec  # noqa: PLC0415
 
@@ -598,11 +655,37 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
             raise ValueError(f"clips の num_frames は整数で渡してください（{frames!r}）")
         references, ref_ignored = _references(entry)
         images, image_ignored = _images(entry)
+        source_audio, audio_ignored = _chain_clip_source_audio(entry)
         ignored |= {k for k in entry if k not in _CHAIN_CLIP_FIELDS}
         ignored |= {f"references[].{k}" for k in ref_ignored}
         ignored |= {f"images[].{k}" for k in image_ignored}
-        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames, references=references, images=images))
+        ignored |= {f"source_audio.{k}" for k in audio_ignored}
+        out.append(H3ChainClipSpec(
+            prompt=prompt, num_frames=frames, references=references, images=images, source_audio=source_audio,
+        ))
     return out, sorted(ignored)
+
+
+def _chain_clip_source_audio(entry: dict) -> tuple:
+    """A ``clips`` entry's ``source_audio`` -> ``(H3ChainClipAudio | None, ignored inner keys)`` (台帳 §1-120).
+
+    ``path`` and ``strength`` are read by the single job's :func:`_source_audio`;
+    ``offset_frames`` (absent / null = 0) must be an integer of 0 or more (not
+    a bool). ``offset_frames`` is not among the ignored keys. The 0..1 range
+    and the file itself are the chain's ``_check_spec``.
+    """
+    from engine_h3.chain_h3 import H3ChainClipAudio  # noqa: PLC0415
+
+    audio, ignored = _source_audio(entry)
+    if audio is None:
+        return None, []
+    offset = entry["source_audio"].get("offset_frames")
+    if offset is None:
+        offset = 0
+    elif isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError(f"source_audio の offset_frames は 0 以上の整数で渡してください（{offset!r}）")
+    ignored = [k for k in ignored if k != "offset_frames"]
+    return H3ChainClipAudio(path=audio.path, strength=audio.strength, offset_frames=offset), ignored
 
 
 def _chain_source(msg: dict) -> tuple:
@@ -651,6 +734,15 @@ def _chain_retake(msg: dict) -> tuple:
     return H3ChainRetake(path=path, audio_strength=float(strength)), ignored
 
 
+def _chain_a2v_summary(clips) -> list:
+    """The log's ``a2v=``: per clip ``(file name, strength, offset_frames)``, or None without one."""
+    return [
+        None if c.source_audio is None
+        else (Path(c.source_audio.path).name, c.source_audio.strength, c.source_audio.offset_frames)
+        for c in clips
+    ]
+
+
 def _do_generate_chain(msg: dict) -> None:
     """Run one chain (台帳 §1-106 / §1-121 / §1-123 retake); the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -673,7 +765,12 @@ def _do_generate_chain(msg: dict) -> None:
         base_msg["prompt"], base_msg["num_frames"] = clips[0].prompt, clips[0].num_frames
     else:
         base_msg["prompt"], base_msg["num_frames"] = "", 0
-    base = _generate_request(base_msg, images=(), loras=loras, source_audio=None, references=())
+    negative_prompt, vsf_scale, nag_ignored = _nag(base_msg)
+    ignored += [f"nag.{k}" for k in nag_ignored]
+    base = _generate_request(
+        base_msg, images=(), loras=loras, source_audio=None, references=(),
+        negative_prompt=negative_prompt, vsf_scale=vsf_scale,
+    )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
     base.attention_backend = effective
@@ -685,8 +782,10 @@ def _do_generate_chain(msg: dict) -> None:
         f"prefetch={base.block_swap_prefetch} vram16={base.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
         + (f"images={[len(c.images) for c in clips]} " if any(c.images for c in clips) else "")
+        + (f"a2v={_chain_a2v_summary(clips)} " if any(c.source_audio is not None for c in clips) else "")
         + (f"source={(Path(source.path).name, source.context_frames)} " if source is not None else "")
         + (f"retake={(Path(retake.path).name, retake.audio_strength)} " if retake is not None else "")
+        + (f"neg=vsf(scale={base.vsf_scale}) " if base.negative_prompt else "neg=off ")
         + f"-> {base.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
     )
@@ -847,6 +946,10 @@ def _selftest_parser():
                         help="Ref2VA: a video reference (repeatable; <Video 1>, ... in order)")
     parser.add_argument("--ref-audio", action="append", default=[], metavar="PATH",
                         help="Ref2VA: an audio reference (repeatable; <Audio 1>, ... in order)")
+    parser.add_argument("--negative-prompt", default=None,
+                        help="VSF: the negative prompt (nag.negative_prompt; nag.method is vsf)")
+    parser.add_argument("--vsf-scale", type=float, default=1.5,
+                        help="VSF: nag.vsf_scale (default 1.5)")
     return parser
 
 
@@ -894,6 +997,9 @@ def _selftest_generate_message(args, out: str) -> dict:
     if references:
         # The same way: a job without references is the same message as before.
         msg["references"] = references
+    if args.negative_prompt is not None:
+        # The same way: a job without a negative prompt is the same message as before.
+        msg["nag"] = {"negative_prompt": args.negative_prompt, "method": "vsf", "vsf_scale": float(args.vsf_scale)}
     return msg
 
 

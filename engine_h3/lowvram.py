@@ -5,10 +5,11 @@ block whose ``vram16`` attribute holds a :class:`Vram16Plan` comes here
 instead (``engine_h3/dit.py`` branches at the top of the two methods). Nothing
 here is new maths: every number is produced by the SAME functions the off path
 calls (``_modulate``, ``_gate``, ``block.mlp``, ``_attention``, ``apply_rope``,
-``_linear_f32``, the norms), only over a range of rows or a group of heads at a
-time, written into preallocated outputs. The one exception is how the qkv
-input reaches the int8 kernels: it is quantized once per block and the head
-groups' slices reuse it (``H3Int8Linear.quantize_input`` / ``forward_rows_q``,
+``_linear_f32``, the norms, and the negative prompt's ``vsf.flip_values``),
+only over a range of rows or a group of heads at a time, written into
+preallocated outputs. The one exception is how the qkv input reaches the
+int8 kernels: it is quantized once per block and the head groups' slices
+reuse it (``H3Int8Linear.quantize_input`` / ``forward_rows_q``,
 台帳 §1-105 ①; the same comfy-kitchen kernels with the same arguments, see
 ``engine_h3.quant_linear``), or, when ``shares_input`` says no, once per slice
 by ``forward_rows`` as before. Every one of those operations is
@@ -47,6 +48,7 @@ from engine_h3.constants import (
     VRAM16_HEAD_GROUP,
     VRAM16_ROW_CHUNK,
 )
+from engine_h3.vsf import flip_values
 
 @dataclass(frozen=True)
 class Vram16Plan:
@@ -155,11 +157,15 @@ def block_forward(
         q = proj(0 * inner + h0 * d, 0 * inner + h1 * d).view(s, g, d)
         k = proj(1 * inner + h0 * d, 1 * inner + h1 * d).view(s, g, d)
         v = proj(2 * inner + h0 * d, 2 * inner + h1 * d).view(s, g, d)
+        if attn.vsf is not None:
+            flip_values(v, attn.vsf)
         q = attn.q_norm(q)
         k = attn.k_norm(k)
         if rope_cos is not None:
             q = _dit.apply_rope(q, rope_cos, rope_sin)
             k = _dit.apply_rope(k, rope_cos, rope_sin)
+        if attn.vsf_probe is not None:
+            attn.vsf_probe.observe(q, k, head0=h0)
         out = _dit._attention(q, k, v, attn.attention_backend)
         del q, k, v
         o[:, h0 * d:h1 * d].view(s, g, d).copy_(out)

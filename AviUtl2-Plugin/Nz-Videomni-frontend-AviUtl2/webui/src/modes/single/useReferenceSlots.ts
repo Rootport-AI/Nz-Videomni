@@ -19,6 +19,7 @@ import {
   referenceReducer,
   summarizeReference,
   type ReferenceAction,
+  type ReferenceAdoptFile,
   type ReferenceAttachOptions,
   type ReferenceKind,
   type ReferenceRules,
@@ -192,6 +193,25 @@ export function useReferenceSlots(rules: ReferenceRules, deps: UseReferenceSlots
     [nativeBridge, attach],
   );
 
+  // §1-120: the Chained screen's distribution — an id already uploaded, put in
+  // as ready. Bumps the slot's generation like `attach`, so an upload still in
+  // flight for the slot is discarded.
+  const adopt = useCallback(
+    (kind: ReferenceKind, slot: number, file: ReferenceAdoptFile) => {
+      bump(kind, slot);
+      send({
+        type: "adopt",
+        kind,
+        slot,
+        id: file.id,
+        fileName: file.fileName,
+        filePath: file.filePath,
+        durationSec: file.durationSec,
+      });
+    },
+    [bump, send],
+  );
+
   const clear = useCallback(
     (kind: ReferenceKind, slot: number) => {
       bump(kind, slot);
@@ -215,7 +235,7 @@ export function useReferenceSlots(rules: ReferenceRules, deps: UseReferenceSlots
 
   const summary = useMemo(() => summarizeReference(state, rules), [state, rules]);
 
-  return { state, summary, rules, attach, pick, clear, attachToFirstEmpty, setEnabled, setA2vSlot };
+  return { state, summary, rules, attach, adopt, pick, clear, attachToFirstEmpty, setEnabled, setA2vSlot };
 }
 
 /**

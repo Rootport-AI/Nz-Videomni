@@ -34,6 +34,8 @@ import { nagRequestFields } from "../../shell/nagSettings";
 import type { NagSettings } from "../../shell/nagSettings";
 import { accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { samplingRequestFields } from "../single/samplingValues";
+import type { SamplingValues } from "../single/samplingValues";
 
 export interface BuildI2vGeneratePayloadParams {
   /** Already composed (see `composeRowPrompt` in `./buildA2vChainPayload`) —
@@ -62,6 +64,14 @@ export interface BuildI2vGeneratePayloadParams {
    * is what makes a row with neither its own image nor a Shared keyframe a
    * plain T2V request. */
   conditioningImages?: ConditioningImage[];
+  /** §1-126 (MiniMax H3): Create's three sampling values, frozen at `start()`
+   * — placed right after `seed`, where `toGenerateRequest` puts them. Omitted
+   * or `null` = none of the three keys (LTX). */
+  sampling?: SamplingValues | null;
+  /** §1-126 (MiniMax H3): an a2v row's audio on the single route — placed
+   * after `conditioning_images`, where Create's A2V submit puts it. Omitted =
+   * no `source_audio` (an i2v row, or LTX). */
+  sourceAudio?: { audioId: string; strength: number };
 }
 
 /**
@@ -72,9 +82,10 @@ export interface BuildI2vGeneratePayloadParams {
  * `crop_output` rides along only while the (already-frozen) crop is ON, in
  * `toGenerateRequest`'s own position — right after `height`.
  *
- * Deliberately absent: `source_audio`, `stage2_window`, `pipeline`,
- * `num_inference_steps`, `guidance_scale`, `overlap_frames`,
- * `overlap_strength`, `chunked_upsample` and `clips`.
+ * Deliberately absent: `stage2_window`, `pipeline`, `guidance_scale`,
+ * `overlap_frames`, `overlap_strength`, `chunked_upsample` and `clips` — and,
+ * unless the caller passes them (§1-126, MiniMax H3), `source_audio` and the
+ * three sampling values.
  */
 export function buildI2vGeneratePayload(params: BuildI2vGeneratePayloadParams): GenerateRequest {
   return {
@@ -85,11 +96,15 @@ export function buildI2vGeneratePayload(params: BuildI2vGeneratePayloadParams): 
     num_frames: params.numFrames,
     frame_rate: params.frameRate,
     seed: params.seed,
+    ...samplingRequestFields(params.sampling ?? null),
     ...nagRequestFields(params.nag),
     ...accelerationRequestFields(params.acceleration),
     ...(params.loras && params.loras.length > 0 ? { loras: params.loras } : {}),
     ...(params.conditioningImages && params.conditioningImages.length > 0
       ? { conditioning_images: params.conditioningImages }
+      : {}),
+    ...(params.sourceAudio
+      ? { source_audio: { audio_id: params.sourceAudio.audioId, strength: params.sourceAudio.strength } }
       : {}),
   };
 }

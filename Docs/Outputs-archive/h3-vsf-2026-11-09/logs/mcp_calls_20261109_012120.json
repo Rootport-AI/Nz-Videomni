@@ -1,0 +1,255 @@
+[
+  {
+    "at": "2026-11-09T01:21:21+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.16,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:21:21+09:00",
+    "tool": "load_pipeline",
+    "args": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default",
+        "text_encoder": "default",
+        "video_vae": "default",
+        "audio": "default"
+      },
+      "finished": true
+    }
+  },
+  {
+    "at": "2026-11-09T01:21:21+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.01,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:21:21+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "width": 640,
+      "height": 384,
+      "num_frames": 124,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 20,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "vram16_mode": true,
+      "nag_enabled": true,
+      "negative_prompt": "blurry, low quality",
+      "neg_method": "vsf",
+      "vsf_scale": 3.0,
+      "keep_resident": true,
+      "embed_mp4_metadata": false
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2",
+      "status": "running",
+      "created_at": "2026-11-08T16:21:21Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:21:21+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:22:11+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:22:56+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:23:41+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 10.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:23:51+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\g3\\vsf",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\g3\\vsf\\da3863ee-e2d9-416b-9ce6-b294669d48c2.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\da3863ee-e2d9-416b-9ce6-b294669d48c2\\output.mp4",
+      "size_bytes": 697046,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:23:51+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "da3863ee-e2d9-416b-9ce6-b294669d48c2"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\da3863ee-e2d9-416b-9ce6-b294669d48c2\\output.mp4",
+      "exists": true,
+      "size_bytes": 697046,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T01:23:51+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "width": 640,
+      "height": 384,
+      "num_frames": 124,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 20,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "vram16_mode": true,
+      "keep_resident": true,
+      "embed_mp4_metadata": false
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422",
+      "status": "running",
+      "created_at": "2026-11-08T16:23:51Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T01:23:51+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:24:36+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 20.01,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T01:25:01+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 49.99,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:25:51+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 10.01,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T01:26:01+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\g3\\off",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\g3\\off\\eba8da8c-53c9-400c-be24-60c1b36f5422.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\eba8da8c-53c9-400c-be24-60c1b36f5422\\output.mp4",
+      "size_bytes": 854334,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T01:26:01+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "eba8da8c-53c9-400c-be24-60c1b36f5422"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\_rt\\outputs\\eba8da8c-53c9-400c-be24-60c1b36f5422\\output.mp4",
+      "exists": true,
+      "size_bytes": 854334,
+      "status": "completed"
+    }
+  }
+]

@@ -1,0 +1,248 @@
+[
+  {
+    "at": "2026-11-09T08:59:52+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.2,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T08:59:53+09:00",
+    "tool": "load_pipeline",
+    "args": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "seconds": 17.81,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default",
+        "text_encoder": "default",
+        "video_vae": "default",
+        "audio": "default"
+      },
+      "finished": true
+    }
+  },
+  {
+    "at": "2026-11-09T09:00:10+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:00:10+09:00",
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 124
+        },
+        {
+          "num_frames": 124,
+          "prompt": "She turns and walks slowly along the street, humming a tune."
+        },
+        {
+          "num_frames": 124,
+          "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+        }
+      ],
+      "width": 640,
+      "height": 384,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "embed_mp4_metadata": false
+    },
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "status": "running",
+      "created_at": "2026-11-09T00:00:10Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-09T09:00:10+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.05,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:00:56+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.05,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:01:41+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 15.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+  },
+  {
+    "at": "2026-11-09T09:02:01+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 29.98,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:02:36+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 30.02,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+  },
+  {
+    "at": "2026-11-09T09:03:11+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:03:56+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.03,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:04:41+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 10.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-09T09:04:56+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 50.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:05:46+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 49.99,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:06:36+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 25.0,
+    "ok": true
+  },
+  {
+    "at": "2026-11-09T09:07:01+09:00",
+    "tool": "save_job_video",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f",
+      "dest_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc0\\before",
+      "no_clobber": true,
+      "which": "output"
+    },
+    "seconds": 0.01,
+    "ok": true,
+    "result": {
+      "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc0\\before\\ea4fc4b6-89b4-47d5-b7d4-4090781f302f.mp4",
+      "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\ea4fc4b6-89b4-47d5-b7d4-4090781f302f\\output.mp4",
+      "size_bytes": 1706119,
+      "clobbered": false
+    }
+  },
+  {
+    "at": "2026-11-09T09:07:01+09:00",
+    "tool": "get_job_video_path",
+    "args": {
+      "job_id": "ea4fc4b6-89b4-47d5-b7d4-4090781f302f"
+    },
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\ea4fc4b6-89b4-47d5-b7d4-4090781f302f\\output.mp4",
+      "exists": true,
+      "size_bytes": 1706119,
+      "status": "completed"
+    }
+  },
+  {
+    "at": "2026-11-09T09:07:01+09:00",
+    "tool": "unload_pipeline",
+    "args": {},
+    "seconds": 0.75,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": false,
+      "state": "unloaded"
+    }
+  }
+]

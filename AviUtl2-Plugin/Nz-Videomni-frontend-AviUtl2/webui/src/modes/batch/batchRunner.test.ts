@@ -977,4 +977,80 @@ describe("BatchRunner", () => {
       }
     });
   });
+
+  // §1-126 (MiniMax H3): `route: "generate"` sends every a2v row to the single
+  // route with its `source_audio`, and both modes apply Create's omissions and
+  // sampling values. Without those settings (LTX) the bodies are unchanged.
+  describe("§1-126 the single-route A2V (MiniMax H3)", () => {
+    const H3_SETTINGS: BatchRunnerSettings = {
+      ...BASE_SETTINGS,
+      promptCommon: "a cat <lora:A:0.6>",
+      route: "generate",
+      sourceAudioStrength: 0.7,
+      omitImageStrength: true,
+      omitLoraAudioStrength: true,
+      sampling: { numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 },
+    };
+    const CARD: ConditioningImage[] = [{ image_id: "kf-1", frame_idx: 0, strength: 0.55 }];
+
+    async function bodyOf(mode: BatchMode, settings: BatchRunnerSettings, image: string = IMAGE_SHARED) {
+      const fs = createMockFs();
+      const base = createMockBridge({ delayMs: 0, fs });
+      const { wrapped: captured, submits } = captureSubmitBridge(base);
+      const { wrapped, calls } = spyBridge(captured);
+      const runner = new BatchRunner(wrapped);
+      await runner.start({
+        mode,
+        wavDir: mode === "a2v" ? "C:\\batch\\in" : null,
+        imgDir: "C:\\batch\\img",
+        outDir: "C:\\batch\\out",
+        settings,
+        rows: [makeRow(1, mode === "a2v" ? "a.wav" : "cat01.png", "Waiting", { image, frames: 90 })],
+        sharedConditioningImages: CARD,
+      });
+      expect(submits).toHaveLength(1);
+      return { ...submits[0]!, calls };
+    }
+
+    it("an a2v row goes to /generate with source_audio, no image strength, no LoRA audio strength, the sampling values", async () => {
+      const { path, body, calls } = await bodyOf("a2v", H3_SETTINGS);
+      expect(path).toBe("/api/v1/generate");
+      const audioUpload = calls.find(
+        (c) => c.method === "backend.uploadFile" && (c.params as { kind: string }).kind === "audio",
+      );
+      expect(audioUpload).toBeDefined();
+      expect(body.num_frames).toBe(90);
+      expect(body.source_audio).toEqual({ audio_id: expect.stringMatching(/^mock-audio-/), strength: 0.7 });
+      expect(body.conditioning_images).toEqual([{ image_id: "kf-1", frame_idx: 0 }]);
+      expect(body.loras).toEqual([{ name: "A", strength: 0.6 }]);
+      expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+      for (const banned of ["clips", "stage2_window", "chunked_upsample", "pipeline", "overlap_frames"]) {
+        expect(body).not.toHaveProperty(banned);
+      }
+      // Key order: the sampling values right after `seed`, `source_audio` last.
+      const keys = Object.keys(body);
+      expect(keys.indexOf("num_inference_steps")).toBe(keys.indexOf("seed") + 1);
+      expect(keys.at(-1)).toBe("source_audio");
+    });
+
+    it("an i2v row gets the same omissions and sampling values, and no source_audio", async () => {
+      const { path, body } = await bodyOf("i2v", H3_SETTINGS);
+      expect(path).toBe("/api/v1/generate");
+      expect(body).not.toHaveProperty("source_audio");
+      expect(body.conditioning_images).toEqual([{ image_id: "kf-1", frame_idx: 0 }]);
+      expect(body.loras).toEqual([{ name: "A", strength: 0.6 }]);
+      expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+    });
+
+    it("without the route (LTX) an a2v row still goes to /generate/chain, and i2v keeps its strengths", async () => {
+      const ltx = { ...BASE_SETTINGS, promptCommon: "a cat <lora:A:0.6>" };
+      const a2v = await bodyOf("a2v", ltx);
+      expect(a2v.path).toBe("/api/v1/generate/chain");
+      expect(a2v.body).not.toHaveProperty("source_audio.strength");
+      const i2v = await bodyOf("i2v", ltx);
+      expect(i2v.body.conditioning_images).toEqual(CARD);
+      expect(i2v.body).not.toHaveProperty("num_inference_steps");
+      expect(i2v.body).not.toHaveProperty("source_audio");
+    });
+  });
 });

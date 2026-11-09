@@ -57,8 +57,11 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   source_video_context_frames=22 を指定してください（既定の 73 のままでは
   422 VALIDATION_ERROR。入力動画があればクリップ 0 は 39 フレーム以上で、
   1 本でも可）。撮り直し（Retake）は H3 でも使えます（下の「撮り直し」の節）。
-  連結の A2V・素材（末尾）、reference_video_id・
-  nag_enabled なども 422 FEATURE_UNSUPPORTED になります（使えない機能は
+  ネガティブプロンプトは H3 では VSF 方式だけで、submit_generate でも
+  submit_chain でも nag_enabled=true と neg_method="vsf" を指定すれば使えます
+  （既定の neg_method="nag" は 422 FEATURE_UNSUPPORTED の nag）。
+  連結の A2V・素材（末尾）、reference_video_id
+  なども 422 FEATURE_UNSUPPORTED になります（使えない機能は
   unsupported_features を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
   H3 では loras の各要素の audio_strength は無視されます（422 にはならず、

@@ -302,6 +302,12 @@ describe("batchA2vDisabledFor", () => {
     expect(batchA2vDisabledFor(["chain"])).toBe(true);
     expect(batchA2vDisabledFor(["a2v"])).toBe(true);
   });
+
+  it("§1-126: an engine taking A2V on the single route opens it whatever the list says (omitted = as before)", () => {
+    expect(batchA2vDisabledFor(["a2v"], true)).toBe(false);
+    expect(batchA2vDisabledFor(["chain", "a2v"], true)).toBe(false);
+    expect(batchA2vDisabledFor(["a2v"], false)).toBe(true);
+  });
 });
 
 describe("batchI2vLongDisabledFor (§1-106)", () => {
@@ -365,6 +371,15 @@ describe("chainPanelsDisabledFor", () => {
       reference: false,
       startImage: false,
     });
+  });
+
+  it("§1-120: `chainSourceAudioAvailable` reopens the A2V panel only (omitted = closed as before)", () => {
+    expect(chainPanelsDisabledFor(["a2v"]).a2v).toBe(true);
+    expect(chainPanelsDisabledFor(["a2v"], false).a2v).toBe(true);
+    expect(chainPanelsDisabledFor(["a2v", "v2v"], true)).toMatchObject({ a2v: false, v2v: true });
+    expect(chainPanelsDisabledFor([], true).a2v).toBe(false);
+    // Batch A2V stays closed by `a2v` — not this function's to reopen.
+    expect(disabledUiTargets(["a2v"]).has("createSection.batchA2v")).toBe(true);
   });
 
   it("§1-106: `chain_start_image` closes the opening image alone among the panels", () => {

@@ -1,0 +1,29 @@
+{
+  "endpoint": "POST /api/v1/generate/chain",
+  "body": {
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "width": 640,
+    "height": 384,
+    "seed": 42,
+    "attention_backend": "sdpa",
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "clips": [
+      {
+        "num_frames": 124
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She turns and walks slowly along the street, humming a tune."
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+      }
+    ],
+    "embed_mp4_metadata": false
+  },
+  "note": "GA0: G-C0 と同じ連結生成（音声なし）",
+  "remark": "送った本文。サーバーが受けた本文は metadata.json の request"
+}

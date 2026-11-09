@@ -44,6 +44,12 @@ export interface ChainReasonMessageParams {
    * to lower). Optional for the same reason as `stage2MaxContextFrames`;
    * omitted/`null` = the LTX sentences. */
   fixedOverlapFrames?: number | null;
+  /** §1-120: the 1-based clip numbers `ChainedScreen` puts into the two
+   * per-clip A2V lines (`h3ChainAudio.h3ChainA2vReasons`). Optional for the
+   * same reason as `stage2MaxContextFrames`; omitted = empty (the codes never
+   * fire outside that screen). */
+  clipA2vAudioTooShortClips?: readonly number[];
+  clipA2vAudioMissingClips?: readonly number[];
   // 素材（末尾）v2 (2026-08-15): `stage2MaxEndContextFrames` and
   // `endContextRequiredLastClipFrames` were removed from this params object
   // together with the two gates that interpolated them. Neither number exists on
@@ -69,7 +75,14 @@ export interface ChainReasonMessageParams {
  */
 export function buildChainReasonMessages(
   strings: Strings,
-  { minFramesForOverlap, minClips, stage2MaxContextFrames = 161, fixedOverlapFrames = null }: ChainReasonMessageParams,
+  {
+    minFramesForOverlap,
+    minClips,
+    stage2MaxContextFrames = 161,
+    fixedOverlapFrames = null,
+    clipA2vAudioTooShortClips = [],
+    clipA2vAudioMissingClips = [],
+  }: ChainReasonMessageParams,
 ): Record<string, string> {
   return {
     promptEmpty: strings.single.generateReasons.promptEmpty,
@@ -107,6 +120,16 @@ export function buildChainReasonMessages(
     audioTooShortForChain: strings.chained.generateReasons.audioTooShortForChain,
     audioTooLong: strings.chained.generateReasons.audioTooLong,
     chainLayoutInvalid: strings.chained.generateReasons.chainLayoutInvalid,
+    // §1-120: MiniMax H3's distribute mode — composed by `ChainedScreen`, not
+    // `validityReasons` codes (so not in `CHAIN_AUDIO_REASON_CODES`). The V2V
+    // clash is the same sentence as `audioConflictsWithSourceVideo`, so the
+    // note shows it once.
+    chainA2vReferencesOff: strings.chained.generateReasons.chainA2vReferencesOff,
+    chainA2vNotDistributed: strings.chained.generateReasons.chainA2vNotDistributed,
+    chainA2vAudioTooShort: strings.chained.generateReasons.chainA2vAudioTooShort,
+    clipA2vAudioTooShort: strings.chained.generateReasons.clipA2vAudioTooShort(clipA2vAudioTooShortClips),
+    clipA2vAudioMissing: strings.chained.generateReasons.clipA2vAudioMissing(clipA2vAudioMissingClips),
+    clipA2vConflictsWithSourceVideo: strings.chained.generateReasons.audioConflictsWithSourceVideo,
     // §1-15 参照動画. The three lines that say exactly what Create's say — same
     // rule, same remedy, same upload — reuse Create's copy verbatim rather than
     // duplicating it; the rest are Chain-specific because they name a

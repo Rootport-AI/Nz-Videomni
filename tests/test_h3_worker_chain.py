@@ -39,7 +39,8 @@ def test_chain_fields():
     assert worker._CHAIN_FIELDS == (
         worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}
     ) | {"clips", "source", "retake"}
-    assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames", "images", "references"})
+    assert "nag" in worker._CHAIN_FIELDS   # the VSF negative prompt, read as the single job reads it (台帳 §1-127)
+    assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames", "images", "references", "source_audio"})
     assert worker._SOURCE_FIELDS == frozenset({"path", "context_frames"})
     assert worker._RETAKE_FIELDS == frozenset({"path", "audio_strength"})
     assert "prompt" in worker._CHAIN_FIELDS and "loras" in worker._CHAIN_FIELDS
@@ -208,14 +209,42 @@ def test_do_generate_chain_builds_the_spec(monkeypatch):
 def test_do_generate_chain_defaults_and_ignored_keys(monkeypatch):
     seen, logs, _events = _capture(monkeypatch)
     msg = {**BASE, "num_frames": 124, "images": [{"path": "a.png"}], "source_audio": {"path": "a.wav"},
-           "references": [], "overlap_frames": 3, "clips": [{**CLIPS[0], "x": 1}, CLIPS[1]]}
+           "references": [], "overlap_frames": 3, "clips": [{**CLIPS[0], "x": 1}, CLIPS[1]],
+           "nag": {"negative_prompt": "x", "method": "vsf", "vsf_scale": 3.0}}
     worker._do_generate_chain(msg)
     base = seen[0][0].base
     assert (base.num_inference_steps, base.shift_video, base.shift_audio) == (20, 12.0, 3.0)
     assert (base.keep_resident, base.vram16_mode, base.loras) == (False, False, ())
     assert base.images == () and base.source_audio is None and base.references == ()
+    assert (base.negative_prompt, base.vsf_scale) == ("x", 3.0)
     line = next(line for line in logs if line.startswith("generate_chain:"))
     assert "ignored keys: images, num_frames, overlap_frames, references, source_audio, clips[].x" in line
+
+
+def test_do_generate_chain_without_nag_has_no_negative_prompt(monkeypatch):
+    seen, logs, _events = _capture(monkeypatch)
+    worker._do_generate_chain(BASE)
+    base = seen[0][0].base
+    assert (base.negative_prompt, base.vsf_scale) == ("", 1.5)
+    line = next(line for line in logs if line.startswith("generate_chain:"))
+    assert "neg=off " in line and "neg=vsf" not in line
+
+
+def test_do_generate_chain_reads_nag_as_the_single_job(monkeypatch):
+    seen, logs, _events = _capture(monkeypatch)
+    worker._do_generate_chain({**BASE, "nag": {"negative_prompt": "cars", "method": "vsf", "vsf_scale": 3, "y": 1}})
+    base = seen[0][0].base
+    assert (base.negative_prompt, base.vsf_scale) == ("cars", 3.0)
+    line = next(line for line in logs if line.startswith("generate_chain:"))
+    assert "neg=vsf(scale=3.0) " in line
+    assert "ignored keys: nag.y" in line
+
+
+def test_do_generate_chain_refuses_the_nag_method(monkeypatch):
+    seen, _logs, _events = _capture(monkeypatch)
+    with pytest.raises(ValueError, match="VSF 方式だけ"):
+        worker._do_generate_chain({**BASE, "nag": {"negative_prompt": "cars", "method": "nag"}})
+    assert seen == []
 
 
 def test_do_generate_chain_passes_clip_references(monkeypatch):
@@ -228,6 +257,61 @@ def test_do_generate_chain_passes_clip_references(monkeypatch):
     assert spec.base.references == ()                    # the top-level references stay ignored
     line = next(line for line in logs if line.startswith("generate_chain:"))
     assert "ignored keys: references, clips[].references[].foo" in line
+
+
+def test_chain_clip_source_audio_is_read_with_its_offset():
+    from engine_h3.chain_h3 import H3ChainClipAudio
+
+    assert worker._chain_clip_source_audio({}) == (None, [])
+    assert worker._chain_clip_source_audio({"source_audio": None}) == (None, [])
+    audio, ignored = worker._chain_clip_source_audio(
+        {"source_audio": {"path": "v.wav", "strength": 1.0, "offset_frames": 102, "audio_id": "x"}}
+    )
+    assert audio == H3ChainClipAudio("v.wav", 1.0, 102)
+    # offset_frames is read, not ignored; the rest of the unknown keys are.
+    assert ignored == ["audio_id"]
+    audio, ignored = worker._chain_clip_source_audio({"source_audio": {"path": "v.wav"}})
+    assert audio == H3ChainClipAudio("v.wav", 0.5, 0) and ignored == []
+    audio, _ignored = worker._chain_clip_source_audio({"source_audio": {"path": "v.wav", "offset_frames": None}})
+    assert audio.offset_frames == 0
+
+
+@pytest.mark.parametrize("bad, match", [
+    ({"path": "v.wav", "offset_frames": -1}, "offset_frames"),
+    ({"path": "v.wav", "offset_frames": True}, "offset_frames"),
+    ({"path": "v.wav", "offset_frames": 1.5}, "offset_frames"),
+    ({"path": "v.wav", "offset_frames": "3"}, "offset_frames"),
+    ({"path": "", "offset_frames": 0}, "path"),
+    ({"path": "v.wav", "strength": "x"}, "strength"),
+    ([1], "オブジェクト"),
+])
+def test_chain_clip_source_audio_malformed_is_refused(bad, match):
+    with pytest.raises(ValueError, match=match):
+        worker._chain_clips({"clips": [{"prompt": "x", "num_frames": 124, "source_audio": bad}]})
+
+
+def test_do_generate_chain_passes_clip_source_audio(monkeypatch):
+    from engine_h3.chain_h3 import H3ChainClipAudio
+
+    seen, logs, _events = _capture(monkeypatch)
+    audio = {"path": "C:/x/voice.wav", "strength": 0.5, "offset_frames": 102, "foo": 1}
+    msg = {**BASE, "clips": [CLIPS[0], {**CLIPS[1], "source_audio": audio}], "source_audio": {"path": "top.wav"}}
+    worker._do_generate_chain(msg)
+    spec = seen[0][0]
+    assert [c.source_audio for c in spec.clips] == [None, H3ChainClipAudio("C:/x/voice.wav", 0.5, 102)]
+    assert spec.base.source_audio is None                 # the top-level source_audio stays ignored
+    line = next(line for line in logs if line.startswith("generate_chain:"))
+    assert "a2v=[None, ('voice.wav', 0.5, 102)] " in line
+    assert "ignored keys: source_audio, clips[].source_audio.foo" in line
+    assert "offset_frames" not in line.split("ignored keys:")[1]
+
+
+def test_do_generate_chain_without_clip_audio_logs_no_a2v(monkeypatch):
+    seen, logs, _events = _capture(monkeypatch)
+    worker._do_generate_chain(BASE)
+    assert all(c.source_audio is None for c in seen[0][0].clips)
+    line = next(line for line in logs if line.startswith("generate_chain:"))
+    assert "a2v=" not in line
 
 
 def test_do_generate_chain_passes_source_and_clip_images(monkeypatch):
@@ -367,6 +451,31 @@ def test_golden_chain_done_keys(monkeypatch):
     assert list(done["h3"]) == ["phases", "quant_backends"]
     assert set(done["h3"]["phases"]) == {"clips", "decode"}
     assert done["images_used"] == 0
+
+
+def test_golden_chain_with_clip_audio_adds_a2v_to_that_clip_only(monkeypatch, tmp_path):
+    from engine_h3 import pipeline_h3
+
+    wav = tmp_path / "v.wav"
+    wav.write_bytes(b"x")
+
+    def encode_audio(self, wave, a_lat, entry, index, total):
+        entry["encoded_samples"], entry["encoder_tensors"] = int(wave.shape[1]), 134
+        return torch.zeros(2, 32, int(a_lat))
+
+    monkeypatch.setattr(pipeline_h3.H3Pipeline, "_encode_audio", encode_audio)
+    clips = [CLIPS[0], {**CLIPS[1], "source_audio": {"path": str(wav), "strength": 0.5, "offset_frames": 102}}]
+    done = _golden_chain_run(monkeypatch, {**BASE, "clips": clips})
+    assert list(done["chain"]) == GOLDEN_CHAIN_KEYS
+    first, second = done["chain"]["clips"]
+    assert list(first) == GOLDEN_CHAIN_CLIP_KEYS
+    assert list(second) == GOLDEN_CHAIN_CLIP_KEYS + ["a2v"]
+    assert list(second["a2v"]) == [
+        "mask_value", "audio_latents", "fixed_head_latents", "start_sample", "required_samples",
+        "encoded_samples", "channels_used", "resampler", "encoder_tensors", "audio_output",
+    ]
+    assert second["a2v"]["start_sample"] == 170 * 800 and second["a2v"]["audio_output"] == "decoded"
+    assert list(second["seconds"]) == ["encode", "audio_encode", "denoise"]
 
 
 @pytest.mark.parametrize("audio", [True, False])

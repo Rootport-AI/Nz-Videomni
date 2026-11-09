@@ -1,0 +1,244 @@
+{
+  "title": "MiniMax H3 の VSF の実用域の較正（台帳 §3-278・記録簿 §203）",
+  "plan_ref": "C:/Users/phenotype nezu/.claude/plans/agile-dazzling-catmull.md §3・§4",
+  "stage_order": [
+    "A",
+    "B",
+    "R",
+    "C",
+    "D"
+  ],
+  "negatives": {
+    "N1": "blue clothes, cars",
+    "N2": "blue denim shirt, blue jacket, blue clothing, white car, vehicle, automobile"
+  },
+  "common": {
+    "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+    "frame_rate": 24.0,
+    "attention_backend": "sage",
+    "vram16_mode": true,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "num_inference_steps": 4,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ]
+  },
+  "common_remark": "embed_mp4_metadata と keep_resident は送らない（既定のまま。第 1 弾の T0 と同じ）。生成する本はすべて nag_enabled=true・neg_method=\"vsf\"・negative_prompt・vsf_scale（0 を含む）を送る",
+  "jobs": [
+    {
+      "name": "A_off",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": null,
+      "vsf_scale": null,
+      "generate": false,
+      "source": "../h3-vsf-2026-11-09/visual/T0",
+      "note": "負の文なし（第 1 弾の T0 を流用。生成しない）"
+    },
+    {
+      "name": "A_s0",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 0.0,
+      "note": "対照（負の行は 1.5 などと同じ配置で、反転した値だけをゼロ）"
+    },
+    {
+      "name": "A_s1",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 1.0,
+      "note": "既定値の帯の下端"
+    },
+    {
+      "name": "A_s1.5",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 1.5,
+      "note": "いまの仮の既定値"
+    },
+    {
+      "name": "A_s2",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 2.0,
+      "note": "既定値の帯の上端"
+    },
+    {
+      "name": "A_s2.5",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 2.5,
+      "note": "帯と上限の間"
+    },
+    {
+      "name": "A_s3",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 3.0,
+      "note": "第 1 弾で背景が外国風になり始めた値"
+    },
+    {
+      "name": "A_s4",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 4.0,
+      "note": "上限の候補（段 C では数値を上げた側の参考）"
+    },
+    {
+      "name": "A_s5",
+      "stage": "A",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 5.0,
+      "note": "上限の候補・先行事例の上限"
+    },
+    {
+      "name": "B_s6",
+      "stage": "B",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 6.0,
+      "note": "最大値の上: 崩れ・逆転の位置"
+    },
+    {
+      "name": "B_s8",
+      "stage": "B",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 8.0,
+      "note": "最大値の上: 崩れ・逆転の位置（第 1 弾の 8 は 11 行の負の文）"
+    },
+    {
+      "name": "R_s0",
+      "stage": "R",
+      "seed": 43,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 0.0,
+      "note": "seed 43 の対照"
+    },
+    {
+      "name": "R_s1",
+      "stage": "R",
+      "seed": 43,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 1.0,
+      "note": "seed 43 で既定値の帯を確かめる"
+    },
+    {
+      "name": "R_s1.5",
+      "stage": "R",
+      "seed": 43,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 1.5,
+      "note": "seed 43 で既定値の帯を確かめる"
+    },
+    {
+      "name": "R_s2",
+      "stage": "R",
+      "seed": 43,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 2.0,
+      "note": "seed 43 で既定値の帯を確かめる"
+    },
+    {
+      "name": "C_s1.5_N2",
+      "stage": "C",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 56,
+      "negative": "blue denim shirt, blue jacket, blue clothing, white car, vehicle, automobile",
+      "vsf_scale": 1.5,
+      "note": "言い換え（同義語で厚くした負の文）。押す力の目安が近い A_s2・A_s2.5 と比べる（実測で決めた。計画の当初の見込みは A_s4・A_s5）"
+    },
+    {
+      "name": "L_s0",
+      "stage": "D",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 124,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 0.0,
+      "note": "長い尺の対照"
+    },
+    {
+      "name": "L_s1.5",
+      "stage": "D",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 124,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 1.5,
+      "note": "長い尺で A_s1.5 より弱く効くか"
+    },
+    {
+      "name": "L_s3",
+      "stage": "D",
+      "seed": 42,
+      "width": 1344,
+      "height": 768,
+      "num_frames": 124,
+      "negative": "blue clothes, cars",
+      "vsf_scale": 3.0,
+      "note": "長い尺で A_s3 より弱く効くか"
+    }
+  ]
+}

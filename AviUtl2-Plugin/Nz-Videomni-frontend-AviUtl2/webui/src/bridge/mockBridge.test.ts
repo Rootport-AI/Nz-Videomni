@@ -1436,4 +1436,22 @@ describe("POST /generate — single-clip A2V (`source_audio`)", () => {
     });
     expect((await post(bridge, 56)).status).toBe(202);
   });
+
+  it("MiniMax H3 checks the shape (§1-126): audio_id non-empty, strength in 0..1", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    await bridge.request("backend.request", {
+      method: "POST",
+      path: "/api/v1/pipeline/load",
+      body: { base_model: "MiniMaxH3" },
+    });
+    for (const sourceAudio of [{ audio_id: "", strength: 0.5 }, { audio_id: "a", strength: 2 }, "nope"]) {
+      const result = await bridge.request("backend.request", {
+        method: "POST",
+        path: "/api/v1/generate",
+        body: { ...BODY, num_frames: 56, source_audio: sourceAudio },
+      });
+      expect(result.status, JSON.stringify(sourceAudio)).toBe(422);
+      expect((result.body as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    }
+  });
 });

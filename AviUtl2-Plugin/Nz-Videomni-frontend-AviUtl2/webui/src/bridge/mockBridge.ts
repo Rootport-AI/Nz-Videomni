@@ -1934,6 +1934,14 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         },
       };
     }
+    // §1-126: the single route's `source_audio` shape (`{audio_id, strength}`,
+    // `strength` optional like the real schema's default), through the chain
+    // clip's checker: the single route never sends `offset_frames`, and one
+    // that arrives anyway is only shape-checked. Length is not checked.
+    if (req.source_audio != null) {
+      const shapeError = mockClipSourceAudioShapeError(req.source_audio);
+      if (shapeError !== null) return validationError("source_audio", shapeError);
+    }
 
     jobCounter += 1;
     const id = `mock-job-${jobCounter}-${Math.random().toString(36).slice(2, 8)}`;

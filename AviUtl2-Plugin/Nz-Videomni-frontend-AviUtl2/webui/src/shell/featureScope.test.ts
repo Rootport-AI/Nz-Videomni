@@ -302,6 +302,12 @@ describe("batchA2vDisabledFor", () => {
     expect(batchA2vDisabledFor(["chain"])).toBe(true);
     expect(batchA2vDisabledFor(["a2v"])).toBe(true);
   });
+
+  it("§1-126: an engine taking A2V on the single route opens it whatever the list says (omitted = as before)", () => {
+    expect(batchA2vDisabledFor(["a2v"], true)).toBe(false);
+    expect(batchA2vDisabledFor(["chain", "a2v"], true)).toBe(false);
+    expect(batchA2vDisabledFor(["a2v"], false)).toBe(true);
+  });
 });
 
 describe("batchI2vLongDisabledFor (§1-106)", () => {

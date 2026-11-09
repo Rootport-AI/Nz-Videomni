@@ -21,6 +21,9 @@ import { compareByName, normalizeImageExtensions } from "../batch-i2v-long/image
 import { isCropOutputValid, rawFramesForAudio, suggestFramesForAudio } from "../chained/chainUtils";
 import { MIN_HEIGHT, MIN_NUM_FRAMES, MIN_WIDTH } from "../single/defaultConfig";
 import { isDimensionOnGrid, isNumFramesOnGrid } from "../single/paramUtils";
+import type { FrameGrid } from "../single/paramUtils";
+import { suggestFramesForSingleAudio } from "../single/audioFit";
+import type { SamplingValues } from "../single/samplingValues";
 import type { UseKeyframesResult } from "../single/useKeyframes";
 import type { BatchRunnerSettings, BatchRunnerState } from "./batchRunner";
 import { composeRowPrompt } from "./buildA2vChainPayload";
@@ -110,6 +113,31 @@ export interface UseBatchFormDeps {
    * did nothing at all (the lock refused it silently) or 409-spammed the
    * backend. Defaults to false so every pre-existing unit test is unaffected. */
   serverBusy?: boolean;
+  /** §1-126: the loaded engine's rules, passed by `SingleScreen` only while
+   * the engine takes A2V on the single `/generate` route
+   * (`constraints.singleSourceAudio` published — MiniMax H3). Present: every
+   * a2v row goes to `/generate` with its `source_audio`, rows are sized on the
+   * engine's grid, and the start gates use the engine's grid and size
+   * multiple. Omitted (LTX): exactly the behaviour before §1-126. */
+  engine?: BatchEngineRules | undefined;
+}
+
+/** §1-126: see {@link UseBatchFormDeps.engine}. */
+export interface BatchEngineRules {
+  /** The `num_frames` lattice (17n+5 on H3). */
+  frameGrid: FrameGrid;
+  minNumFrames: number;
+  maxNumFrames: number;
+  /** Width/height multiple (32 on H3). */
+  dimensionMultiple: number;
+  /** Create's `strengthOmitted` (no keyframe strength on the engine). */
+  omitImageStrength: boolean;
+  /** Create's `loraAudioHidden` (one LoRA strength on the engine). */
+  omitLoraAudioStrength: boolean;
+  /** Create's three sampling values (`null` when the engine has none). */
+  sampling: SamplingValues | null;
+  /** Create's A2V card Strength — every a2v row's `source_audio.strength`. */
+  sourceAudioStrength: number;
 }
 
 export interface UseBatchFormResult {
@@ -393,6 +421,28 @@ export function useBatchForm(
   // §1-7 相互ロック 第2段: the server-side "is the backend occupied right now?"
   // gate (see `UseBatchFormDeps.serverBusy`). Same default-off shape as `nag`.
   const serverBusy = deps.serverBusy ?? false;
+  // §1-126: the engine's rules (MiniMax H3), or `undefined` for LTX.
+  const engine = deps.engine;
+  // The row-length arithmetic: LTX's audio-latent fit, or (§1-126) the largest
+  // value on the engine's grid the audio covers — Create's own A2V rule
+  // (`suggestFramesForSingleAudio`). `rawFramesFor` is the same formula without
+  // the ceiling, so the over-cap Skip still sees the audio's full length.
+  const frameStep = engine?.frameGrid.step;
+  const frameOffset = engine?.frameGrid.offset;
+  const engineMinFrames = engine?.minNumFrames;
+  const engineMaxFrames = engine?.maxNumFrames;
+  const rowFrames = useMemo(() => {
+    if (frameStep === undefined || frameOffset === undefined || engineMinFrames === undefined || engineMaxFrames === undefined) {
+      return { framesFor: suggestFramesForAudio, rawFramesFor: rawFramesForAudio, capFor: (cap: number) => cap };
+    }
+    const grid = { step: frameStep, offset: frameOffset, min: engineMinFrames };
+    return {
+      framesFor: (sec: number, fps: number) => suggestFramesForSingleAudio(sec, fps, { ...grid, max: engineMaxFrames }),
+      rawFramesFor: (sec: number, fps: number) =>
+        suggestFramesForSingleAudio(sec, fps, { ...grid, max: Number.POSITIVE_INFINITY }),
+      capFor: (cap: number) => Math.min(cap, engineMaxFrames),
+    };
+  }, [frameStep, frameOffset, engineMinFrames, engineMaxFrames]);
 
   // バックエンドの `Docs/PENDING_TASKS_CLOSED.md` §3-47-02（2026-09-02）: ランナーはモジュールレベルのシングルトン
   // (`runtime.ts`) なので、走行中にCreate画面がマウントし直されても走行は
@@ -652,6 +702,9 @@ export function useBatchForm(
     try {
       const fps = generationValues.frameRate;
       const maxFrames = generationValues.numFrames;
+      // §1-126: an a2v row's cap is the DURATION, and never past the engine's own
+      // ceiling (`rowFrames.capFor` is the identity on LTX).
+      const audioCap = rowFrames.capFor(maxFrames);
 
       // Audio first, images second — the order the a2v path has always used.
       let audioRows: BatchRow[] = [];
@@ -660,9 +713,9 @@ export function useBatchForm(
         const scannedFiles: ScannedFile[] = listing.files;
         audioRows = scanToRows(scannedFiles, {
           fps,
-          framesFor: suggestFramesForAudio,
-          rawFramesFor: rawFramesForAudio,
-          maxFrames,
+          framesFor: rowFrames.framesFor,
+          rawFramesFor: rowFrames.rawFramesFor,
+          maxFrames: audioCap,
         });
       }
 
@@ -716,6 +769,7 @@ export function useBatchForm(
     generationValues.numFrames,
     config.upload.allowed_image_extensions,
     nativeBridge,
+    rowFrames,
   ]);
 
   const resetRowToWaiting = useCallback(
@@ -820,9 +874,9 @@ export function useBatchForm(
       mode === "a2v"
         ? rejudgeRows(rows, {
             fps: generationValues.frameRate,
-            framesFor: suggestFramesForAudio,
-            rawFramesFor: rawFramesForAudio,
-            maxFrames: generationValues.numFrames,
+            framesFor: rowFrames.framesFor,
+            rawFramesFor: rowFrames.rawFramesFor,
+            maxFrames: rowFrames.capFor(generationValues.numFrames),
           })
         : rejudgeI2vRows(rows, {
             numFrames: generationValues.numFrames,
@@ -867,8 +921,8 @@ export function useBatchForm(
       // enough to thread the whole object through. EVERY new real field must
       // be added to this OR-list too — omitting it makes the toggle work
       // everywhere except Batch A2V. (The list feeds BOTH modes: §1-101's
-      // `vram16Mode` is here for Batch i2v's `/generate` rows — MiniMax H3
-      // closes Batch A2V (`a2v`), so that mode never runs on the engine that reads it.)
+      // `vram16Mode` is read by MiniMax H3, which since §1-126 runs both modes
+      // here, every row on its single `/generate` route.)
       ...(acceleration.attentionBackend !== ATTENTION_BACKEND_DEFAULT ||
       acceleration.blockSwapPrefetch !== BLOCK_SWAP_PREFETCH_SERVER_DEFAULT ||
       acceleration.keepResident !== KEEP_RESIDENT_SERVER_DEFAULT ||
@@ -877,6 +931,18 @@ export function useBatchForm(
       acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT ||
       acceleration.vram16Mode !== VRAM16_MODE_SERVER_DEFAULT
         ? { acceleration }
+        : {}),
+      // §1-126 (MiniMax H3): the single-route A2V and Create's own omissions
+      // and sampling values, frozen with the rest. Absent on LTX, so an LTX
+      // run's settings (and every body built from them) are unchanged.
+      ...(engine
+        ? {
+            route: "generate" as const,
+            sourceAudioStrength: engine.sourceAudioStrength,
+            omitImageStrength: engine.omitImageStrength,
+            omitLoraAudioStrength: engine.omitLoraAudioStrength,
+            ...(engine.sampling ? { sampling: engine.sampling } : {}),
+          }
         : {}),
     };
     // Batch A2V Shared spec (2026-07-18): a `Shared` row uses ONLY the first
@@ -947,6 +1013,9 @@ export function useBatchForm(
     imageFileNames,
     scannedFps,
     scannedMaxFrames,
+    // §1-126: the engine's rules (row lengths and the frozen single-route set).
+    rowFrames,
+    engine,
   ]);
 
   const summary: BatchSummary = useMemo(() => {
@@ -991,9 +1060,11 @@ export function useBatchForm(
   // U4 guard 1: the shared width/height (owned by the Create form) must land on
   // the 64 grid — Create passes free-typed values through unsnapped, and an
   // off-grid dimension would 422 every row of an unattended overnight run.
+  // §1-126: on the engine's own multiple (32 on MiniMax H3); LTX keeps 64.
+  const dimensionMultiple = engine?.dimensionMultiple ?? 64;
   const resolutionValid =
-    isDimensionOnGrid(generationValues.width, 64, limits.minWidth, limits.maxWidth) &&
-    isDimensionOnGrid(generationValues.height, 64, limits.minHeight, limits.maxHeight);
+    isDimensionOnGrid(generationValues.width, dimensionMultiple, limits.minWidth, limits.maxWidth) &&
+    isDimensionOnGrid(generationValues.height, dimensionMultiple, limits.minHeight, limits.maxHeight);
 
   // U4 guard 2 (now informational only): true when the fps OR the DURATION cap
   // baked into each scanned row's frame count / over-cap Skip differs from the
@@ -1013,11 +1084,15 @@ export function useBatchForm(
   // row's `num_frames`, and Create passes a hand-typed value through unsnapped
   // — off the 8n+1 grid it would 422 every row of an unattended overnight run,
   // exactly like an off-grid width/height would.
-  const numFramesOnGrid = isNumFramesOnGrid(
-    generationValues.numFrames,
-    MIN_NUM_FRAMES,
-    config.limits.max_num_frames,
-  );
+  // §1-126: on the engine's grid and bounds (17n+5 in [22, 481] on H3).
+  const numFramesOnGrid = engine
+    ? isNumFramesOnGrid(
+        generationValues.numFrames,
+        engine.minNumFrames,
+        Math.min(config.limits.max_num_frames, engine.maxNumFrames),
+        engine.frameGrid,
+      )
+    : isNumFramesOnGrid(generationValues.numFrames, MIN_NUM_FRAMES, config.limits.max_num_frames);
   const numFramesOffGrid = scannedMode === "i2v" && !numFramesOnGrid;
 
   // §3-153 出力クロップの継承 (2026-09-16): the same gate Create/Chain apply,

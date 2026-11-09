@@ -326,8 +326,15 @@ export function disabledModesFor(unsupportedFeatures: readonly string[]): AppMod
  * ride {@link disabledModesFor}, but `chain` and `a2v` both list it in
  * {@link FEATURE_UI} and the table's disjunction is what used to be a
  * hand-written `||` here.
+ *
+ * §1-126: `singleA2vAvailable` (= `constraints.singleSourceAudio` is published
+ * — MiniMax H3) opens the panel whatever the feature list says: every row of
+ * such an engine goes to the single `/generate` route (an a2v row with its
+ * `source_audio`), never to a chain. Omitted = `false`, the behaviour before
+ * §1-126.
  */
-export function batchA2vDisabledFor(unsupportedFeatures: readonly string[]): boolean {
+export function batchA2vDisabledFor(unsupportedFeatures: readonly string[], singleA2vAvailable = false): boolean {
+  if (singleA2vAvailable) return false;
   return disabledUiTargets(unsupportedFeatures).has("createSection.batchA2v");
 }
 

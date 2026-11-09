@@ -1179,6 +1179,59 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
   );
 });
 
+// ── §1-126: Batch A2V on MiniMax H3 (every row on the single `/generate`) ──
+describe("AppShell — MiniMax H3 Batch A2V (§1-126)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it(
+    "the Batch A2V panel opens on MiniMax H3 (`constraints.source_audio`), with no unavailable line",
+    async () => {
+      await renderApp();
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument(), { timeout: 5_000 });
+      const section = document.querySelector(".batch-section") as HTMLDetailsElement;
+      expect(within(section).queryByText(en.batch.unavailableOnBaseModel)).not.toBeInTheDocument();
+      const inputs = within(section).getAllByRole("textbox") as HTMLInputElement[];
+      expect(inputs.length).toBeGreaterThan(0);
+      expect(inputs.every((i) => i.disabled)).toBe(false);
+    },
+    20_000,
+  );
+
+  it(
+    "without `constraints.source_audio` (an older backend) it stays closed on MiniMax H3",
+    async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      const realRequest = bridge.request.bind(bridge);
+      vi.spyOn(bridge, "request").mockImplementation((async (method: string, params: unknown) => {
+        const res = await (realRequest as (m: string, p: unknown) => Promise<unknown>)(method, params);
+        if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/models") {
+          const body = (res as { body: ModelsResponse }).body;
+          for (const block of body.base_models ?? []) {
+            if (block.engine_family === "h3" && block.constraints) {
+              block.constraints = { ...block.constraints, source_audio: null };
+            }
+          }
+        }
+        return res;
+      }) as typeof bridge.request);
+      await renderApp(bridge);
+      await switchTo("MiniMaxH3");
+      const section = document.querySelector(".batch-section") as HTMLDetailsElement;
+      await waitFor(() => expect(within(section).getByText(en.batch.unavailableOnBaseModel)).toBeInTheDocument(), {
+        timeout: 5_000,
+      });
+    },
+    20_000,
+  );
+});
+
 // ── §1-120: #18 (the long a2v right-click) on MiniMax H3 ──
 describe("AppShell — MiniMax H3 Chained long A2V (§1-120)", () => {
   beforeEach(() => {

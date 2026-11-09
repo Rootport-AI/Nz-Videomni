@@ -1866,8 +1866,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               transformerRole={baseModels.activeTransformerRole}
               /* §3-98 P5 (M4): the Batch A2V section lives on this screen but
                  submits chain jobs, so it follows the engine's feature scope
-                 rather than Create's own. */
-              batchUnavailable={batchA2vDisabledFor(baseModels.unsupportedFeatures)}
+                 rather than Create's own. §1-126: an engine publishing
+                 `constraints.source_audio` (MiniMax H3) gets every row on the
+                 single `/generate` instead, so the panel opens there. */
+              batchUnavailable={batchA2vDisabledFor(baseModels.unsupportedFeatures, singleA2vAvailable)}
               /* The loaded base model's numeric rules and
                  the Create sections its engine closes. */
               constraints={baseModels.activeConstraints}

@@ -296,7 +296,9 @@ export interface SingleScreenProps {
   transformerRole?: TransformerRole | null | undefined;
   /** §3-98 P5: Batch A2V submits `POST /generate/chain`, which the loaded base
    * model's engine may not support (`featureScope.batchA2vDisabledFor`; the
-   * server answers such a request with 422 `FEATURE_UNSUPPORTED`). `true`
+   * server answers such a request with 422 `FEATURE_UNSUPPORTED`). §1-126: on
+   * an engine publishing `constraints.source_audio` (MiniMax H3) every row
+   * goes to the single `POST /generate` instead, and the panel is open. `true`
    * greys the panel's controls the same
    * way its own runner state does — no new mechanism, just another reason.
    * Omitted ⇒ available, so every direct-render test keeps compiling. */
@@ -1343,6 +1345,28 @@ function SingleScreenBody({
       form.cropOutput,
     ],
   );
+  // §1-126: while the loaded engine takes A2V on `/generate`
+  // (`constraints.singleSourceAudio` — MiniMax H3), the batch runs every row
+  // on that route with this screen's own rules, omissions, sampling values and
+  // A2V Strength. `undefined` on LTX: the batch as before.
+  const batchRules = constraints ?? LTX_GENERATION_CONSTRAINTS;
+  const batchSampling = form.values.sampling;
+  const batchEngine = useMemo(
+    () =>
+      singleSourceAudio !== null
+        ? {
+            frameGrid: batchRules.frameGrid,
+            minNumFrames: batchRules.minNumFrames,
+            maxNumFrames: batchRules.maxNumFrames,
+            dimensionMultiple: batchRules.dimensionMultiple,
+            omitImageStrength: strengthOmitted,
+            omitLoraAudioStrength: loraAudioHidden,
+            sampling: batchSampling,
+            sourceAudioStrength,
+          }
+        : undefined,
+    [batchRules, singleSourceAudio, strengthOmitted, loraAudioHidden, batchSampling, sourceAudioStrength],
+  );
 
   return (
     <>
@@ -1455,6 +1479,7 @@ function SingleScreenBody({
         /* §3-98 P5: the loaded base model's engine cannot chain, so this
            panel's every job would come back 422. */
         unavailable={batchUnavailable}
+        engine={batchEngine}
       />
       {shrinkGuard.pendingShrink && (
         <KeyframeShrinkModal

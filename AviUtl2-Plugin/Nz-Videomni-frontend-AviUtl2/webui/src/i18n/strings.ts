@@ -1245,7 +1245,8 @@ export const en = {
     stopButton: "Stop",
     /** U4 guard 1: the shared width/height (owned by the Create form now) must
      * be multiples of 64, or every row 422s. Blocks Start. */
-    resolutionOffGrid: "Width and height must be multiples of 64. Fix the size on the Create form above before starting.",
+    resolutionOffGrid: (multiple: number): string =>
+      `Width and height must be multiples of ${multiple}. Fix the size on the Create form above before starting.`,
     /** U4 guard 2: the FPS and DURATION in effect at scan time were baked into
      * each row's frame count — if either changed since, the rows are stale.
      * Blocks Start. */
@@ -3196,7 +3197,8 @@ export const ja: Strings = {
     runningButton: "実行中…",
     stoppingButton: "停止処理中…",
     stopButton: "停止",
-    resolutionOffGrid: "幅と高さは64の倍数にしてください。開始する前に、上の「作る」フォームでサイズを修正してください。",
+    resolutionOffGrid: (multiple: number): string =>
+      `幅と高さは${multiple}の倍数にしてください。開始する前に、上の「作る」フォームでサイズを修正してください。`,
     fpsMismatch: "FPSまたはDURATIONがスキャン時と異なります。フレーム数はバッチ開始時に現在の値で自動的に再計算されます。",
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
     lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",

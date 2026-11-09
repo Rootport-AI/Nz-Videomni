@@ -269,3 +269,37 @@ describe("buildI2vGeneratePayload", () => {
     });
   });
 });
+
+describe("buildI2vGeneratePayload — §1-126 (MiniMax H3)", () => {
+  it("sampling right after seed, source_audio after conditioning_images", () => {
+    const payload = buildI2vGeneratePayload({
+      ...BASE,
+      loras: LORAS,
+      conditioningImages: [KEYFRAME],
+      sampling: { numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 },
+      sourceAudio: { audioId: "aud-1", strength: 0.5 },
+    });
+    expect(Object.keys(payload)).toEqual([
+      "prompt",
+      "width",
+      "height",
+      "num_frames",
+      "frame_rate",
+      "seed",
+      "num_inference_steps",
+      "shift_video",
+      "shift_audio",
+      "loras",
+      "conditioning_images",
+      "source_audio",
+    ]);
+    expect(payload.source_audio).toEqual({ audio_id: "aud-1", strength: 0.5 });
+    expect(payload).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+  });
+
+  it("omitted or null sampling and no sourceAudio add no key (LTX)", () => {
+    expect(Object.keys(buildI2vGeneratePayload({ ...BASE, sampling: null }))).toEqual(
+      Object.keys(buildI2vGeneratePayload(BASE)),
+    );
+  });
+});

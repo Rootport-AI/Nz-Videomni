@@ -298,6 +298,7 @@
   - **出力の音声は常に復号（監督の裁定）**: Strength 1.0 でも元の波形は貼らない（§3.3 の「採らなかった案」）。必要になれば別の計画にする。
   - **バッチ A2V は単発の経路へ（オーナー裁定）**: H3 ではバッチの各行を単発の `POST /generate` の `source_audio` で送り、連結の改修を待たない。行の音声は 1 クリップに収まる長さだけを使う（超える行は従来どおり Skip）。短すぎる行に新しい Skip 理由を足さないのは監督の裁定（CSV 仕様の語彙は 2 つの GUI の共通契約のため）で、サーバーの 422 で `Failed` になる。
   - **進め方（オーナー裁定）**: 裁定 90 と同じ（コーディング担当は設計を勝手に変えず、疑問があれば手を止めてエスカレーションする。計画は敵対的レビューを受け、指摘は「過剰設計・スパゲッティ化の危険」と「調査で裏付けが取れるか」の 2 点で採否を決める）。
+  - **状態**: 完結（2026-11-10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120・1-126。GPU の門・目視・実機の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204.5・§204.6）。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -1267,7 +1268,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | V2V と冒頭画像の連結（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-121。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193、操作パネルはフロントエンド `Docs/DEVLOG.md` §160） | 弾 1＝幾何・エンジン・ワーカー、弾 2＝API・アダプタ・系統の規則、弾 3＝操作パネル、弾 4＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §193（裁定 90・§3.3） |
 | Retake（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200、操作パネルはフロントエンド `Docs/DEVLOG.md` §163） | 弾 1＝幾何、弾 2＝エンジンとワーカー、弾 3＝API・アダプタ・モック・配信、弾 4＝操作パネル、弾 5＝MCP、弾 6＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §200（裁定 96・§3.4） |
 | ネガティブプロンプト（VSF。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-127。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202、操作パネルはフロントエンド `Docs/DEVLOG.md` §165） | 第 1 弾＝単発の最小実装と目視の実験（記録簿 §201）、第 2 弾＝連結と Retake への配線・操作パネル・文書（同 §202。§3.5） |
-| クリップごとの A2V とバッチ A2V（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-120・§1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
+| クリップごとの A2V とバッチ A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120・1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。

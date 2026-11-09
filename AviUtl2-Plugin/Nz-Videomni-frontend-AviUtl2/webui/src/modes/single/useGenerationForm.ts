@@ -193,12 +193,11 @@ export interface UseGenerationFormDeps {
   /** The loaded base model's engine
    * cannot take a reference video (`reference_video` — Create HIDES the
    * IC-LoRA accordion, with the control-LoRA picker inside it). While true the
-   * form reads the reference video AND the control LoRA as absent — the same
-   * shape as NAG's `effectiveNag`: nothing of them rides on a request, none of
-   * their Generate gates fire, and the 128 grid does not apply. The user's
-   * selections are not cleared, so a base model that takes them gets them
-   * back. Style `<lora:…>` tags in the prompt are untouched (the server's 422
-   * covers them). Omitted = available. */
+   * form reads the reference video AND the control LoRA as absent: nothing of
+   * them rides on a request, none of their Generate gates fire, and the 128
+   * grid does not apply. The user's selections are not cleared, so a base
+   * model that takes them gets them back. Style `<lora:…>` tags in the prompt
+   * are untouched (the server's 422 covers them). Omitted = available. */
   referenceVideoUnavailable?: boolean | undefined;
   /** Ledger §1-119: the keyframe cards and Reference cards the generation
    * sends, which move the comfort marker of a sequence-rows engine (MiniMax

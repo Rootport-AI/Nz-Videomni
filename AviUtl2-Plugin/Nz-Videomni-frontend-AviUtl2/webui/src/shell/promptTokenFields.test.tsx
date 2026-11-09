@@ -54,10 +54,10 @@ describe("PromptBar", () => {
 });
 
 describe("NagAccordion", () => {
-  it("shows the counter even while the field is greyed (engine without NAG)", () => {
+  it("shows the counter even while the field is greyed (negative prompt off)", () => {
     const { container } = render(
       <LanguageProvider>
-        <NagAccordion nag={NAG_OFF} controls={controls} unavailable tokenCount={42} tokenLimit={null} />
+        <NagAccordion nag={NAG_OFF} controls={controls} tokenCount={42} tokenLimit={null} />
       </LanguageProvider>,
     );
     expect(container.querySelector(".token-counter")?.textContent).toBe("42 tokens");

@@ -564,18 +564,15 @@ export const en = {
    * `onBadge` is intentionally identical in both languages (owner decision). */
   nag: {
     heading: "Negative Prompt",
-    /** Shown inside the greyed accordion while the loaded
-     * base model's engine cannot run NAG/VSF (`nag` in its
-     * `unsupported_features`). Nothing from this panel is sent meanwhile;
-     * the sentence only says the base model does not support it (owner
-     * wording, 2026-10-31). */
-    unavailableOnBaseModel: "Negative prompts are not supported on this base model.",
     onBadge: "【🔴ON】",
     textLabel: "Negative prompt",
     enableLabel: "non-CFG Negative",
     methodNag: "NAG",
     methodVsf: "VSF",
     methodVsfHint: "Practical range is 1.5-5. Note: 0 does not disable VSF - uncheck the non-CFG Negative box to turn it off.",
+    /** `title` of the greyed NAG radio while the loaded base model's engine
+     * cannot run the NAG method (`nag` in its `unsupported_features`). */
+    methodNagUnavailableHint: "The NAG method is not available on this base model (only VSF is).",
     scaleLabel: "NAG scale",
     vsfScaleLabel: "VSF scale",
     advancedHeading: "Advanced",
@@ -2811,13 +2808,13 @@ export const ja: Strings = {
   },
   nag: {
     heading: "ネガティブプロンプト",
-    unavailableOnBaseModel: "このベースモデルでは、ネガティブプロンプトは未対応です。",
     onBadge: "【🔴ON】",
     textLabel: "ネガティブプロンプト",
     enableLabel: "non-CFG Negative",
     methodNag: "NAG",
     methodVsf: "VSF",
     methodVsfHint: "実用域はscale 1.5〜5。0にしても無効にはなりません（無効化はチェックを外してください）。",
+    methodNagUnavailableHint: "このベースモデルでは NAG 方式は使えません（VSF 方式だけ使えます）。",
     scaleLabel: "NAG scale",
     vsfScaleLabel: "VSF scale",
     advancedHeading: "詳細設定",

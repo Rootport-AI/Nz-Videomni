@@ -78,7 +78,7 @@ import {
   chainPanelsHiddenFor,
   editSubTabsDisabledFor,
   loraAudioStrengthHiddenFor,
-  nagDisabledFor,
+  nagMethodDisabledFor,
   settingsRowsHiddenFor,
   singleSectionsDisabledFor,
   singleSectionsHiddenFor,
@@ -86,7 +86,6 @@ import {
 import type { ChainPanelsDisabled, EditSubTabsDisabled } from "./featureScope";
 import { frameLimitsFor } from "./generationConstraints";
 import { snapNumFrames } from "../modes/single/paramUtils";
-import { effectiveNag } from "./nagSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 import { baseModelInstaller, useBaseModels } from "./useBaseModels";
 import { BaseModelSelect } from "./BaseModelSelect";
@@ -1675,18 +1674,24 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   const editSubTabs = editSubTabsDisabledFor(baseModels.unsupportedFeatures);
 
   // The same arrangement for Create's own sections and for
-  // the shared Negative Prompt accordion. NAG closes in two halves: the
-  // accordion greys, and every screen READS `NAG_OFF` meanwhile
-  // (`effectiveNag`), so nothing of it rides on a request — the user's own
-  // settings stay put for when a NAG-capable base model is back.
+  // the shared Negative Prompt accordion's NAG method (below).
   // Single-clip A2V: an engine that publishes `constraints.source_audio`
   // takes the source audio on `/generate` itself; otherwise A2V stays a chain
   // submit (capability-driven — the engine id is never read).
   const singleA2vAvailable = baseModels.activeConstraints.singleSourceAudio != null;
   const singleSections = singleSectionsDisabledFor(baseModels.unsupportedFeatures, singleA2vAvailable);
   const singleHidden = singleSectionsHiddenFor(baseModels.unsupportedFeatures);
-  const nagUnavailable = nagDisabledFor(baseModels.unsupportedFeatures);
-  const nagForRequests = effectiveNag(nagControls.nag, !nagUnavailable);
+  // An engine without the NAG method (`nag`) greys the NAG radio alone, and
+  // the method moves to VSF here — one way, never moved back — so a NAG
+  // chosen on another base model cannot 422 a job. Modelled on the
+  // acceleration resets above: the effect depends on the extracted
+  // `setMethod` (stable, `useCallback(..., [])`), not on `nagControls`,
+  // which is rebuilt on every render.
+  const nagMethodUnavailable = nagMethodDisabledFor(baseModels.unsupportedFeatures);
+  const { setMethod: setNagMethod } = nagControls;
+  useEffect(() => {
+    if (nagMethodUnavailable) setNagMethod("vsf");
+  }, [nagMethodUnavailable, setNagMethod]);
   // 台帳 §1-104: an engine whose LoRAs have one strength only hides each
   // chip's audio side, and Single stops sending `audio_strength`.
   const loraAudioHidden = loraAudioStrengthHiddenFor(baseModels.unsupportedFeatures);
@@ -1766,13 +1771,13 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
       />
 
       {/* NAG (2026-07-28): one shared accordion, outside every mode tab —
-          Create/Chain/Batch all read the same settings (owner decision §UX 1),
-          as `nagForRequests` (`effectiveNag`), which reads as off while the
-          loaded base model cannot run NAG. */}
+          Create/Chain/Batch all read the same settings (owner decision §UX 1).
+          The NAG radio greys while the loaded base model cannot run the NAG
+          method; the method has been moved to VSF above. */}
       <NagAccordion
         nag={nagControls.nag}
         controls={nagControls}
-        unavailable={nagUnavailable}
+        nagMethodUnavailable={nagMethodUnavailable}
         tokenCount={promptTokens?.negative_prompt}
         tokenLimit={promptTokenLimit}
       />
@@ -1833,7 +1838,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               controlLora={controlLora}
               setControlLora={setControlLora}
               controlLoraNames={controlLoraNames}
-              nag={nagForRequests}
+              nag={nagControls.nag}
               acceleration={accelerationControls.acceleration}
               sageAvailable={sageAvail}
               /* 2026-08-31: the loaded engine keys the served comfort-budget
@@ -1875,7 +1880,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               controlLoraNames={controlLoraNames}
               depthLoraNames={depthLoraNames}
               referenceDownscaleFactors={referenceDownscaleFactors}
-              nag={nagForRequests}
+              nag={nagControls.nag}
               acceleration={accelerationControls.acceleration}
               /* 2026-08-31: same served comfort-budget table Create reads —
                  Chained takes the row's CHAIN budget (the stage-2 window

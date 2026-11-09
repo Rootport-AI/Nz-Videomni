@@ -8,8 +8,12 @@ import { resetExtractObjectAudioChain } from "../timeline/extractObjectAudio";
 import { resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
+import { createApiClient } from "../api/client";
+import type { ApiClient } from "../api/client";
 import type { ModelsResponse } from "../api/types";
+import { en } from "../i18n/strings";
 import { AppShell } from "./AppShell";
+import { DEFAULT_NEGATIVE_PROMPT, VSF_SCALE_DEFAULT } from "./nagSettings";
 
 // MiniMax H3 第 2 弾 (2026-10-17) — 2c-G1, end to end through the fixture
 // server. Picking "MiniMax H3" in the header must, with NO engine id read
@@ -18,12 +22,14 @@ import { AppShell } from "./AppShell";
 //  - replace the CFG placeholder with the three sampling sliders,
 //  - keep the Edit tab live with only its Retake sub-tab open (§1-123),
 //  - hide Create's reference video and the keyframe strength, grey its A2V
-//    card and the Negative Prompt accordion (台帳 §1-97: keyframes at any
-//    frame, so the second keyframe stays open),
+//    card and the Negative Prompt accordion's NAG radio, moving the method to
+//    VSF (台帳 §1-97: keyframes at any frame, so the second keyframe stays
+//    open),
 //  - draw the comfort marker off H3's sequence-rows line (台帳 §1-119: the
 //    served `single_rows_budget`, moved by the size and the composition),
 //  - snap DURATION onto 17n+5 and pin fps at 24,
-// and the request it sends must carry the three sampling values and no NAG.
+// and the request it sends must carry the three sampling values and a
+// negative prompt in the VSF method only.
 
 const SINGLE_PANEL = '[role="tabpanel"]:not([hidden])';
 
@@ -81,9 +87,14 @@ async function addCapturedKeyframes(user: ReturnType<typeof userEvent.setup>, pa
 /** `bridge` defaults to a fresh fixture server. The submit test passes the
  * app-wide singleton instead: Create's submit goes through the singleton
  * `apiClient`, so the header switch has to reach the SAME fixture server for
- * the generate request to be judged against MiniMax H3's rules. */
-async function renderApp(bridge: NativeBridge = createMockBridge({ delayMs: 0 })): Promise<NativeBridge> {
-  render(<AppShell nativeBridge={bridge} />);
+ * the generate request to be judged against MiniMax H3's rules. `apiClient`
+ * (optional) is the job ledger's client; omitted, the ledger polls the
+ * singleton, which can still hold a job an earlier test left running. */
+async function renderApp(
+  bridge: NativeBridge = createMockBridge({ delayMs: 0 }),
+  apiClient?: ApiClient,
+): Promise<NativeBridge> {
+  render(<AppShell nativeBridge={bridge} {...(apiClient ? { apiClient } : {})} />);
   await screen.findByRole("button", { name: /^generate$/i }, { timeout: 5_000 });
   const select = (await screen.findByRole("combobox", { name: /base model/i })) as HTMLSelectElement;
   await waitFor(() => expect(select.value).toBe("LTX23"));
@@ -165,9 +176,14 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       await user.click(within(audioCard).getByRole("checkbox", { name: "Audio to video", hidden: true }));
       expect(within(audioCard).getByTestId("source-audio-strength")).toBeInTheDocument();
 
-      // Negative Prompt accordion greyed with its note; the switch is disabled.
-      expect(screen.getByText("Negative prompts are not supported on this base model.")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: /non-cfg negative/i })).toBeDisabled();
+      // Negative Prompt accordion: only the NAG radio greys (with its hint on
+      // the label); the switch and the VSF radio stay operable, no note.
+      expect(screen.queryByText("Negative prompts are not supported on this base model.")).not.toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: /non-cfg negative/i })).not.toBeDisabled();
+      const nagRadio = screen.getByRole("radio", { name: /^nag$/i });
+      expect(nagRadio).toBeDisabled();
+      expect(nagRadio.closest("label")?.getAttribute("title")).toBe(en.nag.methodNagUnavailableHint);
+      expect(screen.getByRole("radio", { name: /^vsf$/i })).not.toBeDisabled();
 
       // The rows-line marker (台帳 §1-119): 1280x768 with no keyframe and no
       // Reference card sent (the A2V tick leaves every other card out) fits up
@@ -353,14 +369,14 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "MiniMax H3: the submitted body carries the three sampling values, fps 24, a 17n+5 length, no NAG, no keyframe strength and no LoRA audio strength",
+    "MiniMax H3: the submitted body carries the three sampling values, fps 24, a 17n+5 length, the negative prompt in VSF, no keyframe strength and no LoRA audio strength",
     async () => {
       const bridge = await renderApp(appBridge);
       const requestSpy = vi.spyOn(bridge, "request");
       const user = userEvent.setup();
 
-      // Turn NAG ON while LTX is loaded — the H3 request must still carry none
-      // of it (the accordion greys and the shell stops sending it).
+      // Turn NAG ON while LTX is loaded — the H3 request carries it in the VSF
+      // method (the shell moves the method on the switch).
       await user.click(screen.getByText("Negative Prompt"));
       await user.click(screen.getByRole("checkbox", { name: /non-cfg negative/i }));
 
@@ -401,8 +417,10 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       expect(body.frame_rate).toBe(24);
       expect(((body.num_frames as number) - 5) % 17).toBe(0);
       expect((body.width as number) % 32).toBe(0);
-      expect(body.nag_enabled).toBeUndefined();
-      expect(body.negative_prompt).toBeUndefined();
+      expect(body.nag_enabled).toBe(true);
+      expect(body.neg_method).toBe("vsf");
+      expect(body.negative_prompt).toBe(DEFAULT_NEGATIVE_PROMPT);
+      expect(body.vsf_scale).toBe(VSF_SCALE_DEFAULT);
       const images = body.conditioning_images as Record<string, unknown>[];
       expect(images).toHaveLength(2);
       expect(images[0]?.frame_idx).toBe(0);
@@ -417,9 +435,12 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "code review m-8: NAG on with an EMPTY body on LTX does not block Generate once on MiniMax H3",
+    "code review m-8 (reversed by §1-127): NAG on with an EMPTY body blocks Generate on MiniMax H3 too",
     async () => {
-      await renderApp();
+      // Its own ledger client: the submit test above leaves a job running on
+      // the singleton, which would otherwise show up here as "Busy…".
+      const bridge = createMockBridge({ delayMs: 0 });
+      await renderApp(bridge, createApiClient(bridge));
       const user = userEvent.setup();
       await user.click(screen.getByText("Negative Prompt"));
       await user.click(screen.getByRole("checkbox", { name: /non-cfg negative/i }));
@@ -428,9 +449,38 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       const generate = screen.getByRole("button", { name: /^generate$/i });
       // On LTX the empty body blocks Generate…
       await waitFor(() => expect(generate).toBeDisabled());
-      // …and on MiniMax H3 (NAG closed) it no longer does.
+      // …and on MiniMax H3 it still does (the negative prompt runs in VSF
+      // there, under the same empty-body rule). Wait for the switch to land
+      // first: Generate is already disabled on LTX, so asserting before the
+      // switch has arrived would prove nothing.
       await switchTo("MiniMaxH3");
+      await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument(), { timeout: 5_000 });
+      await waitFor(() => expect(screen.getByRole("radio", { name: /^vsf$/i })).toBeChecked(), { timeout: 5_000 });
+      expect(generate).toBeDisabled();
+      // The empty body is the cause: a negative text releases Generate.
+      await user.type(screen.getByRole("textbox", { name: /negative prompt/i }), "blurry");
       await waitFor(() => expect(generate).not.toBeDisabled(), { timeout: 5_000 });
+    },
+    20_000,
+  );
+
+  it(
+    "§1-127: NAG picked on LTX moves to VSF on MiniMax H3, and stays VSF back on LTX 2.3 with the NAG radio operable again",
+    async () => {
+      await renderApp();
+      const user = userEvent.setup();
+      await user.click(screen.getByText("Negative Prompt"));
+      await user.click(screen.getByRole("radio", { name: /^nag$/i }));
+      expect(screen.getByRole("radio", { name: /^nag$/i })).toBeChecked();
+
+      await switchTo("MiniMaxH3");
+      await waitFor(() => expect(screen.getByRole("radio", { name: /^vsf$/i })).toBeChecked(), { timeout: 5_000 });
+      expect(screen.getByRole("radio", { name: /^nag$/i })).toBeDisabled();
+
+      await switchTo("LTX23");
+      await waitFor(() => expect(screen.getByRole("radio", { name: /^nag$/i })).not.toBeDisabled(), { timeout: 5_000 });
+      expect(screen.getByRole("radio", { name: /^vsf$/i })).toBeChecked();
+      expect(screen.getByRole("radio", { name: /^nag$/i }).closest("label")?.hasAttribute("title")).toBe(false);
     },
     20_000,
   );

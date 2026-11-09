@@ -597,6 +597,14 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   ],
 };
 
+/** A negative prompt asking for the NAG METHOD — `nag_enabled` with
+ * `neg_method` anything but `"vsf"` (omitted included, the server's default
+ * being `"nag"`). This is what a base model declaring `nag` refuses, on
+ * `/generate` and `/generate/chain` alike (MiniMax H3 runs VSF only); a VSF
+ * request goes through. Mirrors the real H3 adapter's reject-table rows. */
+const isNagMethodRequest = (req: Record<string, unknown>): boolean =>
+  req.nag_enabled === true && req.neg_method !== "vsf";
+
 /** §3-102: which `POST /generate/chain` field carries which FEATURE name, for
  * the fixture's own `FEATURE_UNSUPPORTED` refusal below. Mirrors
  * `services/engines/ltx25/adapter.py`'s chain reject table: the field is what a
@@ -621,14 +629,17 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
    * what the shared predicate does; `pipeline` and `vae_mode` are the first
    * rows whose DEFAULT is a non-empty string, so without a predicate of their
    * own the shared one would read `"distilled"` / `"default"` as a request and
-   * 422 every single chain. */
-  isSet?: (value: unknown) => boolean;
+   * 422 every single chain. The whole request is passed as well, for a row
+   * whose verdict depends on another field (`nag_enabled`, read together with
+   * `neg_method`). */
+  isSet?: (value: unknown, req: Record<string, unknown>) => boolean;
 }> = [
   { field: "source_video", feature: "v2v" },
   { field: "source_audio", feature: "a2v" },
   { field: "reference_video_id", feature: "reference_video" },
   { field: "loras", feature: "loras" },
-  { field: "nag_enabled", feature: "nag" },
+  // `nag` closes the NAG method only: a VSF negative prompt chains.
+  { field: "nag_enabled", feature: "nag", isSet: (_v, req) => isNagMethodRequest(req) },
   // ADDED BY THE NAG/VSF INCREMENT, and the first rows this table has ever
   // gained rather than kept. Until then `nag_enabled` was the one declared
   // feature the chain fixture could actually refuse; with `nag` off the
@@ -638,8 +649,8 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // THIS ALSO FIXES A LATENT FIXTURE BUG, and it is worth being precise about
   // where: the CHAIN path has this per-field refusal loop, so `two_stage_hq`
   // and `prune_vaed` were declared unsupported and then never enforced on it.
-  // The single `/generate` path has no such loop at all -- it never refused any
-  // field -- so nothing there was ever wrong, and nothing there is being fixed.
+  // The single `/generate` path has no such loop (its refusals are individual
+  // checks), so nothing there was ever wrong, and nothing there is being fixed.
   { field: "pipeline", feature: "two_stage_hq", isSet: (v) => v != null && v !== "distilled" },
   { field: "vae_mode", feature: "prune_vaed", isSet: (v) => v != null && v !== "default" },
   // 台帳 §3-114 (2026-09-03): the first row here whose feature belongs to LTX
@@ -1841,6 +1852,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (req.nag_enabled === true && String(req.negative_prompt ?? "").trim() === "") {
       return validationError("negative_prompt", "negative_prompt must not be empty when nag_enabled is true");
     }
+    // A base model declaring `nag` refuses the NAG method and takes VSF.
+    if ((MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("nag") && isNagMethodRequest(req)) {
+      return featureUnsupported("nag", "nag_enabled");
+    }
 
     // §1-107: LTX engines refuse `references` (the server's REJECT_TABLE row);
     // H3 checks the shape only and lets the body through (stored as sent).
@@ -2111,7 +2126,8 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
       // otherwise. See the `isSet` field's own note: the shared predicate reads
       // any non-empty string as a request, which is right for an upload id and
       // wrong for an enum whose default is a word.
-      if (!(isSet ?? isChainFieldSet)(req[field])) continue;
+      const predicate: (value: unknown, req: Record<string, unknown>) => boolean = isSet ?? isChainFieldSet;
+      if (!predicate(req[field], req)) continue;
       return featureUnsupported(feature, field);
     }
 

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider } from "../i18n/LanguageContext";
+import { en } from "../i18n/strings";
 import { NagAccordion } from "./NagAccordion";
 import {
   DEFAULT_NEGATIVE_PROMPT,
@@ -21,7 +22,13 @@ import type { NagSettings } from "./nagSettings";
 // reflected back into what's rendered. Same pattern as
 // `ReferenceStrengthField.test.tsx`'s `Harness`.
 
-function Harness({ initial }: { initial?: Partial<NagSettings> | undefined }) {
+function Harness({
+  initial,
+  nagMethodUnavailable,
+}: {
+  initial?: Partial<NagSettings> | undefined;
+  nagMethodUnavailable?: boolean | undefined;
+}) {
   const [nag, setNag] = useState<NagSettings>({
     text: DEFAULT_NEGATIVE_PROMPT,
     enabled: false,
@@ -35,6 +42,7 @@ function Harness({ initial }: { initial?: Partial<NagSettings> | undefined }) {
   return (
     <NagAccordion
       nag={nag}
+      nagMethodUnavailable={nagMethodUnavailable}
       controls={{
         setEnabled: (value) => setNag((prev) => ({ ...prev, enabled: value })),
         setText: (value) => setNag((prev) => ({ ...prev, text: value })),
@@ -56,10 +64,10 @@ function Harness({ initial }: { initial?: Partial<NagSettings> | undefined }) {
   );
 }
 
-function renderAccordion(initial?: Partial<NagSettings>) {
+function renderAccordion(initial?: Partial<NagSettings>, nagMethodUnavailable?: boolean) {
   return render(
     <LanguageProvider>
-      <Harness initial={initial} />
+      <Harness initial={initial} nagMethodUnavailable={nagMethodUnavailable} />
     </LanguageProvider>,
   );
 }
@@ -224,5 +232,39 @@ describe("NagAccordion", () => {
     expect(textarea).toBeDisabled();
     expect(textarea.value).toBe("keep me");
     expect(numberInputFor("NAG scale").valueAsNumber).toBe(7);
+  });
+
+  describe("nagMethodUnavailable (engine without the NAG method, §1-127)", () => {
+    it("greys the NAG radio alone, with the hint on its label; everything else stays operable", async () => {
+      const user = userEvent.setup();
+      const { container } = renderAccordion({ enabled: true, method: "vsf" }, true);
+      await openAccordion(user);
+
+      const nagRadio = screen.getByRole("radio", { name: /^nag$/i });
+      expect(nagRadio).toBeDisabled();
+      expect(nagRadio.closest("label")?.getAttribute("title")).toBe(en.nag.methodNagUnavailableHint);
+
+      expect(screen.getByRole("checkbox", { name: /non-cfg negative/i })).toBeEnabled();
+      expect(screen.getByRole("radio", { name: /^vsf$/i })).toBeEnabled();
+      expect(screen.getByRole("textbox", { name: /negative prompt/i })).toBeEnabled();
+      expect(numberInputFor("VSF scale")).toBeEnabled();
+      expect(screen.getByRole("button", { name: /reset/i })).toBeEnabled();
+      expect(screen.getByText("【🔴ON】")).toBeInTheDocument();
+
+      expect(container.querySelector(".warning-banner")).toBeNull();
+      expect(container.querySelector(".field-reserved")).toBeNull();
+    });
+
+    it("without the prop the NAG radio is operable and its label carries no title", async () => {
+      const user = userEvent.setup();
+      renderAccordion({ method: "vsf" });
+      await openAccordion(user);
+
+      const nagRadio = screen.getByRole("radio", { name: /^nag$/i });
+      expect(nagRadio).toBeEnabled();
+      expect(nagRadio.closest("label")?.hasAttribute("title")).toBe(false);
+      await user.click(nagRadio);
+      expect(nagRadio).toBeChecked();
+    });
   });
 });

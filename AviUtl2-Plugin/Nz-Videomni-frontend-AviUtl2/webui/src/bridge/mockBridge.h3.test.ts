@@ -183,6 +183,66 @@ describe("mockBridge — MiniMax H3", () => {
     expect(res.status).toBe(202);
   });
 
+  // §1-127: `nag` on H3 closes the NAG METHOD only — a VSF negative prompt
+  // is accepted on `/generate` and `/generate/chain` alike, and the NAG
+  // method (named, or left to the server's default) is refused as `nag`.
+  describe("§1-127 negative prompt on MiniMax H3: VSF only", () => {
+    const NEG = { nag_enabled: true, negative_prompt: "blurry" };
+    const H3_SAMPLING = { num_inference_steps: 20, shift_video: 12, shift_audio: 3 };
+
+    async function h3Bridge(): Promise<Bridge> {
+      const bridge = createMockBridge({ delayMs: 0 });
+      expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+      return bridge;
+    }
+
+    function expectNagRefusal(res: Awaited<ReturnType<typeof generate>>) {
+      expect(res.status).toBe(422);
+      const error = (res.body as { error: { code: string; message: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.message).toContain("'nag'");
+    }
+
+    it.each([
+      ["omitted", {}],
+      ['"nag"', { neg_method: "nag" }],
+    ] as const)("POST /generate refuses the NAG method (%s) as 'nag'", async (_label, method) => {
+      expectNagRefusal(await generate(await h3Bridge(), { ...BODY, ...H3_SAMPLING, ...NEG, ...method }));
+    });
+
+    it("POST /generate accepts the VSF method", async () => {
+      const res = await generate(await h3Bridge(), { ...BODY, ...H3_SAMPLING, ...NEG, neg_method: "vsf", vsf_scale: 3 });
+      expect(res.status).toBe(202);
+    });
+
+    it.each([
+      ["omitted", {}],
+      ['"nag"', { neg_method: "nag" }],
+    ] as const)("POST /generate/chain refuses the NAG method (%s) as 'nag'", async (_label, method) => {
+      expectNagRefusal(await chain(await h3Bridge(), { ...H3_SAMPLING, ...NEG, ...method }));
+    });
+
+    it("POST /generate/chain accepts the VSF method", async () => {
+      const res = await chain(await h3Bridge(), { ...H3_SAMPLING, ...NEG, neg_method: "vsf", vsf_scale: 3 });
+      expect(res.status).toBe(202);
+    });
+
+    it("LTX 2.3 keeps accepting the NAG method on both routes", async () => {
+      const single = await generate(createMockBridge({ delayMs: 0 }), {
+        ...BODY,
+        num_frames: 121,
+        ...NEG,
+        neg_method: "nag",
+      });
+      expect(single.status).toBe(202);
+      const chained = await chain(createMockBridge({ delayMs: 0 }), { ...NEG, neg_method: "nag" }, [
+        { num_frames: 121 },
+        { num_frames: 121 },
+      ]);
+      expect(chained.status).toBe(202);
+    });
+  });
+
   // §1-107: the Ref2VA reference limits are H3's own.
   it("publishes `reference` for MiniMax H3 only (LTX publishes none)", async () => {
     const blocks = await listModels(createMockBridge({ delayMs: 0 }));

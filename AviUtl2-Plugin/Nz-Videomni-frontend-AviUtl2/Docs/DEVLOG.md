@@ -6189,3 +6189,39 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **画面側での事前判定は作りません。** 判定の正本はサーバーの事前検査だけです。
 - 理由: H3 の音声の Strength の既定が 0.5 になり、音声の無い動画を既定のまま送ると 422 になります。従来の表示はサーバーの英文で、「窓が収まらない」と誤解を招くものでした。
 - テスト: `EditScreen.retake.test.tsx` に LTX と H3 の 2 件を足し、`VALIDATION_ERROR` では赤いカードが残ることを既存のテストに 1 行足して固定しました。API の表は [`API_REFERENCE.md`](API_REFERENCE.md) §2、門の記録はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §200.10 です。
+
+## 165. MiniMax H3 のネガティブプロンプト（VSF） — 機能名 `nag` を「NAG 方式だけ使えない」の意味に・NAG のラジオだけ灰色・方式を VSF に書き換える・帯の廃止（バックエンド台帳 `PENDING_TASKS.md` §1-127。2026-11-09）
+
+### 165.1 結論
+
+- **MiniMax H3 でも、共有のネガティブプロンプトのアコーディオンが使えるようになりました。** 灰色になるのは NAG〔Normalized Attention Guidance。負のプロンプトのために注意を 2 回計算して混ぜる方式〕のラジオだけです。チェック・本文・VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕のラジオ・スライダーは、LTX と同じく操作できます。
+- **NAG のラジオは、マウスを載せるとヒントを出します**: 日本語「このベースモデルでは NAG 方式は使えません（VSF 方式だけ使えます）。」、英語 "The NAG method is not available on this base model (only VSF is)."（`i18n/strings.ts` の `nag.methodNagUnavailableHint`。灰色のときだけ `<label>` の `title`）。
+- **NAG 方式を持たないベースモデルを読み込むと、保存されている方式を VSF に書き換えます**（一方向。LTX に戻しても NAG へは戻しません。NAG は選び直せます）。LTX で NAG を選んだまま H3 に切り替えても、ジョブが 422 にならないためです。
+- **アコーディオン全体の帯「このベースモデルでは、ネガティブプロンプトは未対応です。」は廃止しました。** ネガティブプロンプトを持たない系統が無くなったためです（設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 35・88 の更新）。
+- 理由: バックエンドが H3 の単発と連結（Retake を含む）で `nag_enabled=true` を `neg_method="vsf"` のときだけ受けるようになり、機能名 `nag` は「NAG 方式が使えない」の意味に狭まりました（仕組みは設計正本 §3.5、API は [`API_REFERENCE.md`](API_REFERENCE.md) §5.1・§5.2）。
+
+### 165.2 変えたもの
+
+- **`shell/featureScope.ts`**: 無効化の鍵 `shell.nag` を `nagAccordion.methodNag` に改名し、`FEATURE_UI.nag = { disables: ["nagAccordion.methodNag"] }`。読み手 `nagDisabledFor` は `nagMethodDisabledFor` に改名しました。表の仕組みは足していません。
+- **`shell/NagAccordion.tsx`**: プロパティ `unavailable` を `nagMethodUnavailable` に変えました。帯と `field-reserved` を消し、NAG のラジオだけが `disabled` とヒントを持ちます。他の部品は可否に依存しません。
+- **`shell/AppShell.tsx`**: acceleration の `resets` の effect に倣った `useEffect` 1 つで、`nagMethodUnavailable` が真なら `setMethod("vsf")` を呼びます（依存は取り出した `setMethod` と真偽値だけなので、ベースモデルの切り替えごとに 1 回しか走りません）。`effectiveNag` と `nagForRequests` を消し、各画面には `nagControls.nag` をそのまま渡します。
+- **`shell/nagSettings.ts`**: `effectiveNag` を削除しました（`NAG_OFF` は各フォームが使うので残す）。`modes/single/useGenerationForm.ts` は注記だけを直しました。
+- **`i18n/strings.ts`**: `unavailableOnBaseModel`（日英）を削除し、`methodNagUnavailableHint`（日英）を足しました。
+- **送信本文**: H3 の要求も LTX と同じ欄を運びます（`nag_enabled`・`negative_prompt`・`neg_method="vsf"`・`vsf_scale`。NAG の強さの 3 欄も載りますが、H3 では効かない従属欄としてサーバーが読みません）。有効で本文が空なら Generate が止まる規則も LTX と同じになり、H3 だけの例外は消えました。
+- **モック（`bridge/mockBridge.ts`）**: バックエンドに合わせ、`unsupported_features` に `nag` を持つベースモデルへ `nag_enabled === true && neg_method !== "vsf"` が来たら、`/generate` でも `/generate/chain` でも 422 `FEATURE_UNSUPPORTED`（`nag`）で断ります。VSF は両方で受けます。連結の拒否表の行の判定は、要求全体を受け取れる形に広げました（`nag_enabled` を `neg_method` と一緒に読むため）。
+
+### 165.3 変えていないもの
+
+- **Retake 画面は負のプロンプトを送りません**（LTX でも同じ。`modes/edit/useRetakeForm.ts` は `nagRequestFields` を使っていません）。バックエンドの Retake は API からは VSF を受けますが、画面から送るかどうかはオーナーの判断です。
+- **LTX の見え方と送信本文は変わりません**（NAG のラジオは生きたまま）。
+- `vsf_scale` のスライダー（既定 1.5・0〜10・刻み 0.1）と VSF のラジオのヒント「実用域は scale 1.5〜5」は LTX の値のままです。H3 では仮の値で、実用域の較正はバックエンド台帳 §3-278 です。
+- `shell/useNagSettings.ts`・BRIDGE_CONTRACT・native のコードは変えていません。
+
+### 165.4 テストと門
+
+- 裏返した期待: `AppShell.minimaxH3.test.tsx`（帯が無い・チェックと VSF のラジオが操作できる・NAG のラジオだけ灰色で `title` がヒント文・LTX で NAG を有効にして H3 へ切り替えた送信本文が `nag_enabled`／`neg_method="vsf"`／既定の負の文／既定の `vsf_scale` を運ぶ）、`promptTokenFields.test.tsx`（プロパティの改名）、`generationConstraints.test.ts`（改名と `effectiveNag` の削除）。
+- コードレビュー m-8 のテストの裏返し: 以前は「H3 では空の本文でも Generate が止まらない」を確かめていましたが、いまは「H3 でも止まる」を確かめます。切り替え前の LTX の時点で既に止まっているので、切り替えが画面に着いたこと（Steps のスライダーが出て VSF のラジオが選ばれる）を待ってから確かめ、負の文を打つと止まりが解けることで原因が空の本文だと示します。
+- **m-8 のテストの頑健化**: このテストは自前の `apiClient` で描画するようにしました。直前の送信のテストが共有の `apiClient` にジョブを走らせたまま残し、それが「Busy…」として見えて Generate を止めうる、テストの順序に依存した既存の危険があったためです（製品のコードの問題ではありません）。
+- 新規: `NagAccordion.test.tsx`（NAG のラジオだけ灰色・label の `title`・他の部品は操作できる・帯と `field-reserved` が無い・プロパティなしなら `title` なし）、`AppShell.minimaxH3.test.tsx`（LTX で NAG → H3 で VSF・LTX 2.3 に戻しても VSF のまま・NAG のラジオは再び操作できる）、`mockBridge.h3.test.ts`（H3 の `/generate` と `/generate/chain` で方式の省略と `"nag"` は 422 `nag`・`"vsf"` は 202・LTX 2.3 の NAG は両方で 202 のまま）。
+- 門: `npm run typecheck`・`npx vitest run --exclude "**/backend.integration.test.ts"`（181 ファイル・3,653 件）・`npm run lint` に合格。
+- オーナーの実機確認は、バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-127 で扱います。

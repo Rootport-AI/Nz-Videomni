@@ -105,6 +105,11 @@ cannot run is greyed out. One line per screen here — the details are in
   blocked on Single, Chained and the batch panels (with a reason shown)
   whenever NAG is enabled
   but the negative-prompt body is empty.
+  On MiniMax H3 only the VSF method is available: the NAG radio is greyed
+  (hovering it shows why) while the checkbox, the text, the VSF radio and the
+  sliders stay usable, and switching to H3 with NAG chosen on LTX moves the
+  method to VSF (it is not moved back on return; backend ledger §1-127,
+  `Docs/DEVLOG.md` §165).
 - **Settings panel**: houses model management (`ModelsPanel`) — 4 model
   categories (`transformer` / `text_encoder` / `video_vae` / `audio`, the
   backend's own `ModelCategory` classification — LoRAs are a separate

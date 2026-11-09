@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -18,7 +18,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 | 次の作業の入口（α版の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184、参照付きの連結は §185〜§186、連結の V2V と冒頭画像は §193、Retake は §200） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184、参照付きの連結は §185〜§186、連結の V2V と冒頭画像は §193、Retake は §200、ネガティブプロンプト（VSF）は §201〜§202） |
 | `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
@@ -69,6 +69,7 @@
   > **更新（2026-10-25）**: Single の A2V カードは、H3 では単発の `/generate` に送る形で開いた（裁定 74・§3.1）。バッチ A2V は `chain` の行で灰色のままである。
   > **更新（2026-10-29）**: H3 の `unsupported_features` から `chain` を外した（T2V の連結を開けた。裁定 85・§3.3）。バッチ A2V と Chained の音声パネルは、代わりに `a2v` の行で灰色のままである。
   > **更新（2026-11-02）**: Chained の素材（末尾）は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-47 へ送ったので、灰色ではなく非表示にした。IC-LoRA の参照動画は、Single に加えて Chained のパネルも非表示にした（どちらも操作パネルの機能の表で隠す。裁定 90）。
+  > **更新（2026-11-09）**: H3 のネガティブプロンプトは VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕で動くようになった（§3.5）。機能名 `nag` の意味は「NAG〔Normalized Attention Guidance。負のプロンプトのために注意を 2 回計算して混ぜる方式〕方式が使えない」に狭まった。アコーディオンは H3 でも操作でき、灰色になるのは NAG のラジオだけである。LTX で NAG を選んだまま H3 に切り替えると、方式は VSF に書き換わる（LTX に戻しても NAG へは戻さない）。アコーディオン全体の注意の帯は廃止した（裁定 88 の更新）。
 - **裁定 36 【オーナー裁定】**: ライセンスは README に明記する（名称・適用除外地域・取得者の自己責任）。インストーラは取得前に注意文とライセンスの URL を表示するだけで、同意の入力は作らない（§10）。
 - **裁定 37 【オーナー裁定】**: README で H3 を「α版」と明示し、できること・できないこと・快適上限が未較正で大きな画角では遅くなること・推奨（VRAM 16GB・主メモリ 64GB）を書く（README §7.6）。
   > **訂正（2026-10-19）**: 「大きな画角では遅くなる」の README の文は、VRAM 16GB mode の実装（台帳 CLOSED 3-240）で現行化した。README では快適上限が未較正であることを残している。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §169。
@@ -199,6 +200,7 @@
   - **Generate の止め方（オーナー裁定）**: 宣言したカードが空か失敗なら Generate を止め、黄色の注意「Audio to video に使う音声を入力してください。」（英語は「Add the audio to use for Audio to video.」）を出す。アップロード中なら既存の「参照ファイルのアップロード完了を待ってください」を出す。
   - **Chained の【🔴ON】（オーナー裁定）**: 埋め込みの Reference アコーディオンは、数えられたカードが 1 枚以上（n/12 の分子と同じ数え方。アップロード中も含む）のときに【🔴ON】を出す。
   - **NAG の注意文（オーナー裁定）**: ネガティブプロンプトが使えないベースモデルでは「このベースモデルでは、ネガティブプロンプトは未対応です。」（英語は「Negative prompts are not supported on this base model.」）を出す。
+    > **更新（2026-11-09）**: この帯の文言は廃止した。ネガティブプロンプトを持たない系統が無くなったためである（H3 は VSF だけを持つ。裁定 35 の更新・§3.5）。代わりに、灰色の NAG のラジオにマウスを載せたときだけ「このベースモデルでは NAG 方式は使えません（VSF 方式だけ使えます）。」（英語は「The NAG method is not available on this base model (only VSF is).」）を出す。
   - **Strength（監督の裁定）**: Enable=off のときは Strength のスライダーも無効にする（表示はする）。オーナーが覆してよい。
   - **写し終わるまで止める（監督の裁定）**: 宣言したカードの音声がアップロード済みになってから `form.sourceAudio` に写るまでの一瞬に、Generate が押せて T2V が送られる隙があった（従来からあった）。写し終わるまで注意を出し続けて塞いだ。オーナーが覆してよい。
   - **既知の挙動**: 右クリック #7 の音声は、空き番号が最も若い Audios カードへ入る。それが宣言済みの空カードなら、その音声が A2V の音声になる（規則どおり）。
@@ -295,7 +297,7 @@
 
 - **規模と構成**: DiT は約 33B パラメータ。隠れ幅 5376・50 ブロック・56 ヘッド×128 次元。このうち約 13B は AdaLN（時刻に応じて各層の変調量を決める枝）で、枝刈り版ではこの枝が表に畳まれている。
 - **映像と音声を同時に作る**: 映像と音声（32kHz ステレオ）のトークンを 1 本の系列に詰め、同じ DiT で同時にノイズ除去する。
-- **CFG なし【設計】**: モデルはガイダンス蒸留済みで、negative prompt も guidance scale も無い。1 ステップにつき前向き計算は 1 回である。
+- **CFG なし【設計】**: モデルはガイダンス蒸留済みで、negative prompt も guidance scale も無い。1 ステップにつき前向き計算は 1 回である。本製品は、前向き計算を増やさない VSF で負のプロンプトを足す（§3.5）。
 - **Rectified Flow の Euler**: モデルの出力は「データ方向の速度」v で、`x0 = x + σ·v` と読む（一般の flow-match と符号が逆）。更新は `x_next = x + (σ − σ_next)·v`。N ステップは N 回の評価である。
 - **shift は 2 本立て**: σ の列は `base = linspace(1, 0, N+1)[:-1]`、`σ = s·base / (1 + (s−1)·base)` で作る。s は映像用と音声用の 2 つで、同じ添字 i について映像は σ_v[i]、音声は σ_a[i] を使い、出力もそれぞれの列で別々に更新する。モデルに渡す時刻は `t = 1 − σ`（1 が無ノイズ）。
 - **フレームと解像度の規約**: 24fps 固定。フレーム数は **17n+5**。潜在フレーム数は `T' = 5n + 2`、音声の潜在数は `A = round(F / 24 × 40)`（例: 124 フレームで T'=37、A=207）。縦横は **32 の倍数**（映像 VAE の 16 倍圧縮とパッチ 2 の積）。モデルの学習上の既定は短辺 768 である（本製品の既定の画角ではない）。
@@ -804,6 +806,51 @@ MCP の `submit_chain` は `retake_audio_strength` を受け、のりしろの 2
 - **Ref2VA の参照との併用**: 今回は排他にした。
 
 
+## 3.5 ネガティブプロンプト（VSF）
+
+**結論**: H3 のネガティブプロンプトは、VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転し、1 回の注意の計算で負の要素を遠ざける方式〕だけで動く。単発の生成（`POST /generate`）と連結（`POST /generate/chain`。Chained と Retake が同じ経路を通る）の両方で、`nag_enabled=true` を `neg_method="vsf"` のときだけ受ける。H3 はガイダンス蒸留済みで CFG〔正と負の 2 回の前向き計算の差で導く方式〕を使えない（§3 の「CFG なし」）ので、前向き計算を増やさない方式を選んだ。NAG〔Normalized Attention Guidance。負のプロンプトのために注意を 2 回計算して混ぜる方式〕は、H3 の共同注意では注意を 2 回計算することになり 1 ステップがほぼ倍になるので、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-48 へ見送った。API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、記録と門は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §165 にある。反転と計測は `engine_h3/vsf.py`、呼び出しは `engine_h3/dit.py`・`engine_h3/lowvram.py`・`engine_h3/pipeline_h3.py`・`engine_h3/chain_h3.py`。
+
+### 仕組み
+
+1. **符号化**: 正のプロンプトの符号化のあとに、テキストエンコーダーをもう 1 回呼んで負のプロンプトだけを符号化する（画像も参照も渡さない。テキストだけ）。進捗の `encode` の段は 1 ステップ増える。
+2. **系列**: 負の行は単独で token_refiner〔テキストの行だけを先に通す前段の網〕を 1 回通し、テキストの区画の末尾に連結する（`[正 L_pos | 負 n]`。行の種類のタグはすべて 1＝文章）。テキストの行数 L は L_pos＋n に伸び、行の並び・RoPE〔回転位置埋め込み。行の時刻を表す〕・行の種類は既存の規則のまま導く。
+3. **V の反転**: 各ブロックの注意の直前、V を作った直後に、負の行の V を −scale 倍にする（`vsf.flip_values`）。VRAM 16GB mode の off の経路と on の経路（ヘッド群ごとの V）が同じ関数を呼ぶ。token_refiner の中では反転しない。全ての query（正のテキスト・負の行自身・条件行・音声・映像）が反転した V を見る最小の形である。
+4. **出力**: 負の行は他のテキストの行と同じく層ごとに更新されるが、最終層は音声と映像の行しか読まないので、捨てる処理は要らない。
+5. **数値の約束**: 負のプロンプトを使わないジョブは、既存の経路と 1 ビットも変わらない（裁定 45・46）。VSF を使っても、sdpa では VRAM 16GB mode の on と off が一致する。sage は裁定 53 の既知の差の範囲である。門の結果は記録簿 §201.7（連結は §202）。
+
+### 計測 m と記録
+
+ジョブごとに 1 回（ステップ 0・ブロック 0）、映像の行から標本にした query の softmax の配分のうち、負の行に乗る和 `m_neg` と正のテキストの行に乗る和 `m_text` を測る（`vsf.H3VsfProbe`。q と k は読むだけ）。結果は完了の記録の `h3.vsf = {rows, scale, m_neg, m_text}`（`rows` は `[L_pos, L]`）に残り、ワーカーのログの行には `neg=vsf(scale=…)`（負なしは `neg=off`）が出る。m は V に依らないので scale を変えても動かず、系列が長いほど小さくなる（記録簿 §201.7・§201.8）。記録の欄の読み方（`phases.denoise.sequence.text` は負の行を含む L など）は記録簿 §201.9。
+
+### 連結と Retake
+
+負のプロンプトはジョブで 1 本で、全クリップに同じように効く。符号化はジョブで 1 回だけで、クリップ 0 の `encode` の段で正と一緒に符号化し、後のクリップはその隠れ状態を使い回す（`engine_h3/chain_h3.py`）。したがって進捗の `encode` が 1 ステップ増えるのはクリップ 0 だけで、`encode` の段の記録の `negative_tokens`・`te_read_negative` もクリップ 0 にだけ入る。各クリップの記録 `metadata.h3.clips[i]` には、単発の `h3.vsf` と同じ形の `vsf` が入る（負のプロンプトを使うときだけ）。Retake は 1 本の連結としてクリップ 0 の同じ経路を通るので、専用のコードは無い。
+
+### 費用
+
+負の符号化のぶん、テキストエンコーダーの 50 層をもう 1 回読む（参照なしの T2V の単発で約 18 秒、連結の門では約 10 秒。読み込みの速さで変わる。記録簿 §201.2・§202.7）。連結ではクリップの本数によらず 1 回である。ノイズ除去は、系列が負の n 行ぶん長くなるだけで、注意の呼び出しの回数は変わらない。
+
+### API とフィーチャースコープ
+
+受ける欄・断る機能名・記録の鍵は仕様書 §6.2b (f)・(h) が正本である。ここには理由だけを書く。
+
+- **スキーマは変えない**: LTX と同じ 7 欄（`nag_enabled`・`negative_prompt`・`neg_method`・`vsf_scale`・`nag_scale`・`nag_tau`・`nag_alpha`）をそのまま使う。H3 は `nag_enabled`・`negative_prompt`・`neg_method`・`vsf_scale` を動作として読み、ワーカーへは LTX と同じ形の `nag: {negative_prompt, method, vsf_scale}` を `nag_enabled` のときだけ渡す。NAG の強さの 3 欄は VSF では効かない従属欄である。
+- **NAG 方式は 422**: `neg_method="nag"`（既定値）は、単発でも連結でも 422 `FEATURE_UNSUPPORTED`（機能名 `nag`）で断る。`detail` は「MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を "vsf" にしてください）。」の 1 文で、単発と連結で同じ文を使う。
+- **`nag` は `unsupported_features` に残る**: 意味は「NAG 方式が使えない」である。配信の一覧は拒否表から導くので、`nag` の行が NAG 方式だけを断る形になっても機能名は残り、操作パネルはこれを読んで NAG のラジオだけを閉じる。
+
+### 既定値と範囲（仮）
+
+`vsf_scale` の既定 1.5・範囲 0〜10 は LTX と共有の値で、H3 には仮の値として使っている（H3 だけの範囲は作らない）。操作パネルのスライダーと VSF のラジオのヒント「実用域は scale 1.5〜5」も LTX の値のままである。**H3 の実用域は較正していない。** オーナーの目視の裁定は「効く」で、既定値と最大値はその実験では決めなかった（記録簿 §201.12）。較正は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-278。H3 の m が LTX より小さいことと、NAG と VSF の使い分けは [`VSF_README_NOTES.md`](VSF_README_NOTES.md) の H3 の節。
+
+### 操作パネル
+
+共有のネガティブプロンプトのアコーディオンは H3 でも操作できる。機能名 `nag` が閉じるのは NAG のラジオだけで、マウスを載せると「このベースモデルでは NAG 方式は使えません（VSF 方式だけ使えます）。」が出る（裁定 35・88 の更新）。チェック・本文・VSF のラジオ・スライダーはそのまま使える。NAG 方式を持たないベースモデルを読み込むと、保存されている方式を 1 回だけ VSF に書き換える（一方向。LTX に戻しても NAG へは戻さない）。要求の本文は LTX と同じ欄を運び、本文が空のまま有効にすると Generate が止まる規則も LTX と同じである。Retake の画面は負のプロンプトを送らない（LTX でも同じ）。判断の詳細はフロントエンド `Docs/DEVLOG.md` §165。
+
+### 採らなかった案
+
+先行事例（hako-mikan 氏の negpip と BenderBlender 氏の NAG 版）と、採らなかった案（負の行の置き方の別案・query を分ける変種・VSF 論文の MMDiT 向けの形・正と負を 1 回で符号化する案など）は記録簿 §201.3・§201.4 にある。連結でクリップごとに負を符号化する案は、結果が同じで、テキストエンコーダーの読み直しをクリップの数だけ繰り返すので採らなかった。H3 だけ既定値やヒント文を変える案は、例外を増やし、較正の前に決める根拠も無いので採らなかった。
+
+
 ---
 
 ## 4. 推論の段と常駐
@@ -1060,6 +1107,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | `h3_lora_format.py`（リポジトリ直下・torch 非依存） | LoRA の鍵の写像と「対応・非対応」の判定。アプリとワーカーが同じ関数を import する（§6.6） |
 | `engine_h3/lora.py` | LoRA の読み込み・付け外し（hook と buffer）・FP32 の加算（§6.6） |
 | `engine_h3/lowvram.py` | VRAM 16GB mode の経路（§6.5）。`dit.py` の既存関数をヘッド群・行の塊ごとに呼ぶだけで、新しい計算は持たない |
+| `engine_h3/vsf.py` | ネガティブプロンプトの VSF（torch だけに依存）。負の行の V の反転 `flip_values`（`dit.py` と `lowvram.py` の両方の注意が同じ関数を呼ぶ）と、計測 m の `H3VsfProbe`（§3.5） |
 | `engine_h3/rope.py` | 3 軸 RoPE・キーフレームの時間座標 `keyframe_t`（§3）・参照の行の座標と時刻の積み上げ（`RefShape`・`build_coords` の `refs`。§3.2） |
 | `engine_h3/text_encoder.py` | Qwen3-VL（文章側 50 層＋I2V の画像読み取り部〔vision tower〕。正規化前の隠れ状態を出す）・層ごとの直接読み・トークン列の書式（§3・§4）・テキスト側の注意（`h3_text_attention`＝問い合わせ 512 行ずつの math 固定の `blocked_causal_attention`。最も高い塊から計算する。名前 `nz_h3_blocked_math` で `build_config` が登録する）・埋め込み表と視覚の塔の早期解放（`install_drop_after_forward_hooks`）（裁定 83・裁定 93・§182） |
 | `engine_h3/scheduler.py` | σ の列と Euler の 1 ステップ |
@@ -1167,6 +1215,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | 参照付きの連結（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-264。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §186、操作パネルはフロントエンド `Docs/DEVLOG.md` §154） | エンジン（クリップのループに参照の段）・アプリ（スキーマ・404・系統の規則・LTX の 422・ワーカーへのペイロード・記録）・操作パネル（クリップごとの Reference アコーディオン）の 3 本を並行で作った。差分のレビュー・機械の門・GPU の門の結果は記録簿 §186（裁定 87・§3.3） |
 | V2V と冒頭画像の連結（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-121。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193、操作パネルはフロントエンド `Docs/DEVLOG.md` §160） | 弾 1＝幾何・エンジン・ワーカー、弾 2＝API・アダプタ・系統の規則、弾 3＝操作パネル、弾 4＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §193（裁定 90・§3.3） |
 | Retake（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200、操作パネルはフロントエンド `Docs/DEVLOG.md` §163） | 弾 1＝幾何、弾 2＝エンジンとワーカー、弾 3＝API・アダプタ・モック・配信、弾 4＝操作パネル、弾 5＝MCP、弾 6＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §200（裁定 96・§3.4） |
+| ネガティブプロンプト（VSF。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-127。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202、操作パネルはフロントエンド `Docs/DEVLOG.md` §165） | 第 1 弾＝単発の最小実装と目視の実験（記録簿 §201）、第 2 弾＝連結と Retake への配線・操作パネル・文書（同 §202。§3.5） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。
@@ -1183,7 +1232,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 - Hybrid（FL2VA と Ref2VA を混ぜた配布物）の対応の保証。Hybrid は SHA-256 が既知のどれとも一致しないので種別なしになり、① FL2VA の注意と ② Ref2VA の注意は出さずに動く（参照も送る。§3.2。③「参照ファイルがありません。」は重みの種別に関係なく、Enable がオンでカードが 0 件なら出る）。オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。
 - Ref2VA のうち次のもの（§3.2）: MCP と Gradio の受け口（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-259）・参照動画の音声・参照画像の `max`（短辺 2048）の大きさ・参照の行数の上限。
-- 画角拡張・NAG／VSF
+- 画角拡張・NAG
 - 連結の限界は §3.3 の「既知の限界・範囲外」、Retake の限界は §3.4 の「既知の限界」を参照
 - A2V のうち次のもの（§3.1）: V2A（映像から音声）の API と UI・映像のマスクの公開・音声の切り出しの引数・行ごとに違う値や区間のマスク・映像のマスクのパッチ単位化・バッチ A2V と MCP の `plan_a2v_batch` の H3 対応。Gradio の H3 の A2V は触っていない（Gradio の H3 の整理は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243。Gradio は知らない機能名と知らない `constraints` のキーを捨てるので、影響は無い）
 

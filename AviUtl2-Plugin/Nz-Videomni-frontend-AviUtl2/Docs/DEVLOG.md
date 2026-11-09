@@ -6225,6 +6225,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 新規: `NagAccordion.test.tsx`（NAG のラジオだけ灰色・label の `title`・他の部品は操作できる・帯と `field-reserved` が無い・プロパティなしなら `title` なし）、`AppShell.minimaxH3.test.tsx`（LTX で NAG → H3 で VSF・LTX 2.3 に戻しても VSF のまま・NAG のラジオは再び操作できる）、`mockBridge.h3.test.ts`（H3 の `/generate` と `/generate/chain` で方式の省略と `"nag"` は 422 `nag`・`"vsf"` は 202・LTX 2.3 の NAG は両方で 202 のまま）。
 - 門: `npm run typecheck`・`npx vitest run --exclude "**/backend.integration.test.ts"`（181 ファイル・3,653 件）・`npm run lint` に合格。
 - オーナーの実機確認は、バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-127 で扱います。
+- （2026-11-10 追記）オーナーの実機確認の 7 項目はすべて合格し、バックエンド台帳の 1-127 は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) へクローズしました。結果はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §202.11。
 
 ## 166. MiniMax H3 の Chained の long a2v〔長い音声から口の動きを合わせる連結〕 — 長い音声のカードの「割り当て」・各クリップの Audios カードに同じ音声と担当区間のバッジ・クリップの自動の追加と縮小・触ったカードだけ確認・Generate を止める理由・右クリック #18（バックエンド台帳 `PENDING_TASKS.md` §1-120。2026-11-09）
 

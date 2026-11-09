@@ -1,0 +1,3712 @@
+{
+  "script": "h3_vsf_calib.py",
+  "plan": "台帳 §3-278・記録簿 §203（条件の正本は calib_plan.json）",
+  "jobs": {
+    "A_off": {
+      "label": "A_off",
+      "stage": "A",
+      "scale": null,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": null,
+      "status": "copied",
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-2026-11-09\\visual\\T0",
+      "seconds_wall": 80.0,
+      "generation_time_seconds": 78.51,
+      "peak_vram_reserved_mb": 7648,
+      "peak_vram_mb": 6377,
+      "attention_used": "sage",
+      "vsf": null,
+      "negative_tokens": null,
+      "sha256": "d5b3952f34d4f238524190dc4302af6c587864d89cfec03b8bceb2f79610a929",
+      "error": null
+    },
+    "A_s0": {
+      "label": "A_s0",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s0",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 0.0・対照（負の行は 1.5 などと同じ配置で、反転した値だけをゼロ）",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 0.0
+      },
+      "started_at": "2026-11-09T11:03:03+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "cc021093-cde7-40c5-adec-6803dc42bfd6",
+      "wait": {
+        "calls": 2,
+        "seconds": 105.0,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "encode",
+            "current_step": null
+          },
+          {
+            "t": 75.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 105.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "cc021093-cde7-40c5-adec-6803dc42bfd6",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:03:03Z",
+        "started_at": "2026-11-09T02:03:03Z",
+        "completed_at": "2026-11-09T02:04:46Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 0.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/cc021093-cde7-40c5-adec-6803dc42bfd6/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 1638412,
+          "generation_time_seconds": 103.39,
+          "seed_used": 42,
+          "output_path": "outputs/cc021093-cde7-40c5-adec-6803dc42bfd6/output.mp4",
+          "metadata_path": "outputs/cc021093-cde7-40c5-adec-6803dc42bfd6/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 25.01500000001397
+      },
+      "seconds_wall": 105.1,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=0.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\cc021093-cde7-40c5-adec-6803dc42bfd6\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=0.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s0\\cc021093-cde7-40c5-adec-6803dc42bfd6.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\cc021093-cde7-40c5-adec-6803dc42bfd6\\output.mp4",
+        "size_bytes": 1646762,
+        "clobbered": false
+      },
+      "sha256": "3afb1771e9f98383591fbb28f30f3cfeb187cb77408b214371cd6c871ea82046",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 0.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 103.39,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:04:48+09:00",
+      "stage": "A",
+      "scale": 0.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 103.39,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s1": {
+      "label": "A_s1",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s1",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 1.0・既定値の帯の下端",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 1.0
+      },
+      "started_at": "2026-11-09T11:04:48+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "bd5c535a-e350-46da-bdb2-e7672394dfcd",
+      "wait": {
+        "calls": 1,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 35.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 55.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "bd5c535a-e350-46da-bdb2-e7672394dfcd",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:04:48Z",
+        "started_at": "2026-11-09T02:04:48Z",
+        "completed_at": "2026-11-09T02:06:25Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 1.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/bd5c535a-e350-46da-bdb2-e7672394dfcd/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2010500,
+          "generation_time_seconds": 96.56,
+          "seed_used": 42,
+          "output_path": "outputs/bd5c535a-e350-46da-bdb2-e7672394dfcd/output.mp4",
+          "metadata_path": "outputs/bd5c535a-e350-46da-bdb2-e7672394dfcd/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 40.0
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=1.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\bd5c535a-e350-46da-bdb2-e7672394dfcd\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=1.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s1\\bd5c535a-e350-46da-bdb2-e7672394dfcd.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\bd5c535a-e350-46da-bdb2-e7672394dfcd\\output.mp4",
+        "size_bytes": 2018851,
+        "clobbered": false
+      },
+      "sha256": "37b1da69473162acc66a0640bacbb4cd0df6c67612e0b6f4df5b8224c69ea066",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 1.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 96.56,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:06:28+09:00",
+      "stage": "A",
+      "scale": 1.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 96.56,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s1.5": {
+      "label": "A_s1.5",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s1.5",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 1.5・いまの仮の既定値",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 1.5
+      },
+      "started_at": "2026-11-09T11:06:28+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "7a6643a3-fe31-48e7-ad02-f30c02d54639",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 50.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 90.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "7a6643a3-fe31-48e7-ad02-f30c02d54639",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:06:28Z",
+        "started_at": "2026-11-09T02:06:28Z",
+        "completed_at": "2026-11-09T02:08:07Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/7a6643a3-fe31-48e7-ad02-f30c02d54639/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 1913592,
+          "generation_time_seconds": 98.85,
+          "seed_used": 42,
+          "output_path": "outputs/7a6643a3-fe31-48e7-ad02-f30c02d54639/output.mp4",
+          "metadata_path": "outputs/7a6643a3-fe31-48e7-ad02-f30c02d54639/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 5.01500000001397
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=1.5) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\7a6643a3-fe31-48e7-ad02-f30c02d54639\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=1.5 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s1.5\\7a6643a3-fe31-48e7-ad02-f30c02d54639.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\7a6643a3-fe31-48e7-ad02-f30c02d54639\\output.mp4",
+        "size_bytes": 1921941,
+        "clobbered": false
+      },
+      "sha256": "c3e3b32b41619d9f1fc48a6cdf4d38d663502ab762ad1b6def2f68685ebc4f06",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 1.5,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.85,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:08:08+09:00",
+      "stage": "A",
+      "scale": 1.5,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.85,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s2": {
+      "label": "A_s2",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s2",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 2.0・既定値の帯の上端",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 2.0
+      },
+      "started_at": "2026-11-09T11:08:08+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "1798a325-fbb8-4ceb-b32c-7e9eb66bf59c",
+      "wait": {
+        "calls": 3,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 50.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 95.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "1798a325-fbb8-4ceb-b32c-7e9eb66bf59c",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:08:08Z",
+        "started_at": "2026-11-09T02:08:08Z",
+        "completed_at": "2026-11-09T02:09:47Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 2.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/1798a325-fbb8-4ceb-b32c-7e9eb66bf59c/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2242263,
+          "generation_time_seconds": 98.4,
+          "seed_used": 42,
+          "output_path": "outputs/1798a325-fbb8-4ceb-b32c-7e9eb66bf59c/output.mp4",
+          "metadata_path": "outputs/1798a325-fbb8-4ceb-b32c-7e9eb66bf59c/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 5.01500000001397
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=2.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\1798a325-fbb8-4ceb-b32c-7e9eb66bf59c\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=2.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s2\\1798a325-fbb8-4ceb-b32c-7e9eb66bf59c.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\1798a325-fbb8-4ceb-b32c-7e9eb66bf59c\\output.mp4",
+        "size_bytes": 2250611,
+        "clobbered": false
+      },
+      "sha256": "68b2cbcdfbb6e6a4c95ce2c8c0dd431cf2664c6df70096553cb3d0167eea5f4d",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 2.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.4,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:09:48+09:00",
+      "stage": "A",
+      "scale": 2.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.4,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s2.5": {
+      "label": "A_s2.5",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s2.5",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 2.5・帯と上限の間",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 2.5
+      },
+      "started_at": "2026-11-09T11:09:48+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "94e9f64e-555e-4172-bd46-a8956c9ee119",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 65.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "94e9f64e-555e-4172-bd46-a8956c9ee119",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:09:48Z",
+        "started_at": "2026-11-09T02:09:48Z",
+        "completed_at": "2026-11-09T02:11:26Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 2.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/94e9f64e-555e-4172-bd46-a8956c9ee119/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 1853221,
+          "generation_time_seconds": 98.01,
+          "seed_used": 42,
+          "output_path": "outputs/94e9f64e-555e-4172-bd46-a8956c9ee119/output.mp4",
+          "metadata_path": "outputs/94e9f64e-555e-4172-bd46-a8956c9ee119/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 30.014999999984866
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=2.5) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\94e9f64e-555e-4172-bd46-a8956c9ee119\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=2.5 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s2.5\\94e9f64e-555e-4172-bd46-a8956c9ee119.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\94e9f64e-555e-4172-bd46-a8956c9ee119\\output.mp4",
+        "size_bytes": 1861571,
+        "clobbered": false
+      },
+      "sha256": "ed6e64506c45f634aed593927ce8c15266d20fb1add388732ba8068464c4a4bd",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 2.5,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.01,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:11:28+09:00",
+      "stage": "A",
+      "scale": 2.5,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.01,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s3": {
+      "label": "A_s3",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s3",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 3.0・第 1 弾で背景が外国風になり始めた値",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 3.0
+      },
+      "started_at": "2026-11-09T11:11:28+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "c70001f0-f104-476b-84b2-d635fd3b3913",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 10.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 60.0,
+            "status": "running",
+            "progress": 0.27,
+            "stage": "stage1_denoise",
+            "current_step": 1
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "c70001f0-f104-476b-84b2-d635fd3b3913",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:11:28Z",
+        "started_at": "2026-11-09T02:11:28Z",
+        "completed_at": "2026-11-09T02:13:07Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 3.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/c70001f0-f104-476b-84b2-d635fd3b3913/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 1871544,
+          "generation_time_seconds": 98.97,
+          "seed_used": 42,
+          "output_path": "outputs/c70001f0-f104-476b-84b2-d635fd3b3913/output.mp4",
+          "metadata_path": "outputs/c70001f0-f104-476b-84b2-d635fd3b3913/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 40.0
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=3.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\c70001f0-f104-476b-84b2-d635fd3b3913\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=3.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s3\\c70001f0-f104-476b-84b2-d635fd3b3913.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\c70001f0-f104-476b-84b2-d635fd3b3913\\output.mp4",
+        "size_bytes": 1879894,
+        "clobbered": false
+      },
+      "sha256": "dc0d1845d59a40ccd46da127cad6936921041e06ea239ec285dd347a5c4c0d7c",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 3.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.97,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:13:08+09:00",
+      "stage": "A",
+      "scale": 3.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.97,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s4": {
+      "label": "A_s4",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s4",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 4.0・上限の候補（段 C の比較の相手）",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 4.0
+      },
+      "started_at": "2026-11-09T11:13:08+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "59ed8691-b769-4c6c-96e4-a11de769ed6c",
+      "wait": {
+        "calls": 1,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 40.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 60.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 95.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "59ed8691-b769-4c6c-96e4-a11de769ed6c",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:13:08Z",
+        "started_at": "2026-11-09T02:13:08Z",
+        "completed_at": "2026-11-09T02:14:47Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 4.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/59ed8691-b769-4c6c-96e4-a11de769ed6c/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2355474,
+          "generation_time_seconds": 98.71,
+          "seed_used": 42,
+          "output_path": "outputs/59ed8691-b769-4c6c-96e4-a11de769ed6c/output.mp4",
+          "metadata_path": "outputs/59ed8691-b769-4c6c-96e4-a11de769ed6c/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 0.0
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=4.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\59ed8691-b769-4c6c-96e4-a11de769ed6c\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=4.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s4\\59ed8691-b769-4c6c-96e4-a11de769ed6c.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\59ed8691-b769-4c6c-96e4-a11de769ed6c\\output.mp4",
+        "size_bytes": 2363821,
+        "clobbered": false
+      },
+      "sha256": "503873d1a15599545c83ea3d0e8ce9c6b0904c577b7ec88926ddfc6c09d96ab6",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 4.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.71,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:14:48+09:00",
+      "stage": "A",
+      "scale": 4.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.71,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "A_s5": {
+      "label": "A_s5",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s5",
+      "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 5.0・上限の候補・先行事例の上限（段 C の比較の相手）",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 5.0
+      },
+      "started_at": "2026-11-09T11:14:48+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "a7428adc-9e97-4256-bc0f-26d0cd78ddd2",
+      "wait": {
+        "calls": 2,
+        "seconds": 110.1,
+        "samples": [
+          {
+            "t": 25.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 75.0,
+            "status": "running",
+            "progress": 0.69,
+            "stage": "stage1_denoise",
+            "current_step": 3
+          },
+          {
+            "t": 105.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 110.1,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "a7428adc-9e97-4256-bc0f-26d0cd78ddd2",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:14:48Z",
+        "started_at": "2026-11-09T02:14:48Z",
+        "completed_at": "2026-11-09T02:16:29Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 5.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/a7428adc-9e97-4256-bc0f-26d0cd78ddd2/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2230178,
+          "generation_time_seconds": 100.3,
+          "seed_used": 42,
+          "output_path": "outputs/a7428adc-9e97-4256-bc0f-26d0cd78ddd2/output.mp4",
+          "metadata_path": "outputs/a7428adc-9e97-4256-bc0f-26d0cd78ddd2/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 0.0
+      },
+      "seconds_wall": 110.1,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=5.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\a7428adc-9e97-4256-bc0f-26d0cd78ddd2\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=5.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\A_s5\\a7428adc-9e97-4256-bc0f-26d0cd78ddd2.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\a7428adc-9e97-4256-bc0f-26d0cd78ddd2\\output.mp4",
+        "size_bytes": 2238524,
+        "clobbered": false
+      },
+      "sha256": "6e1abebb0718700d7efca9f8abae0d18080b44cd0c107e5f98eec9cbca351843",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 5.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 100.3,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:16:39+09:00",
+      "stage": "A",
+      "scale": 5.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 100.3,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "B_s6": {
+      "label": "B_s6",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\B_s6",
+      "note": "段 B・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 6.0・最大値の上: 崩れ・逆転の位置",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 6.0
+      },
+      "started_at": "2026-11-09T11:18:09+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "17d9d133-c688-4758-967f-22c8b06e4a02",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.1,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 75.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 100.1,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "17d9d133-c688-4758-967f-22c8b06e4a02",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:18:09Z",
+        "started_at": "2026-11-09T02:18:09Z",
+        "completed_at": "2026-11-09T02:19:45Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 6.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/17d9d133-c688-4758-967f-22c8b06e4a02/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2283354,
+          "generation_time_seconds": 95.41,
+          "seed_used": 42,
+          "output_path": "outputs/17d9d133-c688-4758-967f-22c8b06e4a02/output.mp4",
+          "metadata_path": "outputs/17d9d133-c688-4758-967f-22c8b06e4a02/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 20.015999999974156
+      },
+      "seconds_wall": 100.1,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=6.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\17d9d133-c688-4758-967f-22c8b06e4a02\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=6.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\B_s6\\17d9d133-c688-4758-967f-22c8b06e4a02.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\17d9d133-c688-4758-967f-22c8b06e4a02\\output.mp4",
+        "size_bytes": 2291700,
+        "clobbered": false
+      },
+      "sha256": "ef4175578cdbc5efd902a295893d6a38f42e02b43a83984b2ca942184959c5d9",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 6.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 95.41,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:19:49+09:00",
+      "stage": "B",
+      "scale": 6.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 95.41,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "B_s8": {
+      "label": "B_s8",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\B_s8",
+      "note": "段 B・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 8.0・最大値の上: 崩れ・逆転の位置（第 1 弾の 8 は 11 行の負の文）",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 8.0
+      },
+      "started_at": "2026-11-09T11:19:50+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "6090cd2e-49ce-4306-ab52-bbff3c195e21",
+      "wait": {
+        "calls": 2,
+        "seconds": 105.0,
+        "samples": [
+          {
+            "t": 50.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 100.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 105.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "6090cd2e-49ce-4306-ab52-bbff3c195e21",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:19:50Z",
+        "started_at": "2026-11-09T02:19:50Z",
+        "completed_at": "2026-11-09T02:21:28Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 8.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/6090cd2e-49ce-4306-ab52-bbff3c195e21/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2003307,
+          "generation_time_seconds": 98.17,
+          "seed_used": 42,
+          "output_path": "outputs/6090cd2e-49ce-4306-ab52-bbff3c195e21/output.mp4",
+          "metadata_path": "outputs/6090cd2e-49ce-4306-ab52-bbff3c195e21/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 0.0
+      },
+      "seconds_wall": 105.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=8.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\6090cd2e-49ce-4306-ab52-bbff3c195e21\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=8.0 m_neg=0.000798 m_text=0.001957"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\B_s8\\6090cd2e-49ce-4306-ab52-bbff3c195e21.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\6090cd2e-49ce-4306-ab52-bbff3c195e21\\output.mp4",
+        "size_bytes": 2011653,
+        "clobbered": false
+      },
+      "sha256": "208554d6ddee815f85b28c9d744ff49204979fd4d8ad0773506e38ed7fc40355",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 8.0,
+        "m_neg": 0.0007975613752440681,
+        "m_text": 0.001957479160629256
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.17,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:21:35+09:00",
+      "stage": "B",
+      "scale": 8.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.17,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "R_s0": {
+      "label": "R_s0",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s0",
+      "note": "段 R・seed 43・1344×768×56・負の文 `blue clothes, cars`・scale 0.0・seed 43 の対照",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 43,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 0.0
+      },
+      "started_at": "2026-11-09T11:21:35+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "dc84534b-155f-487e-a1c0-3b73d29238d7",
+      "wait": {
+        "calls": 1,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 50.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "dc84534b-155f-487e-a1c0-3b73d29238d7",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:21:35Z",
+        "started_at": "2026-11-09T02:21:35Z",
+        "completed_at": "2026-11-09T02:23:14Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 0.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 43,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/dc84534b-155f-487e-a1c0-3b73d29238d7/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2055271,
+          "generation_time_seconds": 99.1,
+          "seed_used": 43,
+          "output_path": "outputs/dc84534b-155f-487e-a1c0-3b73d29238d7/output.mp4",
+          "metadata_path": "outputs/dc84534b-155f-487e-a1c0-3b73d29238d7/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 45.0
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=43 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=0.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\dc84534b-155f-487e-a1c0-3b73d29238d7\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=0.0 m_neg=0.000808 m_text=0.001847"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s0\\dc84534b-155f-487e-a1c0-3b73d29238d7.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\dc84534b-155f-487e-a1c0-3b73d29238d7\\output.mp4",
+        "size_bytes": 2063622,
+        "clobbered": false
+      },
+      "sha256": "5581a942a16c573cb5cbe4e9fdcfe0d79837502e53dc2f1f862db79f6662d596",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 0.0,
+        "m_neg": 0.0008078658388837669,
+        "m_text": 0.0018465454108219806
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 99.1,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 43,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:23:15+09:00",
+      "stage": "R",
+      "scale": 0.0,
+      "seed": 43,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 99.1,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "R_s1": {
+      "label": "R_s1",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s1",
+      "note": "段 R・seed 43・1344×768×56・負の文 `blue clothes, cars`・scale 1.0・seed 43 で既定値の帯を確かめる",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 43,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 1.0
+      },
+      "started_at": "2026-11-09T11:23:15+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "fe0e1f0c-9185-416d-80c4-53fdea0b01a0",
+      "wait": {
+        "calls": 3,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 50.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 95.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "fe0e1f0c-9185-416d-80c4-53fdea0b01a0",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:23:15Z",
+        "started_at": "2026-11-09T02:23:15Z",
+        "completed_at": "2026-11-09T02:24:52Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 1.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 43,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/fe0e1f0c-9185-416d-80c4-53fdea0b01a0/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 1936115,
+          "generation_time_seconds": 97.63,
+          "seed_used": 43,
+          "output_path": "outputs/fe0e1f0c-9185-416d-80c4-53fdea0b01a0/output.mp4",
+          "metadata_path": "outputs/fe0e1f0c-9185-416d-80c4-53fdea0b01a0/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 5.0
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=43 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=1.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\fe0e1f0c-9185-416d-80c4-53fdea0b01a0\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=1.0 m_neg=0.000808 m_text=0.001847"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s1\\fe0e1f0c-9185-416d-80c4-53fdea0b01a0.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\fe0e1f0c-9185-416d-80c4-53fdea0b01a0\\output.mp4",
+        "size_bytes": 1944467,
+        "clobbered": false
+      },
+      "sha256": "feb18d6bc89356a2b540e354e107d0b1ae5fce670444ef2be9833e133159938c",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 1.0,
+        "m_neg": 0.0008078658388837669,
+        "m_text": 0.0018465454108219806
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 97.63,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 43,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:24:55+09:00",
+      "stage": "R",
+      "scale": 1.0,
+      "seed": 43,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 97.63,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "R_s1.5": {
+      "label": "R_s1.5",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s1.5",
+      "note": "段 R・seed 43・1344×768×56・負の文 `blue clothes, cars`・scale 1.5・seed 43 で既定値の帯を確かめる",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 43,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 1.5
+      },
+      "started_at": "2026-11-09T11:24:55+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "ae7feec4-591d-4527-a8b8-38cad9924a91",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 40.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 90.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "ae7feec4-591d-4527-a8b8-38cad9924a91",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:24:55Z",
+        "started_at": "2026-11-09T02:24:55Z",
+        "completed_at": "2026-11-09T02:26:34Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 43,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/ae7feec4-591d-4527-a8b8-38cad9924a91/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2386111,
+          "generation_time_seconds": 99.48,
+          "seed_used": 43,
+          "output_path": "outputs/ae7feec4-591d-4527-a8b8-38cad9924a91/output.mp4",
+          "metadata_path": "outputs/ae7feec4-591d-4527-a8b8-38cad9924a91/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 10.01500000001397
+      },
+      "seconds_wall": 100.1,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=43 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=1.5) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\ae7feec4-591d-4527-a8b8-38cad9924a91\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=1.5 m_neg=0.000808 m_text=0.001847"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s1.5\\ae7feec4-591d-4527-a8b8-38cad9924a91.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\ae7feec4-591d-4527-a8b8-38cad9924a91\\output.mp4",
+        "size_bytes": 2394466,
+        "clobbered": false
+      },
+      "sha256": "a824f303198692ba9cd3606594c48f522dbb96ac510ad90ab093cdabdf57534a",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 1.5,
+        "m_neg": 0.0008078658388837669,
+        "m_text": 0.0018465454108219806
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 99.48,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 43,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:26:35+09:00",
+      "stage": "R",
+      "scale": 1.5,
+      "seed": 43,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 99.48,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "R_s2": {
+      "label": "R_s2",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s2",
+      "note": "段 R・seed 43・1344×768×56・負の文 `blue clothes, cars`・scale 2.0・seed 43 で既定値の帯を確かめる",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 43,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 2.0
+      },
+      "started_at": "2026-11-09T11:26:35+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "0e0542e4-c7d5-437d-98f5-fe7387dc315f",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 10.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 35.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 85.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "0e0542e4-c7d5-437d-98f5-fe7387dc315f",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:26:35Z",
+        "started_at": "2026-11-09T02:26:35Z",
+        "completed_at": "2026-11-09T02:28:14Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 2.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 43,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/0e0542e4-c7d5-437d-98f5-fe7387dc315f/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2362002,
+          "generation_time_seconds": 98.99,
+          "seed_used": 43,
+          "output_path": "outputs/0e0542e4-c7d5-437d-98f5-fe7387dc315f/output.mp4",
+          "metadata_path": "outputs/0e0542e4-c7d5-437d-98f5-fe7387dc315f/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 15.0
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=43 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=2.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\0e0542e4-c7d5-437d-98f5-fe7387dc315f\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=2.0 m_neg=0.000808 m_text=0.001847"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\R_s2\\0e0542e4-c7d5-437d-98f5-fe7387dc315f.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\0e0542e4-c7d5-437d-98f5-fe7387dc315f\\output.mp4",
+        "size_bytes": 2370356,
+        "clobbered": false
+      },
+      "sha256": "0d9a62d641514e56479a27afd33cb4b11f003f4ba34d34a27c04d49775c75c9d",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 2.0,
+        "m_neg": 0.0008078658388837669,
+        "m_text": 0.0018465454108219806
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 98.99,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 43,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:28:15+09:00",
+      "stage": "R",
+      "scale": 2.0,
+      "seed": 43,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 98.99,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "C_s1.5_N2": {
+      "label": "C_s1.5_N2",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\C_s1.5_N2",
+      "note": "段 C・seed 42・1344×768×56・負の文 `blue denim shirt, blue jacket, blue clothing, white car, vehicle, automobile`・scale 1.5・言い換え（同義語で厚くした負の文）。押す力の近い A_s4・A_s5 と比べる",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 56,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue denim shirt, blue jacket, blue clothing, white car, vehicle, automobile",
+        "vsf_scale": 1.5
+      },
+      "started_at": "2026-11-09T11:28:15+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "9a46c850-8b36-4890-bf75-5b2dbc05f2e6",
+      "wait": {
+        "calls": 2,
+        "seconds": 100.0,
+        "samples": [
+          {
+            "t": 35.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 85.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 100.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "9a46c850-8b36-4890-bf75-5b2dbc05f2e6",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:28:15Z",
+        "started_at": "2026-11-09T02:28:15Z",
+        "completed_at": "2026-11-09T02:29:52Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue denim shirt, blue jacket, blue clothing, white car, vehicle, automobile",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 56,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/9a46c850-8b36-4890-bf75-5b2dbc05f2e6/video",
+          "duration_seconds": 2.333,
+          "resolution": "1344x768",
+          "file_size_bytes": 2006443,
+          "generation_time_seconds": 97.16,
+          "seed_used": 42,
+          "output_path": "outputs/9a46c850-8b36-4890-bf75-5b2dbc05f2e6/output.mp4",
+          "metadata_path": "outputs/9a46c850-8b36-4890-bf75-5b2dbc05f2e6/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 15.01500000001397
+      },
+      "seconds_wall": 100.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=1.5) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\9a46c850-8b36-4890-bf75-5b2dbc05f2e6\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,46) scale=1.5 m_neg=0.001155 m_text=0.001909"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\C_s1.5_N2\\9a46c850-8b36-4890-bf75-5b2dbc05f2e6.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\9a46c850-8b36-4890-bf75-5b2dbc05f2e6\\output.mp4",
+        "size_bytes": 2014857,
+        "clobbered": false
+      },
+      "sha256": "f05120b94edcde70a1de6931075a0defc88b7a458be7e9d12467f2ffcbc2f0ba",
+      "vsf": {
+        "rows": [
+          30,
+          46
+        ],
+        "scale": 1.5,
+        "m_neg": 0.0011549661541404735,
+        "m_text": 0.0019089848940317161
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 97.16,
+        "peak_vram_reserved_mb": 7594,
+        "peak_vram_mb": 6374,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 16
+      },
+      "finished_at": "2026-11-09T11:29:55+09:00",
+      "stage": "C",
+      "scale": 1.5,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        56
+      ],
+      "negative": "blue denim shirt, blue jacket, blue clothing, white car, vehicle, automobile",
+      "generation_time_seconds": 97.16,
+      "peak_vram_reserved_mb": 7594,
+      "peak_vram_mb": 6374,
+      "attention_used": "sage",
+      "negative_tokens": 16
+    },
+    "L_s0": {
+      "label": "L_s0",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\L_s0",
+      "note": "段 D・seed 42・1344×768×124・負の文 `blue clothes, cars`・scale 0.0・長い尺の対照",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 0.0
+      },
+      "started_at": "2026-11-09T11:29:55+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "95ff995c-04ec-406f-b991-95cfe73e3dea",
+      "wait": {
+        "calls": 4,
+        "seconds": 180.0,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 90.0,
+            "status": "running",
+            "progress": 0.27,
+            "stage": "stage1_denoise",
+            "current_step": 1
+          },
+          {
+            "t": 120.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 175.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 180.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "95ff995c-04ec-406f-b991-95cfe73e3dea",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:29:55Z",
+        "started_at": "2026-11-09T02:29:55Z",
+        "completed_at": "2026-11-09T02:32:53Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 0.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/95ff995c-04ec-406f-b991-95cfe73e3dea/video",
+          "duration_seconds": 5.167,
+          "resolution": "1344x768",
+          "file_size_bytes": 3305066,
+          "generation_time_seconds": 178.34,
+          "seed_used": 42,
+          "output_path": "outputs/95ff995c-04ec-406f-b991-95cfe73e3dea/output.mp4",
+          "metadata_path": "outputs/95ff995c-04ec-406f-b991-95cfe73e3dea/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 5.014999999984866
+      },
+      "seconds_wall": 180.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=124 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=0.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\95ff995c-04ec-406f-b991-95cfe73e3dea\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=0.0 m_neg=0.000365 m_text=0.000852"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\L_s0\\95ff995c-04ec-406f-b991-95cfe73e3dea.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\95ff995c-04ec-406f-b991-95cfe73e3dea\\output.mp4",
+        "size_bytes": 3313428,
+        "clobbered": false
+      },
+      "sha256": "4ed78111f85427115cb74b7ea4d1d7727d713116275ee0e2eec8cd4a5e2cd3da",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 0.0,
+        "m_neg": 0.00036474987868600247,
+        "m_text": 0.0008521006176565038
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 178.34,
+        "peak_vram_reserved_mb": 7610,
+        "peak_vram_mb": 6390,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:32:55+09:00",
+      "stage": "D",
+      "scale": 0.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        124
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 178.34,
+      "peak_vram_reserved_mb": 7610,
+      "peak_vram_mb": 6390,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "L_s1.5": {
+      "label": "L_s1.5",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\L_s1.5",
+      "note": "段 D・seed 42・1344×768×124・負の文 `blue clothes, cars`・scale 1.5・長い尺で A_s1.5 より弱く効くか",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 1.5
+      },
+      "started_at": "2026-11-09T11:32:55+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "6e80936a-bed0-48ac-93c1-a431d6fe39a3",
+      "wait": {
+        "calls": 4,
+        "seconds": 185.0,
+        "samples": [
+          {
+            "t": 50.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 95.0,
+            "status": "running",
+            "progress": 0.48,
+            "stage": "stage1_denoise",
+            "current_step": 2
+          },
+          {
+            "t": 100.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 125.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 175.0,
+            "status": "running",
+            "progress": 0.9,
+            "stage": "decode",
+            "current_step": null
+          },
+          {
+            "t": 185.0,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "6e80936a-bed0-48ac-93c1-a431d6fe39a3",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:32:55Z",
+        "started_at": "2026-11-09T02:32:55Z",
+        "completed_at": "2026-11-09T02:35:55Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/6e80936a-bed0-48ac-93c1-a431d6fe39a3/video",
+          "duration_seconds": 5.167,
+          "resolution": "1344x768",
+          "file_size_bytes": 3595347,
+          "generation_time_seconds": 179.99,
+          "seed_used": 42,
+          "output_path": "outputs/6e80936a-bed0-48ac-93c1-a431d6fe39a3/output.mp4",
+          "metadata_path": "outputs/6e80936a-bed0-48ac-93c1-a431d6fe39a3/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 10.0
+      },
+      "seconds_wall": 185.0,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=124 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=1.5) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\6e80936a-bed0-48ac-93c1-a431d6fe39a3\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=1.5 m_neg=0.000365 m_text=0.000852"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\L_s1.5\\6e80936a-bed0-48ac-93c1-a431d6fe39a3.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\6e80936a-bed0-48ac-93c1-a431d6fe39a3\\output.mp4",
+        "size_bytes": 3603709,
+        "clobbered": false
+      },
+      "sha256": "252e6c14ea388cc04ae2a0269ae72cad1ddccffc28681d61aec64d24416a57ba",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 1.5,
+        "m_neg": 0.00036474987868600247,
+        "m_text": 0.0008521006176565038
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 179.99,
+        "peak_vram_reserved_mb": 7610,
+        "peak_vram_mb": 6390,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:36:00+09:00",
+      "stage": "D",
+      "scale": 1.5,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        124
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 179.99,
+      "peak_vram_reserved_mb": 7610,
+      "peak_vram_mb": 6390,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    },
+    "L_s3": {
+      "label": "L_s3",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\L_s3",
+      "note": "段 D・seed 42・1344×768×124・負の文 `blue clothes, cars`・scale 3.0・長い尺で A_s3 より弱く効くか",
+      "tool": "submit_generate",
+      "tool_args": {
+        "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "num_inference_steps": 4,
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "negative_prompt": "blue clothes, cars",
+        "vsf_scale": 3.0
+      },
+      "started_at": "2026-11-09T11:36:00+09:00",
+      "status": "completed",
+      "error": null,
+      "job_id": "948720f0-6413-4671-947f-31f654be0654",
+      "wait": {
+        "calls": 4,
+        "seconds": 185.1,
+        "samples": [
+          {
+            "t": 45.0,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          },
+          {
+            "t": 90.0,
+            "status": "running",
+            "progress": 0.27,
+            "stage": "stage1_denoise",
+            "current_step": 1
+          },
+          {
+            "t": 135.0,
+            "status": "running",
+            "progress": 0.69,
+            "stage": "stage1_denoise",
+            "current_step": 3
+          },
+          {
+            "t": 170.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 180.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 185.1,
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "current_step": null
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "948720f0-6413-4671-947f-31f654be0654",
+        "status": "completed",
+        "progress": 1.0,
+        "current_step": null,
+        "total_steps": null,
+        "stage": null,
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-09T02:36:00Z",
+        "started_at": "2026-11-09T02:36:00Z",
+        "completed_at": "2026-11-09T02:38:58Z",
+        "error": null,
+        "request": {
+          "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+          "negative_prompt": "blue clothes, cars",
+          "nag_enabled": true,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "vsf",
+          "vsf_scale": 3.0,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1344,
+          "height": 768,
+          "crop_output": null,
+          "num_frames": 124,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 42,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 0.8,
+              "audio_strength": null
+            }
+          ],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": null,
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": {
+          "video_url": "/api/v1/jobs/948720f0-6413-4671-947f-31f654be0654/video",
+          "duration_seconds": 5.167,
+          "resolution": "1344x768",
+          "file_size_bytes": 4092883,
+          "generation_time_seconds": 177.77,
+          "seed_used": 42,
+          "output_path": "outputs/948720f0-6413-4671-947f-31f654be0654/output.mp4",
+          "metadata_path": "outputs/948720f0-6413-4671-947f-31f654be0654/metadata.json"
+        },
+        "timed_out": false,
+        "waited_sec": 0.0
+      },
+      "seconds_wall": 185.1,
+      "worker_log_lines": [
+        "[h3_worker] generate: seed=42 1344x768 frames=124 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=3.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\948720f0-6413-4671-947f-31f654be0654\\output.mp4",
+        "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=3.0 m_neg=0.000365 m_text=0.000852"
+      ],
+      "saved": {
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\jobs\\L_s3\\948720f0-6413-4671-947f-31f654be0654.mp4",
+        "source_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs\\948720f0-6413-4671-947f-31f654be0654\\output.mp4",
+        "size_bytes": 4101246,
+        "clobbered": false
+      },
+      "sha256": "2f22df7dc48fb2537c7eab8cd4502e22774e606192906e05a918701d0736e47c",
+      "vsf": {
+        "rows": [
+          30,
+          34
+        ],
+        "scale": 3.0,
+        "m_neg": 0.00036474987868600247,
+        "m_text": 0.0008521006176565038
+      },
+      "vsf_where": "h3.vsf",
+      "metadata_summary": {
+        "attention_used": "sage",
+        "vram16_mode_used": "on",
+        "keep_resident_used": "off",
+        "generation_time_seconds": 177.77,
+        "peak_vram_reserved_mb": 7610,
+        "peak_vram_mb": 6390,
+        "seed_used": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "negative_tokens": 4
+      },
+      "finished_at": "2026-11-09T11:39:05+09:00",
+      "stage": "D",
+      "scale": 3.0,
+      "seed": 42,
+      "size": [
+        1344,
+        768,
+        124
+      ],
+      "negative": "blue clothes, cars",
+      "generation_time_seconds": 177.77,
+      "peak_vram_reserved_mb": 7610,
+      "peak_vram_mb": 6390,
+      "attention_used": "sage",
+      "negative_tokens": 4
+    }
+  },
+  "stages": {
+    "A": {
+      "pass": true,
+      "at": "2026-11-09T11:16:39+09:00"
+    },
+    "all/only:B_s6,B_s8,R_s0,R_s1,R_s1.5,R_s2,C_s1.5_N2,L_s0,L_s1.5,L_s3": {
+      "pass": true,
+      "at": "2026-11-09T11:39:05+09:00"
+    }
+  },
+  "runs": [
+    {
+      "started_at": "2026-11-09T11:02:40+09:00",
+      "args": {
+        "stage": "A",
+        "only": null,
+        "port": 18699,
+        "keep_server": true,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 3600.0,
+        "dry_run": false,
+        "selfcheck": false
+      },
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 39300,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\config.h3vsfcalib.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\config.h3vsfcalib.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\state.h3vsfcalib.json",
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\server.log",
+        "started_at": "2026-11-09T11:02:42+09:00"
+      },
+      "mcp_calls": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\logs\\mcp_calls_20261109_110246.json",
+      "mcp_env": {
+        "PYTHONUTF8": "1",
+        "LTX_MCP_BASE_URL": "http://127.0.0.1:18699",
+        "LTX_MCP_CONFIG": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\config.h3vsfcalib.yaml",
+        "LTX_MCP_OUTPUT_DIR": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs"
+      },
+      "tool_schema_check": {
+        "tool_count": 25,
+        "problems": [],
+        "ok": true
+      },
+      "status_before": {
+        "reachable": true,
+        "base_url": "http://127.0.0.1:18699",
+        "api_key_configured": false,
+        "pipeline_load_in_flight": false,
+        "status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": false,
+          "pipeline_type": null,
+          "state": "unloaded",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+          }
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          },
+          "wait_sec": 45
+        },
+        "responses": [
+          {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            },
+            "finished": true
+          }
+        ],
+        "status_polls": 1,
+        "last_status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": true,
+          "pipeline_type": "distilled",
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+          }
+        },
+        "seconds": 16.3
+      },
+      "finished_at": "2026-11-09T11:16:39+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-09T11:18:08+09:00",
+      "args": {
+        "stage": "all",
+        "only": "B_s6,B_s8,R_s0,R_s1,R_s1.5,R_s2,C_s1.5_N2,L_s0,L_s1.5,L_s3",
+        "port": 18699,
+        "keep_server": false,
+        "load_timeout_sec": 1200.0,
+        "job_timeout_sec": 3600.0,
+        "dry_run": false,
+        "selfcheck": false
+      },
+      "server": {
+        "port": 18699,
+        "reused": true,
+        "pid": 39300,
+        "cmdline": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\config.h3vsfcalib.yaml",
+        "stop": {
+          "at": "2026-11-09T11:39:06+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 53952,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 10788,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\config.h3vsfcalib.yaml"
+            }
+          ],
+          "taskkill": "����: PID 53952 �̃v���Z�X (PID 39300 �̎q�v���Z�X) ���I�����܂����B\n����: PID 10788 �̃v���Z�X (PID 39300 �̎q�v���Z�X) ���I�����܂����B\n����: PID 39300 �̃v���Z�X (PID 55924 �̎q�v���Z�X) ���I�����܂����B",
+          "descendants_killed_after": []
+        }
+      },
+      "mcp_calls": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\logs\\mcp_calls_20261109_111809.json",
+      "mcp_env": {
+        "PYTHONUTF8": "1",
+        "LTX_MCP_BASE_URL": "http://127.0.0.1:18699",
+        "LTX_MCP_CONFIG": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\config.h3vsfcalib.yaml",
+        "LTX_MCP_OUTPUT_DIR": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-calib-2026-11-09\\_rt\\outputs"
+      },
+      "tool_schema_check": {
+        "tool_count": 25,
+        "problems": [],
+        "ok": true
+      },
+      "status_before": {
+        "reachable": true,
+        "base_url": "http://127.0.0.1:18699",
+        "api_key_configured": false,
+        "pipeline_load_in_flight": false,
+        "status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": true,
+          "pipeline_type": "distilled",
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 8,
+            "failed": 0
+          }
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          },
+          "wait_sec": 45
+        },
+        "responses": [
+          {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            },
+            "finished": true
+          }
+        ],
+        "status_polls": 1,
+        "last_status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": true,
+          "pipeline_type": "distilled",
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 8,
+            "failed": 0
+          }
+        },
+        "seconds": 0.0
+      },
+      "unload": {
+        "pipeline_loaded": false,
+        "state": "unloaded"
+      },
+      "finished_at": "2026-11-09T11:39:07+09:00",
+      "exit_code": 0
+    }
+  ]
+}

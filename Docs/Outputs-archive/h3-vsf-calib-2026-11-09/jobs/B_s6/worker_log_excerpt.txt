@@ -1,0 +1,20 @@
+[h3_worker] generate: seed=42 1344x768 frames=56 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=vsf(scale=6.0) -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-vsf-calib-2026-11-09\_rt\outputs\17d9d133-c688-4758-967f-22c8b06e4a02\output.mp4
+[h3_worker] engine_h3.text_encoder: H3 TE config: {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}
+[h3_worker] engine_h3.text_encoder: H3 TE built (weights are read during encode): {'num_layers_file': 50, 'num_layers_built': 50, 'int8_linears': 350, 'tensors_planned': 901, 'vision_tensors_in_file': 351, 'rope': {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}, 'extra_special_tokens': {'ids': {'<d>': 151669, '</d>': 151670, '<|cutoff|>': 151671, '<|lyrics_start|>': 151672, '<|lyrics_end|>': 151673, '<|caption_start|>': 151674, '<|caption_end|>': 151675}, 'added_here': False}, 'seconds': 0.31}
+[h3_worker] engine_h3.text_encoder: H3 TE encode (direct read): {'read_gib': 24.17, 'read_seconds': 17.54, 'layers_read': 50, 'encode_seconds': 17.65, 'tokens': 30, 'vision_tokens': 0, 'vision_tokens_per_image': []}
+[h3_worker] engine_h3.text_encoder: H3 TE encode (direct read): {'read_gib': 24.17, 'read_seconds': 8.31, 'layers_read': 50, 'encode_seconds': 8.42, 'tokens': 4, 'vision_tokens': 0, 'vision_tokens_per_image': []}
+[h3_worker] encode: 30 text tokens (negative prompt: 4 tokens)
+[h3_worker] engine_h3.sft_load: sft_load: skipped 200 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 732 tensors, 19.53 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors in 11.4s
+[h3_worker] denoise: LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors x0.8 (208 pairs, 0 skipped)
+[h3_worker] denoise: 48 non-block tensors to cuda; 50 blocks stay on CPU
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 50 blocks, keeping 4/50 on cuda
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch ready: 50 blocks, 20348 MB of CPU masters, largest block 407.0 MB, window 4, arenas ring of 6 x 407.0 MB (held)
+[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[30,34) scale=6.0 m_neg=0.000798 m_text=0.001957
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 1: 50 issued, 1 sync miss(es), 8.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 2: 50 issued, 1 sync miss(es), 9.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 3: 50 issued, 1 sync miss(es), 9.4 ms waiting on pinned slots
+[h3_worker] engine_h3.sft_load: sft_load: skipped 121 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_video_vae_fp16.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 441 tensors, 4.51 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_video_vae_fp16.safetensors in 1.9s
+[h3_worker] engine_h3.sft_load: sft_load: skipped 138 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 779 tensors, 0.24 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors in 0.1s

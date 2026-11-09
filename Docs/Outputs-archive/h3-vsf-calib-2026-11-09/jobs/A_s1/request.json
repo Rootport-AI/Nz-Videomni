@@ -1,0 +1,28 @@
+{
+  "tool": "submit_generate",
+  "arguments": {
+    "prompt": "A Japanese woman in casual clothes walks toward the camera along a city street and smiles, reaching one hand toward the viewer; steady camera, natural daylight.",
+    "width": 1344,
+    "height": 768,
+    "num_frames": 56,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "attention_backend": "sage",
+    "vram16_mode": true,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ],
+    "num_inference_steps": 4,
+    "nag_enabled": true,
+    "neg_method": "vsf",
+    "negative_prompt": "blue clothes, cars",
+    "vsf_scale": 1.0
+  },
+  "note": "段 A・seed 42・1344×768×56・負の文 `blue clothes, cars`・scale 1.0・既定値の帯の下端",
+  "remark": "MCP の道具に渡した引数。サーバーが受けた本文は metadata.json の request"
+}

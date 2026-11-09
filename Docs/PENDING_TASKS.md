@@ -78,6 +78,22 @@
 - [ ] 合格なら dev を main へ `--no-ff` でマージ。
 - [ ] Retake の画面からも負を送るかどうか（LTX でも送っていない。要るなら別に起票）。
 
+### 3-278. MiniMax H3 の VSF の実用域の較正（既定値と最大値の確定）（起票：2026-11-09）
+
+- **概要**: VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕の既定値とスライダーの最大値を決めるため、scale・seed・負の文の言い換え・長い尺を変えた 18 本を生成し、Hugging Face の非公開データセット `Rootport/Nz-LTX23-eval-clips` の `round12-h3-vsf-calib/` に一覧の画像 5 枚と一緒に上げた。数値は保管庫の [`Outputs-archive/h3-vsf-calib-2026-11-09/VISUAL_TABLE.md`](Outputs-archive/h3-vsf-calib-2026-11-09/VISUAL_TABLE.md)、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §203。いまの値は LTX と共有の仮の値（API の `vsf_scale` 既定 1.5・0〜10）。
+- **出典**: オーナー所見 2026-11-09（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201.12）、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §203。
+
+#### オーナーの目視（HF `round12-h3-vsf-calib`）
+
+- [ ] `sheet_A`／`sheet_R` で、青い服と車が消える最小の scale を見る（seed 42 と 43 の両方）→ 既定値の候補。
+- [ ] `sheet_B` で、正の場面（日本らしい街路・歩く・微笑む・手を伸ばす）が保たれる最大の scale を見る → スライダーの最大値の候補。
+- [ ] `sheet_C` で、言い換えの負の文の本 `C_s1.5_N2` と、押す力の近い `A_s2`／`A_s2.5` を見比べる → ヒント文に「言い換え」を足すか。
+- [ ] `sheet_D` で、長い尺（124 フレーム）の効きを見る（対照の scale 0 に負の要素が写っていない点に注意）→ 再試験の要否。
+
+#### オーナー判断待ち
+
+- [ ] 既定値・スライダーの最大値・ヒント文を決める（値が LTX と違えば、ベースモデルごとの範囲の仕組みの要否も）→ 別の計画で操作パネルと文書へ。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
@@ -191,12 +207,6 @@
 - **概要**: [`Outputs-archive/h3-vram16-2026-10-18/measure_h3_vram.py`](Outputs-archive/h3-vram16-2026-10-18/measure_h3_vram.py) は、メモリ確保の履歴を記録するとき、例外を受けた後に `snapshot_error.pickle` を書きます。その前にノイズ除去の `finally`（上限を外す・受け皿を返す・`empty_cache`）が走るので、書かれるのは OOM の瞬間ではなく後片付けの後の状態です。原本の README（と台本の説明）に注記するか、台本に OOM の observer（割り当て器が OOM を投げる直前に呼ばれる仕組み）を足すかを決めます。
 - **判断材料**: observer を足した写しとの差分は [`Outputs-archive/comfort-calib-h3-ref-2026-11-03/mem_history/harness_copy.diff`](Outputs-archive/comfort-calib-h3-ref-2026-11-03/mem_history/harness_copy.diff)。状態の違いの実例は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.14 の 3。
 - **出典**: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-122（参照つきの快適上限の較正）の仕組みの考察。オーナー指示 2026-11-03。
-
-#### 3-278. MiniMax H3 の VSF の実用域の較正（既定値と最大値の確定）（起票：2026-11-09）
-
-- **概要**: 2026-11-09 の目視では VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕は効くが、既定値と最大値は決められなかった（負に挙げた要素のうち「black hair」は「Japanese woman」と結びつきが強く消えず、他は元の動画に登場していなかった。所見は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201.12）。次の実験は、元の動画に写っているもの（例: 青い服）を負に挙げて、消える scale と背景の雰囲気（日本らしい町並み）が保たれる scale を見る。現在の値は LTX と共有の仮の値（API の `vsf_scale` 既定 1.5・0〜10）。
-- **出典**: オーナー所見 2026-11-09（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201.12）。
-- **状態**: 将来の改修項目（着手はオーナー判断待ち）。
 
 ### 研究課題（上の改修項目より優先度が下）
 

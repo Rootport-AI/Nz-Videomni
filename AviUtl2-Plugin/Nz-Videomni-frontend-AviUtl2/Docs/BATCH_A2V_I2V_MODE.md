@@ -6,7 +6,7 @@
 
 - 作成: 2026-09-15
 - 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152（起票時は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-30）。LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
-- 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。§2.11（D13）は実機ゲートG1〜G4に合格してクローズしました（CLOSED §3-153）。§2.8 のプロンプトの条件は 2026-10-06 に追加しました（CLOSED §3-220。[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.24 G12 合格）。
+- 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。§2.11（D13）は実機ゲートG1〜G4に合格してクローズしました（CLOSED §3-153）。§2.8 のプロンプトの条件は 2026-10-06 に追加しました（CLOSED §3-220。[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.24 G12 合格）。§2.12（MiniMax H3 の経路）は 2026-11-09 に追加しました（バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-126。実装は [`DEVLOG.md`](DEVLOG.md) §167）。
 
 **用語**: 本書では「**i2v**（画像1枚から動画を作るモード）」「**a2v**（音声から口パク動画を作るモード）」という略称をそのまま使います。どちらもこのアプリが以前から持っている生成モードの呼び名で、i2vはImage-to-Video、a2vはAudio-to-Videoの略です。
 
@@ -43,7 +43,8 @@
 4. **行画像の生成強度**は、a2v・i2vのどちらのモードでも同じ規則になりました。**Create画面冒頭のキーフレームカード**（「Shared」を選んだ行が参照するのと同じカード）にスライダー値があればその値を、無ければ既定の0.8を使います。**この規則は今回、バッチa2vの行画像にも及びました**——これまでバッチa2vの行画像は強度1.0で固定でしたが、今回からSharedと同じ値を使うように変わっています（詳しくは§2.5）。
 5. **「Shared」の意味は変わりません。** 画像ドロップダウンの先頭は常に「Shared」で、これを選んだ行はCreate画面のKEYFRAMESカードをそのまま使います。KEYFRAMESが空の状態でSharedの行がある場合、開始できずに既存の警告が出るのも従来どおりです。
 6. **`chunked_upsample`（省メモリの時間分割アップサンプル）チェックボックスは、i2vモードでは灰色になります。** i2vの1行は単発の`POST /generate`で、そもそも時間分割アップサンプルの工程を持たないためです。
-7. **バッチパネルは、仕組みのうえでは両方のベースモデルで動きます（D10）。** パネルが灰色になるかどうかは、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるかどうかだけで決まります（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5でも動作し、今回追加したi2vモードも同じゲートに乗るぶん理屈のうえでは動作します。** ただし**今回の実機ゲートG1〜G12はLTX 2.3だけで実施しました**——LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
+7. **バッチパネルは、仕組みのうえでは両方のベースモデルで動きます（D10）。** パネルが灰色になるかどうかは、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるかどうかだけで決まります（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5でも動作し、今回追加したi2vモードも同じゲートに乗るぶん理屈のうえでは動作します。** ただし**今回の実機ゲートG1〜G12はLTX 2.3だけで実施しました**——LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。**MiniMax H3 は`unsupported_features`に`a2v`を載せますが、単発のA2Vの規約`constraints.source_audio`を配るので、パネルは開きます**（2026-11-09から。§2.12）。
+8. **MiniMax H3 でも、a2v・i2vの両モードが使えます**（2026-11-09から）。H3では両モードとも各行を単発の`POST /generate`へ送り、a2vの行は音声を`source_audio`として添えます。行のフレーム数・開始の条件・送る中身はH3の規則に従います（§2.12）。
 
 ## 2. 決まったこと
 
@@ -147,7 +148,7 @@ i2v行は`POST /api/v1/generate`（単発生成と同じエンドポイント）
 - `loras`（1件以上あるときだけ）
 - `conditioning_images`（行の画像またはSharedの画像。無ければ省略）
 
-**送らないフィールド**: `source_audio`、`stage2_window`、`pipeline`、`num_inference_steps`、`guidance_scale`、`overlap_frames`、`overlap_strength`、`chunked_upsample`、`clips`。これらはいずれもチェーン生成専用か、非蒸留モデル専用のフィールドで、i2v行には存在しません。`crop_output` は Create画面の設定を継承して、ONのときだけ送ります（§2.11）。
+**送らないフィールド**: `source_audio`、`stage2_window`、`pipeline`、`num_inference_steps`、`guidance_scale`、`overlap_frames`、`overlap_strength`、`chunked_upsample`、`clips`。これらはいずれもチェーン生成専用か、非蒸留モデル専用のフィールドで、i2v行には存在しません（MiniMax H3 では`num_inference_steps`などのサンプリングの値を送り、行画像の`strength`を送りません。§2.12）。`crop_output` は Create画面の設定を継承して、ONのときだけ送ります（§2.11）。
 
 ### 2.10 共用している部品（D12）
 
@@ -161,6 +162,20 @@ i2v行は`POST /api/v1/generate`（単発生成と同じエンドポイント）
 - **a2v・i2vのどちらのモードにも効きます。** a2v（`POST /generate/chain`）はクロップがOFFのときも従来どおり`crop_output: null`を明示して送り、i2v（`POST /generate`）はONのときだけ`crop_output`を`height`の直後に載せ、OFFならキーごと省略します。サーバーにとってこの2つは等価です（`crop_output`の既定は「無し」）。見え方が違うのは、i2vの送信本文がCreate画面の単発生成（`toGenerateRequest`）とバイト単位で一致することをテストで固定しているためです。
 - **Create画面のクロップが不正（生成サイズ超・空欄・32未満など）だと、バッチは開始できません。** 判定はCreate・Chainと同じ`isCropOutputValid`で、文言もCreate画面の「クロップサイズが生成サイズよりも大きいか、もしくは空欄です。」を借ります。2026-09-16からクロップ欄は自由入力なので、範囲外や空欄を直接打った場合も、クロップを設定したあとに生成サイズを縮めた場合も、同じゲートに掛かります。
 - **Chain画面のバッチi2v-longは対象外です。** こちらはChain画面の送信本文をテンプレートとして丸ごと継承する作りで、クロップも、開始ゲート（Chain画面の`validityReasons`から`promptEmpty`と素材系のコードを除いたものを`chainBlockReasons`として出す。正本は[`BATCH_I2V_WORKORDER.md`](BATCH_I2V_WORKORDER.md) §6.1）も、以前から効いています。
+
+### 2.12 MiniMax H3 の経路（2026-11-09。バックエンド台帳 §1-126）
+
+**結論: MiniMax H3 では、a2v の行も i2v の行も単発の`POST /api/v1/generate`へ送ります。** a2v の行の音声は常に 1 クリップに収まる長さだけを使う（収まらない行は従来どおり Skip）ので、連結を使う理由がありません。LTX のバッチは何も変わりません（送信本文は従来どおり）。
+
+- **パネルが開く条件**: `GET /models`の`constraints.source_audio`（単発の A2V の規約）があれば開きます。H3 は`unsupported_features`に`a2v`を載せますが、この規約が優先します（`featureScope.ts`の`batchA2vDisabledFor`の第 2 引数）。規約の意味はバックエンド[`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.2b (e)・(f)。
+- **a2v の行のフレーム数**: 音声が覆う 17n+5 の最大の値です（Create 画面の A2V カードと同じ規則）。長すぎる行の Skip（`over-cap`）は「上限を付けずに格子へ丸めた長さが、min(Create 画面の DURATION, H3 の上限) を超える」ときで、走行開始の再判定（§2.4）も同じ式を使います。
+- **開始の条件（§2.8）**: i2v の行の DURATION は 17n+5 と H3 の上下限で、幅と高さは 32 の倍数で判定します（LTX は 8n+1・64 の倍数のまま）。解像度の警告の文は倍数の数字を差し込みます。
+- **a2v の行が送るもの**: §2.9 の i2v の行と同じ並びに、次の 2 つを足したものです。
+  - `source_audio {audio_id, strength}`（`conditioning_images`の後ろ）。`strength`は Create 画面の A2V カードの Strength で、走行開始（`start()`）の時点で凍結します。
+  - サンプリングの 3 値（`num_inference_steps`・`shift_video`・`shift_audio`。`seed`の直後）。Create 画面のスライダーの値で、i2v の行にも付きます。
+- **送らないもの（a2v・i2v の両方）**: 行画像の`strength`（H3 にはキーフレームの強度が無い。§2.5 の規則は H3 では使いません）と、LoRA の`audio_strength`（H3 の LoRA は強度が 1 つ）。どちらも Create 画面の単発の送信と中身をそろえるためです。
+- **短すぎる音声の行**: H3 の下限（22 フレーム＝約 0.92 秒）に届かない音声の行は、新しい Skip の理由を足さず、サーバーの 422 で`Failed`になります（`error`列の文言で分かります）。Skip の理由の語彙は 2 つの GUI の共通契約（バックエンド[`BATCH_A2V_CSV_SPEC.md`](../../../Docs/BATCH_A2V_CSV_SPEC.md)）のためで、既知の限界です。
+- 実装の判断と採らなかった案は[`DEVLOG.md`](DEVLOG.md) §167、裁定はバックエンド[`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 98。
 
 ## 3. 意図的に入れなかったもの
 

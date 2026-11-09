@@ -4,7 +4,7 @@
 |------|----|
 | 版 | 1.0 |
 | 日付 | 2026-07-12 |
-| 更新 | 2026-09-01（スキップ理由コードを`over-cap`へ一本化・実効上限を両GUI共通の規約として明記・再スキャンでのSkip復帰をマージ規則へ追記／**同日追記**: 「CSVを読み書きするのはGradio GUIだけで、WebView2フロントエンドは語彙と規約のみに従う」という実態に合わせて§0・§5・§10を書き改めた）／2026-09-08（§3.1の`Shared`の説明から共通キーフレームの枚数を外し、サーバーが`GET /config`で知らせる`limits.max_conditioning_images`への参照に改めた。上限が5枚から10枚になり、値を書き写す形が失効を生むため）／2026-09-16（§0にWebView2側のi2vモードと強度差の追記） |
+| 更新 | 2026-09-01（スキップ理由コードを`over-cap`へ一本化・実効上限を両GUI共通の規約として明記・再スキャンでのSkip復帰をマージ規則へ追記／**同日追記**: 「CSVを読み書きするのはGradio GUIだけで、WebView2フロントエンドは語彙と規約のみに従う」という実態に合わせて§0・§5・§10を書き改めた）／2026-09-08（§3.1の`Shared`の説明から共通キーフレームの枚数を外し、サーバーが`GET /config`で知らせる`limits.max_conditioning_images`への参照に改めた。上限が5枚から10枚になり、値を書き写す形が失効を生むため）／2026-09-16（§0にWebView2側のi2vモードと強度差の追記）／2026-11-09（§9の「8n+1グリッド」を、読み込んでいるエンジンの格子〔LTX 8n+1・MiniMax H3 17n+5〕への参照に改めた。WebView2フロントエンドのバッチがMiniMax H3に対応したため〔台帳 §1-126〕。語彙・`stat`・スキップ理由コードは不変） |
 | 正本実装（Python） | [`gradio_ui/manifest.py`](../gradio_ui/manifest.py) |
 | 併読 | [`BATCH_A2V_WORKORDER.md`](BATCH_A2V_WORKORDER.md)（機能の設計経緯・§4.5でこの仕様への切り出しを決定）／[`PENDING_TASKS.md`](PENDING_TASKS.md)（残課題）／[`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md)・[`chain_math.py`](../chain_math.py)（フレーム数算出の根拠。本書はCSVの列契約のみを扱い、算出式そのものはそちらが正本） |
 
@@ -129,7 +129,7 @@ CSVマニフェストが置かれる音声フォルダとは**別の場所**に�
 
 ## 9. フレーム数算出（参考）
 
-`frames`列の値は、音声の長さ（秒）とフレームレートから、8n+1グリッド（LTX 2.3の生成モデルが要求するフレーム数の形式）に沿って算出される。算出式・快適上限（VRAMあふれの無い目安）・481フレームというハード上限の根拠は、本書の対象外であり [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) と [`chain_math.py`](../chain_math.py) を正本とする。本書が定めるのは「算出済みの値をどの列にどう保存するか」という契約のみ。
+`frames`列の値は、音声の長さ（秒）とフレームレートから、読み込んでいるエンジンのフレーム数の格子に沿って算出される（LTX 2.3／2.5 は 8n+1、MiniMax H3 は 17n+5。格子の正本は [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (c) の規則表と、`GET /models` の `constraints.num_frames`）。WebView2フロントエンドの MiniMax H3 の行の算出は [`BATCH_A2V_I2V_MODE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/BATCH_A2V_I2V_MODE.md) の「MiniMax H3 の経路」を参照。LTX の算出式・快適上限（VRAMあふれの無い目安）・481フレームというハード上限の根拠は、本書の対象外であり [`RESOLUTION_DURATION_CAPABILITY.md`](RESOLUTION_DURATION_CAPABILITY.md) と [`chain_math.py`](../chain_math.py) を正本とする。本書が定めるのは「算出済みの値をどの列にどう保存するか」という契約のみ。
 
 ## 10. CSVを読み書きする別実装への注意点
 

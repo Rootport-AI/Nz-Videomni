@@ -1,0 +1,204 @@
+{
+  "gate": "gc1",
+  "label": "after",
+  "started_at": "2026-11-09T09:33:28+09:00",
+  "job_id": "e6167ba0-8730-468d-9e33-5ef4e699d143",
+  "status": "completed",
+  "error": null,
+  "sha256": "3f0ad33230225b0e0ff6d26db559da267e7e06bf97b7b6fc74d93e2a3ce0771c",
+  "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\gc1\\vsf\\e6167ba0-8730-468d-9e33-5ef4e699d143.mp4",
+  "seconds_wall": 120.1,
+  "generation_time_seconds": 117.11,
+  "peak_vram_reserved_mb": 5240,
+  "peak_vram_mb": 4968,
+  "chain_log_lines": [
+    "[h3_worker] generate_chain: seed=42 512x288 clips=[56, 56] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=True prefetch=True vram16=True loras=[] neg=vsf(scale=3.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\e6167ba0-8730-468d-9e33-5ef4e699d143\\output.mp4"
+  ],
+  "clips_vsf": [
+    {
+      "rows": [
+        41,
+        46
+      ],
+      "scale": 3.0,
+      "m_neg": 0.0043637565313515226,
+      "m_text": 0.010766626308428126
+    },
+    {
+      "rows": [
+        54,
+        59
+      ],
+      "scale": 3.0,
+      "m_neg": 0.006465650598382159,
+      "m_text": 0.01998750409861064
+    }
+  ],
+  "encode_negative": [
+    {
+      "te_read_negative": {
+        "read_gib": 24.17,
+        "read_seconds": 9.8,
+        "layers_read": 50,
+        "encode_seconds": 9.98,
+        "tokens": 5,
+        "vision_tokens": 0,
+        "vision_tokens_per_image": []
+      },
+      "negative_tokens": 5
+    },
+    {
+      "te_read_negative": null,
+      "negative_tokens": null
+    }
+  ],
+  "vsf_log_lines": [
+    "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[41,46) scale=3.0 m_neg=0.004364 m_text=0.010767",
+    "[h3_worker] engine_h3.pipeline_h3: H3 VSF: rows=[54,59) scale=3.0 m_neg=0.006466 m_text=0.019988"
+  ],
+  "refusal": {
+    "tool": "submit_chain",
+    "tool_args": {
+      "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+      "clips": [
+        {
+          "num_frames": 56
+        },
+        {
+          "num_frames": 56,
+          "prompt": "She turns and walks slowly along the street, humming a tune."
+        }
+      ],
+      "width": 512,
+      "height": 288,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "nag_enabled": true,
+      "neg_method": "nag",
+      "negative_prompt": "blurry, low quality",
+      "vsf_scale": 3.0
+    },
+    "error_text": "Error executing tool submit_chain: FEATURE_UNSUPPORTED: 'nag' is not supported by the selected base model (選択中のベースモデルでは使えない機能です) — MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）。",
+    "has_feature_unsupported": true,
+    "mentions_nag": true,
+    "has_detail": true,
+    "pass": true,
+    "expected": "ToolCallError・文に FEATURE_UNSUPPORTED と nag と「VSF 方式だけ」"
+  },
+  "checks": {
+    "job_completed": {
+      "pass": true,
+      "actual": "completed",
+      "expected": "completed"
+    },
+    "two_clips": {
+      "pass": true,
+      "actual": 2,
+      "expected": 2
+    },
+    "clips[0].vsf_has_keys_and_scale_3": {
+      "pass": true,
+      "actual": {
+        "rows": [
+          41,
+          46
+        ],
+        "scale": 3.0,
+        "m_neg": 0.0043637565313515226,
+        "m_text": 0.010766626308428126
+      },
+      "expected": {
+        "keys": [
+          "rows",
+          "scale",
+          "m_neg",
+          "m_text"
+        ],
+        "scale": 3.0
+      }
+    },
+    "clips[1].vsf_has_keys_and_scale_3": {
+      "pass": true,
+      "actual": {
+        "rows": [
+          54,
+          59
+        ],
+        "scale": 3.0,
+        "m_neg": 0.006465650598382159,
+        "m_text": 0.01998750409861064
+      },
+      "expected": {
+        "keys": [
+          "rows",
+          "scale",
+          "m_neg",
+          "m_text"
+        ],
+        "scale": 3.0
+      }
+    },
+    "phases.clips[0].encode_has_negative": {
+      "pass": true,
+      "actual": {
+        "te_read_negative": {
+          "read_gib": 24.17,
+          "read_seconds": 9.8,
+          "layers_read": 50,
+          "encode_seconds": 9.98,
+          "tokens": 5,
+          "vision_tokens": 0,
+          "vision_tokens_per_image": []
+        },
+        "negative_tokens": 5
+      },
+      "expected": "両方ある"
+    },
+    "phases.clips[1].encode_has_no_negative": {
+      "pass": true,
+      "actual": {
+        "encode_present": true,
+        "keys": []
+      },
+      "expected": "encode はあり、負の鍵は無い"
+    },
+    "log_neg_vsf_scale_3": {
+      "pass": true,
+      "actual": [
+        "[h3_worker] generate_chain: seed=42 512x288 clips=[56, 56] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=True prefetch=True vram16=True loras=[] neg=vsf(scale=3.0) -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-vsf-chain-2026-11-09\\_rt\\outputs\\e6167ba0-8730-468d-9e33-5ef4e699d143\\output.mp4"
+      ],
+      "expected": "generate_chain: の行に neg=vsf(scale=3.0)"
+    },
+    "chain_neg_method_nag_refused": {
+      "pass": true,
+      "actual": "Error executing tool submit_chain: FEATURE_UNSUPPORTED: 'nag' is not supported by the selected base model (選択中のベースモデルでは使えない機能です) — MiniMax H3 のネガティブプロンプトは VSF 方式だけです（neg_method を \"vsf\" にしてください）。",
+      "expected": "ToolCallError・文に FEATURE_UNSUPPORTED と nag と「VSF 方式だけ」"
+    },
+    "list_models_still_has_nag": {
+      "pass": true,
+      "actual": [
+        "reference_video",
+        "nag",
+        "two_stage_hq",
+        "guidance_scale",
+        "outpaint",
+        "inpaint",
+        "alpha_gen",
+        "prune_vaed",
+        "keep_resident_embeddings",
+        "keyframe_strength",
+        "a2v",
+        "end_source",
+        "fused_gguf_dequant_kernel",
+        "lora_audio_strength"
+      ],
+      "expected": "MiniMaxH3 の unsupported_features に nag"
+    }
+  },
+  "pass": true,
+  "finished_at": "2026-11-09T09:35:28+09:00"
+}

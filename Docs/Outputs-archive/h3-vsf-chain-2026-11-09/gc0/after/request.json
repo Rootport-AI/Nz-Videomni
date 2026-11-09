@@ -1,0 +1,29 @@
+{
+  "tool": "submit_chain",
+  "arguments": {
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "clips": [
+      {
+        "num_frames": 124
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She turns and walks slowly along the street, humming a tune."
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+      }
+    ],
+    "width": 640,
+    "height": 384,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "embed_mp4_metadata": false
+  },
+  "note": "GC0: G-C0 と同じ連結生成（ネガティブなし）",
+  "remark": "MCP の道具に渡した引数。サーバーが受けた本文は metadata.json の request"
+}

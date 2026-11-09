@@ -14,6 +14,7 @@ import type { ModelsResponse } from "../api/types";
 import { en } from "../i18n/strings";
 import { AppShell } from "./AppShell";
 import { DEFAULT_NEGATIVE_PROMPT, VSF_SCALE_DEFAULT } from "./nagSettings";
+import { PREFILL_SIZE_POLICY_STORAGE_KEY } from "./PrefillPolicyContext";
 
 // MiniMax H3 第 2 弾 (2026-10-17) — 2c-G1, end to end through the fixture
 // server. Picking "MiniMax H3" in the header must, with NO engine id read
@@ -1245,6 +1246,13 @@ describe("AppShell — MiniMax H3 Chained long A2V (§1-120)", () => {
     vi.restoreAllMocks();
   });
 
+  /** Every clip card's DURATION, in order (the §1-106 describe's one-liner). */
+  function clipDurationValues(): number[] {
+    return Array.from(singlePanel().querySelectorAll<HTMLInputElement>(".clip-card input[type='number']")).map((input) =>
+      Number(input.value),
+    );
+  }
+
   function audioObjectSelection(): ResultOf<"timeline.getSelection"> {
     return {
       hasRange: false,
@@ -1295,6 +1303,37 @@ describe("AppShell — MiniMax H3 Chained long A2V (§1-120)", () => {
       const box = within(singlePanel()).getByRole("checkbox", { name: "References" });
       expect(box).toBeChecked();
       expect(screen.queryByText(/Generating from an audio track \(A2V\) is not available/)).not.toBeInTheDocument();
+      // Plan §10: assigned from the default [345, 345] (never the seed's comfort
+      // ceiling): 30 s at 24 fps = 720 frames -> a third clip of 73.
+      await waitFor(() => expect(clipDurationValues()).toEqual([345, 345, 73]), { timeout: 5_000 });
+    },
+    20_000,
+  );
+
+  it(
+    "plan §10: with the `project` size policy, #18 takes the project size but clip 1 stays 345",
+    async () => {
+      window.localStorage.setItem(PREFILL_SIZE_POLICY_STORAGE_KEY, "project");
+      const bridge = createMockBridge({ delayMs: 0, editInfo: { width: 1024, height: 512, rate: 30, scale: 1 } });
+      await renderApp(bridge);
+      await switchTo("MiniMaxH3");
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "audioToLongA2v", selection: audioObjectSelection() });
+      });
+      await waitFor(() => expect(screen.getByRole("tab", { name: "Chained" })).toHaveAttribute("aria-selected", "true"), {
+        timeout: 5_000,
+      });
+      const widthSlider = () => within(singlePanel()).getByRole("slider", { name: /width/i }) as HTMLInputElement;
+      const heightSlider = () => within(singlePanel()).getByRole("slider", { name: /height/i }) as HTMLInputElement;
+      await waitFor(() => expect(widthSlider().value).toBe("1024"), { timeout: 5_000 });
+      expect(heightSlider().value).toBe("512");
+      await waitFor(
+        () => expect(screen.getAllByText(en.chained.sourceAudio.h3.toast.distributed(30))).toHaveLength(1),
+        { timeout: 5_000 },
+      );
+      await waitFor(() => expect(clipDurationValues()).toEqual([345, 345, 73]), { timeout: 5_000 });
+      // No y/n: the cards were never touched.
+      expect(screen.queryByRole("dialog")).toBeNull();
     },
     20_000,
   );

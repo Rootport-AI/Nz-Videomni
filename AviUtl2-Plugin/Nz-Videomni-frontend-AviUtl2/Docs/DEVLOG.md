@@ -6299,7 +6299,18 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 166.10 テストと門
 
 - 新規: `h3ChainAudio.test.ts`（割り当ての計画・境界の例・確認の要否・入れ先の順・送信の本文・理由の組み立て）、`ChainAudioPanel.h3.test.tsx`、`ChainedScreen.h3Audio.test.tsx`（割り当てでアップロードが増えない・References の自動オン・触ったカードの確認と「いいえ」・触っていないカードは確認なし〔#18 の経路〕・🔁〔H3 と LTX〕・📁 で別の音声・LTX から H3 への切り替え・Strength の写し・送信の本文・手入れの音声の `offset_frames` 0・V2V との排他・描画が有限回で落ち着く・鍵の無いバックエンド・トースト）。追加: `referenceRules.test.ts`・`useReferenceSlots.test.ts`（`adopt`）、`ReferenceAccordion.test.tsx`（バッジ）、`ClipReferences.test.tsx`（`ops` が安定していること）、`useChainForm.h3.test.ts`、`featureScope.test.ts`、`AppShell.minimaxH3.test.tsx`、`mockBridge.h3.test.ts`。
-- 門（`npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"`）・GPU の門・オーナーの目視の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204に書きます。
+- 門（`npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"`）・GPU の門・オーナーの目視の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204 に書きます。
+
+### 166.11 追補（2026-11-09 夜）: 右クリック #18 の 1 クリップ目を既定の長さから割り当てる
+
+- **事象（オーナーの実機確認）**: H3 の Chained に右クリック #18 で約 30 秒の音声を送ると、クリップが [481, 226] になりました。📁 で同じ音声を入れると [345, 345, 90] になり、こちらが望ましい形です（オーナー裁定 2026-11-09「1 クリップ目から 345 で割り振られるように」。481 フレームのクリップは崩れやすい長さのため）。結果の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204.6。
+- **原因**: #18 は Chained の画面を作り直し、`ChainedScreen.tsx` が `resolvePrefillSeed`（`timeline/prefillSeed.ts`）の種を初期のクリップに使います。#18 の方針は `comfortCeiling` で、1 クリップ目の `numFrames` に H3 の快適上限の計算値（上限 481 で頭打ち）が入ります。LTX では、その後の音声の自動調整（`planAudioFit`）が触っていないカードを揃え直すので、この値は残りません。H3 の割り当てモードでは自動調整を止めているので（§166.5）種の値が残り、割り当ては [481, 345] を後ろから縮めて [481, 226] にしました（決定どおりの動き）。📁 の経路には種が無いので、1 クリップ目も既定（`config.generation_defaults.num_frames`＝345）になります。
+- **対応**: H3 の割り当てモードの #18（`initialIntent` が `audio-to-long-a2v` で `constraints.chain.sourceAudio` がある）を 1 つの判定にまとめ、2 か所で使います。
+  1. 初期のクリップ（`initialCommon`）に種の `numFrames` を載せません。1 クリップ目は 📁 と同じ既定の 345 になります。幅・高さ・fps の種は今までどおりです。
+  2. サイズ方針＝プロジェクトの上書きの effect でも、1 クリップ目の長さの再計算（快適上限）と `setClipNumFrames` を飛ばします（幅・高さ・fps の上書きは今までどおり）。飛ばさないと、この方針では 1 クリップ目が 481 側へ戻り、さらに `setClipNumFrames` が `intact` の旗を倒すので、以後の割り当てで 1 クリップ目を縮めるときに確認ダイアログが出てしまいます。
+- **LTX は対象外**: LTX には `constraints.chain` が無いので判定に入らず、自動調整が種の長さを直す今までの動きのままです。`resolvePrefillSeed` 本体・`planH3AudioDistribution`・`useChainForm` は変えません。
+- **採らなかった案**: `prefillSeed.ts` 側で H3 の long a2v のとき長さを返さない（種を使う他の経路へ影響が広がる）。1 クリップ目を追加クリップと同じ 226 にする（オーナー裁定で 345）。割り当ての純関数で触っていないカードも既定へ揃える（「既存のクリップは縮めるとき以外は触らない」という決定を崩す）。
+- **テスト**: `AppShell.minimaxH3.test.tsx` の #18 のテストに、割り当て後のクリップ列の確認（mock の 30 秒の音声で [345, 345, 73]）を足し、サイズ方針＝プロジェクトでも同じ列になるテストを 1 件足します。LTX の #18 のテスト（`App.prefill.test.tsx`）と `prefillSeed.test.ts` は無修正で合格する見込みです。
 
 ## 167. バッチ A2V の MiniMax H3 対応 — `constraints.source_audio` でパネルを開く・各行を単発の `/generate` の `source_audio` へ・行のフレーム数は 17n+5・強度とサンプリング値は Create にそろえる（バックエンド台帳 `PENDING_TASKS.md` §1-126。2026-11-09）
 

@@ -512,13 +512,21 @@ function ChainedScreenBody({
     });
   }, [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, constraints]);
 
+  /** §1-120 (plan §10): #18 on MiniMax H3's assign mode. The long audio is
+   * assigned to the clips from the default lengths, as with 📁, so clip 0 never
+   * takes the seed's comfort-ceiling length (and the `project` size policy does
+   * not re-derive it either, below). */
+  const h3LongA2vAssign = initialIntent?.intent === "audio-to-long-a2v" && constraints?.chain?.sourceAudio != null;
+
   const initialCommon = useMemo(() => {
     if (!initialIntent || !seed) return {};
     return {
       width: seed.derived.width,
       height: seed.derived.height,
       ...(seed.frameRate != null ? { frameRate: seed.frameRate } : {}),
-      ...(seed.numFrames != null ? { numFrames: seed.numFrames } : {}),
+      // §1-120: on H3's assign mode clip 0 starts at the config default (the
+      // LTX long-a2v re-lays every clip through its auto-fit; H3's does not).
+      ...(seed.numFrames != null && !h3LongA2vAssign ? { numFrames: seed.numFrames } : {}),
       // X4: #1 extend-video attaches a source video (V2V, 1-clip floor), but the
       // source is still idle at mount, so open the clip list at a single clip
       // instead of the scratch 2-clip minimum — otherwise a stray 2nd clip card
@@ -536,7 +544,7 @@ function ChainedScreenBody({
         ? { forceSingleClip: true }
         : {}),
     };
-  }, [initialIntent, seed]);
+  }, [initialIntent, seed, h3LongA2vAssign]);
 
   const form = useChainForm(
     config,
@@ -1101,7 +1109,9 @@ function ChainedScreenBody({
         // `resolvePrefillSeed` seeded it; every other engine keeps the legacy
         // table. Leaves the seed in place when the ceiling can't be resolved
         // (null).
-        if (sizePolicy === "project") {
+        // §1-120 (plan §10): not on H3's assign mode — clip 0 keeps the default
+        // length the audio is assigned from (and stays intact for the y/n rule).
+        if (sizePolicy === "project" && !h3LongA2vAssign) {
           const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
           let target: number | null;
           if (rowsBudget !== null) {

@@ -60,7 +60,7 @@
 
 ### 1-127. MiniMax H3 のネガティブプロンプト（VSF）（起票：2026-11-02）
 
-- **概要**: VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕を、単発の生成に加えて連結（Chained）と Retake にもつなぎ、操作パネルも H3 で使える形（NAG〔負のプロンプトのために注意を 2 回計算する方式〕のラジオだけ灰色）にした。dev に入り、機械の門（単発の G0〜G3・連結の GC0〜GC3）はすべて合格した。既定値と最大値は LTX と共有の仮の値で、実用域の較正は §3-278。設計は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.5、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202。
+- **概要**: VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕を、単発の生成に加えて連結（Chained）と Retake にもつなぎ、操作パネルも H3 で使える形（NAG〔負のプロンプトのために注意を 2 回計算する方式〕のラジオだけ灰色）にした。dev に入り、機械の門（単発の G0〜G3・連結の GC0〜GC3）はすべて合格した。既定値と最大値は LTX と共有の値（較正の結果、分けないと裁定。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-278・記録簿 §203.11）。設計は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.5、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202。
 - **出典**: オーナー指示 2026-11-02（起票）・2026-11-08（操作パネルの形）、オーナー所見 2026-11-09（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201.12）。
 
 #### オーナーの実機確認（配置後）
@@ -77,22 +77,6 @@
 
 - [ ] 合格なら dev を main へ `--no-ff` でマージ。
 - [ ] Retake の画面からも負を送るかどうか（LTX でも送っていない。要るなら別に起票）。
-
-### 3-278. MiniMax H3 の VSF の実用域の較正（既定値と最大値の確定）（起票：2026-11-09）
-
-- **概要**: VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕の既定値とスライダーの最大値を決めるため、scale・seed・負の文の言い換え・長い尺を変えた 18 本を生成し、Hugging Face の非公開データセット `Rootport/Nz-LTX23-eval-clips` の `round12-h3-vsf-calib/` に一覧の画像 5 枚と一緒に上げた。数値は保管庫の [`Outputs-archive/h3-vsf-calib-2026-11-09/VISUAL_TABLE.md`](Outputs-archive/h3-vsf-calib-2026-11-09/VISUAL_TABLE.md)、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §203。いまの値は LTX と共有の仮の値（API の `vsf_scale` 既定 1.5・0〜10）。
-- **出典**: オーナー所見 2026-11-09（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201.12）、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §203。
-
-#### オーナーの目視（HF `round12-h3-vsf-calib`）
-
-- [ ] `sheet_A`／`sheet_R` で、青い服と車が消える最小の scale を見る（seed 42 と 43 の両方）→ 既定値の候補。
-- [ ] `sheet_B` で、正の場面（日本らしい街路・歩く・微笑む・手を伸ばす）が保たれる最大の scale を見る → スライダーの最大値の候補。
-- [ ] `sheet_C` で、言い換えの負の文の本 `C_s1.5_N2` と、押す力の近い `A_s2`／`A_s2.5` を見比べる → ヒント文に「言い換え」を足すか。
-- [ ] `sheet_D` で、長い尺（124 フレーム）の効きを見る（対照の scale 0 に負の要素が写っていない点に注意）→ 再試験の要否。
-
-#### オーナー判断待ち
-
-- [ ] 既定値・スライダーの最大値・ヒント文を決める（値が LTX と違えば、ベースモデルごとの範囲の仕組みの要否も）→ 別の計画で操作パネルと文書へ。
 
 ## 3. 将来の研究課題
 

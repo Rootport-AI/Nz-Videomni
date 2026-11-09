@@ -6214,7 +6214,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - **Retake 画面は負のプロンプトを送りません**（LTX でも同じ。`modes/edit/useRetakeForm.ts` は `nagRequestFields` を使っていません）。バックエンドの Retake は API からは VSF を受けますが、画面から送るかどうかはオーナーの判断です。
 - **LTX の見え方と送信本文は変わりません**（NAG のラジオは生きたまま）。
-- `vsf_scale` のスライダー（既定 1.5・0〜10・刻み 0.1）と VSF のラジオのヒント「実用域は scale 1.5〜5」は LTX の値のままです。H3 では仮の値で、実用域の較正はバックエンド台帳 §3-278 です。
+- `vsf_scale` のスライダー（既定 1.5・0〜10・刻み 0.1）と VSF のラジオのヒント「実用域は scale 1.5〜5」は LTX の値のままです。H3 では仮の値で、実用域の較正はバックエンド台帳 §3-278 です。（2026-11-09 追記）較正の結果、既定・範囲・刻み・ヒント文は LTX と共有のまま確定し、操作パネルの改修は無しになりました（バックエンド記録簿 `VERIFICATION_LOG.md` §203.11）。
 - `shell/useNagSettings.ts`・BRIDGE_CONTRACT・native のコードは変えていません。
 
 ### 165.4 テストと門

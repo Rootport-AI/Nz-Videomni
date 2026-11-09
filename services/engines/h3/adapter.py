@@ -45,7 +45,7 @@ ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``audio_encode``, is a phase in ``done.h3.phases`` only), and a stage name the
 reader does not know holds the bar where it is.
 ``generate_chain`` carries the same keys minus ``num_frames`` / ``images`` /
-``source_audio`` / ``references`` / ``nag``, plus ``clips`` (``[{prompt, num_frames,
+``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames,
 images?, references?}]``; clip 0's ``images`` and a clip's ``references``
 are the single op's shapes and ride only on a clip that has some — an
 absent key is "none") and, for a V2V chain, ``source`` (``{path,
@@ -339,16 +339,20 @@ GOVERNED_FIELDS: dict[str, str] = {
 
 #: The 422 half: ``(field, feature, is_non_default)``, first offender wins, the
 #: same "differs from the default" discipline as :data:`REJECT_TABLE`.
+#: ``nag_enabled`` is refused only with ``neg_method`` other than "vsf" (the
+#: single path's row): the VSF negative prompt rides the chain too, so it is
+#: also HONOURED.
 #: ``clips`` is also HONOURED (the prompts, lengths, clip 0's key frames and
-#: per-clip references): the audit allows exactly this overlap, as it allows
-#: ``conditioning_images`` on the single path. Its row here refuses only a
-#: key frame's ``strength`` (the single path's ``keyframe_strength``, same
-#: sentence), last so every other feature is named first.
+#: per-clip references): the audit allows exactly these two overlaps, as it
+#: allows ``conditioning_images`` and ``nag_enabled`` on the single path.
+#: Its ``clips`` row here refuses only a key frame's ``strength`` (the single
+#: path's ``keyframe_strength``, same sentence), last so every other feature
+#: is named first.
 CHAIN_REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateChainRequest], bool]], ...] = (
     ("source_audio", "a2v", lambda r: r.source_audio is not None),
     ("end_source", "end_source", lambda r: r.end_source is not None),
     ("reference_video_id", "reference_video", lambda r: r.reference_video_id is not None),
-    ("nag_enabled", "nag", lambda r: r.nag_enabled),
+    ("nag_enabled", "nag", lambda r: r.nag_enabled and r.neg_method != "vsf"),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
@@ -376,7 +380,9 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: alone also the top-level ``prompt``; ``source_video`` becomes the top-level
 #: ``source`` with the app-cut tail's path; ``retake`` becomes the top-level
 #: ``retake`` with the app-cut window's path and the audio Strength;
-#: ``loras`` arrive resolved as ``lora_paths``), except
+#: ``loras`` arrive resolved as ``lora_paths``; ``nag_enabled`` /
+#: ``negative_prompt`` / ``neg_method`` / ``vsf_scale`` become the top-level
+#: ``nag`` key, only with ``nag_enabled``), except
 #: ``crop_output`` (the app-side centre-crop) and ``embed_mp4_metadata`` (the
 #: app-side recipe embed).
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
@@ -397,20 +403,22 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "attention_backend",
         "block_swap_prefetch",
         "vram16_mode",
+        # The VSF negative prompt: the ``nag`` payload key ({negative_prompt,
+        # method, vsf_scale}); the NAG method is refused above.
+        "nag_enabled",
+        "negative_prompt",
+        "neg_method",
+        "vsf_scale",
         "crop_output",
         "embed_mp4_metadata",
     }
 )
 
-#: ``field -> the field that governs it``: the single path's five plus the
-#: three negative-prompt fields the single path honours (the chain refuses
-#: ``nag_enabled`` whatever the method), each
-#: inert unless its governor is non-default, and every governor here is in
-#: :data:`CHAIN_REJECT_TABLE`.
+#: ``field -> the field that governs it``: the single path's five, each inert
+#: unless its governor is non-default, and every governor here is in
+#: :data:`CHAIN_REJECT_TABLE` (``nag_enabled`` only for the NAG method: the
+#: NAG strengths are inert under VSF).
 CHAIN_GOVERNED_FIELDS: dict[str, str] = {
-    "negative_prompt": "nag_enabled",
-    "neg_method": "nag_enabled",
-    "vsf_scale": "nag_enabled",
     "nag_scale": "nag_enabled",
     "nag_tau": "nag_enabled",
     "nag_alpha": "nag_enabled",
@@ -484,8 +492,8 @@ def reject_unsupported(request: GenerateRequest) -> None:
 
 
 def _chain_refusal_detail(field: str, feature: str) -> str:
-    if feature == "keyframe_strength":
-        # The single path's sentence: the same fact, the same words.
+    if feature in ("keyframe_strength", "nag"):
+        # The single path's sentences: the same fact, the same words.
         return _refusal_detail(field, feature)
     return (
         f"MiniMax H3 の連結生成（Chained）は {feature} に対応していません"
@@ -990,7 +998,7 @@ class _RealBackendH3(_RealBackend):
         references.
 
         The payload is the single ``generate`` one minus ``num_frames`` /
-        ``images`` / ``source_audio`` / ``references`` / ``nag``, plus ``clips``
+        ``images`` / ``source_audio`` / ``references``, plus ``clips``
         (``[{prompt, num_frames}]``; each prompt is the shared one with the
         clip's own appended, :meth:`GenerateChainRequest.clip_prompt`). Clip 0
         with key frames also carries ``images`` (the single op's
@@ -1000,6 +1008,8 @@ class _RealBackendH3(_RealBackend):
         also carries ``source`` (``{path, context_frames}``) after ``clips``;
         with a retake it carries ``retake`` (``{path, audio_strength}``; the
         app-cut window, :class:`PipelineManager`'s ``_retake_window.mp4``).
+        ``nag`` rides only with ``nag_enabled``; :func:`reject_chain` has
+        already held ``neg_method`` to "vsf".
         Key set and order are pinned by ``GOLDEN_CHAIN_KEYS_H3`` (and its V2V,
         key-frame and Retake (``GOLDEN_CHAIN_KEYS_H3_RETAKE``) variants) in tests/test_engine_h3_adapter.py.
         """
@@ -1093,6 +1103,14 @@ class _RealBackendH3(_RealBackend):
             payload["retake"] = {
                 "path": str(retake_window_path),
                 "audio_strength": float(chain.retake.audio_strength),
+            }
+        # nag: only for a VSF negative-prompt job (an absent key = none);
+        # reject_chain has already held neg_method to "vsf".
+        if chain.nag_enabled:
+            payload["nag"] = {
+                "negative_prompt": chain.negative_prompt,
+                "method": chain.neg_method,
+                "vsf_scale": float(chain.vsf_scale),
             }
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.

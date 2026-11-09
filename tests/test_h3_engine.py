@@ -3885,8 +3885,9 @@ def test_worker_nag_parse():
 
 
 def test_worker_generate_request_never_reads_nag():
-    """The parsed values come in as arguments (``_do_generate``); a message's ``nag``
-    alone leaves the request without a negative prompt (the chain's shared request)."""
+    """The parsed values come in as arguments (``_do_generate`` /
+    ``_do_generate_chain`` parse ``nag`` with ``_nag``); a message's ``nag``
+    alone leaves the request without a negative prompt."""
     from engine_h3 import worker
 
     msg = {**_VSF_BASE, "nag": {"negative_prompt": "cars", "method": "vsf", "vsf_scale": 3}}

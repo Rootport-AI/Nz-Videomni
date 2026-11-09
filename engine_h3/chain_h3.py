@@ -319,6 +319,11 @@ def run_chain_h3(
     encoded in clip 0's ``source_encode`` phase, fixed at its head and tail
     (:func:`retake_fix`, self-checked bit for bit after the denoise) and
     decoded whole (``trim_head=0``); ``chain`` gains ``retake``.
+
+    With ``spec.base.negative_prompt`` (VSF, 台帳 §1-127) clip 0's text encoder
+    also encodes the negative prompt (one more ``encode`` step, before the key
+    frames' or the input video's), every clip's denoise uses those hidden
+    states, and each clip record gains ``vsf`` (the single job's ``h3.vsf``).
     """
     if pipe._dit_cfg is None:
         raise RuntimeError("generate before load")
@@ -346,6 +351,10 @@ def run_chain_h3(
         requests = clip_requests(spec)
         for req in requests:
             P.validate_request(req)
+        # VSF (台帳 §1-127): every clip inherits the base's negative prompt; it is
+        # encoded once, on clip 0, and its hidden states are reused by every clip.
+        has_neg = bool(base.negative_prompt.strip())
+        negative_hidden = None
         n = len(requests)
         k = layout.overlap_latents
         video_cat = audio_cat = prev_video = None
@@ -378,6 +387,7 @@ def run_chain_h3(
             retake_runtime["source_had_audio"] = src_wave is not None
             retake_runtime["muxed_original_waveform"] = float(retake.audio_strength) == 1.0 and src_wave is not None
         for i, req in enumerate(requests):
+            has_neg_i = has_neg and i == 0   # the negative's text encoder forward: clip 0 only
             from_source = i == 0 and source is not None
             from_retake = i == 0 and retake is not None
             ka = layout.audio_overlap_latents[i - 1] if i else 0   # clip 0 with a source: set by its encode
@@ -409,20 +419,31 @@ def run_chain_h3(
                     media = pipe._read_references(req)
                     if media:
                         vision_images = []
-                    # The key frames' VAE step (4th of the encode stage) also counts the
+                    # The key frames' VAE step (4th of the encode stage, 5th after clip 0's negative) also counts the
                     # input video's encode (V2V or a retake window); they never meet in one clip.
                     has_cond = bool(canvases) or from_source or from_retake
-                    encode_total = P.encode_steps(has_cond=has_cond, has_audio=False, has_refs=bool(media))
+                    encode_total = P.encode_steps(
+                        has_cond=has_cond, has_audio=False, has_refs=bool(media), has_neg=has_neg_i,
+                    )
+                    # Only clip 0 of a VSF chain passes the key: every other call is the same as before.
+                    neg_kw = {"negative_prompt": req.negative_prompt} if has_neg_i else {}
                     with phases.phase("encode") as entry:
-                        hidden, tags = pipe._encode(
+                        encoded = pipe._encode(
                             req.prompt, phases, images=vision_images, has_cond=has_cond,
-                            refs=pipe._te_references(media),
+                            refs=pipe._te_references(media), **neg_kw,
                         )
+                        if has_neg_i:
+                            hidden, tags, negative_hidden = encoded
+                        else:
+                            hidden, tags = encoded
+                        del encoded
                         entry["text_tokens"] = int(hidden.shape[0])
+                        if has_neg_i:
+                            entry["negative_tokens"] = int(negative_hidden.shape[0])
                     cond_clean = None
                     if canvases:
                         with phases.phase("image_encode") as entry:
-                            cond_clean = pipe._encode_image(canvases, entry, 4, encode_total)
+                            cond_clean = pipe._encode_image(canvases, entry, 4 + int(has_neg_i), encode_total)
                             entry["vision_tokens"] = int(phases.data["encode"].get("te_read", {}).get("vision_tokens", 0))
                             entry["canvas"] = [int(req.width), int(req.height)]
                             entry["source_size"] = source_size
@@ -430,7 +451,9 @@ def run_chain_h3(
                     if from_source:
                         with phases.phase("source_encode") as entry:
                             entry["source_size"] = src_info["source_size"]
-                            src_video, src_audio = pipe._encode_source_tail(src_frames, src_wave, entry, 4, encode_total)
+                            src_video, src_audio = pipe._encode_source_tail(
+                                src_frames, src_wave, entry, 4 + int(has_neg_i), encode_total,
+                            )
                             ka = int(entry["freeze_ka"])
                         src_frames = src_wave = None
                         v2v_runtime["freeze_ka"] = ka
@@ -443,7 +466,9 @@ def run_chain_h3(
                     if from_retake:
                         with phases.phase("source_encode") as entry:
                             entry["source_size"] = src_info["source_size"]
-                            src_video, src_audio = pipe._encode_source_tail(src_frames, src_wave, entry, 4, encode_total)
+                            src_video, src_audio = pipe._encode_source_tail(
+                                src_frames, src_wave, entry, 4 + int(has_neg_i), encode_total,
+                            )
                         src_frames = None
                         if not retake_runtime["muxed_original_waveform"]:
                             src_wave = None   # kept only to be muxed at strength 1.0
@@ -467,6 +492,8 @@ def run_chain_h3(
                         media = None   # encoded: drop the read media before the denoise, as a single job
                         counts = {kind: sum(1 for s, _r in ref_rows if s.kind == kind) for kind in P.REFERENCE_KINDS}
                         ref_counts = {"pictures": counts["picture"], "videos": counts["video"], "audios": counts["audio"]}
+                    # The clip's own VSF report (the single job's ``h3.vsf``), only for a VSF chain.
+                    clip_vsf: dict | None = {} if has_neg else None
                     with phases.phase("denoise") as entry:
                         video, audio, prefetch_used = pipe._denoise(
                             req, hidden, tags, phases, entry,
@@ -474,6 +501,8 @@ def run_chain_h3(
                             lora_report=lora_report if i == 0 else None,
                             video_fix=video_fix, audio_fix=audio_fix, refs=ref_rows,
                             video_inject_clean=CHAIN_INJECT_CLEAN,
+                            negative_hidden=negative_hidden if has_neg else None,
+                            vsf_scale=float(req.vsf_scale), vsf_report=clip_vsf,
                         )
                     video, audio = video.cpu(), audio.cpu()
             finally:
@@ -514,6 +543,8 @@ def run_chain_h3(
             }
             if ref_counts is not None:
                 record["references"] = ref_counts   # only for a clip with references
+            if has_neg:
+                record["vsf"] = clip_vsf   # only for a VSF chain: the single job's h3.vsf
             clip_records.append(record)
             if i == 0:
                 video_cat, audio_cat = video, audio   # with a source: its head is already in it
@@ -527,7 +558,7 @@ def run_chain_h3(
                 f"chain: concatenated latents {list(video_cat.shape)} / {list(audio_cat.shape)}, expected "
                 f"{layout.total_latent_frames} video / {layout.total_audio_latents} audio latents"
             )
-        del prev_video
+        del prev_video, negative_hidden   # the negative's hidden states, reused by every clip
         if not keep:
             # As a single job without the key: its denoise drops the DiT before
             # the decode; every clip here kept it (keep=True), so let it go now.

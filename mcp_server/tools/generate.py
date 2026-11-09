@@ -771,8 +771,9 @@ async def submit_chain(
     ``source_video_id``（V2V）は H3 では引き継ぐフレーム数が 22 固定なので、
     ``source_video_context_frames=22`` を指定してください（既定の 73 のままでは
     422 VALIDATION_ERROR。入力動画があればクリップ 0 は 39 以上で、1 本でも可）。
-    ``source_audio_id``・``end_source_*``・``retake_*``・``reference_video_id``・
-    ``nag_enabled`` などは H3 では 422 FEATURE_UNSUPPORTED です。
+    ``nag_enabled`` は H3 の連結でも ``neg_method="vsf"`` なら使えます（既定の
+    ``"nag"`` は 422 FEATURE_UNSUPPORTED）。``source_audio_id``・``end_source_*``・
+    ``reference_video_id`` などは H3 では 422 FEATURE_UNSUPPORTED です。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行

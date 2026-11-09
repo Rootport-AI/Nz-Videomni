@@ -3000,7 +3000,7 @@ export const ja: Strings = {
     },
     sourceAudio: {
       heading: "音声から動画（A2V）",
-      note: "音声を1本添付すると、各クリップに担当区間が自動で割り当てられます。ソース動画（V2V）とは併用できません。",
+      note: "音声を1本添付すると、各クリップに担当区間が自動で割り当てられます。V2V（動画の続きの生成）とは併用できません。",
       audioPlaceholderAlt: "音声ファイル",
       chooseButton: "音声ファイルを選ぶ…",
       changeButton: "音声ファイルを変更…",
@@ -3027,16 +3027,16 @@ export const ja: Strings = {
           "調整できませんでした。すべてのクリップが手動編集済みのため、変更できるカードがありません。クリップを追加してください。",
       },
       h3: {
-        distributeButton: "各クリップに配賦",
+        distributeButton: "各クリップに割り当て",
         probeFailed:
-          "音声の長さを取得できませんでした。配賦はクリップの長さを変えずに音声だけを入れます（長さはサーバー側で検査されます）。",
+          "音声の長さを取得できませんでした。割り当てはクリップの長さを変えずに音声だけを入れます（長さはサーバー側で検査されます）。",
         unusedTailNote: (unusedSeconds: string): string =>
           `動画の尺が足りないため、音声の末尾 約${unusedSeconds}秒は使われません。`,
-        longTooShortWarning: "音声が短すぎます。『各クリップに配賦』を押してください。",
+        longTooShortWarning: "音声が短すぎます。『各クリップに割り当て』を押してください。",
         toast: {
-          distributed: (durationSec: number): string => `音声（${durationSec.toFixed(2)}秒）を各クリップに配賦しました。`,
+          distributed: (durationSec: number): string => `音声（${durationSec.toFixed(2)}秒）を各クリップに割り当てました。`,
           distributedUnknownLength:
-            "音声を各クリップに配賦しました（長さが分からないため、クリップの長さは変えていません）。",
+            "音声を各クリップに割り当てました（長さが分からないため、クリップの長さは変えていません）。",
           tooShortForChain:
             "音声が短すぎて Chained では使えません（2 クリップ以上が必要です）。短い音声は Single の A2V で生成してください。",
           noFreeSlot: (clipNumbers: readonly number[]): string =>
@@ -3100,8 +3100,8 @@ export const ja: Strings = {
         "このフレームレートではクリップ構成が音声タイムラインと整合しません。↔️再生時間の自動調整を押すか、クリップの長さを変えてください。",
       chainA2vReferencesOff: "音声ファイルが入力済みです。Reference をオンにしてください。",
       chainA2vNotDistributed:
-        "音声がクリップに配賦されていません。『各クリップに配賦』を押すか、🔁 で音声を外してください。",
-      chainA2vAudioTooShort: "音声が短すぎます。『各クリップに配賦』を押してください。",
+        "音声がクリップに割り当てられていません。『各クリップに割り当て』を押すか、🔁 で音声を外してください。",
+      chainA2vAudioTooShort: "音声が短すぎます。『各クリップに割り当て』を押してください。",
       clipA2vAudioTooShort: (clipNumbers: readonly number[]): string =>
         `クリップ ${clipNumbers.join("・")} の音声が短すぎます。音声を長くするかフレーム数を減らしてください。`,
       clipA2vAudioMissing: (clipNumbers: readonly number[]): string =>

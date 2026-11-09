@@ -6234,7 +6234,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **長い音声のカードは、H3 では「割り当ての形」で開きます。** LTX の ↔️ ボタンと「追加クリップの長さ」のスライダーは出ず、Strength のスライダー（既定は配信の既定）と「各クリップに割り当て」ボタンが出ます。開く信号は `GET /models` の `constraints.chain.source_audio` で、鍵の無い H3（古いバックエンド）では今までどおり灰色です。
 - 送信は各クリップの `source_audio {audio_id, strength, offset_frames}` で、最上位の `source_audio` は割り当ての形では送りません。
 - **LTX の Chained と、Single の Reference アコーディオンの見た目と送信本文は変わりません**（既存のテストは無修正で緑）。BRIDGE_CONTRACT と native のコードは変えていません。
-- 設計の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 の「クリップごとの A2V」と裁定 98、API の形はバックエンド仕様書 §6.2b (h) の「クリップごとの A2V」（本書には写しません）、門の記録はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204（予定）です。
+- 設計の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 の「クリップごとの A2V」と裁定 98、API の形はバックエンド仕様書 §6.2b (h) の「クリップごとの A2V」（本書には写しません）、門の記録はバックエンド [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204です。
 
 ### 166.2 割り当て（新規 `modes/chained/h3ChainAudio.ts`・`ChainedScreen.tsx`）
 
@@ -6299,7 +6299,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 166.10 テストと門
 
 - 新規: `h3ChainAudio.test.ts`（割り当ての計画・境界の例・確認の要否・入れ先の順・送信の本文・理由の組み立て）、`ChainAudioPanel.h3.test.tsx`、`ChainedScreen.h3Audio.test.tsx`（割り当てでアップロードが増えない・References の自動オン・触ったカードの確認と「いいえ」・触っていないカードは確認なし〔#18 の経路〕・🔁〔H3 と LTX〕・📁 で別の音声・LTX から H3 への切り替え・Strength の写し・送信の本文・手入れの音声の `offset_frames` 0・V2V との排他・描画が有限回で落ち着く・鍵の無いバックエンド・トースト）。追加: `referenceRules.test.ts`・`useReferenceSlots.test.ts`（`adopt`）、`ReferenceAccordion.test.tsx`（バッジ）、`ClipReferences.test.tsx`（`ops` が安定していること）、`useChainForm.h3.test.ts`、`featureScope.test.ts`、`AppShell.minimaxH3.test.tsx`、`mockBridge.h3.test.ts`。
-- 門（`npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"`）・GPU の門・オーナーの目視の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204（予定）に書きます。
+- 門（`npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"`）・GPU の門・オーナーの目視の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204に書きます。
 
 ## 167. バッチ A2V の MiniMax H3 対応 — `constraints.source_audio` でパネルを開く・各行を単発の `/generate` の `source_audio` へ・行のフレーム数は 17n+5・強度とサンプリング値は Create にそろえる（バックエンド台帳 `PENDING_TASKS.md` §1-126。2026-11-09）
 
@@ -6332,4 +6332,4 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 167.5 テストと門
 
 - 新規: `useBatchForm.h3.test.ts`（17n+5・`over-cap`・格子・32 の倍数・走行開始の測り直し）。追加: `featureScope.test.ts`、`batchRunner.test.ts`（H3 の a2v の行が `/generate`＋`source_audio`＋強度なし・i2v の行も強度なし・LTX は不変）、`buildI2vGeneratePayload.test.ts`（鍵の順）、`AppShell.minimaxH3.test.tsx`（H3 でバッチが開く）、`mockBridge.test.ts`。
-- 門の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204（予定）に書きます。
+- 門の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204に書きます。

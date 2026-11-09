@@ -1,0 +1,48 @@
+{
+  "endpoint": "POST /api/v1/generate/chain",
+  "body": {
+    "prompt": "A young woman sits in a softly lit room and talks to the camera with natural lip movement and an expressive face. The camera is steady.",
+    "width": 1344,
+    "height": 768,
+    "seed": 42,
+    "attention_backend": "sage",
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "clips": [
+      {
+        "num_frames": 209,
+        "source_audio": {
+          "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+          "strength": 0.5,
+          "offset_frames": 0
+        }
+      },
+      {
+        "num_frames": 209,
+        "source_audio": {
+          "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+          "strength": 0.5,
+          "offset_frames": 187
+        }
+      },
+      {
+        "num_frames": 209,
+        "source_audio": {
+          "audio_id": "97598ea8-fe65-4189-a81c-e47d2d69e0a3",
+          "strength": 0.5,
+          "offset_frames": 374
+        }
+      }
+    ],
+    "embed_mp4_metadata": false,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ]
+  },
+  "note": "GA3T: 3×209・1344×768・sage・strength 0.5・offset 0・187・374・Turbo LoRA 0.8・4 ステップ（目視用）",
+  "remark": "送った本文。サーバーが受けた本文は metadata.json の request"
+}

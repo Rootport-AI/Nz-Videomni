@@ -1,0 +1,95 @@
+[h3_worker] generate_chain: seed=42 640x384 clips=[124, 141, 124] steps=20 shift=12.0/3.0 attention=sdpa keep_resident=False prefetch=True vram16=True loras=[] a2v=[('input.wav', 1.0, 0), ('input.wav', 1.0, 102), ('input.wav', 1.0, 221)] neg=off -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-chain-a2v-2026-11-09\_rt\outputs\75c4c1ea-3b56-4a23-b0df-34d6ac41c119\output.mp4
+[h3_worker] chain: clip 1/3 seed=42 frames=124 no fixed head
+[h3_worker] engine_h3.text_encoder: H3 TE config: {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}
+[h3_worker] engine_h3.text_encoder: H3 TE built (weights are read during encode): {'num_layers_file': 50, 'num_layers_built': 50, 'int8_linears': 350, 'tensors_planned': 901, 'vision_tensors_in_file': 351, 'rope': {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}, 'extra_special_tokens': {'ids': {'<d>': 151669, '</d>': 151670, '<|cutoff|>': 151671, '<|lyrics_start|>': 151672, '<|lyrics_end|>': 151673, '<|caption_start|>': 151674, '<|caption_end|>': 151675}, 'added_here': False}, 'seconds': 0.33}
+[h3_worker] engine_h3.text_encoder: H3 TE encode (direct read): {'read_gib': 24.17, 'read_seconds': 12.51, 'layers_read': 50, 'encode_seconds': 12.83, 'tokens': 41, 'vision_tokens': 0, 'vision_tokens_per_image': []}
+[h3_worker] encode: 41 text tokens
+[h3_worker] engine_h3.sft_load: sft_load: skipped 783 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 134 tensors, 0.32 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors in 0.1s
+[h3_worker] engine_h3.sft_load: sft_load: skipped 200 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 732 tensors, 19.53 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors in 11.3s
+[h3_worker] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 50 blocks, keeping 4/50 on cuda
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch: pinned staging pool = 2 x 371.1 MB
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch ready: 50 blocks, 18554 MB of CPU masters, largest block 371.1 MB, window 4, arenas ring of 6 x 371.1 MB (held)
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 1: 50 issued, 1 sync miss(es), 3257.9 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 2: 50 issued, 1 sync miss(es), 3189.4 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 3: 50 issued, 1 sync miss(es), 3265.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 4: 50 issued, 1 sync miss(es), 3237.9 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 5: 50 issued, 1 sync miss(es), 3311.1 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 6: 50 issued, 1 sync miss(es), 3257.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 7: 50 issued, 1 sync miss(es), 3328.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 8: 50 issued, 1 sync miss(es), 3264.5 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 9: 50 issued, 1 sync miss(es), 3282.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 10: 50 issued, 1 sync miss(es), 3210.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 11: 50 issued, 1 sync miss(es), 3197.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 12: 50 issued, 1 sync miss(es), 3142.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 13: 50 issued, 1 sync miss(es), 3216.5 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 14: 50 issued, 1 sync miss(es), 3118.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 15: 50 issued, 1 sync miss(es), 3169.9 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 16: 50 issued, 1 sync miss(es), 3181.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 17: 50 issued, 1 sync miss(es), 3165.3 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 18: 50 issued, 1 sync miss(es), 3181.5 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 19: 50 issued, 1 sync miss(es), 3163.5 ms waiting on pinned slots
+[h3_worker] chain: clip 2/3 seed=43 frames=141 fixed head k=7 ka=37
+[h3_worker] engine_h3.text_encoder: H3 TE config: {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}
+[h3_worker] engine_h3.text_encoder: H3 TE built (weights are read during encode): {'num_layers_file': 50, 'num_layers_built': 50, 'int8_linears': 350, 'tensors_planned': 901, 'vision_tensors_in_file': 351, 'rope': {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}, 'extra_special_tokens': {'ids': {'<d>': 151669, '</d>': 151670, '<|cutoff|>': 151671, '<|lyrics_start|>': 151672, '<|lyrics_end|>': 151673, '<|caption_start|>': 151674, '<|caption_end|>': 151675}, 'added_here': False}, 'seconds': 0.35}
+[h3_worker] engine_h3.text_encoder: H3 TE encode (direct read): {'read_gib': 24.17, 'read_seconds': 21.16, 'layers_read': 50, 'encode_seconds': 21.26, 'tokens': 54, 'vision_tokens': 0, 'vision_tokens_per_image': []}
+[h3_worker] encode: 54 text tokens
+[h3_worker] engine_h3.sft_load: sft_load: skipped 783 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 134 tensors, 0.32 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors in 0.2s
+[h3_worker] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 50 blocks, keeping 4/50 on cuda
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch ready: 50 blocks, 18554 MB of CPU masters, largest block 371.1 MB, window 4, arenas ring of 6 x 371.1 MB (held)
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 1: 50 issued, 1 sync miss(es), 4074.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 2: 50 issued, 1 sync miss(es), 4104.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 3: 50 issued, 1 sync miss(es), 4072.3 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 4: 50 issued, 1 sync miss(es), 4095.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 5: 50 issued, 1 sync miss(es), 4095.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 6: 50 issued, 1 sync miss(es), 4109.6 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 7: 50 issued, 1 sync miss(es), 4090.3 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 8: 50 issued, 1 sync miss(es), 4099.3 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 9: 50 issued, 1 sync miss(es), 4103.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 10: 50 issued, 1 sync miss(es), 4065.1 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 11: 50 issued, 1 sync miss(es), 4105.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 12: 50 issued, 1 sync miss(es), 4117.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 13: 50 issued, 1 sync miss(es), 4129.4 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 14: 50 issued, 1 sync miss(es), 4080.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 15: 50 issued, 1 sync miss(es), 4105.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 16: 50 issued, 1 sync miss(es), 4110.4 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 17: 50 issued, 1 sync miss(es), 4094.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 18: 50 issued, 1 sync miss(es), 4075.3 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 19: 50 issued, 1 sync miss(es), 4089.2 ms waiting on pinned slots
+[h3_worker] chain: clip 3/3 seed=44 frames=124 fixed head k=7 ka=37
+[h3_worker] engine_h3.text_encoder: H3 TE config: {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}
+[h3_worker] engine_h3.text_encoder: H3 TE built (weights are read during encode): {'num_layers_file': 50, 'num_layers_built': 50, 'int8_linears': 350, 'tensors_planned': 901, 'vision_tensors_in_file': 351, 'rope': {'rope_type': 'default', 'rope_theta': 5000000.0, 'mrope_section': [24, 20, 20], 'mrope_interleaved': True, 'head_dim': 128, 'num_attention_heads': 64, 'num_key_value_heads': 8, 'num_hidden_layers': 50, 'attn_implementation': 'nz_h3_blocked_math'}, 'extra_special_tokens': {'ids': {'<d>': 151669, '</d>': 151670, '<|cutoff|>': 151671, '<|lyrics_start|>': 151672, '<|lyrics_end|>': 151673, '<|caption_start|>': 151674, '<|caption_end|>': 151675}, 'added_here': False}, 'seconds': 0.36}
+[h3_worker] engine_h3.text_encoder: H3 TE encode (direct read): {'read_gib': 24.17, 'read_seconds': 21.76, 'layers_read': 50, 'encode_seconds': 21.86, 'tokens': 66, 'vision_tokens': 0, 'vision_tokens_per_image': []}
+[h3_worker] encode: 66 text tokens
+[h3_worker] engine_h3.sft_load: sft_load: skipped 783 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 134 tensors, 0.32 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors in 0.2s
+[h3_worker] denoise: 32 non-block tensors to cuda; 50 blocks stay on CPU
+[h3_worker] engine.transformer.block_swap_service: BlockSwap: installing on 50 blocks, keeping 4/50 on cuda
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch ready: 50 blocks, 18554 MB of CPU masters, largest block 371.1 MB, window 4, arenas ring of 6 x 371.1 MB (held)
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 1: 50 issued, 1 sync miss(es), 3238.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 2: 50 issued, 1 sync miss(es), 3158.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 3: 50 issued, 1 sync miss(es), 3213.5 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 4: 50 issued, 1 sync miss(es), 3245.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 5: 50 issued, 1 sync miss(es), 3204.6 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 6: 50 issued, 1 sync miss(es), 3174.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 7: 50 issued, 1 sync miss(es), 3207.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 8: 50 issued, 1 sync miss(es), 3208.9 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 9: 50 issued, 1 sync miss(es), 3196.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 10: 50 issued, 1 sync miss(es), 3183.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 11: 50 issued, 1 sync miss(es), 3188.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 12: 50 issued, 1 sync miss(es), 3185.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 13: 50 issued, 1 sync miss(es), 3192.1 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 14: 50 issued, 1 sync miss(es), 3205.2 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 15: 50 issued, 1 sync miss(es), 3259.7 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 16: 50 issued, 1 sync miss(es), 3177.0 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 17: 50 issued, 1 sync miss(es), 3160.8 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 18: 50 issued, 1 sync miss(es), 3232.4 ms waiting on pinned slots
+[h3_worker] engine.transformer.block_swap_prefetch: BlockSwap prefetch pass 19: 50 issued, 1 sync miss(es), 3238.8 ms waiting on pinned slots
+[h3_worker] engine_h3.sft_load: sft_load: skipped 121 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_video_vae_fp16.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 441 tensors, 4.51 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_video_vae_fp16.safetensors in 1.9s
+[h3_worker] engine_h3.sft_load: sft_load: skipped 138 tensor(s) of S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors (markers / unused)
+[h3_worker] engine_h3.sft_load: sft_load: 779 tensors, 0.24 GiB from S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\models\MiniMaxH3\VAE\minimax_h3_audio_vae_fp32.safetensors in 0.1s

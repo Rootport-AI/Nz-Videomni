@@ -22662,3 +22662,96 @@ H3 の 4 本の条件:
 **文書の反映先**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.5（裁定 97）・仕様書 `Videomni_Backend_Specification.md` §6.2／§6.6（版 v0.5.116）・[`VSF_README_NOTES.md`](VSF_README_NOTES.md) §9・フロントエンド `API_REFERENCE.md` §5.1（と §5.2 の表の注記）・フロントエンド `DEVLOG.md` §165.3・保管庫の `README.md`。台帳の §3-278 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズしました。
 
 **残りの作業**: 第 2 弾の実機確認は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-127 のままです。較正から派生する作業はありません。
+
+## 204. ★台帳 §1-120・§1-126 MiniMax H3 のクリップごとの A2V（長い音声を各クリップへ割り当てる連結）とバッチ A2V の H3 対応＝計画のレビュー・実装・実装差分のレビュー・機械の門・GPU の門 GA0〜GA3T（2026-11-09）
+
+### 204.1 何を作ったか
+
+- **H3 の Chained で、長い音声 1 本から口の動きを合わせた連結動画を作れるようにしました。** 要求は各クリップの `clips[i].source_audio`（音声を全クリップで共有し、各クリップは自分の開始位置から読む）で、操作パネルは長い音声のカードの「各クリップに割り当て」で各クリップの Audios カードへ同じ音声を入れます。
+- **Single タブのバッチ A2V も H3 で使えるようにしました。** 各行を単発の `POST /generate` の `source_audio` へ送ります（操作パネルだけの変更）。
+- 契約の正本は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) の「クリップごとの A2V」（版 v0.5.117）、仕組みと裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3 の「クリップごとの A2V」・裁定 98、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §166（Chained）・§167（バッチ）です。
+
+### 204.2 計画の敵対的レビューの採否
+
+計画書はセッション限りなので、要点を残します。レビュー担当（Opus・読み取りだけ）の指摘は、Major 2・Minor 12・Nit 8・設計への意見 4 でした。物差しは「過剰設計や絡み合いを招かないか」「独立の裏取りがあるか」の 2 点です。指摘の主張は、独立の裏取り（Sonnet）ですべて事実と一致しました。
+
+| 指摘 | 採否 | 扱い |
+|---|---|---|
+| M1 「確認なし」の範囲が計画の 2 か所で食い違う（右クリック #18 の直後の既定のカードの縮小にも毎回確認が出る） | オーナー回答で確定 | 「触っていないカードは確認なし」。確認は、利用者が触ったカード（`intact` の旗が倒れたカード）を縮める・消すときだけ |
+| M2 クリップの登録表に操作のオブジェクトを載せると描画が循環しうる | 採用 | 登録するのは `useMemo` で固めた安定した関数の組 `ops` だけにし、比較の対象にしない。循環しないテストを足す |
+| Minor 12 件（理由の判定の抜け・クリップ番号入りの文言の口・🔁 の後始末を常に動かす・LTX から H3 への切り替えで自動の割り当てを走らせない・計画の擬似コードの直し・ワーカーのログ・対照の音声が短い件・継ぎ目が格子に乗らない形の Strength 1.0 の門・割り当てられなかったクリップのトースト・計画の文の矛盾・LoRA の `audio_strength` の扱いの訂正・CSV 仕様 §9 の追記漏れ） | すべて採用 | 対照の音声の件は、オーナー回答で「対照なし」と確定 |
+| Nit 8 件（行番号・置き場・説明の細部） | すべて採用 | 計画の各節に反映 |
+| D1 開始位置: 時間どおりだと Strength 1.0 の継ぎ目に最大 266 標本の段差ができる | 採用（設計を変更） | 開始標本を音声の潜在の境界 `round(O×5/3)×800` にそろえ、事前検査とエンジンが同じ関数を呼ぶ |
+| D2 配信の鍵を `constraints.chain` の中ではなく最上位に置く | 棄却 | 連結の規約は `chain` の下の方が意味が明快で、LTX に鍵が漏れない |
+| D3 全クリップの波形を最初にまとめて読む | 棄却 | 参照付きの連結の前例（クリップの番に読む）に合わせる。遅れて出るのは壊れたファイルの失敗だけで、既知の限界として書く |
+| D4 「音声が短い」の判定を出力全体で見ると、末尾に音声の無いクリップを置く使い方が止まる | 採用 | 割り当て元のクリップごとに `S_i + F_i > A` で判定する |
+
+### 204.3 実装差分のレビュー
+
+弾ごとに Opus のレビュー担当が読みました。Major はどの弾も 0 件です。
+
+| 弾 | Minor | Nit |
+|---|---|---|
+| 弾 1（バックエンド） | 1 件・採用: 標本率の定数を `h3_chain_math.H3_AUDIO_SAMPLE_RATE` に一本化した | 4 件: 入れ子の if の整理と境界のテストの値は採用。文言の説明は仕様書へ移した。未追跡のファイルは明示のパスで扱った |
+| 弾 2（操作パネル・Chained） | 2 件・採用: 「短すぎ」の判定を純関数 `clipA2vTooShort` に一本化した。画面のテストの抜け 4 件を足した | 7 件: 重複の整理・英語の複数形・コメントは採用。`ops` を依存から外す案と、Strength の初期値の追従は見送った |
+| 弾 4（操作パネル・バッチ） | 2 件・採用: 使われない予備の値を削った。幅と高さの警告の文言を倍数を差し込む形にした | 6 件: 使われない欄 `singleSourceAudio` の削除・古い説明 3 か所・テスト名・mock のコメントは採用。重ねた確認と assert の強さは見送った |
+
+### 204.4 機械の門
+
+| 範囲 | 結果 |
+|---|---|
+| アプリの仮想環境の pytest 全件 | 3,907 件合格・76 件スキップ（最終形。1 回目の 3,906 件から、新しい定数の整合のテストが 1 件増えた） |
+| エンジンの CPU のテスト（`scripts/run_h3_pytest.py`） | 449 件合格・22 件スキップ（実重みのテスト） |
+| 操作パネル `npm run typecheck` | 合格 |
+| 操作パネル vitest 全件（`npx vitest run --exclude "**/backend.integration.test.ts"`） | 185 ファイル・3,729 件合格 |
+| aux2 `build.ps1 -RunTests` の C++ のテスト | 402 件合格 |
+
+**LTX が変わっていないことの根拠**: LTX の既存のテスト（`ChainedScreen.audio.test.tsx`・`ChainAudioPanel.test.tsx`・`ChainedScreen.references.test.tsx`・バッチの LTX のテスト）は、無修正で合格しました。
+
+### 204.5 GPU の門
+
+**環境**: 通常のバックエンド（ポート 18620。重みは未読み込み・ジョブ無し）を止めずに並走させ、門は一時サーバー（ポート 18699）で回しました。GA0〜GA2 は 640×384・sdpa、GA3・GA3T は 1344×768・sage です。
+
+台本は保管庫の `h3_chain_a2v_gate.py` で、一時の設定ファイル・別のポート 18699 のサーバーへ HTTP で直接送りました（MCP の `submit_chain` はクリップの `source_audio` を持たないため）。本番の `config.yaml`・`state.json`・出力には書いていません。条件と基準の全文は保管庫の `README.md` です。共通の条件（GA0〜GA2）は FL2VA・640×384・seed 42・sdpa・20 ステップ・shift 12/3・連結 3 クリップ・GPU に残すブロック 8・生成条件の書き込みなしで、音声は `uploads\h3-a2v-development\ref-voice-patra001.wav`（30.9 秒）を 1 回だけ上げて全クリップで使います。
+
+| 門 | 条件 | 基準 | 結果 |
+|---|---|---|---|
+| GA0（不変） | 2026-10-29 の門 G-C0 と同じ本文（124 フレーム×3・音声なし） | mp4 の sha256 が G-C0 の `4a98be08…0cbec5` と全桁一致・各クリップの潜在の指紋（`h3.clips[i].latents_sha256`）が G-C0 と一致・`a2v` の記録が無い | **合格**。mp4 の sha256 `4a98be0884ae7129e34f58578a3fe7ca3117ca5a764545cbac404e12a70cbec5` が全桁一致。潜在の指紋は 3 本とも一致。`a2v` の記録は無い。生成 410.4 秒・VRAM の予約の山 5,382MiB。所要は約 7 分半（サーバーの起動 20:17:48 → 完了 20:25:07） |
+| GA1（Strength 0 は効き目なし） | GA0 の本文の各クリップに `source_audio {strength: 0, offset_frames: 0・102・204}` | mp4 の sha256 と潜在の指紋が GA0 と同じ・`encoded_samples` が 3 本とも 0・記録の形（`mask_value` 1.0・`start_sample` 0／136000／272000 ほか） | **合格**。mp4 の sha256 `4a98be0884ae7129e34f58578a3fe7ca3117ca5a764545cbac404e12a70cbec5` が GA0 と全桁一致し、潜在の指紋も一致。`encoded_samples` は 3 クリップとも 0（符号化しない）。`mask_value` 1.0・`start_sample` 0／136000／272000。生成 397.2 秒・所要 401 秒・VRAM の予約の山 5,382MiB（GA0 と同じ） |
+| GA2（Strength 1.0・継ぎ目が格子に乗らない形） | クリップ [124, 141, 124]・`strength: 1.0`・`offset_frames` 0・102・221 | 完走・クリップ 1・2 の `head_equals_prev_tail` が真・`mask_value` 0・`audio_output` "decoded"・総フレーム 345・`start_sample` 0／136000／294400 | **合格**。完走・総フレーム 345・クリップ 1・2 の `head_equals_prev_tail` が真・`mask_value` 0.0・`audio_output` "decoded"・`start_sample` 0／136000／294400 で `clip_audio_start_sample` の値と一致・`encoded_samples` 197600／220000／197600。mp4 の sha256 `33390e019120f5525816e02e7da19a4df4c5ae0535654c768db851257d3b5880`。生成 407.3 秒・所要 410 秒・VRAM の予約の山 5,382MiB |
+| GA3（Strength 0.5・目視用） | 209 フレーム×3（583 フレーム＝24.3 秒）・1344×768・sage・`strength: 0.5`・`offset_frames` 0・187・374・20 ステップ | 完走と記録の形（`mask_value` 0.5・`start_sample` 0／249600／498400・`head_equals_prev_tail`）。VRAM の山・所要・主記憶は記録だけ。口の合い方と継ぎ目はオーナーの目視 | **完走・記録の形は合格**（目視はオーナー）。総フレーム 583・`head_equals_prev_tail` 真・`mask_value` 0.5・`start_sample` 0／249600／498400・`audio_output` "decoded"・`request.loras` 空。生成 2,737 秒（所要 2,741 秒＝約 46 分）。クリップごとの秒は encode 14.9／20.6／20.3・audio_encode 0.82／0.67／0.51・denoise 854.9／846.5／815.3。VRAM の予約の山 7,862MiB（nvidia-smi の実測の最大 9,162MiB）・主記憶の RSS の山 23.9GiB・コミットの山 35.8GiB。mp4 の sha256 `10abf332684f83c953e27623951d3c2a62d273ab28a15eeed5549cda0de44316` |
+| GA3T（GA3 を Turbo 4 ステップで・目視用） | GA3 の本文に Turbo LoRA（強さ 0.8）と 4 ステップを足す | GA3 と同じ形の基準・LoRA が効いている（`pairs_applied` が 0 より大きい）。GA3 の 20 ステップとの見比べはオーナーの目視 | **完走・記録の形は合格**（目視はオーナー）。`request.loras` が Turbo（`minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16`・0.8）の 1 本・`h3.loras` に適用の記録（`pairs_applied` 208）・`head_equals_prev_tail` 真・`start_sample` 0／249600／498400。生成 847.5 秒（所要 851 秒＝約 14 分）。クリップごとの秒は encode 15.2／21.0／21.5・audio_encode 0.86／0.72／0.58・denoise 215.7／203.8／204.5。VRAM の予約の山 8,314MiB（実測の最大 9,564MiB）・RSS の山 25.0GiB・コミットの山 38.3GiB。mp4 の sha256 `a269d1c1a348a41e2e81afe4af3dd2254f4666b916dc4d195c1c211e5c6a392e` |
+
+**5 門すべて合格です**（GA3・GA3T は完走と記録の形の合格で、口の合い方と継ぎ目の合否はオーナーの目視）。目視用の mp4 は保管庫の `visual/GA3.mp4`・`visual/GA3T.mp4` に置きました（git には入れない）。
+
+### 204.6 オーナーの目視
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-120・1-126 のチェックリストで行います。
+
+### 204.7 コミット
+
+| コミット（dev） | 内容 |
+|---|---|
+| `250c971` | 操作パネル（Chained の long a2v） |
+| `d5db99a` | バックエンド（クリップごとの A2V） |
+| `fb596df` | 操作パネル（バッチ A2V の H3 対応） |
+| `ac17fe2` | 配布用 aux2 |
+| `a4d50af` | 文書 |
+| `e1a93bc` | 操作パネルの文言（「各クリップに割り当て」） |
+| `4b85d5e` | 文書の文言 |
+| `f1da43e` | 配布用 aux2 |
+
+main への `--no-ff` のマージは、オーナーの目視の後に行います。
+
+### 204.8 残課題・既知の限界
+
+- 既知の限界は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.3 の「クリップごとの A2V」の「既知の限界」と、フロントエンド `Docs/BATCH_A2V_I2V_MODE.md` §2.12（短すぎる音声の行）にあります。
+- レビューで見送った項目（必要なら台帳 §3 に起票する候補）:
+  - 長い音声のカードの Strength の初期値を、配信の既定が変わったときに追従させる。
+  - `ClipReferences` の登録の effect の依存から `ops` を外す。
+  - バッチの、サンプリングの値を重ねて確かめる仕組み。
+  - バッチの短い音声（H3 の下限 22 フレーム未満）の行に、専用の Skip の理由を足す（CSV 仕様の語彙の変更を伴う）。
+
+### 204.9 保管庫
+
+[`Outputs-archive/h3-chain-a2v-2026-11-09/`](Outputs-archive/h3-chain-a2v-2026-11-09/): `README.md`（条件と基準）・`h3_chain_a2v_gate.py`（GA0〜GA3T の台本）・`preconditions.py`・`preconditions_before.txt`・`summary.json`・門ごとのフォルダ（`result.json`・`request.json`・`metadata.json`・`worker_log_excerpt.txt`）。mp4 と `_rt\`（一時サーバーの設定・状態・ログ・出力）はリポジトリに入れません（慣行）。

@@ -1,0 +1,44 @@
+{
+  "endpoint": "POST /api/v1/generate/chain",
+  "body": {
+    "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "width": 640,
+    "height": 384,
+    "seed": 42,
+    "attention_backend": "sdpa",
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "clips": [
+      {
+        "num_frames": 124,
+        "source_audio": {
+          "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+          "strength": 0.0,
+          "offset_frames": 0
+        }
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She turns and walks slowly along the street, humming a tune.",
+        "source_audio": {
+          "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+          "strength": 0.0,
+          "offset_frames": 102
+        }
+      },
+      {
+        "num_frames": 124,
+        "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>",
+        "source_audio": {
+          "audio_id": "8eec929e-9359-43e8-bdb4-22d54f5c960d",
+          "strength": 0.0,
+          "offset_frames": 204
+        }
+      }
+    ],
+    "embed_mp4_metadata": false
+  },
+  "note": "GA1: GA0 と同じ本文の全クリップに source_audio（strength 0.0・offset S_i）",
+  "remark": "送った本文。サーバーが受けた本文は metadata.json の request"
+}

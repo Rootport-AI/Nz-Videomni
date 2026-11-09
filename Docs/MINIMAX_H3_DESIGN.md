@@ -709,7 +709,7 @@ H3 の連結の帯は一段である（Stage 2 が無い。LTX の連結の 2 �
 - LTX に「クリップの音声と V2V」を同時に送ると、`FEATURE_UNSUPPORTED` より先にスキーマの排他の `VALIDATION_ERROR` が返る（受け入れている順序）。
 - **MCP の `submit_chain` と Gradio の Chain タブはクリップの音声を送らない**（Gradio は H3 の連結の A2V を今までどおり 422 で断る）。
 - 映像と音声の時刻の差（最大約 8.3 ミリ秒）は、上の「開始位置」のとおり受け入れる。
-- 効きの強さ（Strength 0.5 で口がどこまで合うか）と、継ぎ目の音は、GPU の門とオーナーの目視で確かめる（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204（予定））。
+- 効きの強さ（Strength 0.5 で口がどこまで合うか）と、継ぎ目の音は、GPU の門とオーナーの目視で確かめる（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204）。
 
 **採らなかった案**
 
@@ -1267,7 +1267,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | V2V と冒頭画像の連結（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-121。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193、操作パネルはフロントエンド `Docs/DEVLOG.md` §160） | 弾 1＝幾何・エンジン・ワーカー、弾 2＝API・アダプタ・系統の規則、弾 3＝操作パネル、弾 4＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §193（裁定 90・§3.3） |
 | Retake（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200、操作パネルはフロントエンド `Docs/DEVLOG.md` §163） | 弾 1＝幾何、弾 2＝エンジンとワーカー、弾 3＝API・アダプタ・モック・配信、弾 4＝操作パネル、弾 5＝MCP、弾 6＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §200（裁定 96・§3.4） |
 | ネガティブプロンプト（VSF。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-127。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202、操作パネルはフロントエンド `Docs/DEVLOG.md` §165） | 第 1 弾＝単発の最小実装と目視の実験（記録簿 §201）、第 2 弾＝連結と Retake への配線・操作パネル・文書（同 §202。§3.5） |
-| クリップごとの A2V とバッチ A2V（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-120・§1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204（予定）、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
+| クリップごとの A2V とバッチ A2V（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-120・§1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。

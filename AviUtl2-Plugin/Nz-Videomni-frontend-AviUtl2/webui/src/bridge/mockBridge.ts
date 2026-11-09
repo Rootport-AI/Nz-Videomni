@@ -394,7 +394,13 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     },
     // §1-106: the server-fixed chain seam (22 PIXEL frames), as the real
     // `GET /models` publishes it. LTX publishes no `chain` block.
-    chain: { overlap_frames: 22 },
+    // §1-120: `source_audio` = the per-clip A2V of the chain (the Strength
+    // slider's range, step and default), as the real `GET /models` publishes
+    // it (`RequestRules.chain_source_audio_strength`).
+    chain: {
+      overlap_frames: 22,
+      source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    },
     // §1-123: the Retake middle-audio Strength slider, as the real
     // `GET /models` publishes it (`RequestRules.retake_audio_strength`). LTX
     // publishes no `retake` block.
@@ -694,7 +700,44 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
         return Array.isArray(refs) && refs.length > 0;
       }),
   },
+  // §1-120: a clip's own A2V source audio (MiniMax H3 only). Last, like the
+  // real LTX `CHAIN_REJECT_TABLE` row; the feature name is the single route's
+  // `source_audio`, which both LTX engines already declare. The chain-wide
+  // `source_audio` row above (`a2v`) stays: H3 still refuses the top-level one.
+  {
+    field: "clips",
+    feature: "source_audio",
+    isSet: (v) =>
+      Array.isArray(v) && v.some((clip) => (clip as { source_audio?: unknown } | null)?.source_audio != null),
+  },
 ];
+
+/** §1-120: a clip's `source_audio` shape check only (`audio_id` a non-empty
+ * string, `strength` in 0..1, `offset_frames` an integer ≥ 0; the last two
+ * optional like the real schema's defaults). The audio's LENGTH is not checked
+ * here — the fixture never measures an upload. */
+function mockClipSourceAudioShapeError(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "source_audio must be an object";
+  }
+  const spec = value as Record<string, unknown>;
+  if (typeof spec.audio_id !== "string" || spec.audio_id === "") {
+    return "source_audio.audio_id must be a non-empty string";
+  }
+  if (
+    spec.strength !== undefined &&
+    (typeof spec.strength !== "number" || !Number.isFinite(spec.strength) || spec.strength < 0 || spec.strength > 1)
+  ) {
+    return "source_audio.strength must be between 0 and 1";
+  }
+  if (
+    spec.offset_frames !== undefined &&
+    (typeof spec.offset_frames !== "number" || !Number.isInteger(spec.offset_frames) || spec.offset_frames < 0)
+  ) {
+    return "source_audio.offset_frames must be an integer >= 0";
+  }
+  return null;
+}
 
 const MOCK_DEFAULT_BASE_MODEL = "LTX23";
 
@@ -2170,6 +2213,22 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
       if (refs == null) continue;
       const shapeError = mockReferencesShapeError(refs);
       if (shapeError !== null) return validationError(`clips.${i}.references`, `clips[${i}]: ${shapeError}`);
+    }
+    // §1-120: a clip's `source_audio` (an engine that refuses it was answered
+    // above) — shape per clip, then the schema's exclusivity with V2V.
+    let firstClipSourceAudio: number | null = null;
+    for (const [i, clip] of clips.entries()) {
+      const spec = (clip as { source_audio?: unknown } | null)?.source_audio;
+      if (spec == null) continue;
+      if (firstClipSourceAudio === null) firstClipSourceAudio = i;
+      const shapeError = mockClipSourceAudioShapeError(spec);
+      if (shapeError !== null) return validationError(`clips.${i}.source_audio`, `clips[${i}]: ${shapeError}`);
+    }
+    if (firstClipSourceAudio !== null && req.source_video != null) {
+      return validationError(
+        "clips",
+        `clips[${firstClipSourceAudio}].source_audio and source_video are mutually exclusive (A2V and V2V cannot be combined)`,
+      );
     }
     // NAG (2026-07-28): mirrors the real backend's 422 for "enabled but no
     // negative prompt" (`shell/nagSettings.ts`'s `isNagNegativeEmpty` is the

@@ -716,7 +716,15 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // ── Step 0, one level down: refuse an entry whose Chained panel is closed
     // (see `CHAIN_INTENT_PANELS`). Computed in place: `chainPanels` is declared later.
     const chainEntry = target === "chained" ? CHAIN_INTENT_PANELS[intent] : undefined;
-    if (chainEntry && chainPanelsDisabledFor(baseModels.unsupportedFeatures)[chainEntry.panel]) {
+    // §1-120: an engine publishing `constraints.chain.sourceAudio` (MiniMax H3)
+    // takes #18 into the long-audio card's distribute mode.
+    if (
+      chainEntry &&
+      chainPanelsDisabledFor(
+        baseModels.unsupportedFeatures,
+        baseModels.activeConstraints.chain?.sourceAudio != null,
+      )[chainEntry.panel]
+    ) {
       showNote("warning", strings.chained.unavailableOnBaseModel[chainEntry.note]);
       return;
     }
@@ -1661,7 +1669,12 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
   // have to grey individually. Computed here, next to `batchUnavailable`, so
   // `ChainedScreen` receives finished booleans and never reasons about engines
   // itself (the shell's standing rule for feature scope).
-  const chainPanels = chainPanelsDisabledFor(baseModels.unsupportedFeatures);
+  // §1-120: the A2V panel reopens on an engine whose chain takes a per-clip
+  // A2V (`constraints.chain.sourceAudio` published — MiniMax H3).
+  const chainPanels = chainPanelsDisabledFor(
+    baseModels.unsupportedFeatures,
+    baseModels.activeConstraints.chain?.sourceAudio != null,
+  );
   // 台帳 §1-121: the closed parts that VANISH rather than grey (the feature
   // table's `hides`); each is also closed in `chainPanels`.
   const chainHidden = chainPanelsHiddenFor(baseModels.unsupportedFeatures);

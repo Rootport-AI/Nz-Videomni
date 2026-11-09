@@ -69,8 +69,15 @@ export interface GenerationConstraints {
    * (`overlapFrames` in PIXEL frames), or `null` when the server publishes no
    * `chain` block (LTX, fallback) — Chained then keeps its own seam-blend
    * controls. Its presence alone switches Chained into the fixed-overlap mode
-   * (no featureScope entry, like {@link reference}). */
-  chain: { overlapFrames: number } | null;
+   * (no featureScope entry, like {@link reference}). §1-120: `sourceAudio`
+   * (flattened from `constraints.chain.source_audio`, MiniMax H3) is present
+   * only when the server takes a per-clip A2V on the chain; its presence opens
+   * the long-audio card's "distribute" mode. The key is left out entirely when
+   * the server does not publish it. */
+  chain: {
+    overlapFrames: number;
+    sourceAudio?: { strength: SamplingParamConstraint };
+  } | null;
   /** §1-123: the Retake middle-audio Strength slider (range, step, default),
    * flattened from `constraints.retake`, or `null` when the server publishes
    * no `retake` block (LTX, fallback). Its presence alone switches the Retake
@@ -127,7 +134,14 @@ export function resolveGenerationConstraints(
           clipMinSec: raw.reference.clip_min_sec,
         }
       : null,
-    chain: raw.chain ? { overlapFrames: raw.chain.overlap_frames } : null,
+    chain: raw.chain
+      ? raw.chain.source_audio
+        ? {
+            overlapFrames: raw.chain.overlap_frames,
+            sourceAudio: { strength: raw.chain.source_audio.strength },
+          }
+        : { overlapFrames: raw.chain.overlap_frames }
+      : null,
     retake: raw.retake ? { audioStrength: raw.retake.audio_strength } : null,
   };
 }

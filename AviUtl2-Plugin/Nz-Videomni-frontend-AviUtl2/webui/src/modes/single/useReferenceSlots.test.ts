@@ -393,6 +393,36 @@ describe("useReferenceSlots — pick / attachToFirstEmpty / clear", () => {
     expect(slots[3]).toBe(2);
   });
 
+  it("§1-120 adopt: ready without any upload, and an upload in flight for the slot is discarded", async () => {
+    const bridge = bridgeWithClips({ holdUploads: true });
+    const spy = vi.spyOn(bridge, "request");
+    const { result } = renderHook(() => useReferenceSlots(RULES, { nativeBridge: bridge }));
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.attach("audio", 1, `${DIR}\\b.wav`, "b.wav");
+    });
+    const uploadsBefore = spy.mock.calls.filter((c) => c[0] === "backend.uploadFile").length;
+    act(() =>
+      result.current.adopt("audio", 1, { id: "long", fileName: "long.wav", filePath: "C:\\long.wav", durationSec: 30 }),
+    );
+    expect(result.current.state.slots.audio[0]).toMatchObject({ status: "ready", id: "long", durationSec: 30 });
+    await act(async () => {
+      bridge.releaseUploads();
+      await pending;
+    });
+    // The held upload's late result did not land on the adopted card.
+    expect(result.current.state.slots.audio[0]).toMatchObject({ status: "ready", id: "long" });
+    expect(spy.mock.calls.filter((c) => c[0] === "backend.uploadFile").length).toBe(uploadsBefore);
+
+    // The A2V check works on an adopted card like on any other.
+    act(() => {
+      result.current.setEnabled(true);
+      result.current.setA2vSlot(1);
+    });
+    expect(result.current.summary.slotUse.audio[0]).toMatchObject({ isA2v: true, used: true });
+  });
+
   it("clear of the A2V slot keeps the tick (§1-117); setEnabled / setA2vSlot pass through", async () => {
     const bridge = bridgeWithClips();
     const { result } = renderHook(() => useReferenceSlots(RULES, { nativeBridge: bridge }));

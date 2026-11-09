@@ -378,3 +378,90 @@ describe("useChainForm — a right-click seed under MiniMax H3's rules (§1-106)
     expect(result.current.validityReasons).toEqual([]);
   });
 });
+
+// §1-120: the long-audio card's distribute mode (`constraints.chain.source_audio`).
+describe("useChainForm — MiniMax H3 distribute mode (§1-120)", () => {
+  const H3_A2V = resolveGenerationConstraints({
+    ...H3_BLOCK,
+    chain: { overlap_frames: 22, source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } } },
+  });
+
+  it("flattens `constraints.chain.source_audio`; without it the key is left out", () => {
+    expect(H3_A2V.chain).toEqual({
+      overlapFrames: 22,
+      sourceAudio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    });
+    expect(H3.chain).toEqual({ overlapFrames: 22 });
+    expect(H3.chain).not.toHaveProperty("sourceAudio");
+  });
+
+  it("is on only with the key", () => {
+    expect(renderForm(H3_A2V).result.current.chainAudioDistribution).toBe(true);
+    expect(renderForm(H3).result.current.chainAudioDistribution).toBe(false);
+    expect(renderForm(undefined).result.current.chainAudioDistribution).toBe(false);
+  });
+
+  it("keeps the LTX long-A2V machinery out: no auto-fit, no LTX gates, no 🎵, no chain-wide source_audio", async () => {
+    const { result } = renderForm(H3_A2V);
+    const before = result.current.clips.map((clip) => clip.numFrames);
+    // 1 s of audio: on LTX this is `audioTooShortForChain`; 1 hour would be
+    // `tooLong` at attach time. Neither fires here.
+    await act(async () => {
+      await result.current.attachAudioByPath("C:\a\long.wav", "long.wav", { knownDurationSec: 1 });
+    });
+    await waitFor(() => expect(result.current.audioDurationSec).toBe(1));
+    expect(result.current.audioFitEvent).toBeNull();
+    expect(result.current.clips.map((clip) => clip.numFrames)).toEqual(before);
+    for (const code of ["audioTooLong", "audioTooShortForChain", "audioTooShort", "chainLayoutInvalid"]) {
+      expect(result.current.validityReasons).not.toContain(code);
+    }
+    expect(result.current.audioSurplusSec).toBeNull();
+    expect(result.current.audioAtMaxClips).toBe(false);
+    expect(result.current.audioSegmentWindowsForClips).toBeNull();
+    act(() => result.current.adjustClipsForAudio());
+    expect(result.current.audioFitEvent).toBeNull();
+    expect(result.current.buildRequest()).not.toHaveProperty("source_audio");
+
+    // A track longer than any LTX chain is kept (no attach-time detach).
+    await act(async () => {
+      await result.current.attachAudioByPath("C:\a\hour.wav", "hour.wav", { knownDurationSec: 3600 });
+    });
+    await waitFor(() => expect(result.current.audioDurationSec).toBe(3600));
+    expect(result.current.audioAttachError).toBeNull();
+    expect(result.current.sourceAudio.state.status).toBe("ready");
+  });
+
+  it("switching to LTX with the same track attached does not auto-fit it there", async () => {
+    const { result, rerender } = renderForm(H3_A2V);
+    await act(async () => {
+      await result.current.attachAudioByPath("C:\a\long.wav", "long.wav", { knownDurationSec: 60 });
+    });
+    await waitFor(() => expect(result.current.audioDurationSec).toBe(60));
+    rerender({ c: undefined });
+    expect(result.current.audioFitEvent).toBeNull();
+    // LTX's chain-wide `source_audio` is back.
+    expect(result.current.buildRequest().source_audio).toEqual({ audio_id: expect.any(String) });
+  });
+
+  it("applyClipLengths grows and shrinks the list, keeping ids, prompts and `intact`", () => {
+    const { result } = renderForm(H3_A2V);
+    const [first, second] = result.current.clips;
+    act(() => result.current.setClipPrompt(first!.id, "hello"));
+    let ids: string[] = [];
+    act(() => {
+      ids = result.current.applyClipLengths([226, 226, 226, 107]);
+    });
+    expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([226, 226, 226, 107]);
+    expect(result.current.clips.map((clip) => clip.id)).toEqual(ids);
+    expect(ids.slice(0, 2)).toEqual([first!.id, second!.id]);
+    expect(result.current.clips[0]).toMatchObject({ prompt: "hello", intact: false });
+    expect(result.current.clips[3]?.intact).toBe(true);
+
+    act(() => {
+      ids = result.current.applyClipLengths([209, 39]);
+    });
+    expect(result.current.clips.map((clip) => clip.numFrames)).toEqual([209, 39]);
+    expect(ids).toEqual([first!.id, second!.id]);
+    expect(result.current.clips[0]?.intact).toBe(false);
+  });
+});

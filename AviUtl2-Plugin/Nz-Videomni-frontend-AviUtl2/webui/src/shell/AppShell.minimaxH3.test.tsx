@@ -1021,8 +1021,9 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
       expect(panel.querySelector(".chain-reference-pick")).toBeNull();
       expect(within(panel).queryByText(/End source is not available/)).not.toBeInTheDocument();
       expect(within(panel).queryByText(/Reference video \(control IC-LoRA\) is not available/)).not.toBeInTheDocument();
-      // A2V still greys with its reason.
-      expect(within(panel).getByText(/Generating from an audio track \(A2V\) is not available/)).toBeInTheDocument();
+      // §1-120: A2V opens in the distribute mode (`constraints.chain.source_audio`).
+      expect(within(panel).queryByText(/Generating from an audio track \(A2V\) is not available/)).not.toBeInTheDocument();
+      expect(within(panel).getByRole("button", { name: en.chained.sourceAudio.h3.distributeButton, hidden: true })).toBeInTheDocument();
     },
     20_000,
   );
@@ -1173,6 +1174,103 @@ describe("AppShell — MiniMax H3 Chained (§1-106)", () => {
         timeout: 5_000,
       });
       expect(screen.queryByText(/A source VIDEO cannot be used on the selected base model/)).not.toBeInTheDocument();
+    },
+    20_000,
+  );
+});
+
+// ── §1-120: #18 (the long a2v right-click) on MiniMax H3 ──
+describe("AppShell — MiniMax H3 Chained long A2V (§1-120)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    resetProvisionalReservation();
+    resetCreateLiveCommands();
+    resetExtractObjectAudioChain();
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  function audioObjectSelection(): ResultOf<"timeline.getSelection"> {
+    return {
+      hasRange: false,
+      rangeStart: 0,
+      rangeEnd: 0,
+      selected: [
+        {
+          layer: 4,
+          frameStart: 0,
+          frameEnd: 899,
+          effectName: "音声ファイル",
+          filePath: "C:\\a\\voice.wav",
+          objectName: "a",
+          textContent: null,
+          mediaWidth: 0,
+          mediaHeight: 0,
+          mediaDurationSec: 30,
+          hasPlaybackRange: false,
+          playbackStartSec: 0,
+          playbackEndSec: 0,
+        },
+      ],
+      cursorFrame: 0,
+      cursorLayer: 1,
+      rate: 30,
+      scale: 1,
+      sampleRate: 44100,
+    };
+  }
+
+  it(
+    "with `constraints.chain.source_audio`: #18 lands on Chained and distributes the audio once",
+    async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      await renderApp(bridge);
+      await switchTo("MiniMaxH3");
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "audioToLongA2v", selection: audioObjectSelection() });
+      });
+      await waitFor(() => expect(screen.getByRole("tab", { name: "Chained" })).toHaveAttribute("aria-selected", "true"), {
+        timeout: 5_000,
+      });
+      // 900 frames at 30 fps = 30 s (the extraction's own length).
+      await waitFor(
+        () => expect(screen.getAllByText(en.chained.sourceAudio.h3.toast.distributed(30))).toHaveLength(1),
+        { timeout: 5_000 },
+      );
+      const box = within(singlePanel()).getByRole("checkbox", { name: "References" });
+      expect(box).toBeChecked();
+      expect(screen.queryByText(/Generating from an audio track \(A2V\) is not available/)).not.toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "without the key (an older backend): #18 is refused with the A2V note, as before",
+    async () => {
+      const bridge = createMockBridge({ delayMs: 0 });
+      const realRequest = bridge.request.bind(bridge);
+      const spy = vi.spyOn(bridge, "request").mockImplementation((async (method: string, params: unknown) => {
+        const res = await (realRequest as (m: string, p: unknown) => Promise<unknown>)(method, params);
+        if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/models") {
+          const body = (res as { body: ModelsResponse }).body;
+          for (const block of body.base_models ?? []) {
+            if (block.engine_family === "h3" && block.constraints?.chain) {
+              block.constraints = { ...block.constraints, chain: { overlap_frames: block.constraints.chain.overlap_frames } };
+            }
+          }
+        }
+        return res;
+      }) as typeof bridge.request);
+      await renderApp(bridge);
+      await switchTo("MiniMaxH3");
+      act(() => {
+        bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "audioToLongA2v", selection: audioObjectSelection() });
+      });
+      await screen.findByText(/Generating from an audio track \(A2V\) is not available/, {}, { timeout: 5_000 });
+      expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
+      expect(spy.mock.calls.some((c) => c[0] === "timeline.extractAudio")).toBe(false);
     },
     20_000,
   );

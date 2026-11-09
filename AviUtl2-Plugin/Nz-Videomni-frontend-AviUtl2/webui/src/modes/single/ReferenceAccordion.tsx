@@ -26,6 +26,12 @@ export interface ReferenceAccordionA2v {
   strengthStep: number;
   /** The existing `audioPrecheck` warning text, or `null`. */
   tooShortWarning: string | null;
+  /** §1-120 (a Chained clip on MiniMax H3): the clip's window on the long
+   * audio, drawn as a badge on the card holding that audio (`slot.id ===
+   * audioId`) only — never on an audio put in by hand. Computed by the screen
+   * from the clip geometry on every render, never stored. Absent/`null` = no
+   * badge (Create, or no long audio). */
+  window?: { audioId: string; label: string; tooltip: string } | null | undefined;
 }
 
 export interface ReferenceAccordionProps {
@@ -34,17 +40,20 @@ export interface ReferenceAccordionProps {
   openSignal: number;
   /** The pen button: appends the card's tag (`<Picture 1>`) to the prompt. */
   onAppendTag: (tag: string) => void;
-  /** The Audios cards' A2V side. Not needed when {@link embedded}. */
+  /** The Audios cards' A2V side. Absent = no "Audio to video" box (a
+   * Chained clip on LTX or on a backend without `constraints.chain.source_audio`). */
   a2v?: ReferenceAccordionA2v | undefined;
   /** Test/DI seam for the drop zones; defaults to the app-wide bridge. */
   nativeBridge?: NativeBridge | undefined;
   /** A submit in flight: every control is locked (the form's `disabled`). */
   disabled?: boolean | undefined;
-  /** §1-109: one Chained clip's accordion. The Enable checkbox and the Audios
-   * cards' "Audio to video" / Strength / too-short warning are
-   * not drawn — the screen-wide References checkbox stands in for Enable, and
-   * a chain has no A2V card. The ON badge shows while at least one card is
-   * counted. Default `false` (Create, unchanged). */
+  /** §1-109: one Chained clip's accordion. The Enable checkbox is not drawn —
+   * the screen-wide References checkbox stands in for Enable. The ON badge
+   * shows while at least one card is counted (§1-120: or, with {@link a2v},
+   * while an "Audio to video" card is declared). The Audios cards' "Audio to
+   * video" / Strength / too-short warning are drawn only when {@link a2v} is
+   * given (§1-120: MiniMax H3 with `constraints.chain.source_audio`). Default
+   * `false` (Create, unchanged). */
   embedded?: boolean | undefined;
 }
 
@@ -62,7 +71,6 @@ function ReferenceSlotCard({
   onAppendTag,
   nativeBridge,
   disabled,
-  embedded,
 }: {
   slot: ReferenceSlot;
   use: ReferenceSlotUse;
@@ -71,7 +79,6 @@ function ReferenceSlotCard({
   onAppendTag: (tag: string) => void;
   nativeBridge?: NativeBridge | undefined;
   disabled: boolean;
-  embedded: boolean;
 }) {
   const strings = useStrings();
   const t = strings.single.reference;
@@ -204,8 +211,13 @@ function ReferenceSlotCard({
       {use.durationUnknown && <p className="warning-banner warning-banner-mild">{t.durationUnknownWarning}</p>}
       {slot.trimFailed && <p className="warning-banner warning-banner-mild">{t.trimFailedWarning}</p>}
 
-      {kind === "audio" && !embedded && a2v && (
+      {kind === "audio" && a2v && (
         <>
+          {a2v.window && slot.id !== null && slot.id === a2v.window.audioId && (
+            <p className="field-hint" title={a2v.window.tooltip} data-testid="ref-a2v-window">
+              {a2v.window.label}
+            </p>
+          )}
           <label className="field field-inline ref-a2v-toggle">
             {/* Enable off overrides the check: disabled, its state kept. */}
             <input
@@ -254,7 +266,6 @@ function ReferenceRow({
   onAppendTag,
   nativeBridge,
   disabled,
-  embedded,
 }: {
   kind: ReferenceKind;
   api: ReferenceSlotsApi;
@@ -262,7 +273,6 @@ function ReferenceRow({
   onAppendTag: (tag: string) => void;
   nativeBridge?: NativeBridge | undefined;
   disabled: boolean;
-  embedded: boolean;
 }) {
   const t = useStrings().single.reference;
   const { summary, rules, state } = api;
@@ -299,7 +309,6 @@ function ReferenceRow({
               onAppendTag={onAppendTag}
               nativeBridge={nativeBridge}
               disabled={disabled}
-              embedded={embedded}
             />
           );
         })}
@@ -335,8 +344,11 @@ export function ReferenceAccordion({
 
   const { summary, rules, state } = api;
   // Create: Enable. Embedded (a Chained clip, no Enable of its own): at least
-  // one card counted — the numerator of `n/maxTotal`.
-  const badgeOn = embedded ? summary.filled.total > 0 : state.enabled;
+  // one card counted — the numerator of `n/maxTotal` — or (§1-120, only when
+  // the clip takes A2V) a declared "Audio to video" card.
+  const badgeOn = embedded
+    ? summary.filled.total > 0 || (a2v !== undefined && declaredA2vSlot(state) !== null)
+    : state.enabled;
 
   return (
     <details className="form-accordion ref-accordion" ref={detailsRef}>
@@ -371,7 +383,6 @@ export function ReferenceAccordion({
             onAppendTag={onAppendTag}
             nativeBridge={nativeBridge}
             disabled={disabled}
-            embedded={embedded}
           />
         ))}
       </div>

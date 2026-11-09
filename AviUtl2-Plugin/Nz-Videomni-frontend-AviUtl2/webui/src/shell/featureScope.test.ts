@@ -367,6 +367,15 @@ describe("chainPanelsDisabledFor", () => {
     });
   });
 
+  it("§1-120: `chainSourceAudioAvailable` reopens the A2V panel only (omitted = closed as before)", () => {
+    expect(chainPanelsDisabledFor(["a2v"]).a2v).toBe(true);
+    expect(chainPanelsDisabledFor(["a2v"], false).a2v).toBe(true);
+    expect(chainPanelsDisabledFor(["a2v", "v2v"], true)).toMatchObject({ a2v: false, v2v: true });
+    expect(chainPanelsDisabledFor([], true).a2v).toBe(false);
+    // Batch A2V stays closed by `a2v` — not this function's to reopen.
+    expect(disabledUiTargets(["a2v"]).has("createSection.batchA2v")).toBe(true);
+  });
+
   it("§1-106: `chain_start_image` closes the opening image alone among the panels", () => {
     expect(chainPanelsDisabledFor(["chain_start_image"])).toEqual({
       v2v: false,

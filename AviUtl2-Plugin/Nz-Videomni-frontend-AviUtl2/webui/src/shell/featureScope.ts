@@ -364,12 +364,22 @@ export interface ChainPanelsDisabled {
  * whole tab through {@link disabledModesFor}, so the table gives `chain` no
  * `chainPanel.*` target and this function cannot duplicate a decision already
  * made one level up.
+ *
+ * §1-120: `chainSourceAudioAvailable` (= `constraints.chain.sourceAudio` is
+ * published — MiniMax H3) reopens the A2V panel even though the engine still
+ * declares `a2v` (the chain-wide `source_audio` stays refused; the panel then
+ * distributes the long audio to the clips' own A2V instead). The `a2v` name
+ * keeps closing Batch A2V — that is decided elsewhere. Omitted = `false`, the
+ * behaviour before §1-120.
  */
-export function chainPanelsDisabledFor(unsupportedFeatures: readonly string[]): ChainPanelsDisabled {
+export function chainPanelsDisabledFor(
+  unsupportedFeatures: readonly string[],
+  chainSourceAudioAvailable = false,
+): ChainPanelsDisabled {
   const disabled = disabledUiTargets(unsupportedFeatures);
   return {
     v2v: disabled.has("chainPanel.v2v"),
-    a2v: disabled.has("chainPanel.a2v"),
+    a2v: disabled.has("chainPanel.a2v") && !chainSourceAudioAvailable,
     endSource: disabled.has("chainPanel.endSource"),
     reference: disabled.has("chainPanel.reference"),
     startImage: disabled.has("chainPanel.startImage"),

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
@@ -84,5 +84,37 @@ describe("ClipReferences", () => {
     rerender({ disabled: true });
     rerender({ disabled: false });
     expect(register.mock.calls.length).toBe(calls);
+  });
+
+  // §1-120: the stable slot mutations the screen's distribution uses.
+  it("registers stable ops; adopting through them re-registers the new state with the same ops", async () => {
+    const { register, rerender } = renderClip();
+    await waitFor(() => expect(register).toHaveBeenCalled());
+    const first = register.mock.calls.at(-1)![1];
+    rerender({ disabled: true });
+    act(() => {
+      first.ops.adopt("audio", 1, { id: "long", fileName: "long.wav", filePath: "C:\\long.wav", durationSec: 30 });
+      first.ops.setA2vSlot(1);
+    });
+    await waitFor(() => expect(register.mock.calls.at(-1)![1].slots.audio[0]?.id).toBe("long"));
+    const last = register.mock.calls.at(-1)![1];
+    expect(last.ops).toBe(first.ops);
+    expect(last.summary.slotUse.audio[0]?.isA2v).toBe(true);
+  });
+
+  it("draws Audio to video only when the screen passes `a2v`", () => {
+    const a2v = {
+      available: true,
+      strength: 0.5,
+      onStrengthChange: vi.fn(),
+      strengthMin: 0,
+      strengthMax: 1,
+      strengthStep: 0.05,
+      tooShortWarning: null,
+    };
+    const { rerender } = renderClip({ referencesOn: true });
+    expect(screen.queryByRole("checkbox", { name: "Audio to video" })).toBeNull();
+    rerender({ referencesOn: true, a2v });
+    expect(screen.getAllByRole("checkbox", { name: "Audio to video" })).toHaveLength(3);
   });
 });

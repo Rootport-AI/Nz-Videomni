@@ -79,14 +79,18 @@ def test_to_clip_request_copies_the_clips_references():
     assert [r.kind for r in chain.to_clip_request(1).references] == ["audio"]
 
 
-def test_both_ltx_chain_tables_refuse_clip_references_last():
+def test_both_ltx_chain_tables_refuse_clip_references():
     from services.engines.ltx import adapter as ltx23
     from services.engines.ltx25 import adapter as ltx25
 
     with_refs = GenerateChainRequest(prompt=PROMPT, clips=_clips([], _refs("picture", 1)))
     without = GenerateChainRequest(prompt=PROMPT, clips=_clips([], []))
     for adapter in (ltx23, ltx25):
-        field, feature, predicate = adapter.CHAIN_REJECT_TABLE[-1]
+        # Found by its feature name: rows added after it (a clip's own A2V,
+        # 台帳 §1-120) do not move this test.
+        rows = [row for row in adapter.CHAIN_REJECT_TABLE if row[1] == "references"]
+        assert len(rows) == 1
+        field, feature, predicate = rows[0]
         assert (field, feature) == ("clips", "references")
         assert predicate(with_refs) and not predicate(without)
     # H3 honours it: no chain row of its own names the feature.
@@ -97,11 +101,14 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for_on_h3():
     """The H3 twin of LTX 2.5's nested audit: the chain audit sees only the
     top level, and ``clips`` is classified as honoured (and refused for a key
     frame's strength), which is a promise about ``ChainClip``'s own fields too."""
-    assert set(ChainClip.model_fields) == {"prompt", "num_frames", "conditioning_images", "references"}
+    assert set(ChainClip.model_fields) == {
+        "prompt", "num_frames", "conditioning_images", "references", "source_audio",
+    }
     source = inspect.getsource(h3._RealBackendH3.generate_chain)
     assert "chain.clip_prompt(i)" in source  # prompt (the shared one + the clip's own)
     assert "num_frames" in source
     assert "_clip_reference_payloads(chain, clip_reference_paths)" in source  # references
+    assert "_clip_source_audio_payloads(chain, clip_source_audio_paths)" in source  # source_audio (台帳 §1-120)
     # conditioning_images: clip 0's key frames are read (台帳 §1-121); only a
     # strength is refused, by the last row (``keyframe_strength``).
     assert "chain.clips[0].conditioning_images" in source
@@ -323,15 +330,16 @@ def test_h3_runner_forwards_clip_reference_paths():
     assert seen["seed"] == 3
 
 
-def test_h3_runner_chain_signature_is_ltx_runners_plus_clip_reference_paths():
+def test_h3_runner_chain_signature_is_ltx_runners_plus_the_h3_keywords():
     """The shared thirteen keywords are copied, not inherited: if
     ``run_chain_job`` ever passes a new one to every runner, this fails rather
-    than an H3 chain dying with a TypeError at run time."""
+    than an H3 chain dying with a TypeError at run time. The H3-only ones:
+    ``clip_reference_paths`` and ``clip_source_audio_paths`` (台帳 §1-120)."""
     from services.engines.ltx.adapter import LTXRunner
 
     ltx = list(inspect.signature(LTXRunner.generate_chain).parameters)
     ours = list(inspect.signature(h3.H3Runner.generate_chain).parameters)
-    assert ours == ltx + ["clip_reference_paths"]
+    assert ours == ltx + ["clip_reference_paths", "clip_source_audio_paths"]
     for backend in (h3._RealBackendH3, h3._MockBackendH3):
         assert list(inspect.signature(backend.generate_chain).parameters) == ours
 

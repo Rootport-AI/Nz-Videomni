@@ -154,6 +154,11 @@ class RequestRules:
     (written back by the family's chain validation). ``None`` for a family that
     refuses the field (LTX: its retake audio is ``regenerate_audio``), and then
     the key is left out entirely. The 0..1 bound itself is the schema's.
+    ``chain_source_audio_strength`` is the range of ``POST /generate/chain``'s
+    ``clips[i].source_audio.strength`` (a chain clip's own A2V, MiniMax H3,
+    台帳 §1-120), published inside the chain key as
+    ``constraints["chain"]["source_audio"]``. ``None`` for a family without
+    it (LTX refuses the field), and then the inner key is left out.
     """
 
     frames_step: int
@@ -175,6 +180,7 @@ class RequestRules:
     reference: ReferenceLimits | None = None
     chain_overlap_frames: int | None = None
     retake_audio_strength: SamplingRange | None = None
+    chain_source_audio_strength: SamplingRange | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -206,7 +212,12 @@ class RequestRules:
         # Only a fixed-overlap chain family (MiniMax H3) publishes the key, so
         # LTX publishes the same block as before.
         if self.chain_overlap_frames is not None:
-            published["chain"] = {"overlap_frames": self.chain_overlap_frames}
+            chain: dict = {"overlap_frames": self.chain_overlap_frames}
+            # Only a family whose chain clips take their own A2V (MiniMax H3)
+            # adds the inner key: the operation panel opens its distribution on it.
+            if self.chain_source_audio_strength is not None:
+                chain["source_audio"] = {"strength": self.chain_source_audio_strength.as_dict()}
+            published["chain"] = chain
         # Only a family whose retake takes an audio Strength (MiniMax H3)
         # publishes the key, so LTX publishes the same block as before.
         if self.retake_audio_strength is not None:

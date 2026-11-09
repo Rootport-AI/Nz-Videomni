@@ -279,8 +279,9 @@ _CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "re
     "clips", "source", "retake",
 }
 #: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109;
-#: ``images``: 台帳 §1-121, clip 0 only).
-_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references"})
+#: ``images``: 台帳 §1-121, clip 0 only; ``source_audio``: 台帳 §1-120, the
+#: clip's own A2V audio, the single job's keys plus ``offset_frames``).
+_CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references", "source_audio"})
 #: The keys of ``source`` this engine reads (台帳 §1-121).
 _SOURCE_FIELDS = frozenset({"path", "context_frames"})
 #: The keys of ``retake`` this engine reads (台帳 §1-123; the 22-frame head and tail are fixed, not sent).
@@ -635,7 +636,8 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
     Each entry's ``references`` is read by :func:`_references` (its ignored
     inner keys come back as ``references[].<key>``) and its ``images`` by
     :func:`_images` (``images[].<key>``); which clip may carry images is the
-    chain's ``_check_spec``.
+    chain's ``_check_spec``. Its ``source_audio`` is read by
+    :func:`_chain_clip_source_audio` (``source_audio.<key>``).
     """
     from engine_h3.chain_h3 import H3ChainClipSpec  # noqa: PLC0415
 
@@ -653,11 +655,37 @@ def _chain_clips(msg: dict) -> tuple[list, list[str]]:
             raise ValueError(f"clips の num_frames は整数で渡してください（{frames!r}）")
         references, ref_ignored = _references(entry)
         images, image_ignored = _images(entry)
+        source_audio, audio_ignored = _chain_clip_source_audio(entry)
         ignored |= {k for k in entry if k not in _CHAIN_CLIP_FIELDS}
         ignored |= {f"references[].{k}" for k in ref_ignored}
         ignored |= {f"images[].{k}" for k in image_ignored}
-        out.append(H3ChainClipSpec(prompt=prompt, num_frames=frames, references=references, images=images))
+        ignored |= {f"source_audio.{k}" for k in audio_ignored}
+        out.append(H3ChainClipSpec(
+            prompt=prompt, num_frames=frames, references=references, images=images, source_audio=source_audio,
+        ))
     return out, sorted(ignored)
+
+
+def _chain_clip_source_audio(entry: dict) -> tuple:
+    """A ``clips`` entry's ``source_audio`` -> ``(H3ChainClipAudio | None, ignored inner keys)`` (台帳 §1-120).
+
+    ``path`` and ``strength`` are read by the single job's :func:`_source_audio`;
+    ``offset_frames`` (absent / null = 0) must be an integer of 0 or more (not
+    a bool). ``offset_frames`` is not among the ignored keys. The 0..1 range
+    and the file itself are the chain's ``_check_spec``.
+    """
+    from engine_h3.chain_h3 import H3ChainClipAudio  # noqa: PLC0415
+
+    audio, ignored = _source_audio(entry)
+    if audio is None:
+        return None, []
+    offset = entry["source_audio"].get("offset_frames")
+    if offset is None:
+        offset = 0
+    elif isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError(f"source_audio の offset_frames は 0 以上の整数で渡してください（{offset!r}）")
+    ignored = [k for k in ignored if k != "offset_frames"]
+    return H3ChainClipAudio(path=audio.path, strength=audio.strength, offset_frames=offset), ignored
 
 
 def _chain_source(msg: dict) -> tuple:
@@ -706,6 +734,15 @@ def _chain_retake(msg: dict) -> tuple:
     return H3ChainRetake(path=path, audio_strength=float(strength)), ignored
 
 
+def _chain_a2v_summary(clips) -> list:
+    """The log's ``a2v=``: per clip ``(file name, strength, offset_frames)``, or None without one."""
+    return [
+        None if c.source_audio is None
+        else (Path(c.source_audio.path).name, c.source_audio.strength, c.source_audio.offset_frames)
+        for c in clips
+    ]
+
+
 def _do_generate_chain(msg: dict) -> None:
     """Run one chain (台帳 §1-106 / §1-121 / §1-123 retake); the mp4 is written by this process to ``msg['output_path']``."""
     if _PIPE is None:
@@ -745,6 +782,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"prefetch={base.block_swap_prefetch} vram16={base.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
         + (f"images={[len(c.images) for c in clips]} " if any(c.images for c in clips) else "")
+        + (f"a2v={_chain_a2v_summary(clips)} " if any(c.source_audio is not None for c in clips) else "")
         + (f"source={(Path(source.path).name, source.context_frames)} " if source is not None else "")
         + (f"retake={(Path(retake.path).name, retake.audio_strength)} " if retake is not None else "")
         + (f"neg=vsf(scale={base.vsf_scale}) " if base.negative_prompt else "neg=off ")

@@ -895,17 +895,24 @@ def _chain_request(**overrides) -> GenerateChainRequest:
 #: and lives in :data:`CHAIN_ACCEPTED_NAG`; it was the last row that carried a
 #: schema companion, so every row that remains is a bare one-field override of
 #: an engine-level field the single path refuses for the same reason.
+#: Keyed by the row's FEATURE name (two rows read the same field ``clips``).
 CHAIN_OVERRIDES: dict[str, dict] = {
-    "pipeline": {"pipeline": "two_stage_hq"},
-    "vae_mode": {"vae_mode": "prune_vaed"},
+    "two_stage_hq": {"pipeline": "two_stage_hq"},
+    "prune_vaed": {"vae_mode": "prune_vaed"},
     # MiniMax H3 only (VRAM 16GB mode), on the chain schema too (台帳 §1-106).
     "vram16_mode": {"vram16_mode": True},
-    # MiniMax H3 only (Ref2VA per clip, 台帳 §1-109): keyed by the FIELD the
-    # row reads (``clips``); its feature name is ``references``.
-    "clips": {
+    # MiniMax H3 only (Ref2VA per clip, 台帳 §1-109): the row reads ``clips``.
+    "references": {
         "clips": [
             {"num_frames": 25},
             {"num_frames": 25, "references": [{"kind": "picture", "id": "img-1", "slot": 1}]},
+        ]
+    },
+    # MiniMax H3 only (a clip's own A2V, 台帳 §1-120): the row reads ``clips`` too.
+    "source_audio": {
+        "clips": [
+            {"num_frames": 25},
+            {"num_frames": 25, "source_audio": {"audio_id": "aud-1", "offset_frames": 3}},
         ]
     },
 }
@@ -1274,20 +1281,20 @@ def test_a_plain_chain_is_accepted():
         ltx25.reject_chain(request)  # no raise
 
 
-@pytest.mark.parametrize("field", list(CHAIN_OVERRIDES))
-def test_every_rejected_chain_field_raises_feature_unsupported(field):
-    request = _chain_request(**CHAIN_OVERRIDES[field])
-    # The field under test really is non-default for this request...
-    predicate = next(p for f, _feat, p in ltx25.CHAIN_REJECT_TABLE if f == field)
+@pytest.mark.parametrize("feature", list(CHAIN_OVERRIDES))
+def test_every_rejected_chain_field_raises_feature_unsupported(feature):
+    request = _chain_request(**CHAIN_OVERRIDES[feature])
+    # The row under test (found by its feature name) really is non-default...
+    predicate = next(p for _f, feat, p in ltx25.CHAIN_REJECT_TABLE if feat == feature)
     assert predicate(request)
     # ...and the FIRST offender in table order is what the message names.
     expected = next(feat for _f, feat, pred in ltx25.CHAIN_REJECT_TABLE if pred(request))
     with pytest.raises(APIError) as ei:
         ltx25.reject_chain(request)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
-    if expected in ltx23.H3_ONLY_REFUSALS:
+    if expected in ltx23.H3_ONLY_CHAIN_REFUSALS:
         # Neither LTX runs it: the message must not point at LTX 2.3.
-        assert ei.value.detail == ltx23.H3_ONLY_REFUSALS[expected]
+        assert ei.value.detail == ltx23.H3_ONLY_CHAIN_REFUSALS[expected]
         return
     assert expected in ei.value.detail
     assert "LTX 2.3" in ei.value.detail
@@ -1295,7 +1302,7 @@ def test_every_rejected_chain_field_raises_feature_unsupported(field):
 
 def test_the_chain_reject_table_covers_every_field_the_fixture_names():
     """The parametrized test above is only as good as its request table."""
-    assert set(CHAIN_OVERRIDES) == {f for f, _feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert set(CHAIN_OVERRIDES) == {feat for _f, feat, _p in ltx25.CHAIN_REJECT_TABLE}
 
 
 def test_the_chain_ignore_table_is_logged_only_when_set(caplog):
@@ -1332,7 +1339,7 @@ def test_generate_chain_refuses_an_out_of_scope_chain(ltx25_paths):
     cfg, _paths, descriptor = ltx25_paths
     backend = _backend(cfg, descriptor)
     with pytest.raises(APIError) as ei:
-        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["vae_mode"]), output_dir=None)
+        backend.generate_chain(_chain_request(**CHAIN_OVERRIDES["prune_vaed"]), output_dir=None)
     assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
     assert "LTX 2.3" in ei.value.detail
 
@@ -1344,7 +1351,7 @@ def test_the_backend_refuses_a_chain_through_the_shared_function(ltx25_paths):
     The subject followed the test above off NAG and onto ``vae_mode`` when the
     NAG/VSF increment made a negative prompt a thing this engine runs."""
     cfg, _paths, descriptor = ltx25_paths
-    request = _chain_request(**CHAIN_OVERRIDES["vae_mode"])
+    request = _chain_request(**CHAIN_OVERRIDES["prune_vaed"])
     with pytest.raises(APIError) as endpoint_side:
         ltx25.reject_chain(request)
     with pytest.raises(APIError) as backend_side:
@@ -3306,7 +3313,7 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for():
     get named here, and a new one fails this test rather than being silently
     dropped from the payload the worker receives."""
     assert set(ChainClip.model_fields) == {
-        "prompt", "num_frames", "conditioning_images", "references",
+        "prompt", "num_frames", "conditioning_images", "references", "source_audio",
     }
     # ...and each of the three honoured ones really is read when the payload
     # is built.
@@ -3314,10 +3321,14 @@ def test_the_nested_chain_clip_fields_are_all_accounted_for():
     assert "clip_prompt" in source  # prompt (the shared one + the clip's own)
     assert "num_frames" in source
     assert "conditioning_images" in source
-    # ``references`` is the refused one (MiniMax H3 only): the chain reject
-    # table's last row, never read into the payload.
-    assert ("clips", "references") == ltx25.CHAIN_REJECT_TABLE[-1][:2]
+    # ``references`` and ``source_audio`` are the refused ones (MiniMax H3
+    # only): chain reject table rows (found by feature name), never read into
+    # the payload. (``source_audio`` the top-level LTX A2V is read: the clip
+    # field is checked through the row, not the source text.)
+    rows = {feat: field for field, feat, _p in ltx25.CHAIN_REJECT_TABLE}
+    assert rows["references"] == "clips" and rows["source_audio"] == "clips"
     assert "references" not in source
+    assert "clip.source_audio" not in source and "clips[i].source_audio" not in source
 
 
 #: Honoured fields that the ADAPTER never reads, exempt from the two "declared

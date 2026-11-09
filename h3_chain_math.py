@@ -100,9 +100,29 @@ H3_CHAIN_MIN_CLIPS_WITH_SOURCE = 1
 #: LTX retake's minimum is also 73, from its own grid (a different reason).
 #: 操作パネルはこの値を `config.limits.retake_window_min_frames`（LTX の 73）で読んでいるので、変えるときは両方を見る。
 H3_RETAKE_MIN_FRAMES = 73
+#: The audio sample rate (engine_h3/constants.py AUDIO_SAMPLE_RATE; the app side
+#: does not import engine_h3, agreement checked by test).
+H3_AUDIO_SAMPLE_RATE = 32000
 #: Audio samples per audio latent at 32 kHz (40 latents per second), and per frame (32000 / 24).
 H3_AUDIO_SAMPLES_PER_LATENT = 800
 H3_AUDIO_SAMPLES_PER_FRAME = Fraction(4000, 3)
+
+
+def clip_audio_start_sample(offset_frames: int) -> int:
+    """The 32 kHz sample a chain clip's own audio (per-clip A2V) starts at.
+
+    ``offset_frames`` is the clip's start on the audio's timeline in frames
+    (the UI's distribution sends ``S_i``; a hand-picked audio sends 0). The
+    start is put on an AUDIO LATENT boundary, ``round(O * 5/3) * 800``: clip
+    i's latent 0 sits at the concatenated audio's latent ``round(S_i * 5/3)``
+    (``compute_h3_chain_layout``), so reading from there keeps the A2V rows
+    sample-continuous with the fixed head (the previous clip's tail). The
+    offset to the video is at most 1/3 latent, the drift a chain already
+    accepts (裁定 84-6). The app's preflight and the engine both call this.
+    """
+    if isinstance(offset_frames, bool) or not isinstance(offset_frames, int) or offset_frames < 0:
+        raise ValueError(f"offset_frames must be an integer >= 0 ({offset_frames!r})")
+    return _audio_latents(offset_frames) * H3_AUDIO_SAMPLES_PER_LATENT
 
 
 @dataclass(frozen=True)

@@ -315,7 +315,11 @@ H3_CONSTRAINTS = {
     "keyframes": {"step": 1, "offset": 0},
     "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
     # The chain's fixed overlap (台帳 §1-106, 裁定 84-3). H3 only: LTX has no key.
-    "chain": {"overlap_frames": 22},
+    # ``source_audio``: a chain clip's own A2V Strength (台帳 §1-120).
+    "chain": {
+        "overlap_frames": 22,
+        "source_audio": {"strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
+    },
     "prompt_token_limit": None,
     "reference": {
         "max_images": 9,
@@ -1307,9 +1311,7 @@ def test_chain_lora_audio_strength_is_nulled():
 
 
 def test_chain_constraints_publish_the_fixed_overlap_from_the_geometry():
-    assert engines.request_constraints("h3")["chain"] == {
-        "overlap_frames": h3_chain_math.H3_CHAIN_OVERLAP_FRAMES
-    }
+    assert engines.request_constraints("h3")["chain"]["overlap_frames"] == h3_chain_math.H3_CHAIN_OVERLAP_FRAMES
     assert "chain" not in engines.request_constraints("ltx")
     assert "chain" not in engines.request_constraints("ltx25")
 

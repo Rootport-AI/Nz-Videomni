@@ -50,6 +50,7 @@ from services import prompt_tokens, video_io
 from services.engines.ltx.chain_rules import validate_ltx_chain
 from services.engines.ltx.request_rules import LTX_REQUEST_RULES
 from services.engines.ltx.adapter import (
+    H3_ONLY_CHAIN_REFUSALS,
     H3_ONLY_REFUSALS,
     _MockBackend,
     _RealBackend,
@@ -342,6 +343,11 @@ CHAIN_REJECT_TABLE: tuple[
     # (the prompts, lengths and clip-0 images), the overlap this adapter's
     # audit allows.
     ("clips", "references", lambda r: any(clip.references for clip in r.clips)),
+    # MiniMax H3 only (a clip's own A2V, 台帳 §1-120). A clip's default is None.
+    # LAST, for the same reason; the feature name is the single path's
+    # ``source_audio`` (already published), the sentence the chain's
+    # (``H3_ONLY_CHAIN_REFUSALS``).
+    ("clips", "source_audio", lambda r: any(clip.source_audio is not None for clip in r.clips)),
 )
 
 #: The ignore-and-log half. Field-for-field the same as
@@ -574,12 +580,12 @@ def reject_chain(request: GenerateChainRequest) -> None:
     Lives at module level (like :func:`reject_unsupported`) so the API layer can
     refuse before a job record is created, while the backend method keeps it as
     the backstop for a payload that arrives another way. A MiniMax H3 feature
-    (``H3_ONLY_REFUSALS``) gets its own message, as on the single path.
+    (``H3_ONLY_CHAIN_REFUSALS``) gets its own message, as on the single path.
     """
     for field, feature, is_non_default in CHAIN_REJECT_TABLE:
         if is_non_default(request):
-            if feature in H3_ONLY_REFUSALS:
-                raise feature_unsupported(feature, detail=H3_ONLY_REFUSALS[feature])
+            if feature in H3_ONLY_CHAIN_REFUSALS:
+                raise feature_unsupported(feature, detail=H3_ONLY_CHAIN_REFUSALS[feature])
             raise feature_unsupported(
                 feature,
                 detail=(

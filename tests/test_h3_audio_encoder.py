@@ -329,6 +329,61 @@ def test_format_change_is_refused_in_japanese():
         S.collect_resampled(iter([frame(44100), frame(48000)]), r, read_samples=10**9)
 
 
+def test_collect_resampled_skips_after_the_conversion():
+    frames = []
+    for k in range(3):
+        arr = np.full((2, 1000), 0.1 * (k + 1), dtype=np.float32)
+        f = av.AudioFrame.from_ndarray(arr, format="fltp", layout="stereo")
+        f.sample_rate = 32000
+        frames.append(f)
+    r = AudioResampler(format="fltp", layout=None, rate=32000)
+    chunks = S.collect_resampled(iter(frames), r, read_samples=10**9, skip_samples=1500)
+    assert [c.shape[1] for c in chunks] == [500, 1000]          # the first chunk is not kept at all
+    assert float(chunks[0][0, 0]) == pytest.approx(0.2) and float(chunks[1][0, 0]) == pytest.approx(0.3)
+
+
+@pytest.mark.parametrize("rate", [32000, 44100])
+def test_start_samples_zero_is_the_default(tmp_path, rate):
+    path = _write_wav(tmp_path / "a.wav", _sine(rate * 2, rate)[None], rate)
+    plain, info = S.load_source_waveform(str(path), keep_samples=32000, read_samples=48000)
+    zero, info0 = S.load_source_waveform(str(path), keep_samples=32000, read_samples=48000, start_samples=0)
+    assert torch.equal(plain, zero)
+    assert info == info0 and info["start_samples"] == 0
+
+
+@pytest.mark.parametrize("rate", [32000, 44100])
+@pytest.mark.parametrize("start", [1, 1023, 1024, 12345, 40001])
+def test_start_samples_is_the_whole_decodes_slice(tmp_path, rate, start):
+    """Bit for bit the whole decode's ``[:, N:N + read]``: 32 kHz passes through,
+    44.1 kHz is resampled (the same stream, so the same samples); the starts cross
+    the decoder's and the resampler's chunk boundaries."""
+    path = _write_wav(tmp_path / "a.wav", _sine(rate * 3, rate)[None], rate)
+    whole, _info = S.load_source_waveform(str(path), keep_samples=1, read_samples=10**9)
+    read = 20000
+    part, info = S.load_source_waveform(str(path), keep_samples=read, read_samples=read, start_samples=start)
+    assert torch.equal(part, whole[:, start:start + read])
+    assert info["start_samples"] == start and info["decoded_samples"] == read
+
+
+def test_start_samples_shortfall_counts_from_the_start(tmp_path):
+    n, start, keep = 32000, 10000, 22000
+    ok = _write_wav(tmp_path / "ok.wav", _sine(n - 20, 32000)[None], 32000)       # 20 short of start + keep
+    wave_out, info = S.load_source_waveform(str(ok), keep_samples=keep, read_samples=keep, start_samples=start)
+    assert wave_out.shape == (2, keep) and info["padded_samples"] == 20
+    short = _write_wav(tmp_path / "short.wav", _sine(n - 33, 32000)[None], 32000)
+    with pytest.raises(ValueError, match="音声が映像より短いです"):
+        S.load_source_waveform(str(short), keep_samples=keep, read_samples=keep, start_samples=start)
+
+
+def test_start_samples_past_the_end_and_bad_values_are_refused(tmp_path):
+    path = _write_wav(tmp_path / "a.wav", _sine(8000, 32000)[None], 32000)
+    with pytest.raises(ValueError, match="開始位置"):
+        S.load_source_waveform(str(path), keep_samples=10, read_samples=10, start_samples=8000)
+    for bad in (-1, True, 1.5):
+        with pytest.raises(ValueError, match="start_samples"):
+            S.load_source_waveform(str(path), keep_samples=10, read_samples=10, start_samples=bad)
+
+
 def test_missing_file_and_bad_arguments_are_refused(tmp_path):
     with pytest.raises(ValueError, match="開けませんでした"):
         S.load_source_waveform(str(tmp_path / "none.wav"), keep_samples=10, read_samples=10)

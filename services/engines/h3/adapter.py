@@ -24,7 +24,7 @@ facts that are genuinely different:
 THE THIRD FAMILY DOES NOT YET EARN THE GENERALISATIONS
 Docs/MULTI_ENGINE_DESIGN.md §8.1 deferred to it (a generic runner, a shared
 mock, a variable category set): ``H3Runner`` subclasses ``LTXRunner``, the mock
-is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, ``generate_chain`` also forwards ``clip_reference_paths``, and the categories are the same four words.
+is 2.3's plus the A2V and reference records (``_MockBackendH3``); ``generate`` also forwards ``source_audio_path`` and ``reference_paths``, ``generate_chain`` also forwards ``clip_reference_paths`` and ``clip_source_audio_paths``, and the categories are the same four words.
 
 THE WORKER PROTOCOL (Docs/MINIMAX_H3_DESIGN.md §8): ``load`` carries the four
 paths, ``tokenizer_dir``, ``blocks_on_gpu``, ``attention_backend``,
@@ -198,6 +198,11 @@ REQUEST_RULES = RequestRules(
     # waveform back. Published as constraints["retake"]; an omitted value
     # becomes the default (validate_chain).
     retake_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
+    # A chain clip's own A2V (``clips[i].source_audio.strength``, 台帳 §1-120):
+    # mask value 1 - s on the clip's new audio rows (the chain always decodes).
+    # Published as constraints["chain"]["source_audio"]: the operation panel's
+    # signal to open the long audio's distribution.
+    chain_source_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -384,7 +389,10 @@ CHAIN_IGNORED_FIELDS: dict[str, str] = {
 #: ``negative_prompt`` / ``neg_method`` / ``vsf_scale`` become the top-level
 #: ``nag`` key, only with ``nag_enabled``), except
 #: ``crop_output`` (the app-side centre-crop) and ``embed_mp4_metadata`` (the
-#: app-side recipe embed).
+#: app-side recipe embed). ``clips`` also carries each clip's own
+#: ``source_audio`` (a clip's A2V, 台帳 §1-120): it becomes that clip's
+#: ``source_audio`` ``{path, strength, offset_frames}``; the top-level
+#: ``source_audio`` stays refused (``a2v`` above).
 CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
     {
         "prompt",
@@ -688,6 +696,37 @@ def _clip_reference_payloads(
     ]
 
 
+def _clip_source_audio_payloads(
+    chain: GenerateChainRequest, clip_source_audio_paths: list[Path | None] | None
+) -> list[dict | None]:
+    """Each clip's own ``source_audio`` (台帳 §1-120) with the resolved path, as
+    the worker takes it: ``{path, strength, offset_frames}``; ``None`` for a
+    clip without one. ``clip_source_audio_paths`` is one path (or ``None``) per
+    clip (``None`` = no clip has one); a count that does not match, or a clip
+    with ``source_audio`` and no path, raises ``RuntimeError``."""
+    if clip_source_audio_paths is None:
+        clip_source_audio_paths = [None for _ in chain.clips]
+    if len(clip_source_audio_paths) != len(chain.clips):
+        raise RuntimeError(
+            f"MiniMax H3: {len(chain.clips)} clip(s) in the chain but "
+            f"{len(clip_source_audio_paths)} source audio path(s) resolved"
+        )
+    out: list[dict | None] = []
+    for i, (clip, path) in enumerate(zip(chain.clips, clip_source_audio_paths)):
+        spec = clip.source_audio
+        if spec is None:
+            out.append(None)
+            continue
+        if path is None:
+            raise RuntimeError(f"MiniMax H3: clips[{i}].source_audio requested but its audio was not resolved")
+        out.append({
+            "path": str(path),
+            "strength": float(spec.strength),
+            "offset_frames": int(spec.offset_frames),
+        })
+    return out
+
+
 def _reference_counts(request: GenerateRequest) -> dict[str, int]:
     """The worker's ``done.h3.references`` summary, counted from the request.
     ``request`` is anything with ``references``: a single
@@ -975,9 +1014,17 @@ class _RealBackendH3(_RealBackend):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
+        clip_source_audio_paths: list[Path | None] | None = None,
     ) -> GenerationOutcome:
         """A T2V / V2V / i2v / Retake chain via the worker's ``generate_chain`` op
         (裁定 84; 台帳 §1-121, §1-123).
+
+        ``clip_source_audio_paths`` (H3-only, 台帳 §1-120): each clip's own
+        ``source_audio`` resolved by the audio store, one path or ``None`` per
+        clip (``None`` = no clip has one); a clip with one carries
+        ``source_audio`` ``{path, strength, offset_frames}`` after its
+        ``references`` (:func:`_clip_source_audio_payloads`). The top-level
+        keys are unchanged.
 
         THE CALL SHAPE IS LTX's thirteen keywords (``PipelineManager.run_chain_job``
         passes them to every runner) plus the H3-only ``clip_reference_paths``
@@ -1056,6 +1103,10 @@ class _RealBackendH3(_RealBackend):
         for entry, references in zip(clips, _clip_reference_payloads(chain, clip_reference_paths)):
             if references:
                 entry["references"] = references
+        # source_audio: only on a clip that has its own (an absent key = none), last.
+        for entry, audio in zip(clips, _clip_source_audio_payloads(chain, clip_source_audio_paths)):
+            if audio is not None:
+                entry["source_audio"] = audio
         if chain.source_video is not None and source_tail_path is None:
             raise RuntimeError("MiniMax H3: source_video requested but no source tail was cut")
         if chain.retake is not None and retake_window_path is None:
@@ -1297,6 +1348,7 @@ class _MockBackendH3(_MockBackend):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
+        clip_source_audio_paths: list[Path | None] | None = None,
     ) -> GenerationOutcome:
         """A synthetic H3 chain: ONE mp4 of the whole timeline (``F_total`` =
         the clips minus 22 per seam, ``h3_chain_math``) and the layout as
@@ -1316,12 +1368,20 @@ class _MockBackendH3(_MockBackend):
         ``clip_reference_paths`` gets the real backend's resolution check, and
         a clip with references records their counts as
         ``done.chain.clips[i].references`` (``{pictures, videos, audios}``), as
-        the real worker does."""
+        the real worker does.
+        ``clip_source_audio_paths`` gets the real backend's resolution check
+        too, and a clip with its own source audio records
+        ``done.chain.clips[i].a2v`` (台帳 §1-120) with what the geometry decides
+        (``mask_value``, ``audio_latents``, ``fixed_head_latents``,
+        ``start_sample``, ``required_samples``), ``channels_used`` from an
+        ffprobe of the upload (once per file), ``None`` for what only a real
+        encode can tell, ``audio_output: "decoded"`` and ``mock: true``."""
         if not self._loaded:
             self.load()
 
         chain = chain_request
         clip_references = _clip_reference_payloads(chain, clip_reference_paths)
+        clip_audios = _clip_source_audio_payloads(chain, clip_source_audio_paths)
         seed = int(seed) if seed is not None else resolve_seed(chain.seed)
         layout = h3_chain_math.compute_h3_chain_layout(
             [c.num_frames for c in chain.clips],
@@ -1390,6 +1450,27 @@ class _MockBackendH3(_MockBackend):
         for i, references in enumerate(clip_references):
             if references:
                 done_chain["clips"][i]["references"] = _reference_counts(chain.clips[i])
+        probed: dict[str, str | None] = {}
+        for i, audio in enumerate(clip_audios):
+            if audio is None:
+                continue
+            if audio["path"] not in probed:
+                _sample_rate, channels = video_io.probe_audio_stream(Path(audio["path"]))
+                probed[audio["path"]] = _mock_channels_used(channels)
+            frames_i = int(layout.clip_frames[i])
+            done_chain["clips"][i]["a2v"] = {
+                "mask_value": 1.0 - float(audio["strength"]),
+                "audio_latents": int(layout.clip_audio_latents[i]),
+                "fixed_head_latents": int(layout.audio_overlap_latents[i - 1]) if i else 0,
+                "start_sample": h3_chain_math.clip_audio_start_sample(int(audio["offset_frames"])),
+                "required_samples": round(frames_i * h3_chain_math.H3_AUDIO_SAMPLE_RATE / int(chain.frame_rate)),
+                "encoded_samples": None,
+                "channels_used": probed[audio["path"]],
+                "resampler": None,
+                "encoder_tensors": None,
+                "audio_output": "decoded",
+                "mock": True,
+            }
         v2v_layout = done_chain.pop("v2v", None)
         retake_layout = done_chain.pop("retake", None)
         done_chain["h3"] = {
@@ -1523,15 +1604,18 @@ class H3Runner(LTXRunner):
         reference_video_path: Path | None = None,
         seed: int | None = None,
         clip_reference_paths: list[list[Path]] | None = None,
+        clip_source_audio_paths: list[Path | None] | None = None,
     ) -> GenerationOutcome:
         """``LTXRunner.generate_chain`` (the thirteen keywords every runner
         takes) plus ``clip_reference_paths`` (each clip's resolved Ref2VA
         uploads, one path list per clip in request order; ``None`` when no
-        clip has references), passed to the backend. The thirteen-keyword
+        clip has references) and ``clip_source_audio_paths`` (each clip's own
+        resolved source audio, one path or ``None`` per clip; ``None`` when no
+        clip has one, 台帳 §1-120), passed to the backend. The thirteen-keyword
         contract of ``LTXRunner.generate_chain`` itself is unchanged:
-        ``PipelineManager.run_chain_job`` adds the keyword only when a clip has
-        references, and only an H3 chain can (both LTX families refuse
-        ``clips[i].references``)."""
+        ``PipelineManager.run_chain_job`` adds each keyword only when a clip has
+        references / its own source audio, and only an H3 chain can (both LTX
+        families refuse ``clips[i].references`` and ``clips[i].source_audio``)."""
         if self._backend is None or not self._backend.loaded:
             self.load()
         assert self._backend is not None
@@ -1551,4 +1635,5 @@ class H3Runner(LTXRunner):
             reference_video_path=reference_video_path,
             seed=seed,
             clip_reference_paths=clip_reference_paths,
+            clip_source_audio_paths=clip_source_audio_paths,
         )

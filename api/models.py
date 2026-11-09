@@ -440,6 +440,26 @@ class SingleSourceAudioSpec(BaseModel):
     strength: float = Field(0.5, ge=0.0, le=1.0)
 
 
+class ChainClipSourceAudioSpec(SingleSourceAudioSpec):
+    """One chain clip's own audio-to-video source (``ChainClip.source_audio``;
+    optional, MiniMax H3 only, 台帳 §1-120).
+
+    ``audio_id`` and ``strength`` mean what they mean for a single generate
+    (:class:`SingleSourceAudioSpec`; the clip's new audio rows get the mask
+    value ``1 - strength``, the fixed head stays the previous clip's tail), but
+    the chain always decodes its audio: 1.0 does NOT mux the original waveform.
+    ``offset_frames`` is the clip's start on that audio's timeline, in frames
+    (the operation panel's distribution sends the clip's timeline start S_i
+    and every clip names the same upload; a hand-picked audio sends 0). The
+    engine reads from sample ``h3_chain_math.clip_audio_start_sample`` (an
+    audio latent boundary); no upper bound here, the length is the preflight's
+    (422 SOURCE_AUDIO_TOO_SHORT). Both LTX families refuse it (422
+    FEATURE_UNSUPPORTED, feature ``source_audio``).
+    """
+
+    offset_frames: int = Field(0, ge=0)
+
+
 class ReferenceInput(BaseModel):
     """One Reference (Ref2VA) input of a single generate or of one chain clip (``ChainClip.references``) (optional, MiniMax H3 only).
 
@@ -928,12 +948,16 @@ class ChainClip(BaseModel):
     answer 422 FEATURE_UNSUPPORTED). They condition that clip's segment only
     (no reference is shared across clips); the counts and slot ranges are the
     family's, per clip. ``[]`` = none. See :class:`ReferenceInput`.
+    ``source_audio`` is the clip's own audio-to-video source (ADDITIVE/optional,
+    MiniMax H3 only, any clip; both LTX families answer 422
+    FEATURE_UNSUPPORTED). ``None`` = none. See :class:`ChainClipSourceAudioSpec`.
     """
 
     prompt: str | None = Field(None)
     num_frames: int = Field(49, ge=9, le=481)
     conditioning_images: list[ConditioningImage] = Field(default_factory=list)
     references: list[ReferenceInput] = Field(default_factory=list)
+    source_audio: ChainClipSourceAudioSpec | None = None
 
 
 class SourceVideoSpec(BaseModel):
@@ -1477,6 +1501,22 @@ class GenerateChainRequest(BaseModel):
                 "(A2V and V2V cannot be combined)"
             )
 
+        # A clip's own A2V (MiniMax H3, 台帳 §1-120) takes the same exclusions
+        # as the single A2V on the chain: not with an input video, not with a
+        # retake. With ``references`` it is accepted (the panel keeps them apart).
+        clip_audio = [i for i, c in enumerate(self.clips) if c.source_audio is not None]
+        if clip_audio:
+            if self.source_video is not None:
+                raise ValueError(
+                    f"clips[{clip_audio[0]}].source_audio and source_video are mutually "
+                    "exclusive (A2V and V2V cannot be combined)"
+                )
+            if self.retake is not None:
+                raise ValueError(
+                    f"clips[{clip_audio[0]}].source_audio and retake are mutually "
+                    "exclusive (both want to own the clip's audio latent)"
+                )
+
         # A2V accepts any clip count the ``clips`` field allows (long A2V). The
         # uploaded audio is ONE track spanning the whole assembled timeline;
         # chain_math.audio_segment_windows hands each stage-1 segment its own
@@ -1784,7 +1824,9 @@ class GenerateChainRequest(BaseModel):
         with a strength), so the stored per-clip record keeps ``None`` there.
         The authoritative copy of all three is ``JobRecord.chain_request``,
         which ``run_chain_job`` reads and which the worker payload is built
-        from.
+        from. A clip's own ``source_audio`` (:class:`ChainClipSourceAudioSpec`)
+        is not copied either, for the same reason (the stored record keeps
+        ``None``; the chain request holds every clip's).
         ``end_source`` follows that same precedent for the same reasons.
 
         ``references`` is transcribed from clip ``index``, so the per-clip

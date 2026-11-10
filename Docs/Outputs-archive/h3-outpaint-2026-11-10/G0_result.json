@@ -1,0 +1,151 @@
+{
+  "label": "G0",
+  "started_at": "2026-11-10T13:23:24+09:00",
+  "status": "done",
+  "geometry": {
+    "canvas": [
+      1920,
+      1088
+    ],
+    "source": [
+      1280,
+      720
+    ],
+    "aligned": [
+      320,
+      160,
+      1600,
+      928
+    ],
+    "aligned_size": [
+      1280,
+      768
+    ],
+    "grid": [
+      60,
+      34
+    ],
+    "fixed_tokens": 880,
+    "generated_tokens": 1160,
+    "latent_offset_yx": [
+      10,
+      20
+    ],
+    "source_offset_in_aligned_yx": [
+      24,
+      0
+    ],
+    "latent_frames": 37
+  },
+  "fixed_tokens_in_box": {
+    "fixed": 880,
+    "fixed_edge": 120,
+    "fixed_inner": 760
+  },
+  "encode_seconds": 488.75,
+  "encode_peak_vram_mb": 4590.7,
+  "latent_shapes": {
+    "single": [
+      1,
+      24,
+      37,
+      48,
+      80
+    ],
+    "canvas_imagenet": [
+      1,
+      24,
+      37,
+      48,
+      80
+    ],
+    "canvas_gray128": [
+      1,
+      24,
+      37,
+      48,
+      80
+    ],
+    "control_source": [
+      1,
+      24,
+      37,
+      45,
+      80
+    ]
+  },
+  "latent_rel_l2": {
+    "single_vs_canvas_imagenet": {
+      "fixed": 0.287454,
+      "fixed_edge": 0.506312,
+      "fixed_inner": 0.231654,
+      "whole_box": 0.409629
+    },
+    "single_vs_canvas_gray128": {
+      "fixed": 0.267458,
+      "fixed_edge": 0.45889,
+      "fixed_inner": 0.219881,
+      "whole_box": 0.374318
+    }
+  },
+  "decode_seconds": 152.3,
+  "decode_peak_vram_mb": 6343.7,
+  "psnr_vs_cut": {
+    "single": {
+      "keep_db": 32.6656,
+      "edge32_db": 32.4381,
+      "interior_db": 32.702,
+      "edge_minus_interior_db": -0.2639,
+      "decoded_shape": [
+        124,
+        768,
+        1280,
+        3
+      ]
+    },
+    "canvas_imagenet": {
+      "keep_db": 31.1328,
+      "edge32_db": 28.336,
+      "interior_db": 31.7899,
+      "edge_minus_interior_db": -3.4539,
+      "decoded_shape": [
+        124,
+        768,
+        1280,
+        3
+      ]
+    },
+    "canvas_gray128": {
+      "keep_db": 31.2885,
+      "edge32_db": 28.815,
+      "interior_db": 31.8398,
+      "edge_minus_interior_db": -3.0247,
+      "decoded_shape": [
+        124,
+        768,
+        1280,
+        3
+      ]
+    },
+    "control_source": {
+      "keep_db": 32.7394,
+      "edge32_db": 32.5958,
+      "interior_db": 32.7621,
+      "edge_minus_interior_db": -0.1663,
+      "decoded_shape": [
+        124,
+        720,
+        1280,
+        3
+      ]
+    }
+  },
+  "notes": {
+    "single": "外接矩形 [x0,y0)-[x1,y1) を aligned_frames（鏡写し）で組んで単独符号化（製品の経路）",
+    "canvas_*": "1920x1088 の余白を灰色で埋めてキャンバスごと符号化し、外接矩形の潜在を切り出した",
+    "control_source": "元の 1280x720 を単独で符号化→復号（VAE の往復の下限）",
+    "edge32": "保持矩形の 4 辺から内側 32 画素の帯。interior はその内側",
+    "latent_rel_l2": "single を基準にした相対 L2（全チャンネル・全潜在フレーム）。fixed_edge は生成トークンに8 近傍で接する固定トークン、fixed_inner はその内側"
+  },
+  "finished_at": "2026-11-10T13:34:06+09:00"
+}

@@ -1,0 +1,93 @@
+{
+  "material": {
+    "source": "outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "30.000000",
+        "nb_read_frames": 720
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "29.976871"
+      }
+    },
+    "cut": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,48\\,171)',setpts=PTS-STARTPTS,scale=1280:720:flags=lanczos[v];[0:a]atrim=start=2.0:end=7.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "start_frame": 48,
+    "end_frame": 171,
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "read_outpaint_source_s1": {
+      "source_size": [
+        1280,
+        720
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "wave_shape_s1": [
+      2,
+      165333
+    ]
+  },
+  "control": {
+    "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\control_write_mp4_1280x720_124f.mp4",
+    "psnr_vs_cut_db": 38.1516,
+    "note": "切り出しの画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"
+  }
+}

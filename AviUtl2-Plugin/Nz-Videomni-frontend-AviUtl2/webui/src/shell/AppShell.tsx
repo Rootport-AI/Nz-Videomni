@@ -1336,6 +1336,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // requirement #2): (a) the `project` policy's async `getEditInfo` overwrite
     // recomputes the form's DURATION a beat after placement, and (b) A2V (#7)
     // supersedes the material-clamped seed once the wav is actually measured.
+    // (c) #18（長尺 A2V はクリップ列を音声に合わせて組み直す。H3 は 1 クリップ目に種を使わない）.
     //
     // §1-17 Retake (`retakeRange`, 系統"D") is a THIRD, deliberately different
     // case — and it is not a residual divergence at all. Its seed is the user's
@@ -1666,7 +1667,7 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
 
   // §3-102 (LTX 2.5 Chained, first stage): once an engine CAN chain, the
   // Chained tab stays live but the material panels its engine still cannot use
-  // have to grey individually. Computed here, next to `batchUnavailable`, so
+  // have to grey individually. Computed here, so
   // `ChainedScreen` receives finished booleans and never reasons about engines
   // itself (the shell's standing rule for feature scope).
   // §1-120: the A2V panel reopens on an engine whose chain takes a per-clip

@@ -81,7 +81,7 @@ export const DURATION_POLICY_BY_INTENT: Readonly<Record<string, DurationPolicy>>
   // cards the moment the wav is measured). Clamping clip 0 to the track's full
   // length would seed a single 60-second clip and then immediately be undone by
   // the auto-fit — so the honest seed is the resolution's comfort ceiling, the
-  // same one every other Chain intent uses.
+  // same one every other Chain intent uses.（H3 の割り当てモードは種の長さを使わず画面の割り当てが走る。`h3LongA2vAssign`・DEVLOG §166.11）
   "audio-to-long-a2v": "comfortCeiling", // 🎵 (Chain, 台帳§1-16)
   // 台帳§1-15 W4 (2026-08-11). Deliberately `comfortCeiling`, NOT the
   // `materialClampedToCeiling` its single-shot sibling `reference-video` uses,

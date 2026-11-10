@@ -105,7 +105,9 @@ interface FeatureUiEntry {
  *  - **a2v** closes the Chain screen's audio panel and, again, Batch A2V: every
  *    batch row carries an audio source, so either limitation takes the panel
  *    down (that "or" is now the table's disjunction rather than a hand-written
- *    `||`).
+ *    `||`). On MiniMax H3 the server's constraints reopen both
+ *    (`chainPanelsDisabledFor` / `batchA2vDisabledFor`'s second argument,
+ *    §1-120 / §1-126).
  *  - **v2v / end_source / reference_video** are exactly one Chain panel each,
  *    because each panel IS one request field: `source_video`, `end_source`,
  *    `reference_video_id` (§3-102, LTX 2.5 Chained's first stage — once an
@@ -375,8 +377,8 @@ export interface ChainPanelsDisabled {
  * §1-120: `chainSourceAudioAvailable` (= `constraints.chain.sourceAudio` is
  * published — MiniMax H3) reopens the A2V panel even though the engine still
  * declares `a2v` (the chain-wide `source_audio` stays refused; the panel then
- * distributes the long audio to the clips' own A2V instead). The `a2v` name
- * keeps closing Batch A2V — that is decided elsewhere. Omitted = `false`, the
+ * distributes the long audio to the clips' own A2V instead). Batch A2V is
+ * decided separately, by `batchA2vDisabledFor`. Omitted = `false`, the
  * behaviour before §1-120.
  */
 export function chainPanelsDisabledFor(

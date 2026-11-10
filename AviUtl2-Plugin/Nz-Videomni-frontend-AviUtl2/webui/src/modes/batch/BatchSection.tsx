@@ -80,7 +80,7 @@ export interface BatchSectionProps {
  * is stateless; see `manifestMerge.ts`) and drives it one row at a time via
  * {@link useBatchForm}. The scan decides which of two modes the queue is (D1,
  * 2026-09-15): an audio folder gives one row per audio file, driven through
- * `POST /generate/chain`; an image folder ALONE gives one row per image,
+ * `POST /generate/chain`（H3 は §1-126 で a2v の行も `/generate`）; an image folder ALONE gives one row per image,
  * driven through `POST /generate`. All state
  * ownership lives in `useBatchForm`/`useBatchRunner`; this component is pure
  * rendering + event wiring, matching the `*Screen.tsx` convention elsewhere in

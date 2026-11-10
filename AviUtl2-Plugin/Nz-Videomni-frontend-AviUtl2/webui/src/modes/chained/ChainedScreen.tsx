@@ -1237,7 +1237,7 @@ function ChainedScreenBody({
     // temp wav in SOLO mode (`timeline/extractObjectAudio.ts`, only the object's
     // layer kept audible) and handed to Chain's audio slot, which then auto-fits
     // the clip list to the measured length (exactly once — `useChainForm` keys
-    // that on the upload id). Going through extraction is what makes a TRIMMED
+    // that on the upload id（H3 の割り当てモードは種の長さを使わず画面の割り当てが走る。`h3LongA2vAssign`・DEVLOG §166.11）). Going through extraction is what makes a TRIMMED
     // object contribute exactly the seconds its ribbon shows. Kept as its own
     // async routine because of the "extracting…" note and the native-specific
     // failure branches.

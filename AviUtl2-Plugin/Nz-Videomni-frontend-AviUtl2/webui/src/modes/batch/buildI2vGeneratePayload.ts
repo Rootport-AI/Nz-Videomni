@@ -6,7 +6,7 @@
  * needs at least 2 clips (`api/models.py`), and the `stage2_window:
  * "full_length"` every `buildA2vChainPayload` body carries requires a
  * `source_audio`. Both of those are 422s, so the a2v builder cannot be reused
- * for an audio-free row.
+ * for an audio-free row.（H3 は §1-126 で a2v の行も `/generate`）
  *
  * A parallel builder rather than Create's own `toGenerateRequest()`: that one
  * is a `useCallback` closing over the LIVE Create form (the reference video,

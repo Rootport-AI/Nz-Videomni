@@ -5538,7 +5538,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - スライダー: `modes/single/GenerationForm.tsx` の音声の区画に、規約があるときだけ出します。作りは `KeyframeCard.tsx` と同じ素の `<input type="range">` に `toFixed(2)` の表示です。状態は `modes/single/useGenerationForm.ts` の `sourceAudioStrength`（既定はサーバーの値。系統を切り替えると既定に戻ります）で、同じ設定の判定（fingerprint）にも本文を通して入ります。`/generate` の経路では「長い音声は Chained の long a2v が使えます」の注記を出しません。文言は `i18n/strings.ts`（英語・日本語）。
 - 音声に合わせたフレーム数: 新しい `modes/single/audioFit.ts`（`suggestFramesForSingleAudio`・`singleAudioPrecheck`。純関数）。`useGenerationForm.ts` は規約があるときだけこれを使い、無ければ今までの連結用の計算（`chained/chainUtils.ts`。LTX の 25 潜在/秒・8n+1）を使います。
 - 模擬サーバー: `bridge/mockBridge.ts` の H3 の `constraints` に `source_audio`、LTX 2.3・2.5 の `unsupported_features` の写しに `source_audio` を足し、LTX で `source_audio` 付きの `/generate` を 422 `FEATURE_UNSUPPORTED` にしました（`detail` は実サーバーと同じ文）。
-- バッチ A2V は H3 では今までどおり灰色です（`chain` が閉じているため）。
+- バッチ A2V は H3 では今までどおり灰色です（`chain` が閉じているため）。（更新 2026-11-09: §167 で開いた）
 
 ### 149.3 テスト
 
@@ -5663,6 +5663,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 > **更新（2026-10-31）**: ここで閉じた参照動画は IC-LoRA のもの。Ref2VA の参照はクリップごとに入れられる（§154）。
 >
 > **更新（2026-11-02）**: 源入力パネル（動画と画像）・バッチ i2v-long・右クリックの #1・#6・#12 は H3 でも開いた。素材（末尾）と IC-LoRA の参照動画は、灰色ではなく非表示にした（§160）。
+>
+> **更新（2026-11-09）**: 長尺 A2V と右クリック #18 も H3 で開いた（§166。表の `video-audio-to-long-a2v` は §155 で削除済み）。
 
 ### 153.2 設計上の判断
 
@@ -5727,6 +5729,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **BRIDGE_CONTRACT は不変です（v17 のまま）。** 変更は `webui/src/` だけで、native は触っていません。
 - 設計の正本は [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.3 の「参照付きの連結」と裁定 87、API は [`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.2b (h) と本書の [`API_REFERENCE.md`](API_REFERENCE.md)、門の記録は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §186、台帳は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 3-264 です（バックエンド側の仕組みはここに写しません）。
 
+> **更新（2026-11-09）**: H3 の連結はクリップごとの A2V を受け、`a2v` を渡したときはチェックと Strength を描く（§166）。
+
 ### 154.2 設計上の判断
 
 - **状態の持ち方は案 A。** クリップ 1 枚につき部品 `ClipReferences`（`modes/chained/ClipReferences.tsx`）を 1 つ、`key={clip.id}` で置き、中で Single と同じ `useReferenceSlots` を呼びます。画面（`ChainedScreenBody`）は各部品が上げてくる要約（`summary` と `slots`）の登録表だけを読み、クリップごとの本文（`buildReferenceBody`）・アップロード中（`referenceSendUploading`）・使用数（`countUsedReferences`）を計算します。採らなかった案は 3 つです。(1) `useReferenceSlots` をクリップの id をキーにした 1 本の reducer に作り直す（Single のフックと既存テストを壊す）。(2) 参照の状態を `useChainForm` に持たせる（すでに大きなフォームに、画面の部品の状態を足すことになる）。(3) `api` を上書きして `enabled` と `a2vSlot` を差し替える（次の `setEnabled(true)` 1 回で足りる）。
@@ -5743,6 +5747,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **`transformerRole` を `ChainedScreen` に渡す。** `AppShell.tsx` が `baseModels.activeTransformerRole` を渡します（Single と同じ）。
 - **閉じた `<details>` の中身も組み立てられる**ので、24 クリップで `References` をオンにしたときの操作感は、G-4 では 3 クリップまでで確認し、24 クリップは検証しません（オーナー判断。現実的に推奨されない本数。記録簿 §186.8）。遅延描画は入れていません。
 - **mock（`bridge/mockBridge.ts`）。** `POST /generate/chain` で、LTX 2.3／2.5 は、いずれかのクリップに `references` があれば 422 `FEATURE_UNSUPPORTED`（機能名 `references`）。H3 はクリップごとに形を検査します。
+
+> **更新（2026-11-09）**: `embedded` でも `a2v` を渡したときは Audios カードのチェックと Strength を描く（H3 の連結はクリップごとの A2V を受ける。§166）。
 
 ### 154.3 テスト
 
@@ -5873,7 +5879,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - **🔁 でチェック済みのカードを空にしても、チェックは残ります。** 空になったカードは上の表の 3 行目の状態になります。
 - **Chained の各クリップの Reference アコーディオンに【🔴ON】を出します。** 条件は、そのクリップで数えられたカードが 1 枚以上（見出しの `n/12` の n が 1 以上）のときです。見た目は Single と同じ部品です。
-- **NAG（ネガティブプロンプト）が使えないベースモデルでの注意文を短くしました。** ja「このベースモデルでは、ネガティブプロンプトは未対応です。」／en「Negative prompts are not supported on this base model.」
+- **NAG（ネガティブプロンプト）が使えないベースモデルでの注意文を短くしました。** ja「このベースモデルでは、ネガティブプロンプトは未対応です。」／en「Negative prompts are not supported on this base model.」（2026-11-09 に廃止。§165）
 
 ### 157.2 何を変えたか
 
@@ -6300,7 +6306,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 166.10 テストと門
 
 - 新規: `h3ChainAudio.test.ts`（割り当ての計画・境界の例・確認の要否・入れ先の順・送信の本文・理由の組み立て）、`ChainAudioPanel.h3.test.tsx`、`ChainedScreen.h3Audio.test.tsx`（割り当てでアップロードが増えない・References の自動オン・触ったカードの確認と「いいえ」・触っていないカードは確認なし〔#18 の経路〕・🔁〔H3 と LTX〕・📁 で別の音声・LTX から H3 への切り替え・Strength の写し・送信の本文・手入れの音声の `offset_frames` 0・V2V との排他・描画が有限回で落ち着く・鍵の無いバックエンド・トースト）。追加: `referenceRules.test.ts`・`useReferenceSlots.test.ts`（`adopt`）、`ReferenceAccordion.test.tsx`（バッジ）、`ClipReferences.test.tsx`（`ops` が安定していること）、`useChainForm.h3.test.ts`、`featureScope.test.ts`、`AppShell.minimaxH3.test.tsx`、`mockBridge.h3.test.ts`。
-- 門（`npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"`）・GPU の門・オーナーの目視の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204 に書きます。
+- 門（`npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"`）・GPU の門・オーナーの目視の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204 にあります。
 
 ### 166.11 追補（2026-11-09 夜）: 右クリック #18 の 1 クリップ目を既定の長さから割り当てる
 
@@ -6311,7 +6317,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
   2. サイズ方針＝プロジェクトの上書きの effect でも、1 クリップ目の長さの再計算（快適上限）と `setClipNumFrames` を飛ばします（幅・高さ・fps の上書きは今までどおり）。飛ばさないと、この方針では 1 クリップ目が 481 側へ戻り、さらに `setClipNumFrames` が `intact` の旗を倒すので、以後の割り当てで 1 クリップ目を縮めるときに確認ダイアログが出てしまいます。
 - **LTX は対象外**: LTX には `constraints.chain` が無いので判定に入らず、自動調整が種の長さを直す今までの動きのままです。`resolvePrefillSeed` 本体・`planH3AudioDistribution`・`useChainForm` は変えません。
 - **採らなかった案**: `prefillSeed.ts` 側で H3 の long a2v のとき長さを返さない（種を使う他の経路へ影響が広がる）。1 クリップ目を追加クリップと同じ 226 にする（オーナー裁定で 345）。割り当ての純関数で触っていないカードも既定へ揃える（「既存のクリップは縮めるとき以外は触らない」という決定を崩す）。
-- **テスト**: `AppShell.minimaxH3.test.tsx` の #18 のテストに、割り当て後のクリップ列の確認（mock の 30 秒の音声で [345, 345, 73]）を足し、サイズ方針＝プロジェクトでも同じ列になるテストを 1 件足します。LTX の #18 のテスト（`App.prefill.test.tsx`）と `prefillSeed.test.ts` は無修正で合格する見込みです。
+- **テスト**: `AppShell.minimaxH3.test.tsx` の #18 のテストに、割り当て後のクリップ列の確認（mock の 30 秒の音声で [345, 345, 73]）を足し、サイズ方針＝プロジェクトでも同じ列になるテストを 1 件足します。LTX の #18 のテスト（`App.prefill.test.tsx`）と `prefillSeed.test.ts` は無修正で合格しました（記録簿 §204.4）。
+- （2026-11-10 追記）オーナーの実機確認に合格し、バックエンド台帳の 1-120 は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) へクローズしました。結果はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204.6。
 
 ## 167. バッチ A2V の MiniMax H3 対応 — `constraints.source_audio` でパネルを開く・各行を単発の `/generate` の `source_audio` へ・行のフレーム数は 17n+5・強度とサンプリング値は Create にそろえる（バックエンド台帳 `PENDING_TASKS.md` §1-126。2026-11-09）
 
@@ -6344,4 +6351,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 167.5 テストと門
 
 - 新規: `useBatchForm.h3.test.ts`（17n+5・`over-cap`・格子・32 の倍数・走行開始の測り直し）。追加: `featureScope.test.ts`、`batchRunner.test.ts`（H3 の a2v の行が `/generate`＋`source_audio`＋強度なし・i2v の行も強度なし・LTX は不変）、`buildI2vGeneratePayload.test.ts`（鍵の順）、`AppShell.minimaxH3.test.tsx`（H3 でバッチが開く）、`mockBridge.test.ts`。
-- 門の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204に書きます。
+- 門の結果は、バックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204 にあります。
+- （2026-11-10 追記）オーナーの実機確認に合格し、バックエンド台帳の 1-126 は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) へクローズしました。結果はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §204.6。

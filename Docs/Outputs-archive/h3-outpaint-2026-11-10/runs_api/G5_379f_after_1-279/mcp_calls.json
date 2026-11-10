@@ -1,0 +1,769 @@
+[
+  {
+    "at": "2026-11-10T23:54:03+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.16,
+    "ok": true
+  },
+  {
+    "at": "2026-11-10T23:54:03+09:00",
+    "tool": "load_pipeline",
+    "args": {
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default"
+      },
+      "wait_sec": 45
+    },
+    "seconds": 4.3,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "default",
+        "text_encoder": "default",
+        "video_vae": "default",
+        "audio": "default"
+      },
+      "finished": true
+    }
+  },
+  {
+    "at": "2026-11-10T23:54:07+09:00",
+    "tool": "backend_status",
+    "args": {},
+    "seconds": 0.01,
+    "ok": true
+  },
+  {
+    "at": "2026-11-10T23:54:07+09:00",
+    "tool": "list_models",
+    "args": {},
+    "seconds": 0.02,
+    "ok": true,
+    "result": {
+      "categories": {
+        "transformer": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            },
+            {
+              "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta4_int8",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3185154",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "minimax_h3_ref2va_pruned_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+              "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            }
+          ]
+        },
+        "text_encoder": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "video_vae": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "audio": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        }
+      },
+      "active_base_model": "MiniMaxH3",
+      "base_models": [
+        {
+          "id": "LTX23",
+          "display_name": "LTX 2.3",
+          "engine_family": "ltx",
+          "active": false,
+          "installed": true,
+          "present": true,
+          "missing_categories": [],
+          "unsupported_features": [
+            "keep_resident_embeddings",
+            "alpha_gen",
+            "vram16_mode",
+            "source_audio",
+            "references"
+          ],
+          "constraints": {
+            "num_frames": {
+              "step": 8,
+              "offset": 1,
+              "min": 9,
+              "max": 481
+            },
+            "dimension_multiple": 64,
+            "frame_rate": {
+              "min": 1.0,
+              "max": 60.0
+            },
+            "sampling": null,
+            "keyframes": {
+              "step": 8,
+              "offset": 1
+            },
+            "prompt_token_limit": 1024
+          },
+          "category_order": [
+            "transformer",
+            "text_encoder",
+            "video_vae",
+            "audio"
+          ],
+          "transformer_weight_class": null,
+          "transformer_role": null,
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/Weights/LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "10Eros-v1.2-Q4_K_M",
+                  "path": "models/LTX23/Weights/10Eros-v1.2-Q4_K_M.gguf",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "Sulphur-2-base-distil-Q6_K",
+                  "path": "models/LTX23/Weights/Sulphur-2-base-distil-Q6_K.gguf",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx-2.3-22b-distilled-1.1_int8mixedtensorwise",
+                  "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_int8mixedtensorwise.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot",
+                  "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx-2.3-22b-distilled-1.1_w4a8",
+                  "path": "models/LTX23/Weights/ltx-2.3-22b-distilled-1.1_w4a8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "sulphur_distil_fp8mixed",
+                  "path": "models/LTX23/Weights/sulphur_distil_fp8mixed.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/TextEncoder/gemma-3-12b-it-Q4_K_M.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/VAE/LTX23_video_vae_bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX23/VAE/LTX23_audio_vae_bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "LTX25",
+          "display_name": "LTX 2.5",
+          "engine_family": "ltx25",
+          "active": false,
+          "installed": true,
+          "present": true,
+          "missing_categories": [],
+          "unsupported_features": [
+            "two_stage_hq",
+            "prune_vaed",
+            "vram16_mode",
+            "source_audio",
+            "references"
+          ],
+          "constraints": {
+            "num_frames": {
+              "step": 8,
+              "offset": 1,
+              "min": 9,
+              "max": 481
+            },
+            "dimension_multiple": 64,
+            "frame_rate": {
+              "min": 1.0,
+              "max": 60.0
+            },
+            "sampling": null,
+            "keyframes": {
+              "step": 8,
+              "offset": 1
+            },
+            "prompt_token_limit": 1024
+          },
+          "category_order": [
+            "transformer",
+            "text_encoder",
+            "video_vae",
+            "audio"
+          ],
+          "transformer_weight_class": null,
+          "transformer_role": null,
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot",
+                  "path": "models/LTX25/Weights/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "ltx25_uncensored_v1.1-fp8_scaled",
+                  "path": "models/LTX25/Weights/ltx25_uncensored_v1.1-fp8_scaled.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW",
+                  "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K",
+                  "path": "models/LTX25/Weights/redgraftLTX25Fast2K_ltx25RedgraftNSFW-Q6_K.gguf",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "MiniMaxH3",
+          "display_name": "MiniMax H3",
+          "engine_family": "h3",
+          "active": true,
+          "installed": true,
+          "present": true,
+          "missing_categories": [],
+          "unsupported_features": [
+            "reference_video",
+            "nag",
+            "two_stage_hq",
+            "guidance_scale",
+            "inpaint",
+            "alpha_gen",
+            "prune_vaed",
+            "keep_resident_embeddings",
+            "keyframe_strength",
+            "a2v",
+            "end_source",
+            "fused_gguf_dequant_kernel",
+            "lora_audio_strength"
+          ],
+          "constraints": {
+            "num_frames": {
+              "step": 17,
+              "offset": 5,
+              "min": 22,
+              "max": 481
+            },
+            "dimension_multiple": 32,
+            "frame_rate": {
+              "min": 24.0,
+              "max": 24.0
+            },
+            "sampling": {
+              "num_inference_steps": {
+                "min": 1,
+                "max": 50,
+                "step": 1,
+                "default": 20
+              },
+              "shift_video": {
+                "min": 1,
+                "max": 20,
+                "step": 0.1,
+                "default": 12
+              },
+              "shift_audio": {
+                "min": 1,
+                "max": 20,
+                "step": 0.1,
+                "default": 3
+              }
+            },
+            "keyframes": {
+              "step": 1,
+              "offset": 0
+            },
+            "prompt_token_limit": null,
+            "source_audio": {
+              "strength": {
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.5
+              }
+            },
+            "reference": {
+              "max_images": 9,
+              "max_videos": 3,
+              "max_audios": 3,
+              "max_total": 12,
+              "video_total_sec": 15.0,
+              "audio_total_sec": 15.0,
+              "clip_min_sec": 2.0
+            },
+            "chain": {
+              "overlap_frames": 22,
+              "source_audio": {
+                "strength": {
+                  "min": 0.0,
+                  "max": 1.0,
+                  "step": 0.05,
+                  "default": 0.5
+                }
+              }
+            },
+            "retake": {
+              "audio_strength": {
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.5
+              }
+            },
+            "outpaint": {
+              "audio_strength": {
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.5
+              },
+              "blend_dilation_stage1": {
+                "min": 0,
+                "max": 15,
+                "step": 1,
+                "default": 1
+              }
+            }
+          },
+          "category_order": [
+            "transformer",
+            "text_encoder",
+            "video_vae",
+            "audio"
+          ],
+          "transformer_weight_class": null,
+          "transformer_role": "fl2va",
+          "categories": {
+            "transformer": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                },
+                {
+                  "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta4_int8",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "h3ErosMax_beta5_3185154",
+                  "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "minimax_h3_ref2va_pruned_int8_convrot",
+                  "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                },
+                {
+                  "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+                  "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+                  "is_default": false,
+                  "exists": true,
+                  "source": "scan"
+                }
+              ]
+            },
+            "text_encoder": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "video_vae": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            },
+            "audio": {
+              "default": "default",
+              "active": "default",
+              "entries": [
+                {
+                  "name": "default",
+                  "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+                  "is_default": true,
+                  "exists": true,
+                  "source": "config"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "at": "2026-11-10T23:54:07+09:00",
+    "tool": "upload_video",
+    "args": {
+      "file_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\G5_src_1280x720_379f.mp4",
+      "max_frames": 100000
+    },
+    "seconds": 2.22,
+    "ok": true,
+    "result": {
+      "video_id": "f038373e-5c72-4ef8-9da8-4617a374ab98",
+      "original_filename": "G5_src_1280x720_379f.mp4",
+      "stored_path": "uploads/videos/f038373e-5c72-4ef8-9da8-4617a374ab98/input.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 21864936,
+      "trimmed": false,
+      "frame_count": 379,
+      "fps": 24.0
+    }
+  },
+  {
+    "at": "2026-11-10T23:54:25+09:00",
+    "tool": "submit_generate",
+    "args": {
+      "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+      "width": 1920,
+      "height": 1088,
+      "num_frames": 379,
+      "frame_rate": 24.0,
+      "seed": 12345,
+      "attention_backend": "sage",
+      "num_inference_steps": 4,
+      "outpaint_pad_left": 320,
+      "outpaint_pad_right": 320,
+      "outpaint_pad_top": 184,
+      "outpaint_pad_bottom": 184,
+      "outpaint_audio_strength": 0.5,
+      "reference_video_id": "f038373e-5c72-4ef8-9da8-4617a374ab98"
+    },
+    "seconds": 1.84,
+    "ok": true,
+    "result": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "status": "running",
+      "created_at": "2026-11-10T14:54:27Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "at": "2026-11-10T23:54:27+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.03,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-10T23:55:17+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.05,
+    "ok": true
+  },
+  {
+    "at": "2026-11-10T23:56:02+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 49.98,
+    "ok": true
+  },
+  {
+    "at": "2026-11-10T23:56:52+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 45.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-10T23:57:37+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 49.98,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+  },
+  {
+    "at": "2026-11-10T23:58:32+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 25.0,
+    "ok": false,
+    "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+  },
+  {
+    "at": "2026-11-10T23:59:02+09:00",
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5.0
+    },
+    "seconds": 0.02,
+    "ok": true
+  },
+  {
+    "at": "2026-11-10T23:59:03+09:00",
+    "tool": "unload_pipeline",
+    "args": {},
+    "seconds": 0.0,
+    "ok": true,
+    "result": {
+      "pipeline_loaded": false,
+      "state": "unloaded"
+    }
+  }
+]

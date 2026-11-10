@@ -258,6 +258,7 @@ set PYTHONUTF8=1
 - **G5 の点を 345／362 から 362／379 に変えました。** 下のコマンドや表の例の 345・362 は、快適上限表 §17.4 の較正（FL2VA・K=1）の c と U です。Outpainting には条件行が無く、text にもキーフレームの行が入らないので、同じ枚数でも S が小さくなります。そこで、S が配信の線 `single_rows_budget` と同じ値になる 362 を線の上の点に、その 1 段上の 379 を線を越えた点にしました（快適上限表 §20.3・§20.4）。台本の `--prepare-frames` の既定（`345,362`）は変えていません。345 枚の素材は作りましたが、回していません。
 - **379 枚の判定**: 台本は「判定なし（ジョブが failed）」と出し、終了コードは 3 でした。サーバーが失敗を書いた直後に取った状態で `error` がまだ null だったためで（記録簿 §205.23）、記録簿では規則 ① の OOM と判定しています。
 - **この保管庫に写したもの**: `summary_api.json`・`summary_api.md`・`run_G5_G6.console.log`（根）と、`runs_api/<本>/`（`summary_row.json`・`request.json`・`server_log_excerpt.txt`・`worker_log_excerpt.txt`、完走した本の `metadata.json`、G5 の `wddm.csv`、G6 の `measure_request.json`・`measure_result.json`）。動画・`_rt\`・`logs_api\` は写していません（git の追跡外の `outputs\h3-outpaint-gates-2026-11-10\` に残る）。
+- **台帳 1-279 の修正の後の 1 本**: `runs_api/G5_379f_after_1-279/`（2026-11-10 23:53〜23:59。台帳 1-279 の修正〔dev `ad69d68`〕の後に、G5_379f と同じ条件で回した 1 本。判定は「非快適（① OOM）」で、`wait_for_job` が `failed` と `GPU_OOM:` の `error` を同時に返した。記録簿 §206.10）。この本だけ `mcp_calls.json`（MCP の呼び出しの記録。`logs_api\` の写し）も置きました。根の `summary_api.json`・`summary_api.md` は、この本の後に監督が最新のものへ写し替えました（`runs` の末尾に `G5_379f_after_1-279` が足され、元の `G5_379f` も残っている）。
 - G6 の動画・元の素材・一覧の画像は、遠隔目視のフォルダ（`round13-h3-outpaint/`）に足しました（記録簿 §205.20）。
 
 ### 前提

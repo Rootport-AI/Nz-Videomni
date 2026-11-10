@@ -1609,6 +1609,273 @@
         "judge": "h3_outpaint_gate.measure_run（弾 1 と同じ関数）"
       },
       "finished_at": "2026-11-10T18:59:11+09:00"
+    },
+    {
+      "gate": "G5",
+      "label": "G5_379f_after_1-279",
+      "purpose": "快適上限の点（1920x1088・379 枚・4 ステップ・Turbo なし・sage）",
+      "frames": 379,
+      "source_size": [
+        1280,
+        720
+      ],
+      "canvas": [
+        1920,
+        1088
+      ],
+      "pads": {
+        "left": 320,
+        "right": 320,
+        "top": 184,
+        "bottom": 184
+      },
+      "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\G5_src_1280x720_379f.mp4",
+      "predicted_rows": {
+        "video": 228480,
+        "cond": 0,
+        "audio": 1264,
+        "text": 30,
+        "total": 229774,
+        "vs_single_rows_budget": 10258
+      },
+      "started_at": "2026-11-10T23:54:07+09:00",
+      "status": "failed",
+      "error": "GPU_OOM: CUDA out of memory during generation (RuntimeError('VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください')\nTraceback (most recent call last):\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\pipeline_h3.py\", line 1817, in _denoise\n    v_video_rows, v_audio_rows = dit(\n                                 ^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py\", line 1778, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py\", line 1789, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\dit.py\", line 678, in forward\n    x = block(x, t_emb, adaln_index, rope_cos, rope_sin)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py\", line 1778, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engin\n...[traceback truncated]...\nb, h_kv, head_dim, padded_len), dtype=v.dtype, device=v.device)\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 450.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.03 GiB is free. 13.69 GiB allowed; Of the allocated memory 12.65 GiB is allocated by PyTorch, and 842.47 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\worker.py\", line 940, in main\n    _do_generate(msg)\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\worker.py\", line 697, in _do_generate\n    result = _PIPE.generate(req)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\pipeline_h3.py\", line 992, in generate\n    video_lat, audio_lat, prefetch_used = self._denoise(\n                                          ^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\pipeline_h3.py\", line 1876, in _denoise\n    raise RuntimeError(VRAM16_OOM_MESSAGE) from exc\nRuntimeError: VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください\n)",
+      "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_379f_after_1-279",
+      "upload": {
+        "video_id": "f038373e-5c72-4ef8-9da8-4617a374ab98",
+        "original_filename": "G5_src_1280x720_379f.mp4",
+        "stored_path": "uploads/videos/f038373e-5c72-4ef8-9da8-4617a374ab98/input.mp4",
+        "content_type": "video/mp4",
+        "size_bytes": 21864936,
+        "trimmed": false,
+        "frame_count": 379,
+        "fps": 24.0
+      },
+      "tool_args": {
+        "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 379,
+        "frame_rate": 24.0,
+        "seed": 12345,
+        "attention_backend": "sage",
+        "num_inference_steps": 4,
+        "outpaint_pad_left": 320,
+        "outpaint_pad_right": 320,
+        "outpaint_pad_top": 184,
+        "outpaint_pad_bottom": 184,
+        "outpaint_audio_strength": 0.5,
+        "reference_video_id": "f038373e-5c72-4ef8-9da8-4617a374ab98"
+      },
+      "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+      "wait": {
+        "calls": 4,
+        "seconds": 275.1,
+        "samples": [
+          {
+            "t": 45.0,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 95.1,
+            "status": "running",
+            "progress": 0.06,
+            "stage": "encode",
+            "current_step": null
+          },
+          {
+            "t": 240.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+          },
+          {
+            "t": 270.1,
+            "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+          },
+          {
+            "t": 275.1,
+            "status": "failed",
+            "progress": 0.06,
+            "stage": "stage1_denoise",
+            "current_step": 0
+          }
+        ]
+      },
+      "job_final": {
+        "job_id": "20e10a3c-0e68-4219-9b86-26fb62ed37a1",
+        "status": "failed",
+        "progress": 0.06,
+        "current_step": 0,
+        "total_steps": 4,
+        "stage": "stage1_denoise",
+        "clip": null,
+        "clip_count": null,
+        "is_v2v": false,
+        "joined": false,
+        "matte": false,
+        "alpha": null,
+        "created_at": "2026-11-10T14:54:27Z",
+        "started_at": "2026-11-10T14:54:27Z",
+        "completed_at": "2026-11-10T14:59:00Z",
+        "error": "GPU_OOM: CUDA out of memory during generation (RuntimeError('VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください')\nTraceback (most recent call last):\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\pipeline_h3.py\", line 1817, in _denoise\n    v_video_rows, v_audio_rows = dit(\n                                 ^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py\", line 1778, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py\", line 1789, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\dit.py\", line 678, in forward\n    x = block(x, t_emb, adaln_index, rope_cos, rope_sin)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py\", line 1778, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engin\n...[traceback truncated]...\nb, h_kv, head_dim, padded_len), dtype=v.dtype, device=v.device)\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 450.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.03 GiB is free. 13.69 GiB allowed; Of the allocated memory 12.65 GiB is allocated by PyTorch, and 842.47 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\worker.py\", line 940, in main\n    _do_generate(msg)\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\worker.py\", line 697, in _do_generate\n    result = _PIPE.generate(req)\n             ^^^^^^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\pipeline_h3.py\", line 992, in generate\n    video_lat, audio_lat, prefetch_used = self._denoise(\n                                          ^^^^^^^^^^^^^^\n  File \"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\engine_h3\\pipeline_h3.py\", line 1876, in _denoise\n    raise RuntimeError(VRAM16_OOM_MESSAGE) from exc\nRuntimeError: VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください\n)",
+        "request": {
+          "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+          "negative_prompt": "",
+          "nag_enabled": false,
+          "nag_scale": 11.0,
+          "nag_tau": 2.5,
+          "nag_alpha": 0.25,
+          "neg_method": "nag",
+          "vsf_scale": 1.5,
+          "attention_backend": "sage",
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "keep_resident_embeddings": false,
+          "fused_gguf_dequant_kernel": true,
+          "vae_mode": "default",
+          "embed_mp4_metadata": true,
+          "vram16_mode": true,
+          "width": 1920,
+          "height": 1088,
+          "crop_output": null,
+          "num_frames": 379,
+          "frame_rate": 24.0,
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "guidance_scale": 1.0,
+          "seed": 12345,
+          "pipeline": "distilled",
+          "conditioning_images": [],
+          "loras": [],
+          "reference_video_id": null,
+          "conditioning_attention_strength": null,
+          "reference_video_strength": null,
+          "outpaint": {
+            "pad_left": 320,
+            "pad_right": 320,
+            "pad_top": 184,
+            "pad_bottom": 184,
+            "blend_dilation_stage1": 1,
+            "blend_dilation_stage2": 2,
+            "freeze_source_audio": true,
+            "source_video_id": "f038373e-5c72-4ef8-9da8-4617a374ab98",
+            "audio_strength": 0.5
+          },
+          "inpaint": null,
+          "alpha_gen": null,
+          "source_audio": null,
+          "references": []
+        },
+        "result": null,
+        "timed_out": false,
+        "waited_sec": 0.015000000013969839
+      },
+      "seconds_wall": 277.9,
+      "spans": {
+        "encode": {
+          "label": "text encode",
+          "found": true,
+          "start": 1794322475.437,
+          "end": 1794322725.233,
+          "start_iso": "2026-11-10T23:54:35.437",
+          "end_iso": "2026-11-10T23:58:45.233",
+          "last_done": 5,
+          "total": 4,
+          "log_elapsed_s": 249.8
+        },
+        "denoise": {
+          "label": "stage-1 denoise",
+          "found": true,
+          "start": 1794322736.958,
+          "end": 1794322736.958,
+          "start_iso": "2026-11-10T23:58:56.958",
+          "end_iso": "2026-11-10T23:58:56.958",
+          "last_done": null,
+          "total": null,
+          "log_elapsed_s": null
+        },
+        "decode": {
+          "label": "VAE decode",
+          "found": false,
+          "start": null,
+          "end": null,
+          "start_iso": null,
+          "end_iso": null,
+          "last_done": null,
+          "total": null,
+          "log_elapsed_s": null
+        }
+      },
+      "wddm": {
+        "luid": "luid_0x00000000_0x0000f2a0_phys_0",
+        "samples": 292,
+        "csv": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_379f_after_1-279\\wddm.csv"
+      },
+      "windows": {
+        "encode": {
+          "evaluated": true,
+          "seconds": 249.8,
+          "wddm_samples": 250,
+          "enough_samples": true,
+          "shared_median_mb": 156.8,
+          "shared_peak_mb": 167.2,
+          "dedicated_median_mb": 6507.2,
+          "dedicated_peak_mb": 6518.1
+        },
+        "denoise": {
+          "evaluated": true,
+          "seconds": 0.0,
+          "wddm_samples": 0,
+          "enough_samples": false,
+          "shared_median_mb": null,
+          "shared_peak_mb": null,
+          "dedicated_median_mb": null,
+          "dedicated_peak_mb": null
+        },
+        "decode": {
+          "evaluated": false,
+          "reason": "窓が見つからない"
+        },
+        "idle_before_submit": {
+          "evaluated": true,
+          "seconds": 13.63,
+          "wddm_samples": 14,
+          "enough_samples": true,
+          "shared_median_mb": 152.7,
+          "shared_peak_mb": 152.8,
+          "dedicated_median_mb": 846.1,
+          "dedicated_peak_mb": 846.4
+        }
+      },
+      "judgement": {
+        "rule": "快適上限表 §17.2 規則 v3″",
+        "status": "failed",
+        "oom": true,
+        "oom_stage": "denoise",
+        "prefetch_used": null,
+        "prefetch_demoted": null,
+        "spill": {
+          "denoise": {
+            "shared_median_mb": null,
+            "wddm_samples": 0,
+            "baseline_shared_median_mb": 1173.2,
+            "baseline_label": "G5_56f",
+            "judged": null,
+            "reason": "標本が 10 未満"
+          },
+          "decode": {
+            "shared_median_mb": null,
+            "wddm_samples": null,
+            "baseline_shared_median_mb": 1165.0,
+            "baseline_label": "G5_56f",
+            "judged": null,
+            "reason": "窓が見つからない"
+          }
+        },
+        "verdict": "非快適（① OOM）"
+      },
+      "finished_at": "2026-11-10T23:59:03+09:00"
     }
   ],
   "invocations": [
@@ -2847,6 +3114,322 @@
         "state": "unloaded"
       },
       "finished_at": "2026-11-10T18:59:13+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-10T23:53:55+09:00",
+      "argv": [
+        "--gate",
+        "G5",
+        "--frames",
+        "379",
+        "--label",
+        "G5_379f_after_1-279"
+      ],
+      "label": "G5_379f_after_1-279",
+      "server": {
+        "port": 18699,
+        "reused": false,
+        "pid": 65164,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\config.h3outpaintapi.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\config.h3outpaintapi.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\state.h3outpaintapi.json",
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\server.console.log",
+        "started_at": "2026-11-10T23:53:57+09:00",
+        "stop": {
+          "at": "2026-11-10T23:59:03+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 70600,
+              "cmdline": "\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4"
+            },
+            {
+              "pid": 44124,
+              "cmdline": "\"S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.python\\cpython-3.12.9-windows-x86_64-none\\python.exe\" -u S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py --config S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\config.h3outpaintapi.yaml"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "mcp_calls": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\logs_api\\mcp_calls_20261110_235401_G5_379f_after_1-279.json",
+      "mcp_env": {
+        "PYTHONUTF8": "1",
+        "LTX_MCP_BASE_URL": "http://127.0.0.1:18699",
+        "LTX_MCP_CONFIG": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\config.h3outpaintapi.yaml",
+        "LTX_MCP_OUTPUT_DIR": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_rt\\outputs"
+      },
+      "luid": {
+        "chosen_luid": "luid_0x00000000_0x0000f2a0_phys_0",
+        "chosen_dedicated_mb": 596.6,
+        "candidates": [
+          {
+            "instance": "luid_0x00000000_0x0000f2a0_phys_0",
+            "mb": 596.6
+          },
+          {
+            "instance": "luid_0x00000000_0x000104ce_phys_0",
+            "mb": 0
+          },
+          {
+            "instance": "luid_0x00000000_0x0001045c_phys_0",
+            "mb": 0
+          }
+        ],
+        "discovered_at": "2026-11-10T23:54:02+09:00"
+      },
+      "server_info": {
+        "name": "nz-videomni",
+        "version": "1.28.1",
+        "protocol": "2025-11-25"
+      },
+      "tool_schema_check": {
+        "tool_count": 25,
+        "problems": [],
+        "warnings": [],
+        "ok": true
+      },
+      "status_before": {
+        "reachable": true,
+        "base_url": "http://127.0.0.1:18699",
+        "api_key_configured": false,
+        "pipeline_load_in_flight": false,
+        "status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": false,
+          "pipeline_type": null,
+          "state": "unloaded",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+          }
+        }
+      },
+      "load": {
+        "requested": {
+          "base_model": "MiniMaxH3",
+          "models": {
+            "transformer": "default"
+          },
+          "wait_sec": 45
+        },
+        "responses": [
+          {
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default",
+              "text_encoder": "default",
+              "video_vae": "default",
+              "audio": "default"
+            },
+            "finished": true
+          }
+        ],
+        "status_polls": 1,
+        "last_status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": true,
+          "pipeline_type": "distilled",
+          "state": "ready",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+          }
+        },
+        "seconds": 4.3
+      },
+      "models_after_load": {
+        "transformer_role": "fl2va",
+        "transformer_weight_class": null,
+        "unsupported_features": [
+          "reference_video",
+          "nag",
+          "two_stage_hq",
+          "guidance_scale",
+          "inpaint",
+          "alpha_gen",
+          "prune_vaed",
+          "keep_resident_embeddings",
+          "keyframe_strength",
+          "a2v",
+          "end_source",
+          "fused_gguf_dequant_kernel",
+          "lora_audio_strength"
+        ],
+        "constraints": {
+          "num_frames": {
+            "step": 17,
+            "offset": 5,
+            "min": 22,
+            "max": 481
+          },
+          "dimension_multiple": 32,
+          "frame_rate": {
+            "min": 24.0,
+            "max": 24.0
+          },
+          "sampling": {
+            "num_inference_steps": {
+              "min": 1,
+              "max": 50,
+              "step": 1,
+              "default": 20
+            },
+            "shift_video": {
+              "min": 1,
+              "max": 20,
+              "step": 0.1,
+              "default": 12
+            },
+            "shift_audio": {
+              "min": 1,
+              "max": 20,
+              "step": 0.1,
+              "default": 3
+            }
+          },
+          "keyframes": {
+            "step": 1,
+            "offset": 0
+          },
+          "prompt_token_limit": null,
+          "source_audio": {
+            "strength": {
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "default": 0.5
+            }
+          },
+          "reference": {
+            "max_images": 9,
+            "max_videos": 3,
+            "max_audios": 3,
+            "max_total": 12,
+            "video_total_sec": 15.0,
+            "audio_total_sec": 15.0,
+            "clip_min_sec": 2.0
+          },
+          "chain": {
+            "overlap_frames": 22,
+            "source_audio": {
+              "strength": {
+                "min": 0.0,
+                "max": 1.0,
+                "step": 0.05,
+                "default": 0.5
+              }
+            }
+          },
+          "retake": {
+            "audio_strength": {
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "default": 0.5
+            }
+          },
+          "outpaint": {
+            "audio_strength": {
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "default": 0.5
+            },
+            "blend_dilation_stage1": {
+              "min": 0,
+              "max": 15,
+              "step": 1,
+              "default": 1
+            }
+          }
+        }
+      },
+      "unload": {
+        "pipeline_loaded": false,
+        "state": "unloaded"
+      },
+      "finished_at": "2026-11-10T23:59:04+09:00",
       "exit_code": 0
     }
   ]

@@ -23432,7 +23432,9 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - 一次記録: `outputs\h3-outpaint-gates-2026-11-10\G5_379f_after_1-279\`（`summary_row.json`・`server_log_excerpt.txt`・`worker_log_excerpt.txt`・`wddm.csv`）、`logs_api\mcp_calls_20261110_235401_G5_379f_after_1-279.json`、`_rt\server.console.log`（218 行目以降）。
 - 写しは保管庫の [`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/) の `runs_api/G5_379f_after_1-279/` です。
 
-### 206.11 起票候補（本件の範囲外。起票はせず記録のみ。起票はオーナー判断）
+### 206.11 起票候補（本件の範囲外。2026-11-11 に台帳 §3-280・§3-281 へ起票）
+
+（2026-11-11 追記）1・2 は台帳 §3-280「軽微なデバッグ」へ、4 は §3-281「軽い症状の原因究明」へ起票した（オーナー指示。どちらも同種の件を溜めてまとめて対処する受け皿）。
 
 1. 本文を付けない `/pipeline/load` には `has_active` の守りが無く、降ろしの最中に読み込みが割り込むと、後片付けが state を UNLOADED で上書きする経路が残る。
 2. キャンセル前の早期終了（`services/pipeline_manager.py:696`・`:1553`）が、読み込み済みかを見ずに state を READY と書く。

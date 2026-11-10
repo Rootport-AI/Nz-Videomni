@@ -720,7 +720,10 @@ def thread_dispatch_client(tmp_path):
     mock at run time in this weightless tmp dir), so POST /generate takes the
     dedicated-daemon-thread dispatch branch instead of BackgroundTasks.
     raise_server_exceptions=False lets a worker-spawn failure surface as a 500
-    response instead of re-raising into the test."""
+    response instead of re-raising into the test.
+    ``model.models_dir`` points at an empty tmp folder so the dir really is
+    weightless: ``_real_available()`` finds no default weight file and "auto"
+    always picks the mock, even on a machine that has the real weights."""
     import argparse
 
     import yaml
@@ -728,9 +731,10 @@ def thread_dispatch_client(tmp_path):
 
     import main
 
+    (tmp_path / "models").mkdir()
     cfg = {
         "server": {"log_dir": (tmp_path / "logs").as_posix()},
-        "model": {"backend": "auto"},
+        "model": {"backend": "auto", "models_dir": (tmp_path / "models").as_posix()},
         "output": {"dir": (tmp_path / "outputs").as_posix()},
         "upload": {"dir": (tmp_path / "uploads").as_posix()},
         # §3-97 P5: the runtime-state file, in tmp like every other

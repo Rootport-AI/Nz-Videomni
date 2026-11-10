@@ -796,8 +796,35 @@ class PipelineManager:
             # same place ``control_<preprocess>.mp4`` goes) rather than in
             # uploads/, which STORAGE_POLICY.md reserves for material the user
             # may delete at any time.
+            #
+            # MiniMax H3's shape (``outpaint.source_video_id``, 台帳 §1-125)
+            # takes the first branch instead: no green canvas and no reference
+            # video, the source is cut to the request's fps and exactly
+            # ``num_frames`` frames (Retake's cutter, frame-exact or it fails)
+            # and handed over as ``outpaint_source_path``. The branch is on the
+            # request's shape, not the family: H3's rules require the field and
+            # LTX's refuse it. The cut lands next to the output with the same
+            # leading "_" as ``_retake_window.mp4``.
             outpaint_source_path = None
-            if job.request.outpaint is not None:
+            if job.request.outpaint is not None and job.request.outpaint.source_video_id is not None:
+                op = job.request.outpaint
+                outpaint_source_path = output_dir / "_outpaint_source.mp4"
+                video_io.cut_window_mp4(
+                    self.video_upload_store.path_for(op.source_video_id),
+                    outpaint_source_path,
+                    0.0,
+                    int(job.request.num_frames),
+                    job.request.frame_rate,
+                )
+                logger.info(
+                    "Job %s outpaint source cut %d frames @ %g fps, canvas %dx%d "
+                    "pads l/r/t/b=%d/%d/%d/%d -> %s",
+                    job.job_id, job.request.num_frames, job.request.frame_rate,
+                    job.request.width, job.request.height,
+                    op.pad_left, op.pad_right, op.pad_top, op.pad_bottom,
+                    outpaint_source_path.name,
+                )
+            elif job.request.outpaint is not None:
                 op = job.request.outpaint
                 outpaint_source_path = reference_video_path
                 canvas_path = output_dir / "outpaint_canvas.mp4"

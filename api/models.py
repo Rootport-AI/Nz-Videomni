@@ -244,6 +244,23 @@ class OutpaintSpec(BaseModel):
     alignment choice is a UI affordance for *distributing* the pads, and pads do
     not determine an alignment uniquely, so the four numbers are both the more
     precise and the only necessary record.
+
+    PER-FAMILY SHAPE (台帳 §1-125). The source video arrives by exactly one of
+    two routes, and which one is the family's rule, not this schema's:
+
+    * LTX 2.3 / 2.5: ``GenerateRequest.reference_video_id`` (the source becomes
+      the green canvas the In-Outpainting IC-LoRA reads), with both blend
+      dilations and ``freeze_source_audio``. ``source_video_id`` and
+      ``audio_strength`` are refused (services/engines/ltx/request_rules.py).
+    * MiniMax H3: ``source_video_id`` (the source's tokens are fixed and the
+      rest is generated; no IC-LoRA, no green canvas), with
+      ``blend_dilation_stage1`` as the paste-back's feather and
+      ``audio_strength`` as the source audio's Strength. ``reference_video_id``
+      is refused as ``reference_video``, an explicit ``freeze_source_audio`` is
+      refused, ``blend_dilation_stage2`` is ignored (H3 has one stage), and an
+      omitted ``blend_dilation_stage1`` / ``audio_strength`` becomes the
+      published default (``constraints.outpaint``;
+      services/engines/h3/adapter.py ``validate_request``).
     """
 
     pad_left: int = Field(0, ge=0, le=4096)
@@ -272,6 +289,17 @@ class OutpaintSpec(BaseModel):
     # outpainting to be consistent with the sounds in the video" (node 5392);
     # turning it off lets the model invent audio for the widened frame instead.
     freeze_source_audio: bool = True
+
+    # MiniMax H3's source video: a ``POST /upload/video`` id. Its LTX
+    # counterpart is ``GenerateRequest.reference_video_id``; exactly one of the
+    # two carries the source (GenerateRequest's validator), and each family
+    # refuses the other's.
+    source_video_id: str | None = None
+    # MiniMax H3's source-audio Strength (Retake's meaning: 0 = free audio,
+    # 1.0 = the original waveform). ``None`` = the family's default
+    # (``constraints.outpaint.audio_strength.default``), written back by the
+    # family's rules; LTX refuses the field (its switch is freeze_source_audio).
+    audio_strength: float | None = Field(None, ge=0, le=1)
 
     @property
     def total_pad(self) -> int:
@@ -807,10 +835,11 @@ class GenerateRequest(BaseModel):
         # the caller got wrong.
         if self.outpaint is not None:
             op = self.outpaint
-            if not self.reference_video_id:
+            if bool(self.reference_video_id) == bool(op.source_video_id):
                 raise ValueError(
-                    "outpaint requires reference_video_id (the video whose "
-                    "canvas is being extended)"
+                    "outpaint requires exactly one of reference_video_id or "
+                    "outpaint.source_video_id (the video whose canvas is being "
+                    "extended; which one is the base model's rule)"
                 )
             if op.total_pad == 0:
                 raise ValueError(

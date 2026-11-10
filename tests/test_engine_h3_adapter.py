@@ -126,12 +126,6 @@ REQUEST_OVERRIDES_H3: dict[str, dict] = {
     "nag": {"nag_enabled": True, "negative_prompt": "blurry"},
     "two_stage_hq": {"pipeline": "two_stage_hq"},
     "guidance_scale": {"guidance_scale": 3.0},
-    "outpaint": {
-        "outpaint": {"pad_left": 128},
-        "reference_video_id": "vid-1",
-        "loras": _LORAS,
-        "width": 768,
-    },
     "inpaint": {
         "inpaint": {"mask_video_id": "mask-1"},
         "reference_video_id": "vid-1",
@@ -214,12 +208,12 @@ def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
     # chain runs an input video and clip 0's key frames); the chain's
     # ``keyframe_strength`` row is the single path's name, listed once. 台帳
     # §1-123: ``retake`` is no longer among them (the chain runs a Retake).
+    # 台帳 §1-125: nor is ``outpaint`` (the single path runs Outpainting).
     assert h3.UNSUPPORTED_FEATURES == (
         "reference_video",
         "nag",
         "two_stage_hq",
         "guidance_scale",
-        "outpaint",
         "inpaint",
         "alpha_gen",
         "prune_vaed",
@@ -332,6 +326,11 @@ H3_CONSTRAINTS = {
     },
     # Retake's middle-audio Strength (台帳 §1-123). H3 only: LTX has no key.
     "retake": {"audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
+    # Outpainting's audio Strength and feather steps (台帳 §1-125). H3 only.
+    "outpaint": {
+        "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5},
+        "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
+    },
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},
@@ -749,6 +748,121 @@ def test_generate_payload_has_no_nag_key_without_nag_enabled(tmp_path):
     assert list(payload) == GOLDEN_GENERATE_KEYS_H3
 
 
+# --- Outpainting (台帳 §1-125) ---------------------------------------------- #
+
+#: Canvas 640x384, keep 512x256 (the schema's 256 floor on the short side).
+_OP_PADS = {"pad_left": 64, "pad_right": 64, "pad_top": 64, "pad_bottom": 64}
+
+
+def _outpaint(**over) -> dict:
+    return {"source_video_id": "vid-1", **_OP_PADS, **over}
+
+
+def test_validate_request_writes_the_outpaint_defaults_back():
+    req = _validated(outpaint=_outpaint())
+    assert req.outpaint.blend_dilation_stage1 == 1
+    assert req.outpaint.audio_strength == 0.5
+    # explicit values are kept, a 5 included (the LTX default is not H3's)
+    req = _validated(outpaint=_outpaint(blend_dilation_stage1=5, audio_strength=0.0))
+    assert (req.outpaint.blend_dilation_stage1, req.outpaint.audio_strength) == (5, 0.0)
+    # nothing happens without outpaint
+    req = _validated()
+    assert req.outpaint is None
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        (
+            {"outpaint": _outpaint(freeze_source_audio=True)},
+            "outpaint.freeze_source_audio is not accepted by MiniMax H3",
+        ),
+        (
+            {"outpaint": _outpaint(freeze_source_audio=False)},
+            "outpaint.freeze_source_audio is not accepted by MiniMax H3",
+        ),
+        (
+            {"outpaint": _outpaint(), "source_audio": {"audio_id": "aud-1"}},
+            "outpaint and source_audio are mutually exclusive on MiniMax H3",
+        ),
+        (
+            {"outpaint": _outpaint(), "references": [{"kind": "picture", "id": "img-1", "slot": 1}]},
+            "outpaint and references are mutually exclusive on MiniMax H3",
+        ),
+    ],
+)
+def test_validate_request_outpaint_refusals(overrides, message):
+    req = _request(**overrides)
+    with pytest.raises(APIError) as ei:
+        engines.validate_for_family("h3", req)
+    assert ei.value.code == "VALIDATION_ERROR" and ei.value.status_code == 422
+    assert message in str(ei.value.detail)
+
+
+def test_validate_request_needs_the_source_video_id_as_the_backstop():
+    # Unreachable over HTTP (the schema wants one of the two routes and
+    # reject_unsupported refuses reference_video_id first); held directly.
+    req = _request(outpaint=_outpaint(), reference_video_id=None)
+    req.outpaint.source_video_id = None
+    with pytest.raises(ValueError, match="outpaint.source_video_id is required on MiniMax H3"):
+        h3.validate_request(req)
+
+
+def test_validate_request_logs_an_ignored_stage2(caplog):
+    with caplog.at_level("INFO", logger="h3.runner"):
+        _validated(outpaint=_outpaint())
+        assert "blend_dilation_stage2" not in caplog.text  # the schema default is silent
+        _validated(outpaint=_outpaint(blend_dilation_stage2=7))
+    assert "MiniMax H3 ignores outpaint.blend_dilation_stage2=7" in caplog.text
+
+
+def test_generate_payload_sends_the_outpaint_block(tmp_path):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    src = tmp_path / "_outpaint_source.mp4"
+    req = _validated(
+        outpaint=_outpaint(pad_left=13, pad_right=115, blend_dilation_stage2=7), num_frames=124
+    )
+    be.generate(req, tmp_path / "job", outpaint_source_path=src, seed=1)
+    (payload,) = captured
+    keys = list(payload)
+    assert keys.index("outpaint") == keys.index("output_path") - 1
+    # 1 step at a 640 long side: floor(1 * 640 / 64 + 0.5) = 10 px. No canvas_*
+    # (width / height are the canvas), no stage 2, no freeze_source_audio.
+    assert payload["outpaint"] == {
+        "source_path": str(src),
+        "pad_left": 13,
+        "pad_right": 115,
+        "pad_top": 64,
+        "pad_bottom": 64,
+        "audio_strength": 0.5,
+        "feather_px": 10,
+    }
+    assert isinstance(payload["outpaint"]["audio_strength"], float)
+    assert (payload["width"], payload["height"]) == (640, 384)
+
+
+@pytest.mark.parametrize(
+    "steps, width, height, expected",
+    [(0, 640, 384, 0), (1, 1920, 1088, 30), (3, 1920, 1088, 90), (15, 1920, 1088, 450),
+     # 1 * 1312 / 64 = 20.5: half rounds up (the operation panel's Math.round)
+     (1, 1312, 768, 21)],
+)
+def test_outpaint_feather_px_is_steps_times_the_long_side_over_64(steps, width, height, expected):
+    pads = {"pad_left": 64, "pad_right": 64, "pad_top": 64, "pad_bottom": 64}
+    req = _validated(
+        width=width, height=height,
+        outpaint={"source_video_id": "v", **pads, "blend_dilation_stage1": steps},
+    )
+    assert h3._outpaint_feather_px(req) == expected
+
+
+def test_generate_outpaint_needs_the_cut_source(tmp_path):
+    be = _capturing_backend([])
+    with pytest.raises(RuntimeError, match="outpaint"):
+        be.generate(_validated(outpaint=_outpaint()), tmp_path / "job", seed=1)
+
+
 # --------------------------------------------------------------------------- #
 # 5) HTTP, three families
 # --------------------------------------------------------------------------- #
@@ -1087,6 +1201,46 @@ def test_precheck_refuses_an_ltx_safetensors_as_the_h3_transformer(three_family_
     error = r.json()["error"]
     assert error["code"] == "MODEL_INCOMPATIBLE"
     assert "LTX の DiT です" in error["detail"]
+
+
+def test_mock_outpaint_over_http_records_h3_outpaint(three_family_client, tmp_path):
+    """The mock end to end: the app cuts the source, the mock records
+    ``h3.outpaint`` and pipeline_manager leaves it inside ``metadata["h3"]``."""
+    import shutil  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
+
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("ffmpeg/ffprobe not on PATH")
+    src = tmp_path / "op_src.mp4"
+    subprocess.run(
+        [shutil.which("ffmpeg"), "-y", "-v", "error", "-f", "lavfi",
+         "-i", "testsrc2=size=512x256:rate=24:duration=2", "-frames:v", "39",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(src)],
+        check=True, capture_output=True,
+    )
+    _activate(three_family_client, "MiniMaxH3")
+    up = three_family_client.post(
+        "/api/v1/upload/video", files={"file": ("src.mp4", src.read_bytes(), "video/mp4")}
+    )
+    assert up.status_code == 200, up.text
+    vid = up.json()["video_id"]
+    r = three_family_client.post(
+        "/api/v1/generate",
+        json={
+            "prompt": PROMPT, "width": 640, "height": 384, "num_frames": 39,
+            "outpaint": {"source_video_id": vid, **_OP_PADS, "audio_strength": 0.0},
+        },
+    )
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert three_family_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    meta = _metadata(three_family_client, job_id)
+    record = meta["h3"]["outpaint"]
+    assert record["canvas"] == [640, 384] and record["source"] == [512, 256]
+    assert record["feather_px"] == 10 and record["audio_strength"] == 0.0
+    assert record["mock"] is True
+    assert meta["request"]["outpaint"]["blend_dilation_stage1"] == 1  # written back
+    assert "outpaint" not in meta  # inside h3, not lifted to the top level
 
 
 def test_h3_block_reaches_metadata_json(three_family_client):

@@ -356,3 +356,31 @@ def test_runner_payload_carries_the_outpaint_block_only_when_requested(tmp_path)
     assert block["source_path"].endswith("src.mp4")
     # The reference the engine conditions on is the CANVAS, not the source.
     assert captured[-1]["reference_video"]["path"].endswith("canvas.mp4")
+
+
+# ──────────────── MiniMax H3's two fields on LTX (台帳 §1-125) ────────────────
+
+
+def test_outpaint_refuses_both_source_routes_at_once(outpaint_client):
+    body = _payload("vid", outpaint={**PADS, "source_video_id": "vid-2"})
+    resp = outpaint_client.post("/api/v1/generate", json=body)
+    assert resp.status_code == 422
+    assert "exactly one of reference_video_id or outpaint.source_video_id" in resp.text
+
+
+def test_ltx_refuses_the_h3_source_video_id(outpaint_client):
+    body = _payload(outpaint={**PADS, "source_video_id": "vid-2"})
+    resp = outpaint_client.post("/api/v1/generate", json=body)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert "outpaint.source_video_id is only accepted by MiniMax H3" in resp.text
+    assert "reference_video_id" in resp.text
+
+
+def test_ltx_refuses_the_h3_audio_strength(outpaint_client):
+    body = _payload("vid", outpaint={**PADS, "audio_strength": 0.5})
+    resp = outpaint_client.post("/api/v1/generate", json=body)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert "outpaint.audio_strength is only accepted by MiniMax H3" in resp.text
+    assert "freeze_source_audio" in resp.text

@@ -89,5 +89,357 @@
     "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\control_write_mp4_1280x720_124f.mp4",
     "psnr_vs_cut_db": 38.1516,
     "note": "切り出しの画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"
+  },
+  "material_trim2": {
+    "source": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+    "cut": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x716_124f_trim2.mp4",
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a:0",
+      "-vf",
+      "crop=1280:716:0:2",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "-c:a",
+      "copy",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x716_124f_trim2.mp4"
+    ],
+    "audio_codec": "copy",
+    "crop": "crop=1280:716:0:2",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x716_124f_trim2.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 716,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "read_outpaint_source_s05": {
+      "source_size": [
+        1280,
+        716
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    }
+  },
+  "control_trim2": {
+    "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\control_write_mp4_1280x716_124f_trim2.mp4",
+    "psnr_vs_cut_db": 38.3157,
+    "note": "trim2 の画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"
+  },
+  "e2:E2": {
+    "params": {
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "frames": 124,
+      "start_sec": 0.0,
+      "scale": null,
+      "size": [
+        1280,
+        720
+      ]
+    },
+    "material": "E2_1280x720_124f.mp4",
+    "control": "E2_1280x720_124f_control.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "source_fps": 24.0,
+    "resampled": false,
+    "start_frame": 0,
+    "end_frame": 123,
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,123)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=5.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2_1280x720_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2_1280x720_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "read_outpaint_source": {
+      "source_size": [
+        1280,
+        720
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "control_psnr_vs_cut_db": 38.2377
+  },
+  "e2:E2a": {
+    "params": {
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "frames": 124,
+      "start_sec": 0.0,
+      "scale": null,
+      "size": [
+        1344,
+        768
+      ]
+    },
+    "material": "E2a_1344x768_124f.mp4",
+    "control": "E2a_1344x768_124f_control.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.167000"
+      }
+    },
+    "source_fps": 24.0,
+    "resampled": false,
+    "start_frame": 0,
+    "end_frame": 123,
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,123)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=5.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2a_1344x768_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2a_1344x768_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.166656"
+      }
+    },
+    "read_outpaint_source": {
+      "source_size": [
+        1344,
+        768
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "control_psnr_vs_cut_db": 39.4086
+  },
+  "e2:E2c": {
+    "params": {
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "frames": 124,
+      "start_sec": 0.0,
+      "scale": null,
+      "size": [
+        1344,
+        768
+      ]
+    },
+    "material": "E2c_1344x768_124f.mp4",
+    "control": "E2c_1344x768_124f_control.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.167000"
+      }
+    },
+    "source_fps": 24.0,
+    "resampled": false,
+    "start_frame": 0,
+    "end_frame": 123,
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,123)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=5.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2c_1344x768_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2c_1344x768_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.166656"
+      }
+    },
+    "read_outpaint_source": {
+      "source_size": [
+        1344,
+        768
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "control_psnr_vs_cut_db": 39.4086
   }
 }

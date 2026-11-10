@@ -49,13 +49,13 @@ G0 と生成の門は、別々のプロセスで回すことを勧めます。�
 
 | 引数 | 既定 | 意味 |
 |---|---|---|
-| `--gate` | `G0,G1,G2,G3,G4` | 回す門（カンマ区切り） |
+| `--gate` | `G0,G1,G2,G3,G4` | 回す門（カンマ区切り）。`E1`・`E2` は既定に入らず、明示したときだけ回す（下の「実験 E1」「実験 E2」） |
 | `--prepare` | 切 | 素材の切り出しと対照を作って終わる（CPU） |
 | `--dry-run` | 切 | モデルを読まずに幾何と要求の一覧を出す（CPU） |
 | `--seed` | 1234 | 種（全本で同じ） |
 | `--prompt` | 下の「プロンプト」 | 全本で同じ文。負のプロンプトは無し |
 | `--steps` | 4 | ステップ数（Turbo LoRA の 4 ステップ） |
-| `--attention` | `sdpa` | 注意の実装（`sdpa`／`sage`）。読み込み時と各本の両方に渡す |
+| `--attention` | E2 は `sage`、G0〜G4・E1 は `sdpa` | 注意の実装（`sdpa`／`sage`）。指定すると全部の本がそれになる。各本の要求に渡し、読み込み時には最初の本の値を渡す |
 | `--no-lora` | 切 | Turbo LoRA を付けない（そのときは `--steps 20` などを合わせて指定する） |
 | `--vram16-off` | 切 | VRAM 16GB mode を切る（既定は on。アプリが H3 で送る既定と同じ） |
 | `--out-dir` | `outputs\h3-outpaint-gates-2026-11-10` | 出力の置き場（git の追跡外） |
@@ -85,7 +85,7 @@ G0 と生成の門は、別々のプロセスで回すことを勧めます。�
 | `control_write_mp4_1280x720_124f.mp4` | 対照。上の切り出しを `read_source_frames` で読み、出力と同じ `engine_h3.media_out.write_mp4` で書き直したもの（音声なし）。出力 mp4 の保持矩形はこの書き直しと同じ再符号化を一度経ているので、比べる相手にする |
 | `prepare.json` | ffmpeg のコマンド、ffprobe の結果、`read_outpaint_source` を s=1.0 で読んだ結果（窓の全長のサンプル数がそろうこと）、対照と切り出しの PSNR |
 
-奇数 pad の本も同じ素材を使います。
+奇数 pad の本も同じ素材を使います。既にある素材は作り直しません（無いものだけ作り、`prepare.json` に追記します）。実験 E1 の素材は下の「実験 E1」です。
 
 ## 各門の条件
 
@@ -174,7 +174,66 @@ G1〜G4（各本）:
 
 - `outputs\` は丸ごと git の追跡外（`.gitignore` の `outputs/*`）。保管庫の mp4 と `_rt\` も追跡外（`.gitignore` の `Docs/Outputs-archive/**/*.mp4` と `Docs/Outputs-archive/**/_rt/`）。この保管庫で追跡するのは台本・この説明書・監督が写す結果の JSON だけ。
 - 判定器の前例 `outputs/ltx25-outpaint-gate/analyze_w2.py` も追跡外です。この台本は同じ量を自分で計算するので、前例が無くても動きます。
-- 生成は 6 本です（主条件の 1 本を G1・G2 の r=1・G4 の s=0.5 で共用するため）。
+- 生成は 6 本です（主条件の 1 本を G1・G2 の r=1・G4 の s=0.5 で共用するため）。実験 E1 の 2 本は別です。
+- `summary.json` が既にあれば、台本はそれを読み込んで足します（今回回さない本と G0 の記録は残し、同じ名前の本は今回のもので置き換える。前回までの実行の時刻・引数・読み込みの記録は `previous_invocations` に残す。各本の条件は `runs[].conditions`）。`summary.json` に G0 が無く `G0
+esult.json` があれば、それを `g0` として取り込みます。
+
+## 実験 E1（素材の縁の暗い行を落とす）
+
+- 目的: オーナーの目視で、保持矩形の上下の境界に細い線が見えました。元の素材（1080p）と切り出し 1280×720 の上端 1 行と下端 2 行が暗く（左右には無し）、出力の線の位置（y=184 と y=902〜903）がその行と一致したためです。素材の暗い行を落とせば線が消えるかを確かめます。
+- 素材（`--prepare` で作る。既存の切り出しは作り直さない）: `_material\src_1280x716_124f_trim2.mp4` は切り出し `src_1280x720_124f.mp4` から ffmpeg の `crop=1280:716:0:2` で上 2 行と下 2 行を落としたもの（libx264 crf 12・yuv420p・24fps CFR、音声はそのまま写す）。ffprobe で 124 枚・1280×716 でなければ止まります。対照は `_material\control_write_mp4_1280x716_124f_trim2.mp4`（trim2 を `write_mp4` で書き直したもの）。`prepare.json` の `material_trim2`・`control_trim2` に記録します。
+- 条件: 主条件と同じ 1920×1088 のキャンバス・Turbo 4 ステップ・s=0.5・注入 1.0・種 1234。pad は左 320・右 320・上 186・下 186（716＋372＝1088）。外接矩形と固定トークン数は主条件と同じ（[320,160)-[1600,928)・固定 880）。
+
+| 本（フォルダ名） | なじませ r（px） |
+|---|---|
+| `E1_trim_r1` | 1（30） |
+| `E1_trim_r0` | 0（0） |
+
+- PSNR は trim2 の対照と比べ、勾配比は pad 186 の位置の辺で測ります。出力の置き場と記録の形は他の本と同じ（`<本>\output.mp4`・`result.json`・`run.log`、`summary.json` の `runs[]`）。
+- コマンド（リポジトリの根で。cmd）:
+
+```
+set PYTHONPATH=%CD%
+set PYTHONUTF8=1
+.venv-engine-h3\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate.py --prepare
+.venv-engine-h3\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate.py --dry-run --gate E1
+.venv-engine-h3\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate.py --gate E1
+```
+
+- `make_outpaint_sheet.py` は E1 の 2 本も拾い、保持矩形の枠を 1280×716・pad 186 の位置に描きます。
+
+## 実験 E2（汎用。別の元動画で確かめる）
+
+- 目的: 切り落としの代わりに、四辺に線の無い別の元動画で、保持矩形の境界の線が出るかを確かめます（素材は監督が選ぶ）。素材・pad・なじませを引数で与える汎用の門です。
+- 素材: `--material` の動画を `--prepare` と同じ作法（select の窓・atrim・libx264 crf 12・yuv420p・24fps CFR・音声は PCM、断られたら AAC 192k）で、24fps・ちょうど `--frames` 枚に切り出します。素材が 24fps でなければ先に 24fps に揃えてから窓を取ります（`cut_window_mp4` と同じ順）。`--scale W:H` を渡すと、縦横比を保って W:H を覆うまで lanczos で縮め、中央で W:H に切り抜きます（W・H は偶数）。渡さなければ、奇数の辺だけ 1 画素を切り落として偶数にします。
+  - できるもの: `_material\<label>_<W>x<H>_<F>f.mp4`（切り出し）と `_material\<label>_<W>x<H>_<F>f_control.mp4`（`write_mp4` で書き直した対照）。ffprobe で枚数と寸法を確かめ、合わなければ止まります。`prepare.json` の `e2:<label>` に記録し、同じ引数で既にあれば作り直しません。
+  - E2 の素材は `--dry-run` でも GPU の実行でも、無ければその場で作ります（CPU）。`--prepare --gate E2 ...` で素材だけを作ることもできます。
+- 条件: キャンバスは素材＋pad（`--canvas` を渡すと一致を確かめる。32 の倍数でなければ止まる）。`--feathers` の r ごとに 1 本、本の名前は `<label>_r<r>`。Turbo 4 ステップ・注入 1.0・種 1234 は他の本と同じ。注意の実装の既定は `sage`（時短。オーナー了承）。音声の Strength は `--audio-strength`（既定 0.5。音声の無い素材では 0 を渡す）。
+- 引数:
+
+| 引数 | 既定 | 意味 |
+|---|---|---|
+| `--material` | （E2 で必須） | 元の動画 |
+| `--pads` | （E2 で必須） | pad の 左,右,上,下 |
+| `--canvas` | 素材＋pad | キャンバスの 幅,高さ（指定すれば一致を確かめる） |
+| `--feathers` | `1,0` | なじませの段数 r の列。1 つにつき 1 本 |
+| `--label` | `E2` | 本の名前と素材のファイル名の接頭辞 |
+| `--frames` | 124 | フレーム数（17n+5） |
+| `--start-sec` | 0 | 窓の開始秒（開始フレームは `round(秒×24)`） |
+| `--scale` | なし | `W:H`。覆うまで縮めて中央で切り抜く |
+| `--audio-strength` | 0.5 | 音声の Strength s |
+
+- 記録: PSNR はその本の素材の対照と比べ、勾配比はその本の pad の位置で測ります。出力・記録の形は他の本と同じ（`<本>\output.mp4`・`result.json`・`run.log`、`summary.json` の `runs[]` に足す。`runs[].conditions` に注意の実装とフレーム数が入る）。
+- コマンド（リポジトリの根で。cmd）:
+
+```
+set PYTHONPATH=%CD%
+set PYTHONUTF8=1
+.venv-engine-h3\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate.py --dry-run --gate E2 --material <元の動画> --pads 320,320,184,184
+.venv-engine-h3\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate.py --gate E2 --material <元の動画> --pads 320,320,184,184
+```
+
+- `make_outpaint_sheet.py` は `summary.json` にある E2 の本も拾います。保持矩形の枠（pad と元の寸法）は本ごとの `result.json` の `h3.outpaint` から読み、元の動画の写しを `source_<本>.mp4` として置きます。
 
 ## 遠隔目視のフォルダの作り方
 

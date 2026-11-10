@@ -20,6 +20,10 @@ r"""MiniMax H3 Outpainting (台帳 §1-125) の GPU の門 G0〜G4: エンジン
   G2  主条件で r=0・r=3（r=1 は G1 と共用）。
   G3  主条件で注入係数 0.999 の対照（engine_h3.outpaint_h3.OUTPAINT_INJECT_CLEAN を差し替える）。
   G4  主条件で s=1.0（s=0.5 は G1 と共用）。
+  E1  実験: 切り出しの上下 2 行を落とした 1280x716 の素材で、pad L320 R320 T186 B186（1920x1088）・r=1 と r=0。
+      --gate E1 で明示したときだけ回す（既定の --gate は G0〜G4）。
+  E2  汎用の実験: --material の動画を 24fps・ちょうど --frames 枚・偶数寸法に切り出し（--scale で縮小と中央の切り抜き）、
+      --pads・--canvas・--feathers（r の列）で 1 本ずつ回す。本の名前は <--label>_r<r>。既定の注意の実装は sage。
 記録と判定は数値を取るだけで止めない。終了コード: 0＝全部完走、1＝失敗した本か門がある、2＝引数・素材の誤り。
 """
 
@@ -69,6 +73,11 @@ MATERIAL_SRC = ROOT / "outputs" / "h3-retake-gates-2026-11-08" / "_material" / "
 MATERIAL_NAME = "src_1280x720_124f.mp4"
 CONTROL_NAME = "control_write_mp4_1280x720_124f.mp4"
 SRC_W, SRC_H = 1280, 720
+#: 実験 E1: 切り出しの上 2 行と下 2 行（素材の縁の暗い行）を落とした素材とその対照。
+TRIM_NAME = "src_1280x716_124f_trim2.mp4"
+TRIM_CONTROL_NAME = "control_write_mp4_1280x716_124f_trim2.mp4"
+TRIM_ROWS = 2
+TRIM_W, TRIM_H = SRC_W, SRC_H - 2 * TRIM_ROWS
 NUM_FRAMES = 124                  # 17x7+5
 START_SEC = 2.0                   # 開始フレームは製品の窓と同じく round(開始秒x24)
 
@@ -108,7 +117,9 @@ PSNR_IDENTICAL = 100.0
 
 MAIN_PADS = {"pad_left": 320, "pad_right": 320, "pad_top": 184, "pad_bottom": 184}
 ODD_PADS = {"pad_left": 13, "pad_right": 19, "pad_top": 8, "pad_bottom": 8}
-GATES = ("G0", "G1", "G2", "G3", "G4")
+TRIM_PADS = {"pad_left": 320, "pad_right": 320, "pad_top": 186, "pad_bottom": 186}   # 716 + 372 = 1088
+GATES = ("G0", "G1", "G2", "G3", "G4", "E1", "E2")
+DEFAULT_GATES = ("G0", "G1", "G2", "G3", "G4")   # E1・E2 は --gate で明示したときだけ
 
 
 def feather_px_of(r: int, canvas_w: int, canvas_h: int) -> int:
@@ -118,12 +129,15 @@ def feather_px_of(r: int, canvas_w: int, canvas_h: int) -> int:
 
 def run_plan() -> list[dict]:
     """生成の本の一覧（G0 は別）。r=1・s=0.5・注入 1.0 の主条件は G1 の 1 本を G2／G4 と共用する。"""
-    def one(label, gate, pads, r=1, s=0.5, inject=1.0, purpose=""):
-        cw = SRC_W + pads["pad_left"] + pads["pad_right"]
-        ch = SRC_H + pads["pad_top"] + pads["pad_bottom"]
+    def one(label, gate, pads, r=1, s=0.5, inject=1.0, purpose="", trim=False):
+        sw, sh = (TRIM_W, TRIM_H) if trim else (SRC_W, SRC_H)
+        cw = sw + pads["pad_left"] + pads["pad_right"]
+        ch = sh + pads["pad_top"] + pads["pad_bottom"]
         return {"label": label, "gate": gate, "pads": dict(pads), "canvas": [cw, ch], "r": r,
                 "feather_px": feather_px_of(r, cw, ch), "audio_strength": s, "inject_clean": inject,
-                "purpose": purpose}
+                "purpose": purpose, "source": [sw, sh],
+                "material": TRIM_NAME if trim else MATERIAL_NAME,
+                "control": TRIM_CONTROL_NAME if trim else CONTROL_NAME}
     return [
         one("G1_main", "G1", MAIN_PADS, purpose="主条件（G2 の r=1・G4 の s=0.5 と共用）"),
         one("G1_odd", "G1", ODD_PADS, purpose="奇数 pad・32 に乗らない"),
@@ -131,6 +145,8 @@ def run_plan() -> list[dict]:
         one("G2_r3", "G2", MAIN_PADS, r=3, purpose="なじませ r=3"),
         one("G3_inject0999", "G3", MAIN_PADS, inject=0.999, purpose="注入係数 0.999 の対照"),
         one("G4_s1", "G4", MAIN_PADS, s=1.0, purpose="音声 s=1.0（元の波形）"),
+        one("E1_trim_r1", "E1", TRIM_PADS, trim=True, purpose="素材の上下 2 行を落とした素材・なじませ r=1"),
+        one("E1_trim_r0", "E1", TRIM_PADS, r=0, trim=True, purpose="素材の上下 2 行を落とした素材・なじませ 0"),
     ]
 
 
@@ -329,6 +345,60 @@ def read_frames(path: Path, n: int) -> np.ndarray:
 # --------------------------------------------------------------------------- #
 
 def prepare(out_root: Path, record: dict) -> None:
+    """素材と対照を用意する（CPU）。既にある素材は作り直さない（無いものだけ作り、prepare.json に追記する）。"""
+    mat_dir = out_root / "_material"
+    pj = mat_dir / "prepare.json"
+    have_main = pj.is_file() and (mat_dir / MATERIAL_NAME).is_file() and (mat_dir / CONTROL_NAME).is_file()
+    if have_main:
+        record.update(json.loads(pj.read_text(encoding="utf-8")))
+        LOG(f"prepare: 既存の {MATERIAL_NAME} と {CONTROL_NAME} を使う（作り直さない）")
+    else:
+        _prepare_main(out_root, record)
+    if "material_trim2" in record and (mat_dir / TRIM_NAME).is_file() and (mat_dir / TRIM_CONTROL_NAME).is_file():
+        LOG(f"prepare: 既存の {TRIM_NAME} と {TRIM_CONTROL_NAME} を使う（作り直さない）")
+    else:
+        _prepare_trim2(out_root, record)
+    pdata = json.loads(pj.read_text(encoding="utf-8")) if pj.is_file() else {}
+    pdata.update({k: record[k] for k in ("material", "control", "material_trim2", "control_trim2") if k in record})
+    write_json(pj, pdata)   # E2 の項目（e2:<label>）は残す
+
+
+def _prepare_trim2(out_root: Path, record: dict) -> None:
+    """実験 E1: 切り出し 1280x720 から上 2 行と下 2 行を落とした 1280x716 と、その write_mp4 の対照。"""
+    from engine_h3.media_out import write_mp4  # noqa: PLC0415
+
+    mat_dir = out_root / "_material"
+    src = mat_dir / MATERIAL_NAME
+    out = mat_dir / TRIM_NAME
+    # 再符号化は切り出しと同じ条件（crf 12・yuv420p・CFR 24fps）。音声はそのまま写す。
+    cmd = [tool("ffmpeg"), "-y", "-v", "error", "-i", str(src), "-map", "0:v:0", "-map", "0:a:0",
+           "-vf", f"crop={TRIM_W}:{TRIM_H}:0:{TRIM_ROWS}",
+           "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", "-fps_mode", "cfr", "-r", str(FRAME_RATE),
+           "-c:a", "copy", str(out)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        raise SystemExit(f"ffmpeg の trim2 に失敗しました（{proc.returncode}）: {proc.stderr[-2000:]}")
+    probe = ffprobe(out)
+    LOG(f"prepare: {rel(out)} ffprobe={jdump(probe)}")
+    vid = probe["video"]
+    if vid.get("nb_read_frames") != NUM_FRAMES or (vid.get("width"), vid.get("height")) != (TRIM_W, TRIM_H):
+        raise SystemExit(f"trim2 の枚数か寸法が合いません（{vid.get('nb_read_frames')} 枚・"
+                         f"{vid.get('width')}x{vid.get('height')}。{NUM_FRAMES} 枚・{TRIM_W}x{TRIM_H} が必要）")
+    frames, wave, info = OH.read_outpaint_source(str(out), NUM_FRAMES, FRAME_RATE, 0.5, log=LOG)
+    LOG(f"prepare: trim2 read_outpaint_source(s=0.5) frames={list(frames.shape)} "
+        f"wave={None if wave is None else list(wave.shape)} info={info}")
+    control = mat_dir / TRIM_CONTROL_NAME
+    write_mp4(str(control), torch.from_numpy(frames), fps=FRAME_RATE, audio=None)
+    ctrl_psnr = psnr_frames(read_frames(control, NUM_FRAMES), frames)
+    LOG(f"prepare: control {rel(control)} PSNR(control vs trim2)={ctrl_psnr:.3f} dB")
+    record["material_trim2"] = {"source": rel(src), "cut": rel(out), "ffmpeg_cmd": cmd, "audio_codec": "copy",
+                                "crop": f"crop={TRIM_W}:{TRIM_H}:0:{TRIM_ROWS}", "probe": probe,
+                                "read_outpaint_source_s05": info}
+    record["control_trim2"] = {"path": rel(control), "psnr_vs_cut_db": round(ctrl_psnr, 4),
+                               "note": "trim2 の画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"}
+
+
+def _prepare_main(out_root: Path, record: dict) -> None:
     """素材を 1280x720・24fps・ちょうど 124 枚に切り出し、write_mp4 で書き直した対照も作る（CPU）。"""
     mat_dir = out_root / "_material"
     mat_dir.mkdir(parents=True, exist_ok=True)
@@ -382,14 +452,14 @@ def prepare(out_root: Path, record: dict) -> None:
     }
     record["control"] = {"path": rel(control), "psnr_vs_cut_db": round(ctrl_psnr, 4),
                          "note": "切り出しの画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"}
-    write_json(mat_dir / "prepare.json", {"material": record["material"], "control": record["control"]})
 
 
-def load_prepared(out_root: Path, record: dict) -> None:
+def load_prepared(out_root: Path, record: dict, runs: list[dict]) -> None:
     p = out_root / "_material" / "prepare.json"
-    if not p.is_file() or not (out_root / "_material" / MATERIAL_NAME).is_file() \
-            or not (out_root / "_material" / CONTROL_NAME).is_file():
-        raise SystemExit("素材がありません。先に --prepare を実行してください")
+    needed = {MATERIAL_NAME, CONTROL_NAME} | {r["material"] for r in runs} | {r["control"] for r in runs}
+    missing = [n for n in sorted(needed) if not (out_root / "_material" / n).is_file()]
+    if not p.is_file() or missing:
+        raise SystemExit(f"素材がありません（{missing or 'prepare.json'}）。先に --prepare を実行してください")
     record.update(json.loads(p.read_text(encoding="utf-8")))
 
 
@@ -397,17 +467,165 @@ def load_prepared(out_root: Path, record: dict) -> None:
 # 要求の組み立て
 # --------------------------------------------------------------------------- #
 
+def run_attention(run: dict, args) -> str:
+    """注意の実装: --attention があればそれ、無ければ E2 は sage（オーナー了承の時短）、他は sdpa（従来どおり）。"""
+    if args.attention:
+        return args.attention
+    return "sage" if run.get("gate") == "E2" else "sdpa"
+
+
+# --------------------------------------------------------------------------- #
+# E2（汎用の実験）
+# --------------------------------------------------------------------------- #
+
+def _int_list(text: str, n: int | None, what: str) -> list[int]:
+    try:
+        vals = [int(v.strip()) for v in str(text).split(",") if v.strip() != ""]
+    except ValueError:
+        raise SystemExit(f"{what} は整数のカンマ区切りです（{text!r}）") from None
+    if n is not None and len(vals) != n:
+        raise SystemExit(f"{what} は {n} 個の整数です（{text!r}）")
+    return vals
+
+
+def probe_fps(path: Path) -> float | None:
+    out = subprocess.run([tool("ffprobe"), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=r_frame_rate", "-of", "default=nw=1:nk=1", str(path)],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
+    try:
+        num, _, den = out.partition("/")
+        return float(num) / float(den or 1)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def prepare_e2(args, out_root: Path, record: dict) -> dict:
+    """E2 の素材: --material を 24fps・ちょうど --frames 枚・偶数寸法に切り出し、write_mp4 の対照も作る（CPU）。
+
+    作法は --prepare と同じ（select の窓・atrim・crf 12・yuv420p・CFR・音声は PCM、断られたら AAC 192k）。
+    素材が 24fps でなければ先に fps=24 で揃えてから窓を取る（cut_window_mp4 と同じ順）。--scale W:H は
+    縦横比を保って W:H を覆うまで lanczos で縮め、中央で W:H に切り抜く。--scale が無いときは奇数の辺だけ
+    1 画素を切り落とす。同じ名前と同じ引数の素材が既にあれば作り直さない。
+    """
+    from engine_h3.media_out import write_mp4  # noqa: PLC0415
+
+    if not args.material:
+        raise SystemExit("E2 には --material が要ります")
+    src = Path(args.material).resolve()
+    if not src.is_file():
+        raise SystemExit(f"素材がありません: {src}")
+    frames_n = int(args.frames)
+    latent_frames(frames_n)   # 17n+5 でなければここで止まる
+    sprobe = ffprobe(src)
+    sw0, sh0 = int(sprobe["video"]["width"]), int(sprobe["video"]["height"])
+    if args.scale:
+        tw, th = _int_list(args.scale.replace(":", ","), 2, "--scale")
+        if tw % 2 or th % 2 or tw <= 0 or th <= 0:
+            raise SystemExit(f"--scale は正の偶数の W:H にしてください（{args.scale}）")
+        geom_vf = (f"scale={tw}:{th}:flags=lanczos:force_original_aspect_ratio=increase,"
+                   f"crop={tw}:{th}:(iw-{tw})/2:(ih-{th})/2")
+    else:
+        tw, th = sw0 - sw0 % 2, sh0 - sh0 % 2
+        geom_vf = f"crop={tw}:{th}:{(sw0 - tw) // 2}:{(sh0 - th) // 2}" if (tw, th) != (sw0, sh0) else ""
+    name = f"{args.label}_{tw}x{th}_{frames_n}f.mp4"
+    cname = f"{args.label}_{tw}x{th}_{frames_n}f_control.mp4"
+    key = f"e2:{args.label}"
+    params = {"source": str(src), "frames": frames_n, "start_sec": float(args.start_sec), "scale": args.scale,
+              "size": [tw, th]}
+    mat_dir = out_root / "_material"
+    mat_dir.mkdir(parents=True, exist_ok=True)
+    pj = mat_dir / "prepare.json"
+    pdata = json.loads(pj.read_text(encoding="utf-8")) if pj.is_file() else {}
+    old = pdata.get(key) or {}
+    if old.get("params") == params and (mat_dir / name).is_file() and (mat_dir / cname).is_file():
+        LOG(f"prepare E2: 既存の {name} と {cname} を使う（作り直さない）")
+        record[key] = old
+        return old
+    fps = probe_fps(src)
+    if fps is None or fps <= 0:
+        raise SystemExit(f"素材の fps が読めません: {src}")
+    has_audio = sprobe.get("audio") is not None
+    start = max(0, round(float(args.start_sec) * FRAME_RATE))
+    end = start + frames_n - 1
+    vchain = ([f"fps={FRAME_RATE}"] if abs(fps - FRAME_RATE) > 1e-3 else []) + [
+        f"select='between(n\\,{start}\\,{end})'", "setpts=PTS-STARTPTS"] + ([geom_vf] if geom_vf else [])
+    fc = "[0:v]" + ",".join(vchain) + "[v]"
+    if has_audio:
+        fc += f";[0:a]atrim=start={start / FRAME_RATE}:end={(end + 1) / FRAME_RATE},asetpts=PTS-STARTPTS[a]"
+    out = mat_dir / name
+
+    def cut(audio_args):
+        cmd = [tool("ffmpeg"), "-y", "-v", "error", "-i", str(src), "-filter_complex", fc, "-map", "[v]"]
+        if has_audio:
+            cmd += ["-map", "[a]", *audio_args]
+        cmd += ["-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", "-fps_mode", "cfr", "-r", str(FRAME_RATE),
+                str(out)]
+        return cmd, subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+    cmd, proc = cut(["-c:a", "pcm_s16le"])
+    audio_codec = "pcm_s16le" if has_audio else None
+    if proc.returncode != 0 and has_audio:
+        cmd, proc = cut(["-c:a", "aac", "-b:a", "192k"])
+        audio_codec = "aac 192k"
+    if proc.returncode != 0:
+        raise SystemExit(f"ffmpeg の E2 の切り出しに失敗しました（{proc.returncode}）: {proc.stderr[-2000:]}")
+    probe = ffprobe(out)
+    vid = probe["video"]
+    LOG(f"prepare E2: {rel(out)} {vid.get('width')}x{vid.get('height')} {vid.get('nb_read_frames')} 枚 "
+        f"audio={probe.get('audio')}")
+    if vid.get("nb_read_frames") != frames_n or (vid.get("width"), vid.get("height")) != (tw, th):
+        raise SystemExit(f"E2 の切り出しの枚数か寸法が合いません（{vid.get('nb_read_frames')} 枚・"
+                         f"{vid.get('width')}x{vid.get('height')}。{frames_n} 枚・{tw}x{th} が必要）")
+    s = float(args.audio_strength)
+    frames, wave, info = OH.read_outpaint_source(str(out), frames_n, FRAME_RATE, s, log=LOG)
+    control = mat_dir / cname
+    write_mp4(str(control), torch.from_numpy(frames), fps=FRAME_RATE, audio=None)
+    ctrl_psnr = psnr_frames(read_frames(control, frames_n), frames)
+    LOG(f"prepare E2: control {rel(control)} PSNR(control vs cut)={ctrl_psnr:.3f} dB")
+    entry = {"params": params, "material": name, "control": cname, "source_probe": sprobe, "source_fps": fps,
+             "resampled": abs(fps - FRAME_RATE) > 1e-3, "start_frame": start, "end_frame": end, "ffmpeg_cmd": cmd,
+             "audio_codec": audio_codec, "probe": probe, "read_outpaint_source": info,
+             "control_psnr_vs_cut_db": round(ctrl_psnr, 4)}
+    pdata[key] = entry
+    write_json(pj, pdata)
+    record[key] = entry
+    return entry
+
+
+def e2_runs(args, entry: dict) -> list[dict]:
+    """E2 の本の一覧（r ごとに 1 本）。キャンバスは素材＋pad（--canvas があれば一致を確かめる）。"""
+    sw, sh = entry["params"]["size"]
+    pl, pr, pt, pb = _int_list(args.pads, 4, "--pads")
+    cw, ch = sw + pl + pr, sh + pt + pb
+    if args.canvas:
+        gw, gh = _int_list(args.canvas, 2, "--canvas")
+        if (gw, gh) != (cw, ch):
+            raise SystemExit(f"--canvas {gw}x{gh} が素材 {sw}x{sh} と pad の和 {cw}x{ch} に一致しません")
+    if cw % TOKEN_PX or ch % TOKEN_PX:
+        raise SystemExit(f"キャンバス {cw}x{ch} が {TOKEN_PX} の倍数ではありません（素材 {sw}x{sh}・pad {args.pads}）")
+    pads = {"pad_left": pl, "pad_right": pr, "pad_top": pt, "pad_bottom": pb}
+    out = []
+    for r in _int_list(args.feathers, None, "--feathers"):
+        out.append({"label": f"{args.label}_r{r}", "gate": "E2", "pads": dict(pads), "canvas": [cw, ch], "r": r,
+                    "feather_px": feather_px_of(r, cw, ch), "audio_strength": float(args.audio_strength),
+                    "inject_clean": 1.0, "purpose": f"汎用の実験（素材 {Path(entry['params']['source']).name}）",
+                    "source": [sw, sh], "material": entry["material"], "control": entry["control"],
+                    "frames": int(entry["params"]["frames"])})
+    return out
+
+
 def build_request(run: dict, args, out_root: Path) -> P.H3GenerateRequest:
     cw, ch = run["canvas"]
     return P.H3GenerateRequest(
-        prompt=args.prompt, seed=int(args.seed), width=cw, height=ch, num_frames=NUM_FRAMES,
+        prompt=args.prompt, seed=int(args.seed), width=cw, height=ch, num_frames=int(run.get("frames", NUM_FRAMES)),
         output_path=str(out_root / run["label"] / "output.mp4"),
         num_inference_steps=int(args.steps), shift_video=SHIFT_VIDEO, shift_audio=SHIFT_AUDIO,
-        keep_resident=True, attention_backend=args.attention, block_swap_prefetch=PREFETCH,
+        keep_resident=True, attention_backend=run_attention(run, args), block_swap_prefetch=PREFETCH,
         vram16_mode=not args.vram16_off,
         loras=() if args.no_lora else (P.H3LoraInput(path=str(ROOT / TURBO_LORA_FILE), strength=TURBO_LORA_STRENGTH),),
         outpaint=P.H3OutpaintInput(
-            path=str(out_root / "_material" / MATERIAL_NAME), audio_strength=float(run["audio_strength"]),
+            path=str(out_root / "_material" / run.get("material", MATERIAL_NAME)),
+            audio_strength=float(run["audio_strength"]),
             feather_px=int(run["feather_px"]), **run["pads"],
         ),
     )
@@ -415,12 +633,13 @@ def build_request(run: dict, args, out_root: Path) -> P.H3GenerateRequest:
 
 def geometry_record(run: dict) -> dict:
     cw, ch = run["canvas"]
-    g = compute_outpaint_geometry(SRC_W, SRC_H, cw, ch, **run["pads"])
-    return {"canvas": [cw, ch], "source": [SRC_W, SRC_H], "aligned": [g.x0, g.y0, g.x1, g.y1],
+    sw, sh = run.get("source", [SRC_W, SRC_H])
+    g = compute_outpaint_geometry(sw, sh, cw, ch, **run["pads"])
+    return {"canvas": [cw, ch], "source": [sw, sh], "aligned": [g.x0, g.y0, g.x1, g.y1],
             "aligned_size": [g.aligned_w, g.aligned_h], "grid": [g.grid_w, g.grid_h],
             "fixed_tokens": g.fixed_count, "generated_tokens": g.generated_count,
             "latent_offset_yx": list(g.latent_offset), "source_offset_in_aligned_yx": list(g.source_offset_in_aligned),
-            "latent_frames": latent_frames(NUM_FRAMES)}
+            "latent_frames": latent_frames(int(run.get("frames", NUM_FRAMES)))}
 
 
 # --------------------------------------------------------------------------- #
@@ -552,13 +771,15 @@ def measure_run(run: dict, out_path: Path, out_root: Path) -> dict:
     cw, ch = run["canvas"]
     pads = run["pads"]
     x, y = pads["pad_left"], pads["pad_top"]
-    out = read_frames(out_path, NUM_FRAMES)
+    sw, sh = run["source"]
+    nf = int(run.get("frames", NUM_FRAMES))
+    out = read_frames(out_path, nf)
     if out.shape[1:3] != (ch, cw):
         raise RuntimeError(f"出力の寸法 {out.shape[2]}x{out.shape[1]} がキャンバス {cw}x{ch} と違います")
-    keep = out[:, y:y + SRC_H, x:x + SRC_W]
-    control = read_frames(out_root / "_material" / CONTROL_NAME, NUM_FRAMES)
-    cut = read_frames(out_root / "_material" / MATERIAL_NAME, NUM_FRAMES)
-    g = compute_outpaint_geometry(SRC_W, SRC_H, cw, ch, **pads)
+    keep = out[:, y:y + sh, x:x + sw]
+    control = read_frames(out_root / "_material" / run["control"], nf)
+    cut = read_frames(out_root / "_material" / run["material"], nf)
+    g = compute_outpaint_geometry(sw, sh, cw, ch, **pads)
     core = feather_weights(g, int(run["feather_px"])) == 1.0
     m = {
         "keep_psnr_vs_control_db": round(psnr_frames(keep, control), 4),
@@ -566,8 +787,8 @@ def measure_run(run: dict, out_path: Path, out_root: Path) -> dict:
         "keep_psnr_vs_cut_db": round(psnr_frames(keep, cut), 4),
         "keep_core_psnr_vs_cut_db": round(psnr_frames(keep, cut, core), 4),
         "core_pixels": int(core.sum()),
-        "boundary_gradient_ratio": boundary_gradients(out, x, y, SRC_W, SRC_H),
-        "pad_band_std": pad_band_std(out, x, y, SRC_W, SRC_H),
+        "boundary_gradient_ratio": boundary_gradients(out, x, y, sw, sh),
+        "pad_band_std": pad_band_std(out, x, y, sw, sh),
         "output_probe": ffprobe(out_path),
     }
     del out, keep, control, cut
@@ -583,7 +804,7 @@ def run_generations(runs: list[dict], args, out_root: Path, record: dict, save) 
     LOG.open(out_root / "load.log")
     t0 = time.perf_counter()
     try:
-        options = H3LoadOptions(blocks_on_gpu=BLOCKS_ON_GPU, attention_backend=args.attention,
+        options = H3LoadOptions(blocks_on_gpu=BLOCKS_ON_GPU, attention_backend=run_attention(runs[0], args),
                                 block_swap_prefetch=PREFETCH, deterministic=DETERMINISTIC)
         paths = H3Paths(**{k: str(ROOT / v) for k, v in PATHS.items()})
         pipe = H3Pipeline(paths, options, device=torch.device("cuda"), progress=LOG.progress, log=LOG)
@@ -604,7 +825,9 @@ def run_generations(runs: list[dict], args, out_root: Path, record: dict, save) 
             run_dir = out_root / run["label"]
             run_dir.mkdir(parents=True, exist_ok=True)
             LOG.open(run_dir / "run.log")
-            rec = {**run, "started_at": now(), "status": "running", "geometry": geometry_record(run)}
+            rec = {**run, "started_at": now(), "status": "running", "geometry": geometry_record(run),
+                   "conditions": {**record["conditions"], "attention": run_attention(run, args),
+                                  "num_frames": int(run.get("frames", NUM_FRAMES))}}
             record["runs"].append(rec)
             save()
             wall = time.perf_counter()
@@ -670,7 +893,8 @@ def write_summary(out_root: Path, record: dict) -> None:
     lines += [f"- 条件: {c.get('lora_file')}（強度 {c.get('lora_strength')}）・{c.get('steps')} ステップ・"
               f"shift {c.get('shift_video')}/{c.get('shift_audio')}・seed {c.get('seed')}・{c.get('attention')}・"
               f"VRAM 16GB mode {c.get('vram16_mode')}・{NUM_FRAMES} フレーム",
-              f"- 対照の PSNR（write_mp4 の書き直し vs 切り出し）: {_fmt((record.get('control') or {}).get('psnr_vs_cut_db'))} dB",
+              f"- 対照の PSNR（write_mp4 の書き直し vs 切り出し）: {_fmt((record.get('control') or {}).get('psnr_vs_cut_db'))} dB"
+              f"（E1 の trim2: {_fmt((record.get('control_trim2') or {}).get('psnr_vs_cut_db'))} dB）",
               ""]
     g0 = record.get("g0")
     if g0:
@@ -689,7 +913,7 @@ def write_summary(out_root: Path, record: dict) -> None:
             lines.append("")
     runs = record.get("runs") or []
     if runs:
-        lines += ["## G1〜G4（生成）", "",
+        lines += ["## G1〜G4・E1（生成）", "",
                   "| 本 | 門 | キャンバス | pad L/R/T/B | なじませ px | s | 注入 | 固定トークン | 状態 | 保持 PSNR 対照 dB | "
                   "芯 PSNR 対照 dB | 勾配比 縦 | 勾配比 横 | audio_output | inject_clean 記録 | 秒 | VRAM 山 MiB |",
                   "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -719,16 +943,28 @@ def write_summary(out_root: Path, record: dict) -> None:
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--gate", default=",".join(GATES), help="回す門（カンマ区切り。既定は全部）")
+    ap.add_argument("--gate", default=",".join(DEFAULT_GATES),
+                    help="回す門（カンマ区切り。既定は G0〜G4。E1 は明示したときだけ）")
     ap.add_argument("--prepare", action="store_true", help="素材と対照を作って終わる（CPU）")
     ap.add_argument("--dry-run", action="store_true", help="モデルを読まずに幾何と要求の一覧を出す（CPU）")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--prompt", default=DEFAULT_PROMPT)
     ap.add_argument("--steps", type=int, default=TURBO_STEPS)
-    ap.add_argument("--attention", choices=("sdpa", "sage"), default="sdpa")
+    ap.add_argument("--attention", choices=("sdpa", "sage"), default=None,
+                    help="注意の実装（既定: E2 は sage、G0〜G4・E1 は sdpa）")
     ap.add_argument("--no-lora", action="store_true", help="Turbo LoRA を付けない（--steps も合わせて変えること）")
     ap.add_argument("--vram16-off", action="store_true", help="VRAM 16GB mode を切る（既定は on＝アプリの H3 の既定）")
     ap.add_argument("--out-dir", default=str(OUT_ROOT))
+    e2 = ap.add_argument_group("E2（汎用の実験）")
+    e2.add_argument("--material", default=None, help="元の動画（E2 で必須）")
+    e2.add_argument("--pads", default=None, help="pad の 左,右,上,下（E2 で必須）")
+    e2.add_argument("--canvas", default=None, help="キャンバスの 幅,高さ（省略なら素材＋pad。指定すれば一致を確かめる）")
+    e2.add_argument("--feathers", default="1,0", help="なじませの段数 r の列（既定 1,0。1 つにつき 1 本）")
+    e2.add_argument("--label", default="E2", help="本の名前の接頭辞（既定 E2。本は <label>_r<r>）")
+    e2.add_argument("--frames", type=int, default=NUM_FRAMES, help="フレーム数（17n+5。既定 124）")
+    e2.add_argument("--start-sec", type=float, default=0.0, help="窓の開始秒（開始フレームは round(秒x24)）")
+    e2.add_argument("--scale", default=None, help="W:H。縦横比を保って覆うまで lanczos で縮め、中央で切り抜く（偶数）")
+    e2.add_argument("--audio-strength", type=float, default=0.5, help="音声の Strength s（既定 0.5。音声の無い素材は 0）")
     return ap.parse_args(argv)
 
 
@@ -746,7 +982,8 @@ def main(argv=None) -> int:
         "conditions": {
             "transformer": PATHS["transformer"], "lora_file": None if args.no_lora else TURBO_LORA_FILE,
             "lora_strength": None if args.no_lora else TURBO_LORA_STRENGTH, "steps": args.steps,
-            "shift_video": SHIFT_VIDEO, "shift_audio": SHIFT_AUDIO, "seed": args.seed, "attention": args.attention,
+            "shift_video": SHIFT_VIDEO, "shift_audio": SHIFT_AUDIO, "seed": args.seed,
+            "attention": args.attention or "本ごと（E2 は sage・他は sdpa。runs[].conditions.attention）",
             "vram16_mode": not args.vram16_off, "blocks_on_gpu": BLOCKS_ON_GPU, "block_swap_prefetch": PREFETCH,
             "deterministic": DETERMINISTIC, "keep_resident": True, "num_frames": NUM_FRAMES,
             "prompt": args.prompt, "negative_prompt": "",
@@ -756,13 +993,21 @@ def main(argv=None) -> int:
 
     if args.prepare:
         prepare(out_root, record)
-        print(jdump({"material": record["material"], "control": record["control"]}))
+        if "E2" in gates:
+            prepare_e2(args, out_root, record)
+        print(jdump({k: v for k, v in record.items()
+                     if k in ("material", "control", "material_trim2", "control_trim2") or k.startswith("e2:")}))
         return 0
 
-    if args.dry_run and not (out_root / "_material" / "prepare.json").is_file():
-        prepare(out_root, record)
-    load_prepared(out_root, record)
     runs = [r for r in run_plan() if r["gate"] in gates]
+    if args.dry_run:
+        prepare(out_root, record)   # 無い素材だけ作る（既存は作り直さない）
+    if "E2" in gates:
+        if not args.pads:
+            print("E2 には --pads が要ります", file=sys.stderr)
+            return 2
+        runs += e2_runs(args, prepare_e2(args, out_root, record))   # CPU（無ければ切り出しを作る）
+    load_prepared(out_root, record, runs)
 
     if args.dry_run:
         rows = []
@@ -793,6 +1038,23 @@ def main(argv=None) -> int:
     if not torch.cuda.is_available():
         print("CUDA が使えません（GPU の門は GPU が要ります）", file=sys.stderr)
         return 2
+
+    # 既存の summary.json があれば読み込んで足す（今回回さない本と G0 の記録は残す。同じ本は今回のもので置き換える）。
+    prev_path = out_root / "summary.json"
+    if prev_path.is_file():
+        prev = json.loads(prev_path.read_text(encoding="utf-8"))
+        labels = {r["label"] for r in runs}
+        prev_conditions = prev.get("conditions")
+        for r in prev.get("runs") or []:
+            if r.get("label") not in labels:
+                r.setdefault("conditions", prev_conditions)
+                record["runs"].append(r)
+        if "G0" not in gates and prev.get("g0"):
+            record["g0"] = prev["g0"]
+        record["previous_invocations"] = (prev.get("previous_invocations") or []) + [
+            {k: prev.get(k) for k in ("started_at", "finished_at", "gates", "exit_code", "args", "load")}]
+    if "G0" not in gates and "g0" not in record and (out_root / "G0" / "result.json").is_file():
+        record["g0"] = json.loads((out_root / "G0" / "result.json").read_text(encoding="utf-8"))
 
     def save():
         write_summary(out_root, record)

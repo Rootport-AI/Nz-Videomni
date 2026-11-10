@@ -42,19 +42,24 @@ SOURCE_NAME = "src_1280x720_124f.mp4"
 
 MAIN = {"pad_left": 320, "pad_right": 320, "pad_top": 184, "pad_bottom": 184}
 ODD = {"pad_left": 13, "pad_right": 19, "pad_top": 8, "pad_bottom": 8}
+#: 実験 E1: 上下 2 行を落とした 1280x716 の素材（台本の TRIM_PADS と同じ）。
+TRIM = {"pad_left": 320, "pad_right": 320, "pad_top": 186, "pad_bottom": 186}
+TRIM_SRC = (1280, 716)
 
 
-def _plan(label, pads, r=1, s=0.5, inject=1.0):
-    cw = SRC_W + pads["pad_left"] + pads["pad_right"]
-    ch = SRC_H + pads["pad_top"] + pads["pad_bottom"]
+def _plan(label, pads, r=1, s=0.5, inject=1.0, source=(SRC_W, SRC_H)):
+    sw, sh = source
+    cw = sw + pads["pad_left"] + pads["pad_right"]
+    ch = sh + pads["pad_top"] + pads["pad_bottom"]
     feather = int(((r * max(cw, ch)) / 64.0) + 0.5)
     return {"label": label, "pads": dict(pads), "canvas": [cw, ch], "r": r, "feather_px": feather,
-            "audio_strength": s, "inject_clean": inject}
+            "audio_strength": s, "inject_clean": inject, "source": [sw, sh]}
 
 
 # 台本 h3_outpaint_gate.py の run_plan と同じ条件（summary.json の runs[] が無いときの代わり）
 PLAN = [_plan("G1_main", MAIN), _plan("G1_odd", ODD), _plan("G2_r0", MAIN, r=0), _plan("G2_r3", MAIN, r=3),
-        _plan("G3_inject0999", MAIN, inject=0.999), _plan("G4_s1", MAIN, s=1.0)]
+        _plan("G3_inject0999", MAIN, inject=0.999), _plan("G4_s1", MAIN, s=1.0),
+        _plan("E1_trim_r1", TRIM, source=TRIM_SRC), _plan("E1_trim_r0", TRIM, r=0, source=TRIM_SRC)]
 G0_NAMES = ["single", "canvas_imagenet", "canvas_gray128", "control_source"]
 
 
@@ -74,20 +79,55 @@ def g(x, digits=2) -> str:
     return str(x)
 
 
+def _from_result(res: dict) -> dict:
+    """本の result.json の ``h3.outpaint`` から pad・元の寸法・キャンバス・なじませ幅（あれば）。"""
+    op = (res.get("h3") or {}).get("outpaint") or {}
+    out = {}
+    pads = op.get("pads")
+    if isinstance(pads, dict) and all(k in pads for k in ("left", "right", "top", "bottom")):
+        out["pads"] = {"pad_left": pads["left"], "pad_right": pads["right"],
+                       "pad_top": pads["top"], "pad_bottom": pads["bottom"]}
+    for key, name in (("source", "source"), ("canvas", "canvas")):
+        if isinstance(op.get(key), list) and len(op[key]) == 2:
+            out[name] = list(op[key])
+    if op.get("feather_px") is not None:
+        out["feather_px"] = op["feather_px"]
+    if op.get("audio_strength") is not None:
+        out["audio_strength"] = op["audio_strength"]
+    if op.get("inject_clean") is not None:
+        out["inject_clean"] = op["inject_clean"]
+    return out
+
+
 def collect(root: Path, summary: dict) -> list[dict]:
     sruns = {r.get("label"): r for r in (summary.get("runs") or []) if isinstance(r, dict)}
     seed = (summary.get("conditions") or {}).get("seed", (summary.get("args") or {}).get("seed", DEFAULT_SEED))
+    # 決まった本（PLAN）に、summary.json にだけある本（E2 など。<接頭辞>_r<r>）を足す。
+    plan = list(PLAN)
+    known = {b["label"] for b in plan}
+    for label, sr in sruns.items():
+        if label in known or not all(k in sr for k in ("pads", "canvas", "r")):
+            continue
+        plan.append({"label": label, "pads": sr["pads"], "canvas": sr["canvas"], "r": sr["r"],
+                     "feather_px": sr.get("feather_px"), "audio_strength": sr.get("audio_strength", 0.5),
+                     "inject_clean": sr.get("inject_clean", 1.0), "source": sr.get("source") or [SRC_W, SRC_H],
+                     "material": sr.get("material")})
+        known.add(label)
     rows = []
-    for base in PLAN:
+    for base in plan:
         label = base["label"]
         sr = sruns.get(label) or {}
         res = load_json(root / label / "result.json")
-        cond = {k: sr.get(k, base[k]) for k in ("pads", "canvas", "r", "feather_px", "audio_strength", "inject_clean")}
+        cond = {k: sr.get(k, base[k]) for k in ("pads", "canvas", "r", "feather_px", "audio_strength", "inject_clean",
+                                                 "source")}
+        # 枠の位置（pad と元の寸法）は本ごとの result.json の記録を正とする（無ければ summary.json か既定）。
+        cond.update(_from_result(res))
         mp4 = root / label / "output.mp4"
         m = sr.get("metrics") or {}
         bg = m.get("boundary_gradient_ratio") or {}
         rows.append({
-            "label": label, **cond, "seed": seed, "mp4": mp4 if mp4.is_file() else None,
+            "label": label, **cond, "seed": (sr.get("conditions") or {}).get("seed", seed),
+            "material": sr.get("material", base.get("material")), "mp4": mp4 if mp4.is_file() else None,
             "status": sr.get("status") or ("done" if mp4.is_file() else "未実行"),
             "keep": m.get("keep_psnr_vs_control_db"), "core": m.get("keep_core_psnr_vs_control_db"),
             "vmax": bg.get("vertical_max"), "hmax": bg.get("horizontal_max"),
@@ -202,7 +242,8 @@ def make_sheet(entries: list[dict], key: str, out: Path) -> bool:
 def run_entry(r: dict) -> dict:
     p = r["pads"]
     cw, ch = r["canvas"]
-    return {"name": r["label"], "mp4": r["mp4"], "rect": (p["pad_left"], p["pad_top"], SRC_W, SRC_H),
+    sw, sh = r.get("source") or (SRC_W, SRC_H)
+    return {"name": r["label"], "mp4": r["mp4"], "rect": (p["pad_left"], p["pad_top"], sw, sh),
             "lines": [f"{cw}x{ch}  r{r['r']} ({r['feather_px']}px)",
                       f"s {r['audio_strength']:g}  inject {r['inject_clean']:g}", f"seed {r['seed']}"]}
 
@@ -251,6 +292,9 @@ def write_readme(hf: Path, rows: list[dict], names: dict[str, str], sheets: list
           "- 見るのは、枠の辺に沿った継ぎ目、色や明るさの段差、時間方向の動きの連続（枠をまたいで人物や背景の動きが途切れないか）です。",
           "- `G2_r0` はなじませなし、`G2_r3` は広いなじませ、`G1_odd` は 32 に乗らない pad の例です。",
           "- `G3_inject0999` は注入係数だけ 0.999 の対照、`G4_s1` は音声 Strength 1.0（元の波形が入る）です。",
+          "- `E1_trim_r1`・`E1_trim_r0` は実験 E1: 元の動画の上下 2 行（素材の縁の暗い行）を落とした 1280×716 を、"
+          "上下の pad 186 で同じ 1920×1088 に置いたものです（境界の線が素材の縁の行から来ているかの切り分け）。",
+          "- `E2_r<r>` など `<接頭辞>_r<r>` の本は汎用の実験 E2 です（元の動画・pad は上の表、元の動画の写しは `source_<本>.mp4`）。",
           ""]
     if sheets:
         L += ["画像: " + "・".join(f"`{s}`" for s in sheets), ""]
@@ -306,6 +350,11 @@ def main(argv: list[str] | None = None) -> int:
     source_ok = src.is_file()
     if source_ok:
         copy_if_changed(src, hf / "source_1280x720_124f.mp4")
+    # E2 など、決まった素材以外を使った本は、その素材の写しも置く（source_<本>.mp4）。
+    for r in rows:
+        mat = r.get("material")
+        if r["mp4"] is not None and mat and mat != SOURCE_NAME and (root / "_material" / mat).is_file():
+            copy_if_changed(root / "_material" / mat, hf / f"source_{r['label']}.mp4")
     g0_dir = root / "G0"
     g0_files, g0_entries = [], []
     for n in G0_NAMES:

@@ -6,6 +6,8 @@ r"""MiniMax H3 の Outpainting の門（台帳 §1-125）の結果を、遠隔�
 
 読むもの: ``<out-root>\summary.json``（``runs[]`` と ``conditions.seed``。無ければ各本の ``result.json`` と台本と同じ既定の条件）・
 ``<out-root>\<本>\output.mp4``・``<out-root>\G0\<名前>.mp4``・``<out-root>\G0\result.json``・``<out-root>\_material\src_1280x720_124f.mp4``。
+弾 2 の後の API 経由の門の記録 ``<out-root>\summary_api.json``（``runs[]``）のうち G6（``G6_20steps``。20 ステップ・Turbo なし・sage の目視用）も読み、
+``<out-root>\G6_20steps\<job_id>.mp4`` と ``_outpaint_source.mp4``（``source_G6_20steps.mp4`` として写す）を加える（無ければ何もしない。G5 は加えない）。
 
 書くもの（``--hf-dir``）: 各本の mp4（``<本>_<幅>x<高さ>_r<なじませ段数>_s<音声Strength>_seed<seed>.mp4``）・``source_1280x720_124f.mp4``・
 ``sheet_all.png``・``sheet_<本>.png``・G0 の mp4 と ``sheet_G0.png``・``README.md``。何度でも回してよい（既存のファイルは消さない）。
@@ -113,6 +115,7 @@ def collect(root: Path, summary: dict) -> list[dict]:
                      "inject_clean": sr.get("inject_clean", 1.0), "source": sr.get("source") or [SRC_W, SRC_H],
                      "material": sr.get("material")})
         known.add(label)
+    steps = (summary.get("conditions") or {}).get("steps", 4)
     rows = []
     for base in plan:
         label = base["label"]
@@ -127,6 +130,7 @@ def collect(root: Path, summary: dict) -> list[dict]:
         bg = m.get("boundary_gradient_ratio") or {}
         rows.append({
             "label": label, **cond, "seed": (sr.get("conditions") or {}).get("seed", seed),
+            "steps": sr.get("steps", steps), "turbo": True,
             "material": sr.get("material", base.get("material")), "mp4": mp4 if mp4.is_file() else None,
             "status": sr.get("status") or ("done" if mp4.is_file() else "未実行"),
             "keep": m.get("keep_psnr_vs_control_db"), "core": m.get("keep_core_psnr_vs_control_db"),
@@ -134,6 +138,43 @@ def collect(root: Path, summary: dict) -> list[dict]:
             "seconds": sr.get("seconds", res.get("seconds")),
             "peak": sr.get("peak_vram_mb", res.get("peak_vram_mb")),
             "reserved": sr.get("peak_vram_reserved_mb", res.get("peak_vram_reserved_mb")),
+        })
+    return rows
+
+
+def collect_api(root: Path) -> list[dict]:
+    """``summary_api.json`` の G6（status が completed の本）を、``collect`` の rows と同じ形の辞書にする。"""
+    api = load_json(root / "summary_api.json")
+    rows = []
+    for sr in (api.get("runs") or []):
+        if not isinstance(sr, dict) or sr.get("gate") != "G6" or sr.get("status") != "completed":
+            continue
+        label = sr.get("label")
+        d = root / label
+        pads = sr.get("pads") or {}
+        orec = sr.get("outpaint_record") or {}
+        m = sr.get("metrics") or {}
+        bg = m.get("boundary_gradient_ratio") or {}
+        den = sr.get("denoise") or {}
+        targs = sr.get("tool_args") or {}
+        saved = Path(sr["saved_path"]) if sr.get("saved_path") else None
+        mp4 = saved if saved is not None and saved.is_file() else d / f"{sr.get('job_id')}.mp4"
+        mat = d / "_outpaint_source.mp4"
+        rows.append({
+            "label": label,
+            "pads": {"pad_left": pads.get("left"), "pad_right": pads.get("right"),
+                     "pad_top": pads.get("top"), "pad_bottom": pads.get("bottom")},
+            "canvas": sr.get("canvas"), "source": sr.get("source_size"),
+            "r": (sr.get("metadata_summary") or {}).get("request_outpaint", {}).get("blend_dilation_stage1"),
+            "feather_px": orec.get("feather_px"), "audio_strength": orec.get("audio_strength"),
+            "inject_clean": orec.get("inject_clean"), "seed": targs.get("seed"),
+            "steps": targs.get("num_inference_steps"), "turbo": False, "attention": targs.get("attention_backend"),
+            "material": "_outpaint_source.mp4", "material_path": mat if mat.is_file() else None,
+            "mp4": mp4 if mp4.is_file() else None, "status": sr.get("status"),
+            "keep": m.get("keep_psnr_vs_control_db"), "core": m.get("keep_core_psnr_vs_control_db"),
+            "vmax": bg.get("vertical_max"), "hmax": bg.get("horizontal_max"),
+            "seconds": (((sr.get("job_final") or {}).get("result")) or {}).get("generation_time_seconds"),
+            "peak": den.get("peak_vram_mb"), "reserved": den.get("peak_vram_reserved_mb"),
         })
     return rows
 
@@ -259,6 +300,7 @@ def write_readme(hf: Path, rows: list[dict], names: dict[str, str], sheets: list
         "",
         "元の動画（1280×720・124 フレーム・24fps）の外側へキャンバスを広げ、外側を生成で描き足す機能（Outpainting。"
         "台帳 PENDING_TASKS.md §1-125）の門の動画です。保持矩形（元の動画を置いた位置）の画質、継ぎ目、動きの連続を目で確かめます。"
+        "なお `G6_20steps` だけは元の動画が違い、1344×768・124 フレームです（下の「見方」を参照）。"
         "数値の正本は Nz-Videomni の VERIFICATION_LOG.md、台本は `Docs/Outputs-archive/h3-outpaint-2026-11-10/` です。",
         "",
         "## 各動画の条件",
@@ -266,15 +308,17 @@ def write_readme(hf: Path, rows: list[dict], names: dict[str, str], sheets: list
         "なじませ幅は継ぎ目をぼかす幅（px）、音声 Strength は元の音声を残す割合（1.0 で元の波形）、"
         "注入係数は元の映像の潜在を入れる強さです。",
         "",
-        "| 本 | キャンバス | pad 左/右/上/下 | なじませ r（px） | 音声 Strength | 注入係数 | ファイル |",
-        "|---|---|---|---|---|---|---|",
+        "| 本 | キャンバス | pad 左/右/上/下 | なじませ r（px） | 音声 Strength | 注入係数 | ステップ | ファイル |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         p = r["pads"]
         fn = f"`{names[r['label']]}`" if r["label"] in names else "未実行"
+        turbo = "Turbo LoRA あり" if r.get("turbo", True) else "Turbo なし"
         L.append(f"| {r['label']} | {r['canvas'][0]}×{r['canvas'][1]} | "
                  f"{p['pad_left']}/{p['pad_right']}/{p['pad_top']}/{p['pad_bottom']} "
-                 f"| {r['r']}（{r['feather_px']}） | {r['audio_strength']:g} | {r['inject_clean']:g} | {fn} |")
+                 f"| {r['r']}（{r['feather_px']}） | {r['audio_strength']:g} | {r['inject_clean']:g} "
+                 f"| {r.get('steps', 4)}（{turbo}） | {fn} |")
     L += ["", f"種は全本 {rows[0]['seed']}。" + ("比べる元は `source_1280x720_124f.mp4`（元の動画の切り出し）です。" if source_ok else ""),
           "", "## 数値", "",
           "PSNR は保持矩形を、同じ再符号化を経た対照と比べた値（dB。大きいほど元に近い）で、芯はなじませの重みが 1 の画素だけです。"
@@ -294,6 +338,10 @@ def write_readme(hf: Path, rows: list[dict], names: dict[str, str], sheets: list
           "- `G3_inject0999` は注入係数だけ 0.999 の対照、`G4_s1` は音声 Strength 1.0（元の波形が入る）です。",
           "- `E1_trim_r1`・`E1_trim_r0` は実験 E1: 元の動画の上下 2 行（素材の縁の暗い行）を落とした 1280×716 を、"
           "上下の pad 186 で同じ 1920×1088 に置いたものです（境界の線が素材の縁の行から来ているかの切り分け）。",
+          *([f"- `G6_20steps` は弾 2（API・MCP 経由）の後の門で、20 ステップ・Turbo LoRA なし・sage attention の完走です。"
+             "元の動画は VSF の較正で作った 1344×768・124 フレームの線の無い素材（`source_G6_20steps.mp4`）、"
+             "pad は 288/288/160/160、キャンバスは 1920×1088 です。ほかの本（4 ステップ・Turbo LoRA あり）と条件が違うので、"
+             "画質の比較は参考にとどめてください。"] if any(r["label"] == "G6_20steps" for r in rows) else []),
           "- `E2_r<r>` など `<接頭辞>_r<r>` の本は汎用の実験 E2 です（元の動画・pad は上の表、元の動画の写しは `source_<本>.mp4`）。",
           ""]
     if sheets:
@@ -336,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     root = a.out_root
     hf = a.hf_dir or (root / "hf-round13")
     summary = load_json(root / "summary.json")
-    rows = collect(root, summary)
+    rows = collect(root, summary) + collect_api(root)
     hf.mkdir(parents=True, exist_ok=True)
     names: dict[str, str] = {}
     for r in rows:
@@ -355,6 +403,10 @@ def main(argv: list[str] | None = None) -> int:
         mat = r.get("material")
         if r["mp4"] is not None and mat and mat != SOURCE_NAME and (root / "_material" / mat).is_file():
             copy_if_changed(root / "_material" / mat, hf / f"source_{r['label']}.mp4")
+    # API の本（G6）は、フォルダ内の _outpaint_source.mp4 を source_<本>.mp4 として写す。
+    for r in rows:
+        if r["mp4"] is not None and r.get("material_path"):
+            copy_if_changed(r["material_path"], hf / f"source_{r['label']}.mp4")
     g0_dir = root / "G0"
     g0_files, g0_entries = [], []
     for n in G0_NAMES:

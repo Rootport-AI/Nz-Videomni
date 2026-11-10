@@ -1,0 +1,17 @@
+2026-11-10 18:01:14,454 INFO ltx.pipeline: Job 5a2462c6-c562-44fd-9bc1-40e0a13bf0a5 start mode=t2v 1920x1088 frames=362 steps=4 fps=24 seed=12345
+2026-11-10 18:01:19,312 INFO ltx.pipeline: Job 5a2462c6-c562-44fd-9bc1-40e0a13bf0a5 outpaint source cut 362 frames @ 24 fps, canvas 1920x1088 pads l/r/t/b=320/320/184/184 -> _outpaint_source.mp4
+2026-11-10 18:01:19,312 INFO ltx.pipeline: Job 5a2462c6-c562-44fd-9bc1-40e0a13bf0a5 base=minimax_h3_fl2va_pruned_int8_convrot.safetensors loras=none prompt="コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。"
+2026-11-10 18:01:22,175 INFO ltx.runner: generate text encode started (4 steps)
+2026-11-10 18:01:39,837 INFO ltx.runner: generate text encode 3/4 steps (0.11 step/s, 17.7s elapsed)
+2026-11-10 18:01:39,990 INFO ltx.runner: generate text encode 4/4 steps (6.41 step/s, 17.8s elapsed)
+2026-11-10 18:05:15,146 INFO ltx.runner: generate text encode 5/4 steps (0.00 step/s, 233.0s elapsed)
+2026-11-10 18:05:27,624 INFO ltx.runner: generate stage-1 denoise started (4 steps)
+2026-11-10 18:11:10,312 INFO ltx.runner: generate stage-1 denoise 1/4 steps (0.00 step/s, 342.7s elapsed)
+2026-11-10 18:16:52,738 INFO ltx.runner: generate stage-1 denoise 2/4 steps (0.00 step/s, 685.1s elapsed)
+2026-11-10 18:22:35,079 INFO ltx.runner: generate stage-1 denoise 3/4 steps (0.00 step/s, 1027.5s elapsed)
+2026-11-10 18:28:17,421 INFO ltx.runner: generate stage-1 denoise 4/4 steps (0.00 step/s, 1369.8s elapsed)
+2026-11-10 18:28:17,635 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-10 18:32:01,351 INFO ltx.runner: generate VAE decode 2/3 steps (0.00 step/s, 223.7s elapsed)
+2026-11-10 18:32:02,595 INFO ltx.runner: generate VAE decode 3/3 steps (0.81 step/s, 225.0s elapsed)
+2026-11-10 18:32:08,492 INFO ltx.runner: generate VAE decode 4/3 steps (0.17 step/s, 230.9s elapsed)
+2026-11-10 18:32:08,693 INFO ltx.pipeline: Job 5a2462c6-c562-44fd-9bc1-40e0a13bf0a5 done in 1854.1s peak_vram=13115MB -> completed

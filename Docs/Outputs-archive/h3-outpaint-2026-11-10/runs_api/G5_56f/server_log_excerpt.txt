@@ -1,0 +1,18 @@
+2026-11-10 17:57:37,920 INFO ltx.pipeline: Job e545af92-e6b0-4f2b-bd34-3e8f7a8276da start mode=t2v 1920x1088 frames=56 steps=4 fps=24 seed=12345
+2026-11-10 17:57:39,010 INFO ltx.pipeline: Job e545af92-e6b0-4f2b-bd34-3e8f7a8276da outpaint source cut 56 frames @ 24 fps, canvas 1920x1088 pads l/r/t/b=320/320/184/184 -> _outpaint_source.mp4
+2026-11-10 17:57:39,010 INFO ltx.pipeline: Job e545af92-e6b0-4f2b-bd34-3e8f7a8276da base=minimax_h3_fl2va_pruned_int8_convrot.safetensors loras=none prompt="コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。"
+2026-11-10 17:57:39,586 INFO ltx.runner: generate text encode started (4 steps)
+2026-11-10 17:57:41,672 INFO ltx.runner: generate text encode 2/4 steps (0.48 step/s, 2.1s elapsed)
+2026-11-10 17:58:03,735 INFO ltx.runner: generate text encode 3/4 steps (0.05 step/s, 24.1s elapsed)
+2026-11-10 17:58:03,876 INFO ltx.runner: generate text encode 4/4 steps (7.09 step/s, 24.3s elapsed)
+2026-11-10 17:58:43,845 INFO ltx.runner: generate text encode 5/4 steps (0.03 step/s, 64.2s elapsed)
+2026-11-10 17:58:56,434 INFO ltx.runner: generate stage-1 denoise started (4 steps)
+2026-11-10 17:59:14,060 INFO ltx.runner: generate stage-1 denoise 1/4 steps (0.06 step/s, 17.6s elapsed)
+2026-11-10 17:59:31,072 INFO ltx.runner: generate stage-1 denoise 2/4 steps (0.06 step/s, 34.6s elapsed)
+2026-11-10 17:59:48,168 INFO ltx.runner: generate stage-1 denoise 3/4 steps (0.06 step/s, 51.7s elapsed)
+2026-11-10 18:00:05,267 INFO ltx.runner: generate stage-1 denoise 4/4 steps (0.06 step/s, 68.8s elapsed)
+2026-11-10 18:00:05,526 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-10 18:00:40,884 INFO ltx.runner: generate VAE decode 2/3 steps (0.03 step/s, 35.4s elapsed)
+2026-11-10 18:00:41,467 INFO ltx.runner: generate VAE decode 3/3 steps (1.73 step/s, 35.9s elapsed)
+2026-11-10 18:00:42,498 INFO ltx.runner: generate VAE decode 4/3 steps (0.97 step/s, 37.0s elapsed)
+2026-11-10 18:00:42,878 INFO ltx.pipeline: Job e545af92-e6b0-4f2b-bd34-3e8f7a8276da done in 184.7s peak_vram=8142MB -> completed

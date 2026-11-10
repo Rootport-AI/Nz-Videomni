@@ -1,0 +1,26 @@
+{
+  "out_root": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10",
+  "output": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\0f9a1d84-b9da-469e-b730-99024d82f34e.mp4",
+  "cut": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\_outpaint_source.mp4",
+  "control": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\_control_write_mp4.mp4",
+  "run": {
+    "canvas": [
+      1920,
+      1088
+    ],
+    "source": [
+      1344,
+      768
+    ],
+    "frames": 124,
+    "pads": {
+      "pad_left": 288,
+      "pad_right": 288,
+      "pad_top": 160,
+      "pad_bottom": 160
+    },
+    "feather_px": 30,
+    "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\_outpaint_source.mp4",
+    "control": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\_control_write_mp4.mp4"
+  }
+}

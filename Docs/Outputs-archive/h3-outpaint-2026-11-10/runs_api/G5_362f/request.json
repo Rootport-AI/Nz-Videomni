@@ -1,0 +1,21 @@
+{
+  "tool": "submit_generate",
+  "arguments": {
+    "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+    "width": 1920,
+    "height": 1088,
+    "num_frames": 362,
+    "frame_rate": 24.0,
+    "seed": 12345,
+    "attention_backend": "sage",
+    "num_inference_steps": 4,
+    "outpaint_pad_left": 320,
+    "outpaint_pad_right": 320,
+    "outpaint_pad_top": 184,
+    "outpaint_pad_bottom": 184,
+    "outpaint_audio_strength": 0.5,
+    "reference_video_id": "962983e1-254f-4215-98a0-78b0110c66d6"
+  },
+  "gate": "G5",
+  "note": "MCP の道具に渡した引数。H3 では MCP が reference_video_id を outpaint.source_video_id へ移す。サーバーが受けた本文（書き戻し後）は metadata.json の request"
+}

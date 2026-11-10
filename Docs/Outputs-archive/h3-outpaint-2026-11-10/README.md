@@ -252,6 +252,14 @@ set PYTHONUTF8=1
 
 `h3_outpaint_gate_api.py` は、弾 2（API・アプリ層・配信・操作パネル・MCP）の後の GPU の門 G5（快適上限の点）と G6（20 ステップの目視用）を、**MCP サーバー → バックエンド → エンジン**の経路で回す台本です。門の設計は実装計画（`rosy-jingling-stonebraker.md` の §2.6・§3「弾 2」・§7）です。製品コードは import も変更もしません。部品は前例から写しました。MCP の stdio クライアントは Retake の門の台本（`../h3-retake-2026-11-08/h3_retake_gate.py`。経路は記録簿 §39.6 と同じ）、別ポートの一時サーバー（`_rt`）は VSF の較正の台本（`../h3-vsf-calib-2026-11-09/h3_vsf_calib.py`）、保持矩形の PSNR と境界の勾配比は弾 1 の `h3_outpaint_gate.py` の `measure_run` です（G6 だけ、エンジンの仮想環境の子プロセスで呼びます）。退避の測り方（WDDM の共有メモリの標本と、server.log による窓の区切り）は較正台 `outputs/comfort-calib-h3-chain-2026-11-08/` の `vram_sampler2.ps1` と `calib.py` を写しました。数値はここに書きません（数値の正本は記録簿 `Docs/VERIFICATION_LOG.md`）。
 
+### 実際に回した本と結果の置き場（2026-11-10）
+
+- 回したのは `G5_56f`（規則 v3″ の基準点）・`G5_362f`・`G5_379f`・`G6_20steps` の 4 本です（17:57〜18:59。1 本ごとに新しいサーバーのプロセス）。結果は記録簿 §205.19（G5）・§205.20（G6）にあります。
+- **G5 の点を 345／362 から 362／379 に変えました。** 下のコマンドや表の例の 345・362 は、快適上限表 §17.4 の較正（FL2VA・K=1）の c と U です。Outpainting には条件行が無く、text にもキーフレームの行が入らないので、同じ枚数でも S が小さくなります。そこで、S が配信の線 `single_rows_budget` と同じ値になる 362 を線の上の点に、その 1 段上の 379 を線を越えた点にしました（快適上限表 §20.3・§20.4）。台本の `--prepare-frames` の既定（`345,362`）は変えていません。345 枚の素材は作りましたが、回していません。
+- **379 枚の判定**: 台本は「判定なし（ジョブが failed）」と出し、終了コードは 3 でした。サーバーが失敗を書いた直後に取った状態で `error` がまだ null だったためで（記録簿 §205.23）、記録簿では規則 ① の OOM と判定しています。
+- **この保管庫に写したもの**: `summary_api.json`・`summary_api.md`・`run_G5_G6.console.log`（根）と、`runs_api/<本>/`（`summary_row.json`・`request.json`・`server_log_excerpt.txt`・`worker_log_excerpt.txt`、完走した本の `metadata.json`、G5 の `wddm.csv`、G6 の `measure_request.json`・`measure_result.json`）。動画・`_rt\`・`logs_api\` は写していません（git の追跡外の `outputs\h3-outpaint-gates-2026-11-10\` に残る）。
+- G6 の動画・元の素材・一覧の画像は、遠隔目視のフォルダ（`round13-h3-outpaint/`）に足しました（記録簿 §205.20）。
+
 ### 前提
 
 - GPU を使う実行は、毎回オーナーの了承を得てから行います。`--prepare` と `--dry-run` は GPU もサーバーも使いません。
@@ -311,7 +319,7 @@ set PYTHONUTF8=1
 
 | 本 | 素材 | pad 左／右／上／下 | フレーム | ステップ | 注意の実装 | 種 | プロンプト |
 |---|---|---|---|---|---|---|---|
-| `G5_345f`・`G5_362f` | `G5_src_1280x720_<F>f.mp4` | 320／320／184／184 | 345・362 | 4 | sage | 12345 | 較正の文（`outputs\h3-vram16-gates\f0_prompt.txt`。text 30 行） |
+| `G5_56f`・`G5_362f`・`G5_379f`（実際に回した本。上の「実際に回した本」） | `G5_src_1280x720_<F>f.mp4` | 320／320／184／184 | 56・362・379 | 4 | sage | 12345 | 較正の文（`outputs\h3-vram16-gates\f0_prompt.txt`。text 30 行） |
 | `G6_20steps` | `G6_src_1344x768_124f.mp4` | 288／288／160／160 | 124 | 20 | sage | 1234 | 弾 1 の既定の文（同じ素材・同じ pad・同じ種の `E2c_r1` と比べられるように） |
 
 G5 の条件は快適上限表 §17.1 に合わせました（FL2VA の重み・VRAM 16GB mode on・先読み on・`keep_resident` off・LoRA なし・sage・種 12345・同じ文）。ステップ数は §17.1 の走査と同じく 4 です（VRAM の山はステップ数に依らない）。`--frames 56` で回すと規則 v3″ の基準点（較正の `b1080` と同じ長さ）になり、② 退避の判定の比べる相手として使われます（素材は `--prepare --prepare-frames 56` で作る）。
@@ -340,7 +348,7 @@ G5 の条件は快適上限表 §17.1 に合わせました（FL2VA の重み・
 | `logs_api\` | MCP の呼び出しの控え（起動ごと）と MCP サーバーの標準エラー |
 | `_rt\` | 一時サーバーの設定・状態・ログ・出力・アップロード |
 
-監督は実行後に `summary_api.json` と各本の `request.json`・`metadata.json`・`summary_row.json` をこの保管庫へ写します（mp4 と `_rt\` は写さない）。
+監督は実行後に、`summary_api.json`・`summary_api.md`・`run_G5_G6.console.log` と各本の記録（`request.json`・`metadata.json`・`summary_row.json`・ログの切れ端・G5 の `wddm.csv`・G6 の測定の依頼と結果）を、この保管庫の根と `runs_api/<本>/` へ写します（mp4・`_rt\`・`logs_api\` は写さない）。
 
 ### 終了コード
 

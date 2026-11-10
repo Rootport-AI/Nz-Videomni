@@ -1,0 +1,267 @@
+{
+  "gate": "G5",
+  "label": "G5_379f",
+  "purpose": "快適上限の点（1920x1088・379 枚・4 ステップ・Turbo なし・sage）",
+  "frames": 379,
+  "source_size": [
+    1280,
+    720
+  ],
+  "canvas": [
+    1920,
+    1088
+  ],
+  "pads": {
+    "left": 320,
+    "right": 320,
+    "top": 184,
+    "bottom": 184
+  },
+  "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\G5_src_1280x720_379f.mp4",
+  "predicted_rows": {
+    "video": 228480,
+    "cond": 0,
+    "audio": 1264,
+    "text": 30,
+    "total": 229774,
+    "vs_single_rows_budget": 10258
+  },
+  "started_at": "2026-11-10T18:32:23+09:00",
+  "status": "failed",
+  "error": null,
+  "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_379f",
+  "upload": {
+    "video_id": "134400d0-e5da-493d-bbc0-179e16576a3b",
+    "original_filename": "G5_src_1280x720_379f.mp4",
+    "stored_path": "uploads/videos/134400d0-e5da-493d-bbc0-179e16576a3b/input.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 21864936,
+    "trimmed": false,
+    "frame_count": 379,
+    "fps": 24.0
+  },
+  "tool_args": {
+    "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+    "width": 1920,
+    "height": 1088,
+    "num_frames": 379,
+    "frame_rate": 24.0,
+    "seed": 12345,
+    "attention_backend": "sage",
+    "num_inference_steps": 4,
+    "outpaint_pad_left": 320,
+    "outpaint_pad_right": 320,
+    "outpaint_pad_top": 184,
+    "outpaint_pad_bottom": 184,
+    "outpaint_audio_strength": 0.5,
+    "reference_video_id": "134400d0-e5da-493d-bbc0-179e16576a3b"
+  },
+  "job_id": "0573c2ad-f0f7-454d-8198-4fdcef9122de",
+  "wait": {
+    "calls": 5,
+    "seconds": 265.1,
+    "samples": [
+      {
+        "t": 45.0,
+        "status": "running",
+        "progress": 0.06,
+        "stage": "encode",
+        "current_step": null
+      },
+      {
+        "t": 60.0,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+      },
+      {
+        "t": 80.0,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 260.1,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 265.1,
+        "status": "failed",
+        "progress": 0.06,
+        "stage": "stage1_denoise",
+        "current_step": 0
+      }
+    ]
+  },
+  "job_final": {
+    "job_id": "0573c2ad-f0f7-454d-8198-4fdcef9122de",
+    "status": "failed",
+    "progress": 0.06,
+    "current_step": 0,
+    "total_steps": 4,
+    "stage": "stage1_denoise",
+    "clip": null,
+    "clip_count": null,
+    "is_v2v": false,
+    "joined": false,
+    "matte": false,
+    "alpha": null,
+    "created_at": "2026-11-10T09:32:42Z",
+    "started_at": "2026-11-10T09:32:42Z",
+    "completed_at": "2026-11-10T09:37:06Z",
+    "error": null,
+    "request": {
+      "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+      "negative_prompt": "",
+      "nag_enabled": false,
+      "nag_scale": 11.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "neg_method": "nag",
+      "vsf_scale": 1.5,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "fused_gguf_dequant_kernel": true,
+      "vae_mode": "default",
+      "embed_mp4_metadata": true,
+      "vram16_mode": true,
+      "width": 1920,
+      "height": 1088,
+      "crop_output": null,
+      "num_frames": 379,
+      "frame_rate": 24.0,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "guidance_scale": 1.0,
+      "seed": 12345,
+      "pipeline": "distilled",
+      "conditioning_images": [],
+      "loras": [],
+      "reference_video_id": null,
+      "conditioning_attention_strength": null,
+      "reference_video_strength": null,
+      "outpaint": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184,
+        "blend_dilation_stage1": 1,
+        "blend_dilation_stage2": 2,
+        "freeze_source_audio": true,
+        "source_video_id": "134400d0-e5da-493d-bbc0-179e16576a3b",
+        "audio_strength": 0.5
+      },
+      "inpaint": null,
+      "alpha_gen": null,
+      "source_audio": null,
+      "references": []
+    },
+    "result": null,
+    "timed_out": false,
+    "waited_sec": 0.0
+  },
+  "seconds_wall": 268.0,
+  "spans": {
+    "encode": {
+      "label": "text encode",
+      "found": true,
+      "start": 1794303170.489,
+      "end": 1794303412.986,
+      "start_iso": "2026-11-10T18:32:50.489",
+      "end_iso": "2026-11-10T18:36:52.986",
+      "last_done": 5,
+      "total": 4,
+      "log_elapsed_s": 242.5
+    },
+    "denoise": {
+      "label": "stage-1 denoise",
+      "found": true,
+      "start": 1794303425.442,
+      "end": 1794303425.442,
+      "start_iso": "2026-11-10T18:37:05.442",
+      "end_iso": "2026-11-10T18:37:05.442",
+      "last_done": null,
+      "total": null,
+      "log_elapsed_s": null
+    },
+    "decode": {
+      "label": "VAE decode",
+      "found": false,
+      "start": null,
+      "end": null,
+      "start_iso": null,
+      "end_iso": null,
+      "last_done": null,
+      "total": null,
+      "log_elapsed_s": null
+    }
+  },
+  "wddm": {
+    "luid": "luid_0x00000000_0x0000f2a0_phys_0",
+    "samples": 282,
+    "csv": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_379f\\wddm.csv"
+  },
+  "windows": {
+    "encode": {
+      "evaluated": true,
+      "seconds": 242.5,
+      "wddm_samples": 242,
+      "enough_samples": true,
+      "shared_median_mb": 163.3,
+      "shared_peak_mb": 166.8,
+      "dedicated_median_mb": 6576.3,
+      "dedicated_peak_mb": 6579.9
+    },
+    "denoise": {
+      "evaluated": true,
+      "seconds": 0.0,
+      "wddm_samples": 0,
+      "enough_samples": false,
+      "shared_median_mb": null,
+      "shared_peak_mb": null,
+      "dedicated_median_mb": null,
+      "dedicated_peak_mb": null
+    },
+    "decode": {
+      "evaluated": false,
+      "reason": "窓が見つからない"
+    },
+    "idle_before_submit": {
+      "evaluated": true,
+      "seconds": 13.64,
+      "wddm_samples": 14,
+      "enough_samples": true,
+      "shared_median_mb": 149.4,
+      "shared_peak_mb": 149.8,
+      "dedicated_median_mb": 908.2,
+      "dedicated_peak_mb": 908.6
+    }
+  },
+  "judgement": {
+    "rule": "快適上限表 §17.2 規則 v3″",
+    "status": "failed",
+    "oom": false,
+    "oom_stage": null,
+    "prefetch_used": null,
+    "prefetch_demoted": null,
+    "spill": {
+      "denoise": {
+        "shared_median_mb": null,
+        "wddm_samples": 0,
+        "baseline_shared_median_mb": 1173.2,
+        "baseline_label": "G5_56f",
+        "judged": null,
+        "reason": "標本が 10 未満"
+      },
+      "decode": {
+        "shared_median_mb": null,
+        "wddm_samples": null,
+        "baseline_shared_median_mb": 1165.0,
+        "baseline_label": "G5_56f",
+        "judged": null,
+        "reason": "窓が見つからない"
+      }
+    },
+    "verdict": "判定なし（ジョブが failed）"
+  },
+  "finished_at": "2026-11-10T18:37:08+09:00"
+}

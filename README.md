@@ -638,7 +638,7 @@ $env:UV_PYTHON_INSTALL_DIR = "$PWD\.python"
 - **Single**: 動画を1本ずつ作るタブです。テキスト・画像・音声から作る基本の生成に加えて、途中の絵を指定するキーフレームと、フォルダの中身をまとめて流すバッチ（音声フォルダから作る a2v モードと、画像フォルダから作る i2v モード）がここにあります。「生成」ボタンの下の **Repeat count** に回数を入れると、同じ条件で指定の回数だけ生成を自動で繰り返します（シードが -1 なら毎回別の乱数になります。途中で設定を変えると次の回から反映されます）。
 - **Chained**: クリップをつないで長い動画を作るタブです。素材（冒頭）に動画を置いて続きを作る V2V と、素材（末尾）もここにあります。「生成」ボタンの下の **Repeat count** は Single と同じ働きです。
   - **プロンプトの効き方**: クリップに個別のプロンプトを書くと、そのクリップでは共通のプロンプトの後ろへ半角スペース1つをはさんで付け足されます（共通の内容は残ります）。個別が空欄のクリップは、共通のプロンプトだけが使われます。個別のプロンプトが効くのは動きや場面を作る最初の工程だけで、そのあとの高解像度の仕上げの工程（Stage-2）は、動画全体を共通のプロンプトだけで仕上げます（1番目のクリップに個別のプロンプトを書いても、仕上げの条件は変わりません）。そのため、全体に効かせたい画風や質感・被写体は共通のプロンプトに、クリップごとに変えたい場面の移り変わりは個別のプロンプトに、共通との差分だけを書くのが確実です。プロンプトの長さに文字数の上限はありません。ただし LTX は、（開始トークン込みで）1,024 トークンを超えた分を黙って切り捨てます。プロンプト欄のトークン数が赤くなったら、超えているということです（詳しい仕組みは [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2）。
-- **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）・**Alpha Gen**（動画から透過用の白黒マット動画を作る。LTX 2.5 専用）のサブタブに分かれます。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」「Alpha Gen」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md) と [`Docs/ALPHAGEN_DESIGN.md`](Docs/ALPHAGEN_DESIGN.md)）。
+- **Edit**: できあがった動画に手を入れるタブで、**Retake**（選んだ区間の撮り直し）・**Outpainting**（画角拡張）・**Inpainting**（部分フィルタの枠の内側だけを描き替える）・**Alpha Gen**（動画から透過用の白黒マット動画を作る。LTX 2.5 専用）のサブタブに分かれます（MiniMax H3 で使えるのは Retake と Outpainting。§7.6）。入口は動画や部分フィルタの右クリックが中心です（§1「Inpainting」「Alpha Gen」。設計の正本は [`Docs/INPAINTING_DESIGN.md`](Docs/INPAINTING_DESIGN.md) と [`Docs/ALPHAGEN_DESIGN.md`](Docs/ALPHAGEN_DESIGN.md)）。
 - **Inventory**: 上がスタイル LoRA の棚、下が生成済みジョブの一覧です。棚のカードを押すとプロンプト欄へその LoRA のタグが入り、一覧の `🎞` ボタンで完成した動画をタイムラインへ送れます。
 
 **MiniMax H3 を選んでいるときは、使えないタブ・サブタブ・項目が灰色になるか、表示されなくなります**（Edit のタブは灰色になります。Chained のタブは使えます。テキストからの連結・動画の続き（V2V）・冒頭の画像から始める連結ができ、クリップごとの参照素材も付けられます。素材（末尾）と IC-LoRA の参照動画は表示されません）。どれが使えないかは §7.6 にまとめてあります。
@@ -965,7 +965,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 <a id="limit-h3"></a>
 ### 7.6 MiniMax H3（α版）を選んでいるときの制限
 
-**MiniMax H3 は α版です。** 映像と音声を 1 つのモデルで同時に作れますが、使えるのは基本の生成・単発の A2V・参照素材からの生成（Ref2VA）・連結（Chained。テキスト・動画の続き・冒頭の画像から）・撮り直し（Retake）などです。導入手順は §1「MiniMax H3 を追加する（`install-MiniMaxH3.bat`）」、推奨構成は §7.3、ライセンスは「[ライセンス](#ライセンス)」にあります。
+**MiniMax H3 は α版です。** 映像と音声を 1 つのモデルで同時に作れますが、使えるのは基本の生成・単発の A2V・参照素材からの生成（Ref2VA）・連結（Chained。テキスト・動画の続き・冒頭の画像から）・撮り直し（Retake）・画角拡張（Outpainting）などです。導入手順は §1「MiniMax H3 を追加する（`install-MiniMaxH3.bat`）」、推奨構成は §7.3、ライセンスは「[ライセンス](#ライセンス)」にあります。
 
 **できること**
 
@@ -981,18 +981,19 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
   - **冒頭の画像から始める**: 素材（冒頭）に画像を置くと、1 本目のクリップのキーフレームになります（Single と同じく強度はありません）。バッチ i2v-long も使えます。動画の続きと同時には使えません。
   - **長い音声から口の動きを合わせる（A2V）**: Chained の A2V アコーディオンに長い音声を 1 本入れて「各クリップに割り当て」を押すと、各クリップの Reference アコーディオンの Audios カードに同じ音声が入り（音声は切りません）、カードに担当区間が出ます。クリップが音声より短ければ約 10 秒のクリップが足され、長ければ後ろから縮みます（自分で長さを変えたクリップを縮める・消すときだけ確認が出ます）。右クリックの「この音声から long a2v」でも同じように入ります。Strength はカードのスライダーで選べ（既定 0.5）、クリップごとにも変えられますが、1.0 にしても動画の音声はモデルが作り直したものになります（Single と違い、元の音声はそのまま入りません）。Reference のチェックはオンのままにしてください（オフにすると生成が止まります）。音声を付けたクリップでは、ほかの参照素材は使われません。動画の続き（V2V）と同時には使えません。MCP と Gradio UI からは使えません。
 - **撮り直し（Retake）**。動画の選んだ区間だけを描き直します。Edit タブの Retake で使え、タイムラインの動画で範囲を選んで右クリックの「選択範囲を撮り直す (Retake)」からも送れます。区間の頭と尾の 22 フレームは元の動画のまま残り、その間だけが新しくなります。出力は区間まるごとなので、タイムラインで元の動画の上に重ねて使います。音声は「音声の Strength」のスライダーで選び、0 で区間の真ん中の音声を作り直し、1 で元の音声のままにします（既定は 0.5）。音声の無い動画では Strength を 0 にしてください（0 より大きいと、元の音声が無いので断られます。画面には「この動画には音声トラックがありません」の黄色の注意が出ます）。区間の長さは 17n+5 のフレーム数にそろえられ、最短は LTX と同じです。MCP の `submit_chain` では `retake_audio_strength` で Strength を渡し、のりしろの `retake_head_px`／`retake_tail_px` は指定しません。Gradio UI からは使えません。
+- **画角拡張（Outpainting）**。動画の外側へキャンバスを広げて描き足します（2026-11-10 から）。元の動画は拡大縮小せずにそのまま残し、広げた部分だけを作ります。出力はキャンバスの大きさの動画 1 本なので、LTX と同じくタイムラインで元の動画の上に重ねて使います。LTX と違って In-Outpainting の LoRA は使わず、スタイル LoRA と Turbo LoRA はプロンプトの LoRA タグで使えます。キャンバスの縦横は 32 の倍数、フレーム数は 17n+5、24fps です。元の動画の縦横は偶数である必要があります（奇数だと断られます）。元の動画との境目は「マスクブラー」で内側の帯を混ぜてなじませます（既定は 1 段で、1920 幅のキャンバスでおよそ 30 ピクセル。0 にすると元の動画が一切混ざらずに残り、境目は硬くなります）。音声は「音声の Strength」のスライダーで選び、0 で作り直し、1 で元の音声のままにします（既定は 0.5）。音声の無い動画では Strength を 0 にしてください（0 より大きいと断られ、画面には黄色の注意が出ます）。API では `POST /generate` の `outpaint`（元の動画は `outpaint.source_video_id`。LTX の `reference_video_id` ではありません）、MCP では `submit_generate` の `outpaint_*` の引数です（下の「MCP サーバー」）。Gradio UI からは使えません。**操作パネルの Edit タブの Outpainting を H3 で使う形は、GPU での確認（快適上限の測定）が済んでから配布します。** 仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §3.6、API の形は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.3 の OutpaintSpec です。
 - **参照素材からの生成（Ref2VA）**。人物・衣装・背景の画像、参考にしたい動画、声の音声を参照として渡し、それに似せた動画を作ります。使い方は下の「参照素材からの生成（Ref2VA）」です。
 - **フレームレートは 24fps 固定**です。**フレーム数は 17n+5 の形**（22・39・56 … と 17 ずつ）で、22 以上 481 以下です。**縦横は 32 の倍数**です。操作パネルでは、フレーム数がこの規則に合う値へ自動でそろいます。
 - **ステップ数と shift（映像・音声）の 3 本のスライダー**で、ノイズ除去の工程数と、工程のどこにノイズの減らし方の重みを置くかを変えられます。操作パネルと Gradio UI の両方にあり、LTX を選んでいるときは表示されません。既定はステップ数 20・shift（映像）12・shift（音声）3 で、範囲はステップ数が 1〜50、shift が 1〜20 です（値の正本はサーバーが `GET /models` の `base_models[].constraints` で配るもので、ここはその写しです）。
 - **ネガティブプロンプト（VSF 方式だけ）**。ネガティブプロンプトのアコーディオンのチェックを入れると、VSF 方式で Single と Chained に効きます（Retake の画面は、LTX と同じくネガティブプロンプトを送りません。NAG のラジオは灰色です。LTX で NAG を選んだまま MiniMax H3 に切り替えると、自動で VSF に変わります）。VSF scale の既定と範囲は LTX と同じです（H3 でも較正済み）。API と MCP では `neg_method: "vsf"` を指定してください。仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §3.5、NAG と VSF の違いは [`Docs/VSF_README_NOTES.md`](Docs/VSF_README_NOTES.md) です。
 - **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
 
-**できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Edit タブは開きますが、使えるのは Retake だけで、Outpainting・Inpainting・Alpha Gen のサブタブは灰色になります。Chained タブも開きますが、下の表の連結の入口は灰色になるか、表示されません）。
+**できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Edit タブは開きますが、使えるのは Retake と Outpainting だけで、Inpainting・Alpha Gen のサブタブは灰色になります。Chained タブも開きますが、下の表の連結の入口は灰色になるか、表示されません）。
 
 | 断られる機能 | 対応するリクエスト項目 |
 |--------------|------------------------|
 | 連結（Chained）のうち、素材（末尾）・IC-LoRA の参照動画と、連結全体に音声を 1 本付ける LTX の形の長尺 A2V。テキストからの連結・V2V・冒頭の画像から始める連結・長い音声を各クリップへ割り当てる A2V と撮り直し（Retake）は使えます（単発の A2V とバッチ A2V も使えます。上の「できること」） | `POST /generate/chain` の `end_source`・`reference_video_id`・最上位の `source_audio`（各クリップの `source_audio` は使えます） |
-| 画角拡張（Outpainting）・Inpainting・Alpha Gen | `outpaint`・`inpaint`・`alpha_gen` |
+| Inpainting・Alpha Gen（画角拡張〔Outpainting〕は使えます。上の「できること」） | `inpaint`・`alpha_gen` |
 | IC-LoRA（参照動画による制御）。スタイル LoRA は使えます（`models/MiniMaxH3/LoRA/`）が、音声だけの強度（第3引数）は使われません | `reference_video_id`（`loras` は使えます） |
 | ネガティブプロンプトの NAG 方式（VSF 方式は使えます。上の「できること」） | `neg_method: "nag"`（`nag_enabled` が true のとき。省略も `"nag"` 扱い） |
 | キーフレームの強度（MiniMax H3 には強度がありません。省略すれば通ります） | `conditioning_images` の `strength`（値を入れると、0.8 でも断られます） |
@@ -1114,7 +1115,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイル（動画ファイルの音声トラックも可）をアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）に加え、**画角拡張（Outpainting）の6引数**も指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない） |
 | `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（連結生成には無い項目のため）に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |

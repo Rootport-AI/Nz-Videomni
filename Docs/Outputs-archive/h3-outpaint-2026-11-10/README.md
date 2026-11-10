@@ -247,3 +247,101 @@ set PYTHONUTF8=1
 - 書くもの: 各本の mp4（`<本>_<幅>x<高さ>_r<なじませ段数>_s<音声Strength>_seed<seed>.mp4`）、`source_1280x720_124f.mp4`、`G0_<名前>.mp4`、`sheet_all.png`・`sheet_<本>.png`・`sheet_G0.png`（先頭・中央・末尾の 3 コマ。保持矩形に 1 画素のマゼンタの枠）、`README.md`（条件の表と数値の表）。動画の無い本は飛ばし、表に「未実行」と書きます。何度回してもよく、既存のファイルは消しません。
 - 引数: `--no-sheets`（画像を作らない）、`--out-root`（入力の根の差し替え。試走用）、`--hf-dir`（書き先。既定は `<out-root>\hf-round13`）。
 - 上げるのは前例と同じ書式です（`.venv\Scripts\python.exe -m huggingface_hub.cli.hf upload Rootport/Nz-LTX23-eval-clips <フォルダ> round13-h3-outpaint --repo-type dataset`）。上げる前にオーナーの了承を得ます。
+
+## 弾 2 の GPU の門 G5・G6（API 経由の台本 `h3_outpaint_gate_api.py`）
+
+`h3_outpaint_gate_api.py` は、弾 2（API・アプリ層・配信・操作パネル・MCP）の後の GPU の門 G5（快適上限の点）と G6（20 ステップの目視用）を、**MCP サーバー → バックエンド → エンジン**の経路で回す台本です。門の設計は実装計画（`rosy-jingling-stonebraker.md` の §2.6・§3「弾 2」・§7）です。製品コードは import も変更もしません。部品は前例から写しました。MCP の stdio クライアントは Retake の門の台本（`../h3-retake-2026-11-08/h3_retake_gate.py`。経路は記録簿 §39.6 と同じ）、別ポートの一時サーバー（`_rt`）は VSF の較正の台本（`../h3-vsf-calib-2026-11-09/h3_vsf_calib.py`）、保持矩形の PSNR と境界の勾配比は弾 1 の `h3_outpaint_gate.py` の `measure_run` です（G6 だけ、エンジンの仮想環境の子プロセスで呼びます）。退避の測り方（WDDM の共有メモリの標本と、server.log による窓の区切り）は較正台 `outputs/comfort-calib-h3-chain-2026-11-08/` の `vram_sampler2.ps1` と `calib.py` を写しました。数値はここに書きません（数値の正本は記録簿 `Docs/VERIFICATION_LOG.md`）。
+
+### 前提
+
+- GPU を使う実行は、毎回オーナーの了承を得てから行います。`--prepare` と `--dry-run` は GPU もサーバーも使いません。
+- 台本を動かす python はアプリの仮想環境 `.venv`（`mcp`・`yaml` が入っている）。`PYTHONUTF8=1` を設定します。G6 の測定の子プロセスだけ、エンジンの仮想環境 `.venv-engine-h3` の python を使います（CPU だけ。`CUDA_VISIBLE_DEVICES=-1`）。
+- 台本は自分で一時サーバーを起こします。`config.yaml` は読むだけで、`server.port`（既定 18699）・`server.log_dir`・`output.dir`・`upload.dir`・`state_file` の 5 つの鍵を `outputs\h3-outpaint-gates-2026-11-10\_rt\` に向けた一時 yaml（`config.h3outpaintapi.yaml`）と、MiniMax H3 の 4 カテゴリを `default` にした一時 state（`state.h3outpaintapi.json`）を書きます。オーナーの `config.yaml`・`state.json`・`logs\`・`outputs\<ジョブ>`・`uploads\` は書き換えません。
+- MCP サーバーには `LTX_MCP_BASE_URL=http://127.0.0.1:<ポート>`・`LTX_MCP_CONFIG=<一時 yaml>`・`LTX_MCP_OUTPUT_DIR=_rt\outputs` を渡します（`get_job_video_path` が一時の出力先を指すように）。
+- 前処理（AviUtl2 の扱い・GPU の使用量・孤児の `engine.worker` が無いこと）は監督が確かめます。G5 の線の較正（快適上限表 §17.1）は AviUtl2 と操作パネルを開いたまま測ったので、cap（VRAM 16GB mode の割り当て器の上限）が同居プロセスで動きます。台本は cap を `metadata.json` から記録するだけです。
+
+### コマンド
+
+リポジトリの根で（cmd）:
+
+```
+set PYTHONUTF8=1
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --prepare
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --gate G5 --frames 345 --dry-run
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --gate G5 --frames 362 --dry-run
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --gate G6 --dry-run
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --gate G5 --frames 345
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --gate G5 --frames 362
+.venv\Scripts\python.exe Docs\Outputs-archive\h3-outpaint-2026-11-10\h3_outpaint_gate_api.py --gate G6
+```
+
+1 回の起動で 1 本を回し、既定では終わりにパイプラインを降ろしてサーバーをプロセスの木ごと止めます。G5 の 2 本はそれぞれ新しいサーバーのプロセスで回ることになり、前の本の VRAM の断片化を持ち越しません。続けて回したいときは `--keep-server`（次の回で同じポートのサーバーを使い回す）と `--skip-load`（`load_pipeline` を呼ばず、H3 が載っていることだけ確かめる）を使います。
+
+### 引数
+
+| 引数 | 既定 | 意味 |
+|---|---|---|
+| `--gate` | （必須。`--prepare` だけなら省略可） | `G5` か `G6` |
+| `--frames` | （G5 で必須） | G5 のフレーム数（17n+5）。G6 は 124 固定 |
+| `--prepare` | 切 | 素材を作って終わる（ffmpeg。CPU） |
+| `--prepare-frames` | `345,362` | `--prepare` で作る G5 の枚数（カンマ区切り）。`--gate G5 --frames N --prepare` なら N も足す |
+| `--dry-run` | 切 | サーバーを起こさず、素材の有無・一時サーバーの起こし方・MCP の環境・送る引数・送らない引数・S の予測を表示して終わる |
+| `--skip-load` | 切 | `load_pipeline` を呼ばない |
+| `--keep-server` | 切 | 終わりに `unload_pipeline` もサーバーの停止もしない |
+| `--port` | 18699 | 一時サーバーのポート |
+| `--label` | `G5_<枚数>f`／`G6_20steps` | 本の名前＝保存先のフォルダ名 |
+| `--prompt` | G5 は較正の文、G6 は弾 1 の文 | プロンプトの差し替え |
+| `--idle-sec` | 15 | G5: 標本を始めてから送るまでの静かな区間（記録だけ） |
+| `--load-timeout-sec` | 1200 | H3 の読み込みを待つ上限 |
+| `--job-timeout-sec` | 7200 | 1 本を待つ上限 |
+
+### 素材（`--prepare`。`outputs\h3-outpaint-gates-2026-11-10\_material\`）
+
+| ファイル | 内容 |
+|---|---|
+| `G5_src_1280x720_345f.mp4`・`G5_src_1280x720_362f.mp4` | `outputs\h3-retake-gates-2026-11-08\_material\H3-Ref-1080p-30s.mp4`（1920×1080・24fps・720 枚・AAC 44.1kHz）の先頭から 345 枚と 362 枚を 1280×720 へ縮めたもの。作法は弾 1 の素材と同じ（select の窓・atrim・lanczos・libx264 crf 12・yuv420p・24fps CFR・音声は PCM、断られたら AAC 192k）。ffprobe で枚数・寸法・音声を確かめ、合わなければ止まる |
+| `G6_src_1344x768_124f.mp4` | `outputs\h3-vsf-calib-2026-11-09\hf-round12\L_s0_1344x768_seed42.mp4`（1344×768・24fps・124 枚・AAC 32kHz・四辺に線なし）の写し（再符号化しない）。枚数・寸法・fps・音声を確かめる |
+| `prepare_api.json` | ffmpeg のコマンドと ffprobe の結果 |
+
+既にある素材は作り直しません。元の 30 秒の素材は 15 秒を 2 回つないだものなので、362 枚の切り出しはつなぎ目（360 枚目）をまたぎ、音声が映像より約 0.02 秒短くなります。Strength 0.5 は読めた分だけ使う規則（`engine_h3.outpaint_h3.read_outpaint_source`）なので止まりません（1.0 なら全長が要るので止まります）。サーバーは受け取った動画から、さらに先頭 `num_frames` 枚を `_outpaint_source.mp4` へ切り出し直します（`services/video_io.cut_window_mp4`）。
+
+### 各門の条件
+
+共通: キャンバス 1920×1088・音声の Strength 0.5・なじませは送らない（サーバーの既定）・Turbo LoRA なし・`frame_rate` 24。`vram16_mode`・`keep_resident`・`block_swap_prefetch`・`shift_*` は送らず、サーバーの既定（on・off・on・12／3）に任せる。元動画の ID は `reference_video_id` で渡す（H3 では MCP が `outpaint.source_video_id` へ移す）。
+
+| 本 | 素材 | pad 左／右／上／下 | フレーム | ステップ | 注意の実装 | 種 | プロンプト |
+|---|---|---|---|---|---|---|---|
+| `G5_345f`・`G5_362f` | `G5_src_1280x720_<F>f.mp4` | 320／320／184／184 | 345・362 | 4 | sage | 12345 | 較正の文（`outputs\h3-vram16-gates\f0_prompt.txt`。text 30 行） |
+| `G6_20steps` | `G6_src_1344x768_124f.mp4` | 288／288／160／160 | 124 | 20 | sage | 1234 | 弾 1 の既定の文（同じ素材・同じ pad・同じ種の `E2c_r1` と比べられるように） |
+
+G5 の条件は快適上限表 §17.1 に合わせました（FL2VA の重み・VRAM 16GB mode on・先読み on・`keep_resident` off・LoRA なし・sage・種 12345・同じ文）。ステップ数は §17.1 の走査と同じく 4 です（VRAM の山はステップ数に依らない）。`--frames 56` で回すと規則 v3″ の基準点（較正の `b1080` と同じ長さ）になり、② 退避の判定の比べる相手として使われます（素材は `--prepare --prepare-frames 56` で作る）。
+
+### 記録するもの
+
+- 全部の本: `submit_generate` に渡した引数（`request.json`）、`metadata.json` の写し、ジョブの成否・`generation_time_seconds`・壁時計の秒、`h3.phases.denoise` の `peak_vram_mb`・`peak_vram_reserved_mb`・`sequence`（`sequence.total`＝S）・`vram16`（`cap_mib`・`num_alloc_retries`・`num_ooms`・`inactive_split_peak_mib` ほか）・`block_swap_prefetch_used`、`h3.outpaint` とその 12 鍵の照合（`outpaint_keys_check`。欠けた鍵・余分な鍵）、サーバーとワーカーのログの切れ端。
+- G5: S の予測（快適上限表 §17.3 の式。Outpainting は cond 0・キーフレームなし・参照なしで、固定行は行数を増やさない）と線 219,516（`single_rows_budget`）との差、ジョブの間の WDDM の共有メモリの標本（`wddm.csv`）、server.log で区切った `encode`・`denoise`・`decode` の窓ごとの共有メモリの中央値と山、送る前の静かな区間の値。
+- G5 の判定（`judgement`）は快適上限表 §17.2 の規則 v3″ の写しです。快適＝ジョブが `completed` で、① OOM（`job.error` が `GPU_OOM:` で始まる。段は最初のトレースバックから `denoise`／`encode`／`decode`／`other`）、② 退避（`denoise` と `decode` の窓で、標本が 10 以上あり、共有メモリの中央値が基準点〔G5 の 56 枚〕の同じ窓より +300MB 以上）、③ 先読みの降格（`block_swap_prefetch_used` が on でない）のどれにも当たらない。基準点が無いか標本が足りない窓は「② は未判定」と書きます。
+- G6: 保持矩形の PSNR（対照＝サーバーの切り出し `_outpaint_source.mp4` を `engine_h3.media_out.write_mp4` で書き直したもの、と切り出しそのもの）・なじませの芯の PSNR・境界の勾配比（左右上下）・pad の帯の標準偏差。量の定義は上の「記録するもの」の G1〜G4 と同じで、関数も同じ（弾 1 の `measure_run`）です。
+
+### 出力の置き場
+
+すべて `outputs\h3-outpaint-gates-2026-11-10\`（git の追跡外）。
+
+| ファイル | 内容 |
+|---|---|
+| `<本>\request.json` | `submit_generate` に渡した引数 |
+| `<本>\metadata.json` | ジョブの `metadata.json` の写し（失敗したジョブには無い） |
+| `<本>\summary_row.json` | その本の記録（`summary_api.json` の `runs[]` の 1 行と同じ） |
+| `<本>\<job_id>.mp4` | 出力（`save_job_video` の既定のファイル名） |
+| `<本>\_outpaint_source.mp4`・`_control_write_mp4.mp4` | サーバーの切り出しの写しと、G6 の対照 |
+| `<本>\wddm.csv`・`worker_log_excerpt.txt`・`server_log_excerpt.txt` | G5 の共有メモリの標本、ログの切れ端 |
+| `<本>\measure_request.json`・`measure_result.json` | G6 の測定の子プロセスへの依頼と結果 |
+| `summary_api.json`・`summary_api.md` | 全体の記録（同じ名前の本は今回のもので置き換える。起動ごとの記録は `invocations[]`）と表 |
+| `logs_api\` | MCP の呼び出しの控え（起動ごと）と MCP サーバーの標準エラー |
+| `_rt\` | 一時サーバーの設定・状態・ログ・出力・アップロード |
+
+監督は実行後に `summary_api.json` と各本の `request.json`・`metadata.json`・`summary_row.json` をこの保管庫へ写します（mp4 と `_rt\` は写さない）。
+
+### 終了コード
+
+0＝ジョブが `completed`（G5 で OOM になったときも、門の記録として 0）。3＝OOM 以外の失敗・送信の拒否・アップロードの失敗・待ちきれない・測定の失敗。1＝準備の段で止まった（素材が無い・サーバーが起きない・道具の引数名が違う・バックエンドに届かない・読み込みの失敗・例外か中断）。

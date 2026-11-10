@@ -1646,18 +1646,74 @@ def test_submit_chain_input_schema_exposes_retake_arguments():
 
 
 # -------------- outpaint (Docs/PENDING_TASKS_CLOSED.md §3-122, closed 2026-09-01)
+#
+# Since D35 (Docs/MCP_SERVER_DESIGN.md) submit_generate reads GET /models before
+# an outpaint POST and picks the body shape by whether the ACTIVE base model
+# publishes ``constraints.outpaint`` (MiniMax H3 does, LTX does not). The handler
+# below answers both paths; the LTX listing is the default so the D20 tests keep
+# asserting the pre-D35 body byte for byte.
+
+_LTX_MODELS_LISTING = {
+    "active_base_model": "LTX23",
+    "base_models": [
+        {"id": "LTX23", "active": True, "constraints": {"dimension_multiple": 64}},
+        # An inactive H3 entry must not switch the shape.
+        {
+            "id": "MiniMaxH3",
+            "active": False,
+            "constraints": {"outpaint": {"audio_strength": {"default": 0.5}}},
+        },
+    ],
+}
+
+_H3_MODELS_LISTING = {
+    "active_base_model": "MiniMaxH3",
+    "base_models": [
+        {"id": "LTX23", "active": False, "constraints": {"dimension_multiple": 64}},
+        {
+            "id": "MiniMaxH3",
+            "active": True,
+            "constraints": {
+                "dimension_multiple": 32,
+                "outpaint": {
+                    "audio_strength": {"min": 0, "max": 1, "step": 0.05, "default": 0.5},
+                    "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
+                },
+            },
+        },
+    ],
+}
 
 
-def test_submit_generate_outpaint_body_default_blend_omits_both_keys():
-    captured: dict = {}
+def _outpaint_handler(captured: dict, models: dict | None = _LTX_MODELS_LISTING):
+    """GET /models -> ``models`` (None = an error envelope), POST /generate -> 202.
+
+    Records the POST body in ``captured["body"]`` and counts the /models reads in
+    ``captured["models_calls"]``.
+    """
+    captured.setdefault("models_calls", 0)
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path.endswith("/models"):
+            captured["models_calls"] += 1
+            if models is None:
+                return httpx.Response(500, json={"error": {"code": "INTERNAL", "message": "boom"}})
+            return httpx.Response(200, json=models)
+        assert request.method == "POST" and request.url.path.endswith("/generate"), (
+            request.method,
+            request.url.path,
+        )
         captured["body"] = json.loads(request.content)
         return httpx.Response(
             202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
         )
 
-    set_client(_client_for_handler(handler))
+    return handler
+
+
+def test_submit_generate_outpaint_body_default_blend_omits_both_keys():
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured)))
 
     anyio.run(
         functools.partial(
@@ -1686,14 +1742,7 @@ def test_submit_generate_outpaint_body_default_blend_omits_both_keys():
 
 def test_submit_generate_outpaint_non_default_blend_follows_5_to_2():
     captured: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["body"] = json.loads(request.content)
-        return httpx.Response(
-            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
-        )
-
-    set_client(_client_for_handler(handler))
+    set_client(_client_for_handler(_outpaint_handler(captured)))
 
     anyio.run(
         functools.partial(
@@ -1735,14 +1784,7 @@ def test_outpaint_stage2_from_stage1_matches_the_panel_formula(stage1, expected_
 
 def test_submit_generate_all_pads_zero_sends_no_outpaint_key():
     captured: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["body"] = json.loads(request.content)
-        return httpx.Response(
-            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
-        )
-
-    set_client(_client_for_handler(handler))
+    set_client(_client_for_handler(_outpaint_handler(captured)))
 
     anyio.run(
         functools.partial(
@@ -1758,6 +1800,7 @@ def test_submit_generate_all_pads_zero_sends_no_outpaint_key():
     body = captured["body"]
     assert "outpaint" not in body
     assert "loras" not in body  # ...and no LoRA is injected either
+    assert captured["models_calls"] == 0  # no outpaint -> no family lookup
     assert set(body.keys()) == {"prompt", "width", "height", "num_frames", "frame_rate", "seed"}
 
 
@@ -1766,14 +1809,7 @@ def test_submit_generate_outpaint_auto_injects_the_in_outpainting_lora():
     # exactly one preprocess-free control adapter alongside `outpaint`, and an
     # agent that forgets it only ever sees a 422. So the tool adds it.
     captured: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["body"] = json.loads(request.content)
-        return httpx.Response(
-            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
-        )
-
-    set_client(_client_for_handler(handler))
+    set_client(_client_for_handler(_outpaint_handler(captured)))
 
     anyio.run(
         functools.partial(
@@ -1811,14 +1847,7 @@ def test_submit_generate_outpaint_does_not_duplicate_an_existing_in_outpainting_
     # Match on NAME ONLY: a caller who deliberately dialled the strength down to
     # 0.7 keeps that value rather than getting a second 1.0 entry beside it.
     captured: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["body"] = json.loads(request.content)
-        return httpx.Response(
-            202, json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z"}
-        )
-
-    set_client(_client_for_handler(handler))
+    set_client(_client_for_handler(_outpaint_handler(captured)))
 
     anyio.run(
         functools.partial(
@@ -1839,7 +1868,13 @@ def test_submit_generate_outpaint_does_not_duplicate_an_existing_in_outpainting_
     "kwargs",
     [
         {"outpaint_blend_dilation_stage1": 8},
+        # D35: compared against None, so even the LTX default values are refused
+        # when no pad is set (they would be silently dropped just the same).
+        {"outpaint_blend_dilation_stage1": 5},
         {"outpaint_freeze_source_audio": False},
+        {"outpaint_freeze_source_audio": True},
+        {"outpaint_audio_strength": 0.5},
+        {"outpaint_audio_strength": 0.0},
     ],
 )
 def test_submit_generate_outpaint_helper_args_with_zero_pads_raise_before_any_http_call(kwargs):
@@ -1852,6 +1887,177 @@ def test_submit_generate_outpaint_helper_args_with_zero_pads_raise_before_any_ht
         anyio.run(functools.partial(generate.submit_generate, "a prompt", **kwargs))
 
     assert "OUTPAINT_PADS_ALL_ZERO" in str(exc_info.value)
+
+
+def test_submit_generate_outpaint_ltx_explicit_default_blend_and_freeze_keep_the_d20_body():
+    # LTX: an explicit 5 / True is the pre-D35 default -- the body must be the
+    # same bytes as when both are omitted (and the LoRA is still injected).
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            reference_video_id="v-1",
+            outpaint_pad_left=128,
+            outpaint_pad_right=128,
+            outpaint_blend_dilation_stage1=5,
+            outpaint_freeze_source_audio=True,
+        )
+    )
+
+    body = captured["body"]
+    assert captured["models_calls"] == 1
+    assert body["reference_video_id"] == "v-1"
+    assert body["outpaint"] == {"pad_left": 128, "pad_right": 128, "pad_top": 0, "pad_bottom": 0}
+    assert body["loras"] == [{"name": "in-outpainting", "strength": 1.0}]
+
+
+def test_submit_generate_outpaint_ltx_forwards_audio_strength_for_the_server_to_refuse():
+    # Not silently dropped: the LTX server answers 422 (use freeze_source_audio).
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            reference_video_id="v-1",
+            outpaint_pad_top=64,
+            outpaint_audio_strength=0.5,
+        )
+    )
+
+    assert captured["body"]["outpaint"]["audio_strength"] == 0.5
+    assert captured["body"]["reference_video_id"] == "v-1"
+
+
+def test_submit_generate_outpaint_h3_body_defaults_omit_helper_keys():
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, _H3_MODELS_LISTING)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1920,
+            height=1088,
+            num_frames=73,
+            reference_video_id="v-1",
+            outpaint_pad_left=320,
+            outpaint_pad_right=320,
+            outpaint_pad_top=184,
+            outpaint_pad_bottom=184,
+        )
+    )
+
+    body = captured["body"]
+    assert captured["models_calls"] == 1
+    # The source video moves into outpaint.source_video_id; no reference video,
+    # no in-outpainting LoRA, no stage 2, and the helper keys are absent so the
+    # server writes back the family defaults.
+    assert "reference_video_id" not in body
+    assert "loras" not in body
+    assert body["outpaint"] == {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184,
+        "source_video_id": "v-1",
+    }
+
+
+def test_submit_generate_outpaint_h3_body_sends_given_helper_keys_and_keeps_user_loras():
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, _H3_MODELS_LISTING)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1920,
+            height=1088,
+            num_frames=73,
+            loras=[LoraArg(name="turbo", strength=1.0)],
+            reference_video_id="v-1",
+            outpaint_pad_left=320,
+            outpaint_pad_right=320,
+            # 5 is sent on H3 (the LTX "5 means omit" rule would let the server
+            # write back its own default instead of what was asked for).
+            outpaint_blend_dilation_stage1=5,
+            outpaint_audio_strength=0.0,
+        )
+    )
+
+    body = captured["body"]
+    assert "reference_video_id" not in body
+    assert body["loras"] == [{"name": "turbo", "strength": 1.0}]
+    assert body["outpaint"] == {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 0,
+        "pad_bottom": 0,
+        "source_video_id": "v-1",
+        "blend_dilation_stage1": 5,
+        "audio_strength": 0.0,
+    }
+    assert "blend_dilation_stage2" not in body["outpaint"]
+
+
+@pytest.mark.parametrize("freeze", [True, False])
+def test_submit_generate_outpaint_h3_forwards_freeze_source_audio_for_the_server_to_refuse(freeze):
+    # H3 answers 422 to an explicit freeze_source_audio; the tool must not drop it.
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, _H3_MODELS_LISTING)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1920,
+            height=1088,
+            reference_video_id="v-1",
+            outpaint_pad_left=320,
+            outpaint_freeze_source_audio=freeze,
+        )
+    )
+
+    assert captured["body"]["outpaint"]["freeze_source_audio"] is freeze
+
+
+@pytest.mark.parametrize(
+    "models",
+    [
+        None,  # GET /models answers an error envelope
+        {"unexpected": True},  # no base_models
+        {"base_models": [{"id": "LTX23", "active": False}]},  # no active base model
+    ],
+)
+def test_submit_generate_outpaint_unreadable_models_falls_back_to_the_ltx_shape(models):
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, models)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=768,
+            reference_video_id="v-1",
+            outpaint_pad_bottom=128,
+        )
+    )
+
+    body = captured["body"]
+    assert captured["models_calls"] == 1
+    assert body["reference_video_id"] == "v-1"
+    assert body["outpaint"] == {"pad_left": 0, "pad_right": 0, "pad_top": 0, "pad_bottom": 128}
+    assert body["loras"] == [{"name": "in-outpainting", "strength": 1.0}]
 
 
 def test_submit_generate_input_schema_exposes_outpaint_arguments():
@@ -1869,11 +2075,19 @@ def test_submit_generate_input_schema_exposes_outpaint_arguments():
         "outpaint_pad_bottom",
         "outpaint_blend_dilation_stage1",
         "outpaint_freeze_source_audio",
+        "outpaint_audio_strength",
     ):
         assert name in props, f"{name} missing from submit_generate schema"
     assert props["outpaint_pad_left"]["default"] == 0
-    assert props["outpaint_blend_dilation_stage1"]["default"] == 5
-    assert props["outpaint_freeze_source_audio"]["default"] is True
+    # D35: the three helper arguments default to None (= not sent; the server
+    # writes back each family's own default).
+    for name in (
+        "outpaint_blend_dilation_stage1",
+        "outpaint_freeze_source_audio",
+        "outpaint_audio_strength",
+    ):
+        assert props[name].get("default") is None, name
+        assert name not in tool.inputSchema.get("required", []), name
     # blend_dilation_stage2 is DERIVED (5:2), never an argument -- exposing it
     # would give the ratio a second source of truth.
     assert "outpaint_blend_dilation_stage2" not in props

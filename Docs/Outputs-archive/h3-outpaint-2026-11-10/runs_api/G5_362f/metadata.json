@@ -1,0 +1,353 @@
+{
+  "job_id": "5a2462c6-c562-44fd-9bc1-40e0a13bf0a5",
+  "created_at": "2026-11-10T09:01:14Z",
+  "started_at": "2026-11-10T09:01:14Z",
+  "completed_at": "2026-11-10T09:32:08Z",
+  "status": "completed",
+  "request": {
+    "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": true,
+    "vram16_mode": true,
+    "width": 1920,
+    "height": 1088,
+    "crop_output": null,
+    "num_frames": 362,
+    "frame_rate": 24.0,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "guidance_scale": 1.0,
+    "seed": 12345,
+    "pipeline": "distilled",
+    "conditioning_images": [],
+    "loras": [],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "outpaint": {
+      "pad_left": 320,
+      "pad_right": 320,
+      "pad_top": 184,
+      "pad_bottom": 184,
+      "blend_dilation_stage1": 1,
+      "blend_dilation_stage2": 2,
+      "freeze_source_audio": true,
+      "source_video_id": "962983e1-254f-4215-98a0-78b0110c66d6",
+      "audio_strength": 0.5
+    },
+    "inpaint": null,
+    "alpha_gen": null,
+    "source_audio": null,
+    "references": []
+  },
+  "generation_mode": "t2v",
+  "seed_used": 12345,
+  "attention_used": "sage",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "off",
+  "vram16_mode_used": "on",
+  "keep_resident_embeddings_used": null,
+  "fused_gguf_dequant_kernel_used": null,
+  "vae_mode_used": null,
+  "peak_vram_reserved_mb": 13932,
+  "generation_time_seconds": 1854.13,
+  "backend": "minimax-h3",
+  "output": {
+    "path": "outputs/5a2462c6-c562-44fd-9bc1-40e0a13bf0a5/output.mp4",
+    "resolution": "1920x1088",
+    "duration_seconds": 15.083,
+    "frame_rate": 24.0,
+    "file_size_bytes": 15705865
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 13115
+  },
+  "models": {
+    "base_model": "MiniMaxH3",
+    "selection": {
+      "transformer": {
+        "name": "default",
+        "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "minimax_h3_video_vae_fp16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "minimax_h3_audio_vae_fp32.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "h3": {
+    "sampler": "euler",
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images_used": 0,
+    "rss_peak_gib": 23.45,
+    "commit_gib": 6.57,
+    "commit_peak_gib": 41.08,
+    "seconds": 1849.27,
+    "phases": {
+      "encode": {
+        "te": {
+          "num_layers_file": 50,
+          "num_layers_built": 50,
+          "int8_linears": 350,
+          "tensors_planned": 901,
+          "vision_tensors_in_file": 351,
+          "rope": {
+            "rope_type": "default",
+            "rope_theta": 5000000.0,
+            "mrope_section": [
+              24,
+              20,
+              20
+            ],
+            "mrope_interleaved": true,
+            "head_dim": 128,
+            "num_attention_heads": 64,
+            "num_key_value_heads": 8,
+            "num_hidden_layers": 50,
+            "attn_implementation": "nz_h3_blocked_math"
+          },
+          "extra_special_tokens": {
+            "ids": {
+              "<d>": 151669,
+              "</d>": 151670,
+              "<|cutoff|>": 151671,
+              "<|lyrics_start|>": 151672,
+              "<|lyrics_end|>": 151673,
+              "<|caption_start|>": 151674,
+              "<|caption_end|>": 151675
+            },
+            "added_here": false
+          },
+          "seconds": 0.32
+        },
+        "rss_after_load_gib": 1.88,
+        "commit_after_load_gib": 3.24,
+        "te_read": {
+          "read_gib": 24.17,
+          "read_seconds": 15.49,
+          "layers_read": 50,
+          "encode_seconds": 15.79,
+          "tokens": 30,
+          "vision_tokens": 0,
+          "vision_tokens_per_image": []
+        },
+        "rss_after_release_gib": 2.4,
+        "commit_after_release_gib": 4.11,
+        "text_tokens": 30,
+        "seconds": 17.82,
+        "rss_end_gib": 2.4,
+        "rss_process_peak_gib": 3.33,
+        "commit_end_gib": 4.11,
+        "commit_process_peak_gib": 6.15,
+        "peak_vram_mb": 1492,
+        "peak_vram_reserved_mb": 1514
+      },
+      "source_encode": {
+        "source_size": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "latent_shape": [
+          1,
+          24,
+          107,
+          48,
+          80
+        ],
+        "frames_read": 362,
+        "canvas": [
+          1280,
+          768
+        ],
+        "source_had_audio": true,
+        "freeze_ka": 602,
+        "encoded_samples": 481927,
+        "seconds": 215.22,
+        "rss_end_gib": 2.83,
+        "rss_process_peak_gib": 3.83,
+        "commit_end_gib": 4.65,
+        "commit_process_peak_gib": 10.48,
+        "peak_vram_mb": 4390,
+        "peak_vram_reserved_mb": 5672
+      },
+      "denoise": {
+        "dit": {
+          "int8_linears": 200,
+          "loaded_tensors": 732,
+          "loaded_gib": 19.53,
+          "read_seconds": 11.47
+        },
+        "dit_source": "file",
+        "rss_after_load_gib": 22.25,
+        "commit_after_load_gib": 27.95,
+        "rss_after_place_gib": 22.47,
+        "commit_after_place_gib": 31.77,
+        "sequence": {
+          "text": 30,
+          "cond": 0,
+          "audio": 1206,
+          "video": 218280,
+          "total": 219516,
+          "latent_frames": 107,
+          "audio_latents": 603,
+          "grid": [
+            34,
+            60
+          ]
+        },
+        "m_per_step": [
+          3,
+          4,
+          4,
+          4
+        ],
+        "block_swap_prefetch_used": "on",
+        "mask": {
+          "audio": {
+            "rows": 1206,
+            "min": 0.5,
+            "max": 1.0
+          },
+          "video": {
+            "rows": 218280,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 1.0
+          }
+        },
+        "vram16": {
+          "cap_fraction": 0.8563,
+          "cap_mib": 14023,
+          "blocks_on_gpu": 4,
+          "head_group": 8,
+          "row_chunk": 4096,
+          "qkv_quant_shared": true,
+          "text_modules": "meta",
+          "num_alloc_retries": 12,
+          "num_ooms": 0,
+          "inactive_split_peak_mib": 4248
+        },
+        "rss_after_release_gib": 21.85,
+        "commit_after_release_gib": 28.56,
+        "seconds": 1382.3,
+        "rss_end_gib": 21.85,
+        "rss_process_peak_gib": 22.56,
+        "commit_end_gib": 28.56,
+        "commit_process_peak_gib": 41.08,
+        "peak_vram_mb": 13115,
+        "peak_vram_reserved_mb": 13932
+      },
+      "decode": {
+        "vae_source": "file",
+        "audio_samples": 482400,
+        "audio_samples_decoded": 482400,
+        "frames": 362,
+        "seconds": 230.86,
+        "rss_end_gib": 5.84,
+        "rss_process_peak_gib": 23.45,
+        "commit_end_gib": 7.5,
+        "commit_process_peak_gib": 41.08,
+        "peak_vram_mb": 8276,
+        "peak_vram_reserved_mb": 10598
+      }
+    },
+    "quant_backends": {
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      }
+    },
+    "outpaint": {
+      "canvas": [
+        1920,
+        1088
+      ],
+      "pads": {
+        "left": 320,
+        "right": 320,
+        "top": 184,
+        "bottom": 184
+      },
+      "source": [
+        1280,
+        720
+      ],
+      "aligned": [
+        320,
+        160,
+        1600,
+        928
+      ],
+      "fixed_tokens": 880,
+      "generated_tokens": 1160,
+      "feather_px": 30,
+      "audio_strength": 0.5,
+      "source_had_audio": true,
+      "audio_latents_encoded": 602,
+      "audio_output": "decoded",
+      "inject_clean": 1.0
+    }
+  }
+}

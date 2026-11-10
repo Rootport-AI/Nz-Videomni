@@ -1,0 +1,74 @@
+### G5 56 (baseline)
+[17:57:02] サーバーが起きた（pid 53536・ポート 18699）
+[17:57:04] LUID: luid_0x00000000_0x0000f2a0_phys_0（専用 671.7MB）
+[17:57:22] load_pipeline: finished=True pipeline_loaded=True
+[17:57:22] H3 が載った（16.4 秒）
+[17:57:22] === G5_56f: 規則 v3″ の基準点（退避の判定の比べる相手） ===
+[17:57:22] upload: video_id=70384f7c-cdf3-4498-aba0-445ce82e28ba frame_count=56 fps=24.0
+[17:57:37] job_id=e545af92-e6b0-4f2b-bd34-3e8f7a8276da
+[17:59:17]   job e545af92 status=running progress=0.27 stage=stage1_denoise step=1
+[18:00:03]   job e545af92 status=running progress=0.69 stage=stage1_denoise step=3
+[18:00:43]   job e545af92 status=completed progress=1.0 stage=None step=None
+[18:00:43] 判定: 快適（①③ なし。② は未判定: denoise, decode）
+[18:00:45] サーバーを止めた（pid 53536・残っていた子孫 []）
+[18:00:45] 記録: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.json・S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.md（終了コード 0）
+exit=0
+### G5 362
+[18:00:50] サーバーが起きた（pid 14400・ポート 18699）
+[18:00:52] LUID: luid_0x00000000_0x0000f2a0_phys_0（専用 662.7MB）
+[18:00:55] load_pipeline: finished=True pipeline_loaded=True
+[18:00:55] H3 が載った（2.9 秒）
+[18:00:55] === G5_362f: 快適上限の点（1920x1088・362 枚・4 ステップ・Turbo なし・sage） ===
+[18:00:57] upload: video_id=962983e1-254f-4215-98a0-78b0110c66d6 frame_count=362 fps=24.0
+[18:01:14] job_id=5a2462c6-c562-44fd-9bc1-40e0a13bf0a5
+[18:02:49]   job 5a2462c6 status=running progress=0.06 stage=encode step=None
+[18:05:49]   job 5a2462c6 status=running progress=0.06 stage=stage1_denoise step=0
+[18:11:44]   job 5a2462c6 status=running progress=0.27 stage=stage1_denoise step=1
+[18:17:14]   job 5a2462c6 status=running progress=0.48 stage=stage1_denoise step=2
+[18:23:00]   job 5a2462c6 status=running progress=0.69 stage=stage1_denoise step=3
+[18:29:00]   job 5a2462c6 status=running progress=0.9 stage=decode step=None
+[18:32:10]   job 5a2462c6 status=completed progress=1.0 stage=None step=None
+[18:32:10] 判定: 快適
+[18:32:12] サーバーを止めた（pid 14400・残っていた子孫 []）
+[18:32:12] 記録: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.json・S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.md（終了コード 0）
+exit=0
+### G5 379
+[18:32:17] サーバーが起きた（pid 61160・ポート 18699）
+[18:32:19] LUID: luid_0x00000000_0x0000f2a0_phys_0（専用 657.3MB）
+[18:32:23] load_pipeline: finished=True pipeline_loaded=True
+[18:32:23] H3 が載った（2.9 秒）
+[18:32:23] === G5_379f: 快適上限の点（1920x1088・379 枚・4 ステップ・Turbo なし・sage） ===
+[18:32:25] upload: video_id=134400d0-e5da-493d-bbc0-179e16576a3b frame_count=379 fps=24.0
+[18:32:42] job_id=0573c2ad-f0f7-454d-8198-4fdcef9122de
+[18:33:27]   job 0573c2ad status=running progress=0.06 stage=encode step=None
+[18:37:07]   job 0573c2ad status=failed progress=0.06 stage=stage1_denoise step=0
+[18:37:08] ジョブが failed: 
+[18:37:08] 判定: 判定なし（ジョブが failed）
+[18:37:09] サーバーを止めた（pid 61160・残っていた子孫 []）
+[18:37:09] 記録: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.json・S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.md（終了コード 3）
+exit=3
+### G6
+[18:37:15] サーバーが起きた（pid 63032・ポート 18699）
+[18:37:19] load_pipeline: finished=True pipeline_loaded=True
+[18:37:19] H3 が載った（2.9 秒）
+[18:37:19] === G6_20steps: 20 ステップ・Turbo なしの完走（目視用） ===
+[18:37:19] upload: video_id=204513ef-fb57-4a79-875e-d37f89e2b402 frame_count=124 fps=24.0
+[18:37:20] job_id=0f9a1d84-b9da-469e-b730-99024d82f34e
+[18:39:10]   job 0f9a1d84 status=running progress=0.06 stage=encode step=None
+[18:39:55]   job 0f9a1d84 status=running progress=0.06 stage=stage1_denoise step=0
+[18:40:40]   job 0f9a1d84 status=running progress=0.102 stage=stage1_denoise step=1
+[18:41:25]   job 0f9a1d84 status=running progress=0.144 stage=stage1_denoise step=2
+[18:44:05]   job 0f9a1d84 status=running progress=0.27 stage=stage1_denoise step=5
+[18:44:50]   job 0f9a1d84 status=running progress=0.312 stage=stage1_denoise step=6
+[18:48:10]   job 0f9a1d84 status=running progress=0.438 stage=stage1_denoise step=9
+[18:49:00]   job 0f9a1d84 status=running progress=0.48 stage=stage1_denoise step=10
+[18:51:10]   job 0f9a1d84 status=running progress=0.606 stage=stage1_denoise step=13
+[18:52:00]   job 0f9a1d84 status=running progress=0.648 stage=stage1_denoise step=14
+[18:54:05]   job 0f9a1d84 status=running progress=0.732 stage=stage1_denoise step=16
+[18:55:55]   job 0f9a1d84 status=running progress=0.816 stage=stage1_denoise step=18
+[18:57:16]   job 0f9a1d84 status=running progress=0.858 stage=stage1_denoise step=19
+[18:58:06]   job 0f9a1d84 status=running progress=0.9 stage=decode step=None
+[18:58:51]   job 0f9a1d84 status=completed progress=1.0 stage=None step=None
+[18:59:13] サーバーを止めた（pid 63032・残っていた子孫 []）
+[18:59:13] 記録: S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.json・S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\outputs\h3-outpaint-gates-2026-11-10\summary_api.md（終了コード 0）
+exit=0

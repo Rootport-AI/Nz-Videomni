@@ -1,0 +1,491 @@
+{
+  "gate": "G6",
+  "label": "G6_20steps",
+  "purpose": "20 ステップ・Turbo なしの完走（目視用）",
+  "frames": 124,
+  "source_size": [
+    1344,
+    768
+  ],
+  "canvas": [
+    1920,
+    1088
+  ],
+  "pads": {
+    "left": 288,
+    "right": 288,
+    "top": 160,
+    "bottom": 160
+  },
+  "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\G6_src_1344x768_124f.mp4",
+  "predicted_rows": {
+    "video": 75480,
+    "cond": 0,
+    "audio": 414,
+    "text": null,
+    "total": null
+  },
+  "started_at": "2026-11-10T18:37:19+09:00",
+  "status": "completed",
+  "error": null,
+  "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps",
+  "upload": {
+    "video_id": "204513ef-fb57-4a79-875e-d37f89e2b402",
+    "original_filename": "G6_src_1344x768_124f.mp4",
+    "stored_path": "uploads/videos/204513ef-fb57-4a79-875e-d37f89e2b402/input.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 3313428,
+    "trimmed": false,
+    "frame_count": 124,
+    "fps": 24.0
+  },
+  "tool_args": {
+    "prompt": "A young woman in a light beige jacket and white top walks toward the camera along a narrow Japanese shopping street lined with signs, small shops and parked bicycles, overcast daylight, steady handheld camera, natural ambient street sound",
+    "width": 1920,
+    "height": 1088,
+    "num_frames": 124,
+    "frame_rate": 24.0,
+    "seed": 1234,
+    "attention_backend": "sage",
+    "num_inference_steps": 20,
+    "outpaint_pad_left": 288,
+    "outpaint_pad_right": 288,
+    "outpaint_pad_top": 160,
+    "outpaint_pad_bottom": 160,
+    "outpaint_audio_strength": 0.5,
+    "reference_video_id": "204513ef-fb57-4a79-875e-d37f89e2b402"
+  },
+  "job_id": "0f9a1d84-b9da-469e-b730-99024d82f34e",
+  "wait": {
+    "calls": 16,
+    "seconds": 1290.6,
+    "samples": [
+      {
+        "t": 35.0,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 45.0,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 60.1,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 110.1,
+        "status": "running",
+        "progress": 0.06,
+        "stage": "encode",
+        "current_step": null
+      },
+      {
+        "t": 155.1,
+        "status": "running",
+        "progress": 0.06,
+        "stage": "stage1_denoise",
+        "current_step": 0
+      },
+      {
+        "t": 200.2,
+        "status": "running",
+        "progress": 0.102,
+        "stage": "stage1_denoise",
+        "current_step": 1
+      },
+      {
+        "t": 245.2,
+        "status": "running",
+        "progress": 0.144,
+        "stage": "stage1_denoise",
+        "current_step": 2
+      },
+      {
+        "t": 260.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 275.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 325.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 355.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 405.3,
+        "status": "running",
+        "progress": 0.27,
+        "stage": "stage1_denoise",
+        "current_step": 5
+      },
+      {
+        "t": 450.3,
+        "status": "running",
+        "progress": 0.312,
+        "stage": "stage1_denoise",
+        "current_step": 6
+      },
+      {
+        "t": 455.3,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 485.3,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 495.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 525.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 555.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+      },
+      {
+        "t": 600.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 650.4,
+        "status": "running",
+        "progress": 0.438,
+        "stage": "stage1_denoise",
+        "current_step": 9
+      },
+      {
+        "t": 700.4,
+        "status": "running",
+        "progress": 0.48,
+        "stage": "stage1_denoise",
+        "current_step": 10
+      },
+      {
+        "t": 705.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 735.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 775.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 830.5,
+        "status": "running",
+        "progress": 0.606,
+        "stage": "stage1_denoise",
+        "current_step": 13
+      },
+      {
+        "t": 880.4,
+        "status": "running",
+        "progress": 0.648,
+        "stage": "stage1_denoise",
+        "current_step": 14
+      },
+      {
+        "t": 955.5,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1005.5,
+        "status": "running",
+        "progress": 0.732,
+        "stage": "stage1_denoise",
+        "current_step": 16
+      },
+      {
+        "t": 1020.5,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+      },
+      {
+        "t": 1065.5,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1115.6,
+        "status": "running",
+        "progress": 0.816,
+        "stage": "stage1_denoise",
+        "current_step": 18
+      },
+      {
+        "t": 1120.6,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1145.6,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1195.6,
+        "status": "running",
+        "progress": 0.858,
+        "stage": "stage1_denoise",
+        "current_step": 19
+      },
+      {
+        "t": 1245.6,
+        "status": "running",
+        "progress": 0.9,
+        "stage": "decode",
+        "current_step": null
+      },
+      {
+        "t": 1285.6,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1290.6,
+        "status": "completed",
+        "progress": 1.0,
+        "stage": null,
+        "current_step": null
+      }
+    ]
+  },
+  "job_final": {
+    "job_id": "0f9a1d84-b9da-469e-b730-99024d82f34e",
+    "status": "completed",
+    "progress": 1.0,
+    "current_step": null,
+    "total_steps": null,
+    "stage": null,
+    "clip": null,
+    "clip_count": null,
+    "is_v2v": false,
+    "joined": false,
+    "matte": false,
+    "alpha": null,
+    "created_at": "2026-11-10T09:37:20Z",
+    "started_at": "2026-11-10T09:37:20Z",
+    "completed_at": "2026-11-10T09:58:47Z",
+    "error": null,
+    "request": {
+      "prompt": "A young woman in a light beige jacket and white top walks toward the camera along a narrow Japanese shopping street lined with signs, small shops and parked bicycles, overcast daylight, steady handheld camera, natural ambient street sound",
+      "negative_prompt": "",
+      "nag_enabled": false,
+      "nag_scale": 11.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "neg_method": "nag",
+      "vsf_scale": 1.5,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "fused_gguf_dequant_kernel": true,
+      "vae_mode": "default",
+      "embed_mp4_metadata": true,
+      "vram16_mode": true,
+      "width": 1920,
+      "height": 1088,
+      "crop_output": null,
+      "num_frames": 124,
+      "frame_rate": 24.0,
+      "num_inference_steps": 20,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "guidance_scale": 1.0,
+      "seed": 1234,
+      "pipeline": "distilled",
+      "conditioning_images": [],
+      "loras": [],
+      "reference_video_id": null,
+      "conditioning_attention_strength": null,
+      "reference_video_strength": null,
+      "outpaint": {
+        "pad_left": 288,
+        "pad_right": 288,
+        "pad_top": 160,
+        "pad_bottom": 160,
+        "blend_dilation_stage1": 1,
+        "blend_dilation_stage2": 2,
+        "freeze_source_audio": true,
+        "source_video_id": "204513ef-fb57-4a79-875e-d37f89e2b402",
+        "audio_strength": 0.5
+      },
+      "inpaint": null,
+      "alpha_gen": null,
+      "source_audio": null,
+      "references": []
+    },
+    "result": {
+      "video_url": "/api/v1/jobs/0f9a1d84-b9da-469e-b730-99024d82f34e/video",
+      "duration_seconds": 5.167,
+      "resolution": "1920x1088",
+      "file_size_bytes": 5480474,
+      "generation_time_seconds": 1286.48,
+      "seed_used": 1234,
+      "output_path": "outputs/0f9a1d84-b9da-469e-b730-99024d82f34e/output.mp4",
+      "metadata_path": "outputs/0f9a1d84-b9da-469e-b730-99024d82f34e/metadata.json"
+    },
+    "timed_out": false,
+    "waited_sec": 0.015000000013969839
+  },
+  "seconds_wall": 1291.2,
+  "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\0f9a1d84-b9da-469e-b730-99024d82f34e.mp4",
+  "metadata_summary": {
+    "attention_used": "sage",
+    "vram16_mode_used": "on",
+    "keep_resident_used": "off",
+    "block_swap_prefetch_used": "on",
+    "generation_time_seconds": 1286.48,
+    "peak_vram_reserved_mb": 10518,
+    "seed_used": 1234,
+    "num_inference_steps": 20,
+    "loras": null,
+    "request_outpaint": {
+      "pad_left": 288,
+      "pad_right": 288,
+      "pad_top": 160,
+      "pad_bottom": 160,
+      "blend_dilation_stage1": 1,
+      "blend_dilation_stage2": 2,
+      "freeze_source_audio": true,
+      "source_video_id": "204513ef-fb57-4a79-875e-d37f89e2b402",
+      "audio_strength": 0.5
+    }
+  },
+  "denoise": {
+    "peak_vram_mb": 6007,
+    "peak_vram_reserved_mb": 8936,
+    "seconds": 1105.56,
+    "block_swap_prefetch_used": "on",
+    "sequence": {
+      "text": 43,
+      "cond": 0,
+      "audio": 414,
+      "video": 75480,
+      "total": 75937,
+      "latent_frames": 37,
+      "audio_latents": 207,
+      "grid": [
+        34,
+        60
+      ]
+    },
+    "sequence_total": 75937,
+    "vram16": {
+      "cap_mib": 14023,
+      "cap_fraction": 0.8563,
+      "num_alloc_retries": 0,
+      "num_ooms": 0,
+      "inactive_split_peak_mib": 1481,
+      "blocks_on_gpu": 4,
+      "row_chunk": 4096
+    },
+    "m_per_step": [
+      3,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4,
+      4
+    ]
+  },
+  "outpaint_record": {
+    "canvas": [
+      1920,
+      1088
+    ],
+    "pads": {
+      "left": 288,
+      "right": 288,
+      "top": 160,
+      "bottom": 160
+    },
+    "source": [
+      1344,
+      768
+    ],
+    "aligned": [
+      288,
+      160,
+      1632,
+      928
+    ],
+    "fixed_tokens": 1008,
+    "generated_tokens": 1032,
+    "feather_px": 30,
+    "audio_strength": 0.5,
+    "source_had_audio": true,
+    "audio_latents_encoded": 206,
+    "audio_output": "decoded",
+    "inject_clean": 1.0
+  },
+  "outpaint_keys_check": {
+    "present": true,
+    "count": 12,
+    "missing": [],
+    "extra": []
+  },
+  "metrics": {
+    "keep_psnr_vs_control_db": 38.6778,
+    "keep_core_psnr_vs_control_db": 39.502,
+    "keep_psnr_vs_cut_db": 38.318,
+    "keep_core_psnr_vs_cut_db": 39.0901,
+    "core_pixels": 909072,
+    "boundary_gradient_ratio": {
+      "left": 1.1242,
+      "right": 1.0741,
+      "top": 1.1878,
+      "bottom": 1.2257,
+      "vertical_max": 1.1242,
+      "horizontal_max": 1.2257
+    },
+    "pad_band_std": {
+      "left": 50.028,
+      "right": 53.397,
+      "top": 70.717,
+      "bottom": 32.287
+    },
+    "output_probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\0f9a1d84-b9da-469e-b730-99024d82f34e.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1088,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.167000"
+      }
+    },
+    "control_psnr_vs_cut_db": 39.4086,
+    "judge": "h3_outpaint_gate.measure_run（弾 1 と同じ関数）"
+  },
+  "finished_at": "2026-11-10T18:59:11+09:00"
+}

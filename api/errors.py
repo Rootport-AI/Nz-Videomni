@@ -497,6 +497,45 @@ def outpaint_source_too_short(available: int, required: int) -> APIError:
     )
 
 
+def outpaint_source_not_found(video_id: str) -> APIError:
+    """Outpainting（MiniMax H3）: ``outpaint.source_video_id`` が保存済みの
+    アップロードを指していない。:func:`retake_video_not_found` と同じ形（404）。
+    LTX の経路の元動画（``reference_video_id``）の 404 とは欄が違うので、
+    クライアントが欄の名前で見分けられるよう専用のコードにする。"""
+    return APIError(
+        "OUTPAINT_SOURCE_NOT_FOUND", f"outpaint.source_video_id not found: {video_id}", 404
+    )
+
+
+def outpaint_source_odd_size(actual: tuple[int, int]) -> APIError:
+    """Outpainting（MiniMax H3）: 元動画の幅か高さが奇数。アプリ層は元動画を
+    要求の fps・ちょうど ``num_frames`` 枚の mp4 に切り出し
+    （``video_io.cut_window_mp4``。libx264・yuv420p）、yuv420p は奇数の寸法を
+    符号化できないため、受付を通すとジョブの途中で失敗する。ジョブを作る前に
+    422 で断る。LTX の経路（``reference_video_id``）は緑のキャンバス（偶数）を
+    書くので、この検査を通らない。"""
+    return APIError(
+        "OUTPAINT_SOURCE_ODD_SIZE",
+        "the outpaint source video's width and height must both be even",
+        422,
+        detail=f"outpaint.source_video_id is {actual[0]}x{actual[1]}",
+    )
+
+
+def outpaint_video_no_audio(video_id: str, detail: str | None = None) -> APIError:
+    """Outpainting（MiniMax H3）: 要求が元動画の音声を使う
+    （``outpaint.audio_strength`` > 0。省略時は系統の既定 0.5 が書き戻された後）
+    のに、元動画に音声の流れが無い。GPU の作業の前に 422 で断る。
+    :func:`retake_video_no_audio` と同じ形。利用者の直し方は Strength を 0 に
+    するか、音声のある素材に替えること。"""
+    return APIError(
+        "OUTPAINT_VIDEO_NO_AUDIO",
+        f"the outpaint uses the source video's audio, but outpaint.source_video_id has no audio stream: {video_id}",
+        422,
+        detail=detail,
+    )
+
+
 def inpaint_preprocess_conflict(kinds: list[str]) -> APIError:
     """Inpainting（マスクによる部分再生成）: 塗り潰したキャンバスを
     参照動画として渡す方式なので、参照を前処理（輪郭抽出・姿勢推定・深度）へ

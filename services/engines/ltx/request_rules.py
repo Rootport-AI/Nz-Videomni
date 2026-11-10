@@ -159,6 +159,15 @@ class RequestRules:
     台帳 §1-120), published inside the chain key as
     ``constraints["chain"]["source_audio"]``. ``None`` for a family without
     it (LTX refuses the field), and then the inner key is left out.
+    ``outpaint_audio_strength`` / ``outpaint_blend_dilation`` are the ranges of
+    a single ``POST /generate``'s ``outpaint.audio_strength`` and
+    ``outpaint.blend_dilation_stage1`` (MiniMax H3's Outpainting, 台帳 §1-125),
+    published together as ``constraints["outpaint"]``; their ``default`` is
+    what an omitted value becomes (written back by the family's
+    ``validate_request``). ``None`` for a family whose Outpainting takes
+    neither (LTX: its audio is ``freeze_source_audio``, its blend the 5 / 2
+    pair the schema holds), and then the key is left out entirely; its
+    presence is the operation panel's signal for the H3 form.
     """
 
     frames_step: int
@@ -181,6 +190,8 @@ class RequestRules:
     chain_overlap_frames: int | None = None
     retake_audio_strength: SamplingRange | None = None
     chain_source_audio_strength: SamplingRange | None = None
+    outpaint_audio_strength: SamplingRange | None = None
+    outpaint_blend_dilation: SamplingRange | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -222,6 +233,14 @@ class RequestRules:
         # publishes the key, so LTX publishes the same block as before.
         if self.retake_audio_strength is not None:
             published["retake"] = {"audio_strength": self.retake_audio_strength.as_dict()}
+        # Only a family whose Outpainting takes an audio Strength and a
+        # published feather default (MiniMax H3) publishes the key, so LTX
+        # publishes the same block as before.
+        if self.outpaint_audio_strength is not None and self.outpaint_blend_dilation is not None:
+            published["outpaint"] = {
+                "audio_strength": self.outpaint_audio_strength.as_dict(),
+                "blend_dilation_stage1": self.outpaint_blend_dilation.as_dict(),
+            }
         return published
 
     # ------------------------------------------------------------ enforcing
@@ -381,6 +400,36 @@ def _ltx_distilled(request: "GenerateRequest") -> str | None:
     return None
 
 
+def _ltx_outpaint_fields(request: "GenerateRequest") -> str | None:
+    """MiniMax H3's two Outpainting fields are not LTX's (台帳 §1-125).
+
+    Refused here rather than in the reject table: a reject-table name is
+    always published in ``unsupported_features``, and the Outpainting feature
+    itself runs on LTX (the same reasoning as a retake's ``audio_strength``,
+    services/engines/ltx/chain_rules.py).
+    """
+    op = request.outpaint
+    if op is None:
+        return None
+    if op.source_video_id is not None:
+        return (
+            "outpaint.source_video_id is only accepted by MiniMax H3; "
+            "on this family send the source video as reference_video_id"
+        )
+    if op.audio_strength is not None:
+        return (
+            "outpaint.audio_strength is only accepted by MiniMax H3; "
+            "on this family the source audio is set with outpaint.freeze_source_audio"
+        )
+    return None
+
+
+def _ltx_extra(request: "GenerateRequest") -> str | None:
+    """LTX's family checks that do not fit the table: the Outpainting fields
+    first, then the distilled pipeline."""
+    return _ltx_outpaint_fields(request) or _ltx_distilled(request)
+
+
 #: LTX's rules. 64 is the two-stage distilled pipeline's spatial multiple
 #: (stage 1 at half size through a 32px VAE); a non-64 display size is
 #: ``crop_output``'s job. 8n+1 is the causal VAE's frame grid, and a keyframe
@@ -399,7 +448,7 @@ LTX_REQUEST_RULES = RequestRules(
     frame_rate_max=FRAME_RATE_MAX,
     default_steps=LTX_DISTILLED_STEPS,
     sampling=None,
-    extra=_ltx_distilled,
+    extra=_ltx_extra,
     keyframe_step=8,
     keyframe_offset=1,
     keyframe_strength_default=0.8,

@@ -424,3 +424,59 @@ describe("outpaintReasons", () => {
     expect(reasons).toEqual(["padsZero", "canvasWidthTooLarge"]);
   });
 });
+
+// §1-125 MiniMax H3: the grids come in as arguments; their defaults are LTX's,
+// so every call above (which passes none) is the LTX result unchanged.
+describe("§1-125: 格子を引数で受ける（既定は LTX の値）", () => {
+  const H3_GRID = { step: 17, offset: 5 };
+  const H3_READY: OutpaintReasonsInput = {
+    prompt: "a wide shot of a city",
+    sourceStatus: "ready",
+    sourceVideoId: "vid-1",
+    sourceTrimFailed: false,
+    sourceWidth: 1280,
+    sourceHeight: 720,
+    sourceDurationSec: 8,
+    pads: { left: 12, right: 20, top: 0, bottom: 48 }, // 1312 x 768
+    numFrames: 124,
+    maxNumFrames: 192,
+    hasOutpaintLora: false,
+    canvasMultiple: 32,
+    frameGrid: H3_GRID,
+    minNumFrames: 22,
+    requireLora: false,
+  };
+
+  it("maxNumFrames は 17n+5 に切り下げ、下限は 22", () => {
+    expect(maxNumFrames(8, 24, H3_GRID, 22)).toBe(192); // 192 = 17*11+5
+    expect(maxNumFrames(5, 24, H3_GRID, 22)).toBe(107); // 120 -> 107
+    expect(maxNumFrames(0.5, 24, H3_GRID, 22)).toBe(22);
+    expect(maxNumFrames(0, 24, H3_GRID, 22)).toBe(22);
+    // 既定は LTX の 8n+1・9 のまま。
+    expect(maxNumFrames(5, 24)).toBe(maxNumFrames(5, 24, { step: 8, offset: 1 }, 9));
+  });
+
+  it("H3 の入力が揃えば空配列。ピン留めの LoRA が無くても loraMissing は出ない", () => {
+    expect(outpaintReasons(H3_READY)).toEqual([]);
+  });
+
+  it("キャンバスは 32 の格子で測る（128 に乗らない 1312 も通り、32 から外れれば止まる）", () => {
+    expect(outpaintReasons({ ...H3_READY, pads: { left: 13, right: 20, top: 0, bottom: 48 } })).toEqual([
+      "canvasWidthOffGrid",
+    ]);
+    expect(outpaintReasons({ ...H3_READY, pads: { left: 12, right: 20, top: 1, bottom: 48 } })).toEqual([
+      "canvasHeightOffGrid",
+    ]);
+  });
+
+  it("フレーム数は 17n+5 と下限 22 で測る", () => {
+    expect(outpaintReasons({ ...H3_READY, numFrames: 121 })).toEqual(["numFramesOffGrid"]); // 8n+1 だが 17n+5 ではない
+    expect(outpaintReasons({ ...H3_READY, numFrames: 5 })).toEqual(["numFramesOffGrid"]); // 格子上だが下限未満
+    expect(outpaintReasons({ ...H3_READY, numFrames: 22 })).toEqual([]);
+  });
+
+  it("引数を省けば LTX の 128・8n+1・9・LoRA 必須", () => {
+    const { canvasMultiple: _c, frameGrid: _g, minNumFrames: _m, requireLora: _r, ...ltxShaped } = H3_READY;
+    expect(outpaintReasons(ltxShaped)).toEqual(["numFramesOffGrid", "canvasWidthOffGrid", "loraMissing"]);
+  });
+});

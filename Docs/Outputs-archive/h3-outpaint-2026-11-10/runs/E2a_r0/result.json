@@ -1,0 +1,261 @@
+{
+  "seed_used": 1234,
+  "sampler": "euler",
+  "num_inference_steps": 4,
+  "shift_video": 12.0,
+  "shift_audio": 3.0,
+  "peak_vram_mb": 8175,
+  "peak_vram_reserved_mb": 10522,
+  "rss_peak_gib": 30.26,
+  "commit_gib": 36.55,
+  "commit_peak_gib": 47.13,
+  "seconds": 442.12,
+  "num_frames": 124,
+  "frame_rate": 24,
+  "width": 1920,
+  "height": 1088,
+  "size_bytes": 5846797,
+  "attention_used": "sage",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "on",
+  "vram16_mode_used": "on",
+  "images_used": 0,
+  "h3": {
+    "phases": {
+      "encode": {
+        "te": {
+          "num_layers_file": 50,
+          "num_layers_built": 50,
+          "int8_linears": 350,
+          "tensors_planned": 901,
+          "vision_tensors_in_file": 351,
+          "rope": {
+            "rope_type": "default",
+            "rope_theta": 5000000.0,
+            "mrope_section": [
+              24,
+              20,
+              20
+            ],
+            "mrope_interleaved": true,
+            "head_dim": 128,
+            "num_attention_heads": 64,
+            "num_key_value_heads": 8,
+            "num_hidden_layers": 50,
+            "attn_implementation": "nz_h3_blocked_math"
+          },
+          "extra_special_tokens": {
+            "ids": {
+              "<d>": 151669,
+              "</d>": 151670,
+              "<|cutoff|>": 151671,
+              "<|lyrics_start|>": 151672,
+              "<|lyrics_end|>": 151673,
+              "<|caption_start|>": 151674,
+              "<|caption_end|>": 151675
+            },
+            "added_here": false
+          },
+          "seconds": 0.32
+        },
+        "rss_after_load_gib": 28.68,
+        "commit_after_load_gib": 36.74,
+        "te_read": {
+          "read_gib": 24.17,
+          "read_seconds": 22.01,
+          "layers_read": 50,
+          "encode_seconds": 22.13,
+          "tokens": 41,
+          "vision_tokens": 0,
+          "vision_tokens_per_image": []
+        },
+        "rss_after_release_gib": 27.98,
+        "commit_after_release_gib": 36.24,
+        "text_tokens": 41,
+        "seconds": 22.65,
+        "rss_end_gib": 27.98,
+        "rss_process_peak_gib": 30.13,
+        "commit_end_gib": 36.24,
+        "commit_process_peak_gib": 46.62,
+        "peak_vram_mb": 1493,
+        "peak_vram_reserved_mb": 1510
+      },
+      "source_encode": {
+        "source_size": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          128,
+          1664,
+          928
+        ],
+        "latent_shape": [
+          1,
+          24,
+          37,
+          50,
+          86
+        ],
+        "frames_read": 124,
+        "canvas": [
+          1376,
+          800
+        ],
+        "source_had_audio": true,
+        "freeze_ka": 206,
+        "encoded_samples": 165333,
+        "seconds": 78.34,
+        "rss_end_gib": 28.22,
+        "rss_process_peak_gib": 30.13,
+        "commit_end_gib": 36.53,
+        "commit_process_peak_gib": 46.62,
+        "peak_vram_mb": 4366,
+        "peak_vram_reserved_mb": 5744
+      },
+      "denoise": {
+        "dit_source": "resident",
+        "rss_after_load_gib": 28.19,
+        "commit_after_load_gib": 36.5,
+        "rss_after_place_gib": 29.65,
+        "commit_after_place_gib": 41.79,
+        "sequence": {
+          "text": 41,
+          "cond": 0,
+          "audio": 414,
+          "video": 75480,
+          "total": 75935,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            34,
+            60
+          ]
+        },
+        "m_per_step": [
+          3,
+          4,
+          4,
+          4
+        ],
+        "block_swap_prefetch_used": "on",
+        "mask": {
+          "audio": {
+            "rows": 414,
+            "min": 0.5,
+            "max": 1.0
+          },
+          "video": {
+            "rows": 75480,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 1.0
+          }
+        },
+        "vram16": {
+          "cap_fraction": 0.855,
+          "cap_mib": 14001,
+          "blocks_on_gpu": 4,
+          "head_group": 8,
+          "row_chunk": 4096,
+          "qkv_quant_shared": true,
+          "text_modules": "cpu",
+          "num_alloc_retries": 0,
+          "num_ooms": 0,
+          "inactive_split_peak_mib": 1570
+        },
+        "dit_parked_tensors": 13,
+        "rss_after_release_gib": 29.85,
+        "commit_after_release_gib": 38.46,
+        "seconds": 268.19,
+        "rss_end_gib": 29.82,
+        "rss_process_peak_gib": 30.13,
+        "commit_end_gib": 38.43,
+        "commit_process_peak_gib": 47.13,
+        "peak_vram_mb": 6343,
+        "peak_vram_reserved_mb": 9416
+      },
+      "decode": {
+        "vae_source": "resident",
+        "audio_samples": 165333,
+        "audio_samples_decoded": 165600,
+        "frames": 124,
+        "seconds": 71.75,
+        "rss_end_gib": 28.72,
+        "rss_process_peak_gib": 30.26,
+        "commit_end_gib": 37.05,
+        "commit_process_peak_gib": 47.13,
+        "peak_vram_mb": 8175,
+        "peak_vram_reserved_mb": 10522
+      }
+    },
+    "quant_backends": {
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true
+      }
+    },
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8,
+        "layout": "ab",
+        "dtype": "BF16",
+        "pairs_applied": 208,
+        "skipped": []
+      }
+    ],
+    "outpaint": {
+      "canvas": [
+        1920,
+        1088
+      ],
+      "pads": {
+        "left": 300,
+        "right": 276,
+        "top": 150,
+        "bottom": 170
+      },
+      "source": [
+        1344,
+        768
+      ],
+      "aligned": [
+        288,
+        128,
+        1664,
+        928
+      ],
+      "fixed_tokens": 943,
+      "generated_tokens": 1097,
+      "feather_px": 0,
+      "audio_strength": 0.5,
+      "source_had_audio": true,
+      "audio_latents_encoded": 206,
+      "audio_output": "decoded",
+      "inject_clean": 1.0
+    }
+  }
+}

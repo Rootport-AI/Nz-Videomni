@@ -1,0 +1,47 @@
+2026-11-10 18:32:42,397 INFO ltx.pipeline: Job 0573c2ad-f0f7-454d-8198-4fdcef9122de start mode=t2v 1920x1088 frames=379 steps=4 fps=24 seed=12345
+2026-11-10 18:32:47,495 INFO ltx.pipeline: Job 0573c2ad-f0f7-454d-8198-4fdcef9122de outpaint source cut 379 frames @ 24 fps, canvas 1920x1088 pads l/r/t/b=320/320/184/184 -> _outpaint_source.mp4
+2026-11-10 18:32:47,495 INFO ltx.pipeline: Job 0573c2ad-f0f7-454d-8198-4fdcef9122de base=minimax_h3_fl2va_pruned_int8_convrot.safetensors loras=none prompt="コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。"
+2026-11-10 18:32:50,489 INFO ltx.runner: generate text encode started (4 steps)
+2026-11-10 18:33:08,053 INFO ltx.runner: generate text encode 3/4 steps (0.11 step/s, 17.6s elapsed)
+2026-11-10 18:33:08,202 INFO ltx.runner: generate text encode 4/4 steps (7.09 step/s, 17.7s elapsed)
+2026-11-10 18:36:52,986 INFO ltx.runner: generate text encode 5/4 steps (0.00 step/s, 242.5s elapsed)
+2026-11-10 18:37:05,442 INFO ltx.runner: generate stage-1 denoise started (4 steps)
+2026-11-10 18:37:06,267 ERROR ltx.pipeline: Job 0573c2ad-f0f7-454d-8198-4fdcef9122de OOM: RuntimeError('VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください')
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\engine_h3\pipeline_h3.py", line 1817, in _denoise
+    v_video_rows, v_audio_rows = dit(
+                                 ^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv-engine-h3\Lib\site-packages\torch\nn\modules\module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv-engine-h3\Lib\site-packages\torch\nn\modules\module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\engine_h3\dit.py", line 678, in forward
+    x = block(x, t_emb, adaln_index, rope_cos, rope_sin)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv-engine-h3\Lib\site-packages\torch\nn\modules\module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv-engin
+...[traceback truncated]...
+b, h_kv, head_dim, padded_len), dtype=v.dtype, device=v.device)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 450.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.09 GiB is free. 13.69 GiB allowed; Of the allocated memory 12.65 GiB is allocated by PyTorch, and 842.47 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\engine_h3\worker.py", line 940, in main
+    _do_generate(msg)
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\engine_h3\worker.py", line 697, in _do_generate
+    result = _PIPE.generate(req)
+             ^^^^^^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\engine_h3\pipeline_h3.py", line 992, in generate
+    video_lat, audio_lat, prefetch_used = self._denoise(
+                                          ^^^^^^^^^^^^^^
+  File "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\engine_h3\pipeline_h3.py", line 1876, in _denoise
+    raise RuntimeError(VRAM16_OOM_MESSAGE) from exc
+RuntimeError: VRAM 16GB mode でも GPU メモリが足りません (CUDA out of memory)。解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください
+
+2026-11-10 18:37:06,267 INFO ltx.runner: Unloading pipeline (REAL worker).

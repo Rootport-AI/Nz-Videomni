@@ -22,7 +22,10 @@ from api.errors import (
     lora_requires_reference,
     outpaint_preprocess_conflict,
     outpaint_source_mismatch,
+    outpaint_source_not_found,
+    outpaint_source_odd_size,
     outpaint_source_too_short,
+    outpaint_video_no_audio,
     reference_audio_no_stream,
     reference_audio_silent,
     reference_not_found,
@@ -198,6 +201,16 @@ def generate(
     # The shape-only rules (pads, exclusivity, keep-region floor) live in the
     # pydantic validator; the three below need the registry or the file on disk,
     # so they belong here — the same split the control-adapter checks above use.
+    #
+    # The source arrives by exactly one route (the schema's rule): LTX's
+    # ``reference_video_id`` or MiniMax H3's ``outpaint.source_video_id``
+    # (台帳 §1-125). The branch is on the REQUEST'S SHAPE, never on the family
+    # (each family's rules refuse the other's route). The source_video_id route
+    # adds three checks the app's cut needs: its own 404 name, an even size
+    # (the cut is libx264 yuv420p), and the frame count at the REQUEST's fps
+    # (the cut resamples to it). Then the audio preflight: validate_for_family
+    # has already written H3's default Strength back, so ``audio_strength`` is
+    # a number here on that route and None on LTX's (which refuses it).
     if request.outpaint is not None:
         if preprocess_kinds:
             raise outpaint_preprocess_conflict(sorted(preprocess_kinds))
@@ -208,16 +221,39 @@ def generate(
             request.width - op.pad_left - op.pad_right,
             request.height - op.pad_top - op.pad_bottom,
         )
-        ref_path = context.video_upload_store.path_for(request.reference_video_id)
+        if op.source_video_id is not None:
+            try:
+                ref_path = context.video_upload_store.path_for(op.source_video_id)
+            except APIError:
+                raise outpaint_source_not_found(op.source_video_id)
+        else:
+            ref_path = context.video_upload_store.path_for(request.reference_video_id)
         actual = video_io.probe_resolution(ref_path)
+        if op.source_video_id is not None and actual is not None and (actual[0] % 2 or actual[1] % 2):
+            raise outpaint_source_odd_size(actual)
         if actual != keep:
             raise outpaint_source_mismatch(keep, actual)
         # Frame count is authoritative for the blend pairing (see
         # outpaint_source_too_short). ffprobe is required for outpainting — it was
         # already required a line above, so this raises rather than degrading.
         available = video_io.frame_count(ref_path)
+        if op.source_video_id is not None:
+            # The count at the request's fps (the cut resamples the source to
+            # it): the same expression as PipelineManager.preflight_retake_window.
+            src_fps = video_io.probe_fps(ref_path)
+            if src_fps and abs(src_fps - float(request.frame_rate)) > 1e-3:
+                available = int(round(available * float(request.frame_rate) / src_fps))
         if available < request.num_frames:
             raise outpaint_source_too_short(available, request.num_frames)
+        if (op.audio_strength or 0) > 0 and not video_io.has_audio_stream(ref_path):
+            raise outpaint_video_no_audio(
+                op.source_video_id,
+                detail=(
+                    "the outpaint uses the source video's audio "
+                    f"(audio_strength={op.audio_strength:g} > 0; send 0 to generate "
+                    f"the audio freely), but upload {op.source_video_id} has no audio stream"
+                ),
+            )
 
     # ── Inpainting ────────────────────────────────────────────────────────
     # The same split the outpaint block above uses: the shape-only rules

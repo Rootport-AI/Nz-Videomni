@@ -1,0 +1,42 @@
+{
+  "keep_psnr_vs_control_db": 38.6778,
+  "keep_core_psnr_vs_control_db": 39.502,
+  "keep_psnr_vs_cut_db": 38.318,
+  "keep_core_psnr_vs_cut_db": 39.0901,
+  "core_pixels": 909072,
+  "boundary_gradient_ratio": {
+    "left": 1.1242,
+    "right": 1.0741,
+    "top": 1.1878,
+    "bottom": 1.2257,
+    "vertical_max": 1.1242,
+    "horizontal_max": 1.2257
+  },
+  "pad_band_std": {
+    "left": 50.028,
+    "right": 53.397,
+    "top": 70.717,
+    "bottom": 32.287
+  },
+  "output_probe": {
+    "path": "outputs\\h3-outpaint-gates-2026-11-10\\G6_20steps\\0f9a1d84-b9da-469e-b730-99024d82f34e.mp4",
+    "video": {
+      "codec_name": "h264",
+      "width": 1920,
+      "height": 1088,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "24/1",
+      "avg_frame_rate": "24/1",
+      "duration": "5.166667",
+      "nb_read_frames": 124
+    },
+    "audio": {
+      "codec_name": "aac",
+      "sample_rate": "32000",
+      "channels": 2,
+      "duration": "5.167000"
+    }
+  },
+  "control_psnr_vs_cut_db": 39.4086,
+  "judge": "h3_outpaint_gate.measure_run（弾 1 と同じ関数）"
+}

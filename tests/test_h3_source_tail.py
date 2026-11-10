@@ -26,7 +26,7 @@ from PIL import Image  # noqa: E402
 from engine_h3 import media_out as MO  # noqa: E402
 from engine_h3 import pipeline_h3 as P  # noqa: E402
 from engine_h3.image_cond import cover_crop, load_canvas_image  # noqa: E402
-from engine_h3.source_tail import has_audio_stream, read_source_tail  # noqa: E402
+from engine_h3.source_tail import has_audio_stream, read_source_frames, read_source_tail  # noqa: E402
 
 
 def _write_clip(path, frames=22, size=(80, 48), audio=True):
@@ -104,6 +104,74 @@ def test_has_audio_stream(tmp_path):
     assert has_audio_stream(str(_write_clip(tmp_path / "v.mp4", audio=False))) is False
     with pytest.raises(ValueError, match="開けません"):
         has_audio_stream(str(tmp_path / "none.mp4"))
+
+
+# --------------------------------------------------------------------------- #
+# read_source_frames (Outpainting, 台帳 §1-125: the source at its own size)
+# --------------------------------------------------------------------------- #
+
+def test_read_source_frames_keeps_the_source_size(tmp_path):
+    path = _write_clip(tmp_path / "src.mp4")
+    frames = read_source_frames(str(path), 22)
+    assert frames.dtype == np.uint8 and frames.shape == (22, 48, 80, 3)   # no resize, no crop
+    greys = [float(frames[i, :, 40:, 1].mean()) for i in range(22)]
+    assert all(abs(g - 10 * i) < 6 for i, g in enumerate(greys)), greys
+    # Each frame is the decoded frame's pixels as they are (the paste-back relies on it).
+    import av
+
+    with av.open(str(path)) as c:
+        decoded = [f.to_ndarray(format="rgb24") for f in c.decode(c.streams.video[0])]
+    assert all(np.array_equal(frames[i], decoded[i]) for i in range(22))
+
+
+@pytest.mark.parametrize("want", [21, 23])
+def test_read_source_frames_refuses_a_wrong_count(tmp_path, want):
+    path = _write_clip(tmp_path / "src.mp4")
+    with pytest.raises(ValueError, match=f"元動画の切り出しのフレーム数が合いません.*ちょうど {want} フレーム"):
+        read_source_frames(str(path), want)
+
+
+def test_read_source_frames_refuses_a_missing_or_bad_file(tmp_path):
+    with pytest.raises(ValueError, match="元動画の切り出しが見つかりません"):
+        read_source_frames(str(tmp_path / "none.mp4"), 22)
+    bad = tmp_path / "bad.mp4"
+    bad.write_bytes(b"not a video")
+    with pytest.raises(ValueError, match="元動画の切り出しを読めません"):
+        read_source_frames(str(bad), 22)
+
+
+def test_read_source_frames_refuses_mixed_frame_sizes(tmp_path, monkeypatch):
+    """A file whose frames change size (an encoder will not write one): PyAV is stood in."""
+    import av
+
+    class _Frame:
+        def __init__(self, w, h):
+            self.width, self.height = w, h
+
+        def to_ndarray(self, format):  # noqa: A002 -- PyAV's keyword
+            assert format == "rgb24"
+            return np.zeros((self.height, self.width, 3), np.uint8)
+
+    class _Container:
+        streams = type("S", (), {"video": ["v0"]})()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def decode(self, stream):
+            return iter([_Frame(80, 48), _Frame(80, 48), _Frame(48, 80)])
+
+    path = tmp_path / "mixed.mp4"
+    path.write_bytes(b"x")
+    monkeypatch.setattr(av, "open", lambda *a, **k: _Container())
+    with pytest.raises(ValueError, match="寸法がそろっていません（3 フレーム目が 48×80、1 フレーム目は 80×48）"):
+        read_source_frames(str(path), 3)
+    # The same three frames of one size are read.
+    monkeypatch.setattr(_Container, "decode", lambda self, stream: iter([_Frame(80, 48)] * 3))
+    assert read_source_frames(str(path), 3).shape == (3, 48, 80, 3)
 
 
 # --------------------------------------------------------------------------- #

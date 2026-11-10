@@ -19,7 +19,7 @@
  * territory.
  */
 import type { Strings } from "../../i18n/strings";
-import { MIN_INNER_SIDE } from "./outpaintGeometry";
+import { CANVAS_MULTIPLE, MIN_INNER_SIDE } from "./outpaintGeometry";
 
 /** The one runtime value two of the lines interpolate. Taken as a parameter
  * object (rather than read off the form hook's result) so this module has no
@@ -32,6 +32,10 @@ export interface OutpaintReasonMessageParams {
   /** The smallest kept side the server accepts. Defaults to
    * {@link MIN_INNER_SIDE} — the only value production ever passes. */
   minInnerSide?: number;
+  /** §1-125: the canvas grid the two off-grid lines name. Defaults to
+   * {@link CANVAS_MULTIPLE} (LTX 128); MiniMax H3 passes its served
+   * `constraints.dimension_multiple` (32). */
+  canvasMultiple?: number;
 }
 
 /**
@@ -48,7 +52,7 @@ export interface OutpaintReasonMessageParams {
  */
 export function buildOutpaintReasonMessages(
   strings: Strings,
-  { loraName, minInnerSide = MIN_INNER_SIDE }: OutpaintReasonMessageParams,
+  { loraName, minInnerSide = MIN_INNER_SIDE, canvasMultiple = CANVAS_MULTIPLE }: OutpaintReasonMessageParams,
 ): Record<string, string> {
   const t = strings.edit.outpainting.generateReasons;
   return {
@@ -64,12 +68,12 @@ export function buildOutpaintReasonMessages(
     sourceTrimFailed: t.sourceTrimFailed,
     mediaInfoUnknown: t.mediaInfoUnknown,
     padsZero: t.padsZero,
-    // 2026-08-11: パッドが 1px 刻みになったので、拡張後キャンバスが 128 の格子から
-    // 外れうる。幅と高さで別の行にすること —— `GenerateReasonsNote` は解決済みの
+    // 2026-08-11: パッドが 1px 刻みになったので、拡張後キャンバスが格子（LTX 128・
+    // §1-125 の H3 32。引数で受ける）から外れうる。幅と高さで別の行にすること —— `GenerateReasonsNote` は解決済みの
     // 文言で de-dup するため、共通の 1 文にすると片方だけ直した段階でも行が残る。
     // 他タブの `dimensionsOffGrid`（幅・高さ 1 行まとめ）を借りないのはこのため。
-    canvasWidthOffGrid: t.canvasWidthOffGrid,
-    canvasHeightOffGrid: t.canvasHeightOffGrid,
+    canvasWidthOffGrid: t.canvasWidthOffGrid(canvasMultiple),
+    canvasHeightOffGrid: t.canvasHeightOffGrid(canvasMultiple),
     // 第2弾（2026-08-11）: 4096 の上限も 128 の格子と同じくメッセージで担保する
     // ようになった（スライダー上限は定数 220、数値ボックスは 4096 固定で、どちらも
     // キャンバス寸法を見ていないため）。ここも幅・高さで別の行にする。

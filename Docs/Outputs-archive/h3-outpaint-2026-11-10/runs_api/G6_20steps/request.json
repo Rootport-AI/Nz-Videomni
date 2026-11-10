@@ -1,0 +1,21 @@
+{
+  "tool": "submit_generate",
+  "arguments": {
+    "prompt": "A young woman in a light beige jacket and white top walks toward the camera along a narrow Japanese shopping street lined with signs, small shops and parked bicycles, overcast daylight, steady handheld camera, natural ambient street sound",
+    "width": 1920,
+    "height": 1088,
+    "num_frames": 124,
+    "frame_rate": 24.0,
+    "seed": 1234,
+    "attention_backend": "sage",
+    "num_inference_steps": 20,
+    "outpaint_pad_left": 288,
+    "outpaint_pad_right": 288,
+    "outpaint_pad_top": 160,
+    "outpaint_pad_bottom": 160,
+    "outpaint_audio_strength": 0.5,
+    "reference_video_id": "204513ef-fb57-4a79-875e-d37f89e2b402"
+  },
+  "gate": "G6",
+  "note": "MCP の道具に渡した引数。H3 では MCP が reference_video_id を outpaint.source_video_id へ移す。サーバーが受けた本文（書き戻し後）は metadata.json の request"
+}

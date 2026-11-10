@@ -47,6 +47,14 @@ describe("mockBridge — MiniMax H3", () => {
     // carries the middle-audio Strength slider. LTX publishes no `retake` block.
     expect(h3?.unsupported_features).not.toContain("retake");
     expect(h3?.constraints?.retake).toEqual({ audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } });
+    // §1-125: H3 runs an Outpainting now — `outpaint` left, and
+    // `constraints.outpaint` carries the source-audio Strength and mask-blur
+    // sliders. LTX publishes no `outpaint` block.
+    expect(h3?.unsupported_features).not.toContain("outpaint");
+    expect(h3?.constraints?.outpaint).toEqual({
+      audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
+      blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
+    });
     // §1-106: H3 chains now — `chain` left, and the chain material it cannot
     // take is published instead; `constraints.chain` carries the fixed seam.
     // 台帳 §1-121: V2V and the opening image opened, so `v2v` and
@@ -69,6 +77,7 @@ describe("mockBridge — MiniMax H3", () => {
     });
     expect(ltx?.constraints?.chain).toBeUndefined();
     expect(ltx?.constraints?.retake).toBeUndefined();
+    expect(ltx?.constraints?.outpaint).toBeUndefined();
     expect(ltx?.unsupported_features).not.toContain("chain_start_image");
     // 台帳 §1-101: VRAM 16GB mode is H3's own — H3 does NOT publish the name,
     // both LTX engines do (which hides the Settings row there).
@@ -175,6 +184,35 @@ describe("mockBridge — MiniMax H3", () => {
       },
       [{ num_frames: 124 }],
     );
+    expect(res.status).toBe(202);
+  });
+
+  // §1-125: the H3 Outpainting body (a 32-multiple canvas, 17n+5 frames, 24
+  // fps, `outpaint.source_video_id` and no `reference_video_id` / control LoRA)
+  // is accepted on `/generate`.
+  it("accepts an Outpainting with `outpaint.source_video_id` while MiniMax H3 is loaded", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const res = await generate(bridge, {
+      prompt: "wider",
+      width: 1344,
+      height: 768,
+      num_frames: 124,
+      frame_rate: 24,
+      seed: -1,
+      num_inference_steps: 20,
+      shift_video: 12,
+      shift_audio: 3,
+      outpaint: {
+        pad_left: 12,
+        pad_right: 20,
+        pad_top: 0,
+        pad_bottom: 48,
+        source_video_id: "vid",
+        audio_strength: 0.5,
+        blend_dilation_stage1: 1,
+      },
+    });
     expect(res.status).toBe(202);
   });
 

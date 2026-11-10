@@ -1,0 +1,2753 @@
+{
+  "script": "Docs\\Outputs-archive\\h3-outpaint-2026-11-10\\h3_outpaint_gate.py",
+  "started_at": "2026-11-10T16:54:23+09:00",
+  "args": {
+    "gate": "E2",
+    "prepare": false,
+    "dry_run": false,
+    "seed": 1234,
+    "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+    "steps": 4,
+    "attention": null,
+    "no_lora": false,
+    "vram16_off": false,
+    "out_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10",
+    "material": "outputs/h3-vsf-calib-2026-11-09/hf-round12/L_s0_1344x768_seed42.mp4",
+    "pads": "288,288,160,160",
+    "canvas": null,
+    "feathers": "1",
+    "label": "E2c",
+    "frames": 124,
+    "start_sec": 0.0,
+    "scale": null,
+    "audio_strength": 0.5
+  },
+  "gates": [
+    "E2"
+  ],
+  "conditions": {
+    "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+    "lora_strength": 0.8,
+    "steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "seed": 1234,
+    "attention": "本ごと（E2 は sage・他は sdpa。runs[].conditions.attention）",
+    "vram16_mode": true,
+    "blocks_on_gpu": 8,
+    "block_swap_prefetch": true,
+    "deterministic": false,
+    "keep_resident": true,
+    "num_frames": 124,
+    "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+    "negative_prompt": ""
+  },
+  "runs": [
+    {
+      "label": "G1_main",
+      "gate": "G1",
+      "pads": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 1,
+      "feather_px": 30,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "主条件（G2 の r=1・G4 の s=0.5 と共用）",
+      "started_at": "2026-11-10T13:34:31+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "aligned_size": [
+          1280,
+          768
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "latent_offset_yx": [
+          10,
+          20
+        ],
+        "source_offset_in_aligned_yx": [
+          24,
+          0
+        ],
+        "latent_frames": 37
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G1_main\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sdpa",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+          "pad_left": 320,
+          "pad_right": 320,
+          "pad_top": 184,
+          "pad_bottom": 184,
+          "audio_strength": 0.5,
+          "feather_px": 30
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 320,
+          "right": 320,
+          "top": 184,
+          "bottom": 184
+        },
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "feather_px": 30,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8174,
+      "peak_vram_reserved_mb": 10518,
+      "seconds": 920.6,
+      "rss_peak_gib": 30.0,
+      "commit_peak_gib": 46.56,
+      "metrics": {
+        "keep_psnr_vs_control_db": 31.539,
+        "keep_core_psnr_vs_control_db": 38.0777,
+        "keep_psnr_vs_cut_db": 31.5175,
+        "keep_core_psnr_vs_cut_db": 38.0735,
+        "core_pixels": 805200,
+        "boundary_gradient_ratio": {
+          "left": 1.3319,
+          "right": 0.9342,
+          "top": 0.622,
+          "bottom": 0.7589,
+          "vertical_max": 1.3319,
+          "horizontal_max": 0.7589
+        },
+        "pad_band_std": {
+          "left": 26.167,
+          "right": 55.505,
+          "top": 48.236,
+          "bottom": 42.618
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\G1_main\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 934.55,
+      "finished_at": "2026-11-10T13:50:06+09:00",
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sdpa",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      }
+    },
+    {
+      "label": "G1_odd",
+      "gate": "G1",
+      "pads": {
+        "pad_left": 13,
+        "pad_right": 19,
+        "pad_top": 8,
+        "pad_bottom": 8
+      },
+      "canvas": [
+        1312,
+        736
+      ],
+      "r": 1,
+      "feather_px": 21,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "奇数 pad・32 に乗らない",
+      "started_at": "2026-11-10T13:50:06+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1312,
+          736
+        ],
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          0,
+          0,
+          1312,
+          736
+        ],
+        "aligned_size": [
+          1312,
+          736
+        ],
+        "grid": [
+          41,
+          23
+        ],
+        "fixed_tokens": 819,
+        "generated_tokens": 124,
+        "latent_offset_yx": [
+          0,
+          0
+        ],
+        "source_offset_in_aligned_yx": [
+          8,
+          13
+        ],
+        "latent_frames": 37
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1312,
+        "height": 736,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G1_odd\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sdpa",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+          "pad_left": 13,
+          "pad_right": 19,
+          "pad_top": 8,
+          "pad_bottom": 8,
+          "audio_strength": 0.5,
+          "feather_px": 21
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1312,
+          736
+        ],
+        "pads": {
+          "left": 13,
+          "right": 19,
+          "top": 8,
+          "bottom": 8
+        },
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          0,
+          0,
+          1312,
+          736
+        ],
+        "fixed_tokens": 819,
+        "generated_tokens": 124,
+        "feather_px": 21,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 6330,
+      "peak_vram_reserved_mb": 7526,
+      "seconds": 333.32,
+      "rss_peak_gib": 30.05,
+      "commit_peak_gib": 46.56,
+      "metrics": {
+        "keep_psnr_vs_control_db": 30.8014,
+        "keep_core_psnr_vs_control_db": 37.0879,
+        "keep_psnr_vs_cut_db": 30.8026,
+        "keep_core_psnr_vs_cut_db": 37.0276,
+        "core_pixels": 839364,
+        "boundary_gradient_ratio": {
+          "left": 0.9973,
+          "right": 0.9493,
+          "top": 1.1157,
+          "bottom": 1.1168,
+          "vertical_max": 0.9973,
+          "horizontal_max": 1.1168
+        },
+        "pad_band_std": {
+          "left": 31.229,
+          "right": 57.218,
+          "top": 37.612,
+          "bottom": 39.21
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\G1_odd\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1312,
+            "height": 736,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 344.59,
+      "finished_at": "2026-11-10T13:55:51+09:00",
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sdpa",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      }
+    },
+    {
+      "label": "G2_r0",
+      "gate": "G2",
+      "pads": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 0,
+      "feather_px": 0,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "なじませ 0（硬い貼り付け）",
+      "started_at": "2026-11-10T13:55:51+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "aligned_size": [
+          1280,
+          768
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "latent_offset_yx": [
+          10,
+          20
+        ],
+        "source_offset_in_aligned_yx": [
+          24,
+          0
+        ],
+        "latent_frames": 37
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G2_r0\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sdpa",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+          "pad_left": 320,
+          "pad_right": 320,
+          "pad_top": 184,
+          "pad_bottom": 184,
+          "audio_strength": 0.5,
+          "feather_px": 0
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 320,
+          "right": 320,
+          "top": 184,
+          "bottom": 184
+        },
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "feather_px": 0,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8175,
+      "peak_vram_reserved_mb": 10522,
+      "seconds": 906.91,
+      "rss_peak_gib": 30.08,
+      "commit_peak_gib": 47.04,
+      "metrics": {
+        "keep_psnr_vs_control_db": 38.0911,
+        "keep_core_psnr_vs_control_db": 38.0911,
+        "keep_psnr_vs_cut_db": 38.0698,
+        "keep_core_psnr_vs_cut_db": 38.0698,
+        "core_pixels": 921600,
+        "boundary_gradient_ratio": {
+          "left": 1.7931,
+          "right": 1.2372,
+          "top": 9.8669,
+          "bottom": 9.6733,
+          "vertical_max": 1.7931,
+          "horizontal_max": 9.8669
+        },
+        "pad_band_std": {
+          "left": 26.165,
+          "right": 55.503,
+          "top": 48.237,
+          "bottom": 42.622
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\G2_r0\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 921.41,
+      "finished_at": "2026-11-10T14:11:12+09:00",
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sdpa",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      }
+    },
+    {
+      "label": "G2_r3",
+      "gate": "G2",
+      "pads": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 3,
+      "feather_px": 90,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "なじませ r=3",
+      "started_at": "2026-11-10T14:11:12+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "aligned_size": [
+          1280,
+          768
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "latent_offset_yx": [
+          10,
+          20
+        ],
+        "source_offset_in_aligned_yx": [
+          24,
+          0
+        ],
+        "latent_frames": 37
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G2_r3\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sdpa",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+          "pad_left": 320,
+          "pad_right": 320,
+          "pad_top": 184,
+          "pad_bottom": 184,
+          "audio_strength": 0.5,
+          "feather_px": 90
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 320,
+          "right": 320,
+          "top": 184,
+          "bottom": 184
+        },
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "feather_px": 90,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8175,
+      "peak_vram_reserved_mb": 10522,
+      "seconds": 912.04,
+      "rss_peak_gib": 30.12,
+      "commit_peak_gib": 47.04,
+      "metrics": {
+        "keep_psnr_vs_control_db": 31.1724,
+        "keep_core_psnr_vs_control_db": 37.7958,
+        "keep_psnr_vs_cut_db": 31.1245,
+        "keep_core_psnr_vs_cut_db": 37.8333,
+        "core_pixels": 594000,
+        "boundary_gradient_ratio": {
+          "left": 1.3108,
+          "right": 0.9299,
+          "top": 0.5742,
+          "bottom": 0.7261,
+          "vertical_max": 1.3108,
+          "horizontal_max": 0.7261
+        },
+        "pad_band_std": {
+          "left": 26.166,
+          "right": 55.503,
+          "top": 48.242,
+          "bottom": 42.614
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\G2_r3\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 924.92,
+      "finished_at": "2026-11-10T14:26:37+09:00",
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sdpa",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      }
+    },
+    {
+      "label": "G3_inject0999",
+      "gate": "G3",
+      "pads": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 1,
+      "feather_px": 30,
+      "audio_strength": 0.5,
+      "inject_clean": 0.999,
+      "purpose": "注入係数 0.999 の対照",
+      "started_at": "2026-11-10T14:26:37+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "aligned_size": [
+          1280,
+          768
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "latent_offset_yx": [
+          10,
+          20
+        ],
+        "source_offset_in_aligned_yx": [
+          24,
+          0
+        ],
+        "latent_frames": 37
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G3_inject0999\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sdpa",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+          "pad_left": 320,
+          "pad_right": 320,
+          "pad_top": 184,
+          "pad_bottom": 184,
+          "audio_strength": 0.5,
+          "feather_px": 30
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 320,
+          "right": 320,
+          "top": 184,
+          "bottom": 184
+        },
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "feather_px": 30,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 0.999
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8175,
+      "peak_vram_reserved_mb": 10522,
+      "seconds": 911.69,
+      "rss_peak_gib": 30.27,
+      "commit_peak_gib": 47.04,
+      "metrics": {
+        "keep_psnr_vs_control_db": 31.5038,
+        "keep_core_psnr_vs_control_db": 38.0804,
+        "keep_psnr_vs_cut_db": 31.4842,
+        "keep_core_psnr_vs_cut_db": 38.0791,
+        "core_pixels": 805200,
+        "boundary_gradient_ratio": {
+          "left": 1.3273,
+          "right": 0.9474,
+          "top": 0.6338,
+          "bottom": 0.6948,
+          "vertical_max": 1.3273,
+          "horizontal_max": 0.6948
+        },
+        "pad_band_std": {
+          "left": 26.512,
+          "right": 56.056,
+          "top": 48.826,
+          "bottom": 42.149
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\G3_inject0999\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 925.31,
+      "finished_at": "2026-11-10T14:42:03+09:00",
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sdpa",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      }
+    },
+    {
+      "label": "G4_s1",
+      "gate": "G4",
+      "pads": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 1,
+      "feather_px": 30,
+      "audio_strength": 1.0,
+      "inject_clean": 1.0,
+      "purpose": "音声 s=1.0（元の波形）",
+      "started_at": "2026-11-10T14:42:03+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "aligned_size": [
+          1280,
+          768
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "latent_offset_yx": [
+          10,
+          20
+        ],
+        "source_offset_in_aligned_yx": [
+          24,
+          0
+        ],
+        "latent_frames": 37
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G4_s1\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sdpa",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+          "pad_left": 320,
+          "pad_right": 320,
+          "pad_top": 184,
+          "pad_bottom": 184,
+          "audio_strength": 1.0,
+          "feather_px": 30
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 320,
+          "right": 320,
+          "top": 184,
+          "bottom": 184
+        },
+        "source": [
+          1280,
+          720
+        ],
+        "aligned": [
+          320,
+          160,
+          1600,
+          928
+        ],
+        "fixed_tokens": 880,
+        "generated_tokens": 1160,
+        "feather_px": 30,
+        "audio_strength": 1.0,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "original",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": "skipped",
+        "audio_samples": 165333,
+        "audio_samples_source": 165333,
+        "audio_samples_decoded": null,
+        "frames": 124
+      },
+      "peak_vram_mb": 8175,
+      "peak_vram_reserved_mb": 10522,
+      "seconds": 912.06,
+      "rss_peak_gib": 30.27,
+      "commit_peak_gib": 47.05,
+      "metrics": {
+        "keep_psnr_vs_control_db": 31.5155,
+        "keep_core_psnr_vs_control_db": 38.0759,
+        "keep_psnr_vs_cut_db": 31.4967,
+        "keep_core_psnr_vs_cut_db": 38.0771,
+        "core_pixels": 805200,
+        "boundary_gradient_ratio": {
+          "left": 1.3249,
+          "right": 0.9359,
+          "top": 0.6236,
+          "bottom": 0.7863,
+          "vertical_max": 1.3249,
+          "horizontal_max": 0.7863
+        },
+        "pad_band_std": {
+          "left": 27.126,
+          "right": 55.381,
+          "top": 48.435,
+          "bottom": 42.488
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\G4_s1\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 925.8,
+      "finished_at": "2026-11-10T14:57:28+09:00",
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sdpa",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      }
+    },
+    {
+      "label": "E2a_r1",
+      "gate": "E2",
+      "pads": {
+        "pad_left": 300,
+        "pad_right": 276,
+        "pad_top": 150,
+        "pad_bottom": 170
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 1,
+      "feather_px": 30,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "汎用の実験（素材 L_s0_1344x768_seed42.mp4）",
+      "source": [
+        1344,
+        768
+      ],
+      "material": "E2a_1344x768_124f.mp4",
+      "control": "E2a_1344x768_124f_control.mp4",
+      "frames": 124,
+      "started_at": "2026-11-10T16:38:42+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          128,
+          1664,
+          928
+        ],
+        "aligned_size": [
+          1376,
+          800
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 943,
+        "generated_tokens": 1097,
+        "latent_offset_yx": [
+          8,
+          18
+        ],
+        "source_offset_in_aligned_yx": [
+          22,
+          12
+        ],
+        "latent_frames": 37
+      },
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sage",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\E2a_r1\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sage",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2a_1344x768_124f.mp4",
+          "pad_left": 300,
+          "pad_right": 276,
+          "pad_top": 150,
+          "pad_bottom": 170,
+          "audio_strength": 0.5,
+          "feather_px": 30
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 300,
+          "right": 276,
+          "top": 150,
+          "bottom": 170
+        },
+        "source": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          128,
+          1664,
+          928
+        ],
+        "fixed_tokens": 943,
+        "generated_tokens": 1097,
+        "feather_px": 30,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8174,
+      "peak_vram_reserved_mb": 10518,
+      "seconds": 463.7,
+      "rss_peak_gib": 30.08,
+      "commit_peak_gib": 46.62,
+      "metrics": {
+        "keep_psnr_vs_control_db": 37.0683,
+        "keep_core_psnr_vs_control_db": 38.3035,
+        "keep_psnr_vs_cut_db": 36.9437,
+        "keep_core_psnr_vs_cut_db": 38.2036,
+        "core_pixels": 909072,
+        "boundary_gradient_ratio": {
+          "left": 1.056,
+          "right": 1.0339,
+          "top": 1.0048,
+          "bottom": 1.015,
+          "vertical_max": 1.056,
+          "horizontal_max": 1.015
+        },
+        "pad_band_std": {
+          "left": 48.353,
+          "right": 53.524,
+          "top": 70.302,
+          "bottom": 31.151
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\E2a_r1\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 478.77,
+      "finished_at": "2026-11-10T16:46:41+09:00"
+    },
+    {
+      "label": "E2a_r0",
+      "gate": "E2",
+      "pads": {
+        "pad_left": 300,
+        "pad_right": 276,
+        "pad_top": 150,
+        "pad_bottom": 170
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 0,
+      "feather_px": 0,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "汎用の実験（素材 L_s0_1344x768_seed42.mp4）",
+      "source": [
+        1344,
+        768
+      ],
+      "material": "E2a_1344x768_124f.mp4",
+      "control": "E2a_1344x768_124f_control.mp4",
+      "frames": 124,
+      "started_at": "2026-11-10T16:46:41+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          128,
+          1664,
+          928
+        ],
+        "aligned_size": [
+          1376,
+          800
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 943,
+        "generated_tokens": 1097,
+        "latent_offset_yx": [
+          8,
+          18
+        ],
+        "source_offset_in_aligned_yx": [
+          22,
+          12
+        ],
+        "latent_frames": 37
+      },
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sage",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\E2a_r0\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sage",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2a_1344x768_124f.mp4",
+          "pad_left": 300,
+          "pad_right": 276,
+          "pad_top": 150,
+          "pad_bottom": 170,
+          "audio_strength": 0.5,
+          "feather_px": 0
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 300,
+          "right": 276,
+          "top": 150,
+          "bottom": 170
+        },
+        "source": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          128,
+          1664,
+          928
+        ],
+        "fixed_tokens": 943,
+        "generated_tokens": 1097,
+        "feather_px": 0,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8175,
+      "peak_vram_reserved_mb": 10522,
+      "seconds": 442.12,
+      "rss_peak_gib": 30.26,
+      "commit_peak_gib": 47.13,
+      "metrics": {
+        "keep_psnr_vs_control_db": 38.3698,
+        "keep_core_psnr_vs_control_db": 38.3698,
+        "keep_psnr_vs_cut_db": 38.2667,
+        "keep_core_psnr_vs_cut_db": 38.2667,
+        "core_pixels": 1032192,
+        "boundary_gradient_ratio": {
+          "left": 1.678,
+          "right": 1.4201,
+          "top": 1.9309,
+          "bottom": 2.5355,
+          "vertical_max": 1.678,
+          "horizontal_max": 2.5355
+        },
+        "pad_band_std": {
+          "left": 48.347,
+          "right": 53.526,
+          "top": 70.301,
+          "bottom": 31.148
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\E2a_r0\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 457.51,
+      "finished_at": "2026-11-10T16:54:19+09:00"
+    },
+    {
+      "label": "E2c_r1",
+      "gate": "E2",
+      "pads": {
+        "pad_left": 288,
+        "pad_right": 288,
+        "pad_top": 160,
+        "pad_bottom": 160
+      },
+      "canvas": [
+        1920,
+        1088
+      ],
+      "r": 1,
+      "feather_px": 30,
+      "audio_strength": 0.5,
+      "inject_clean": 1.0,
+      "purpose": "汎用の実験（素材 L_s0_1344x768_seed42.mp4）",
+      "source": [
+        1344,
+        768
+      ],
+      "material": "E2c_1344x768_124f.mp4",
+      "control": "E2c_1344x768_124f_control.mp4",
+      "frames": 124,
+      "started_at": "2026-11-10T16:54:25+09:00",
+      "status": "done",
+      "geometry": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "source": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          160,
+          1632,
+          928
+        ],
+        "aligned_size": [
+          1344,
+          768
+        ],
+        "grid": [
+          60,
+          34
+        ],
+        "fixed_tokens": 1008,
+        "generated_tokens": 1032,
+        "latent_offset_yx": [
+          10,
+          18
+        ],
+        "source_offset_in_aligned_yx": [
+          0,
+          0
+        ],
+        "latent_frames": 37
+      },
+      "conditions": {
+        "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "lora_file": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "lora_strength": 0.8,
+        "steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "seed": 1234,
+        "attention": "sage",
+        "vram16_mode": true,
+        "blocks_on_gpu": 8,
+        "block_swap_prefetch": true,
+        "deterministic": false,
+        "keep_resident": true,
+        "num_frames": 124,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "negative_prompt": ""
+      },
+      "request": {
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "seed": 1234,
+        "width": 1920,
+        "height": 1088,
+        "num_frames": 124,
+        "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\E2c_r1\\output.mp4",
+        "frame_rate": 24,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "images": [],
+        "keep_resident": true,
+        "attention_backend": "sage",
+        "block_swap_prefetch": true,
+        "vram16_mode": true,
+        "loras": [
+          {
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8
+          }
+        ],
+        "source_audio": null,
+        "references": [],
+        "negative_prompt": "",
+        "vsf_scale": 1.5,
+        "outpaint": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2c_1344x768_124f.mp4",
+          "pad_left": 288,
+          "pad_right": 288,
+          "pad_top": 160,
+          "pad_bottom": 160,
+          "audio_strength": 0.5,
+          "feather_px": 30
+        }
+      },
+      "outpaint_record": {
+        "canvas": [
+          1920,
+          1088
+        ],
+        "pads": {
+          "left": 288,
+          "right": 288,
+          "top": 160,
+          "bottom": 160
+        },
+        "source": [
+          1344,
+          768
+        ],
+        "aligned": [
+          288,
+          160,
+          1632,
+          928
+        ],
+        "fixed_tokens": 1008,
+        "generated_tokens": 1032,
+        "feather_px": 30,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 206,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      },
+      "loras_record": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 0.8,
+          "layout": "ab",
+          "dtype": "BF16",
+          "pairs_applied": 208,
+          "skipped": []
+        }
+      ],
+      "decode_record": {
+        "audio_vae_source": null,
+        "audio_samples": 165333,
+        "audio_samples_source": null,
+        "audio_samples_decoded": 165600,
+        "frames": 124
+      },
+      "peak_vram_mb": 8174,
+      "peak_vram_reserved_mb": 10518,
+      "seconds": 455.73,
+      "rss_peak_gib": 30.04,
+      "commit_peak_gib": 46.62,
+      "metrics": {
+        "keep_psnr_vs_control_db": 38.7935,
+        "keep_core_psnr_vs_control_db": 39.5825,
+        "keep_psnr_vs_cut_db": 38.3157,
+        "keep_core_psnr_vs_cut_db": 39.0395,
+        "core_pixels": 909072,
+        "boundary_gradient_ratio": {
+          "left": 1.1371,
+          "right": 1.1303,
+          "top": 1.2522,
+          "bottom": 1.2502,
+          "vertical_max": 1.1371,
+          "horizontal_max": 1.2522
+        },
+        "pad_band_std": {
+          "left": 47.744,
+          "right": 53.51,
+          "top": 70.323,
+          "bottom": 31.265
+        },
+        "output_probe": {
+          "path": "outputs\\h3-outpaint-gates-2026-11-10\\E2c_r1\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1920,
+            "height": 1088,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        }
+      },
+      "wall_seconds": 470.65,
+      "finished_at": "2026-11-10T17:02:15+09:00"
+    }
+  ],
+  "e2:E2c": {
+    "params": {
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "frames": 124,
+      "start_sec": 0.0,
+      "scale": null,
+      "size": [
+        1344,
+        768
+      ]
+    },
+    "material": "E2c_1344x768_124f.mp4",
+    "control": "E2c_1344x768_124f_control.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.167000"
+      }
+    },
+    "source_fps": 24.0,
+    "resampled": false,
+    "start_frame": 0,
+    "end_frame": 123,
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,123)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=5.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2c_1344x768_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2c_1344x768_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.166656"
+      }
+    },
+    "read_outpaint_source": {
+      "source_size": [
+        1344,
+        768
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "control_psnr_vs_cut_db": 39.4086
+  },
+  "material": {
+    "source": "outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "30.000000",
+        "nb_read_frames": 720
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "29.976871"
+      }
+    },
+    "cut": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-retake-gates-2026-11-08\\_material\\H3-Ref-1080p-30s.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,48\\,171)',setpts=PTS-STARTPTS,scale=1280:720:flags=lanczos[v];[0:a]atrim=start=2.0:end=7.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "start_frame": 48,
+    "end_frame": 171,
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "read_outpaint_source_s1": {
+      "source_size": [
+        1280,
+        720
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "wave_shape_s1": [
+      2,
+      165333
+    ]
+  },
+  "control": {
+    "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\control_write_mp4_1280x720_124f.mp4",
+    "psnr_vs_cut_db": 38.1516,
+    "note": "切り出しの画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"
+  },
+  "material_trim2": {
+    "source": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+    "cut": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x716_124f_trim2.mp4",
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "-map",
+      "0:v:0",
+      "-map",
+      "0:a:0",
+      "-vf",
+      "crop=1280:716:0:2",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "-c:a",
+      "copy",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x716_124f_trim2.mp4"
+    ],
+    "audio_codec": "copy",
+    "crop": "crop=1280:716:0:2",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x716_124f_trim2.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 716,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "read_outpaint_source_s05": {
+      "source_size": [
+        1280,
+        716
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    }
+  },
+  "control_trim2": {
+    "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\control_write_mp4_1280x716_124f_trim2.mp4",
+    "psnr_vs_cut_db": 38.3157,
+    "note": "trim2 の画素を engine_h3.media_out.write_mp4 で書き直したもの（音声なし）"
+  },
+  "e2:E2": {
+    "params": {
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "frames": 124,
+      "start_sec": 0.0,
+      "scale": null,
+      "size": [
+        1280,
+        720
+      ]
+    },
+    "material": "E2_1280x720_124f.mp4",
+    "control": "E2_1280x720_124f_control.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "source_fps": 24.0,
+    "resampled": false,
+    "start_frame": 0,
+    "end_frame": 123,
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\src_1280x720_124f.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,123)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=5.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2_1280x720_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2_1280x720_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 720,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.166667"
+      }
+    },
+    "read_outpaint_source": {
+      "source_size": [
+        1280,
+        720
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "control_psnr_vs_cut_db": 38.2377
+  },
+  "e2:E2a": {
+    "params": {
+      "source": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "frames": 124,
+      "start_sec": 0.0,
+      "scale": null,
+      "size": [
+        1344,
+        768
+      ]
+    },
+    "material": "E2a_1344x768_124f.mp4",
+    "control": "E2a_1344x768_124f_control.mp4",
+    "source_probe": {
+      "path": "outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.167000"
+      }
+    },
+    "source_fps": 24.0,
+    "resampled": false,
+    "start_frame": 0,
+    "end_frame": 123,
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-vsf-calib-2026-11-09\\hf-round12\\L_s0_1344x768_seed42.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,123)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=5.166666666666667,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2a_1344x768_124f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "probe": {
+      "path": "outputs\\h3-outpaint-gates-2026-11-10\\_material\\E2a_1344x768_124f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1344,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.166656"
+      }
+    },
+    "read_outpaint_source": {
+      "source_size": [
+        1344,
+        768
+      ],
+      "frames_read": 124,
+      "source_had_audio": true,
+      "required_samples": 165333,
+      "read_samples": 165333
+    },
+    "control_psnr_vs_cut_db": 39.4086
+  },
+  "g0": {
+    "label": "G0",
+    "started_at": "2026-11-10T13:23:24+09:00",
+    "status": "done",
+    "geometry": {
+      "canvas": [
+        1920,
+        1088
+      ],
+      "source": [
+        1280,
+        720
+      ],
+      "aligned": [
+        320,
+        160,
+        1600,
+        928
+      ],
+      "aligned_size": [
+        1280,
+        768
+      ],
+      "grid": [
+        60,
+        34
+      ],
+      "fixed_tokens": 880,
+      "generated_tokens": 1160,
+      "latent_offset_yx": [
+        10,
+        20
+      ],
+      "source_offset_in_aligned_yx": [
+        24,
+        0
+      ],
+      "latent_frames": 37
+    },
+    "fixed_tokens_in_box": {
+      "fixed": 880,
+      "fixed_edge": 120,
+      "fixed_inner": 760
+    },
+    "encode_seconds": 488.75,
+    "encode_peak_vram_mb": 4590.7,
+    "latent_shapes": {
+      "single": [
+        1,
+        24,
+        37,
+        48,
+        80
+      ],
+      "canvas_imagenet": [
+        1,
+        24,
+        37,
+        48,
+        80
+      ],
+      "canvas_gray128": [
+        1,
+        24,
+        37,
+        48,
+        80
+      ],
+      "control_source": [
+        1,
+        24,
+        37,
+        45,
+        80
+      ]
+    },
+    "latent_rel_l2": {
+      "single_vs_canvas_imagenet": {
+        "fixed": 0.287454,
+        "fixed_edge": 0.506312,
+        "fixed_inner": 0.231654,
+        "whole_box": 0.409629
+      },
+      "single_vs_canvas_gray128": {
+        "fixed": 0.267458,
+        "fixed_edge": 0.45889,
+        "fixed_inner": 0.219881,
+        "whole_box": 0.374318
+      }
+    },
+    "decode_seconds": 152.3,
+    "decode_peak_vram_mb": 6343.7,
+    "psnr_vs_cut": {
+      "single": {
+        "keep_db": 32.6656,
+        "edge32_db": 32.4381,
+        "interior_db": 32.702,
+        "edge_minus_interior_db": -0.2639,
+        "decoded_shape": [
+          124,
+          768,
+          1280,
+          3
+        ]
+      },
+      "canvas_imagenet": {
+        "keep_db": 31.1328,
+        "edge32_db": 28.336,
+        "interior_db": 31.7899,
+        "edge_minus_interior_db": -3.4539,
+        "decoded_shape": [
+          124,
+          768,
+          1280,
+          3
+        ]
+      },
+      "canvas_gray128": {
+        "keep_db": 31.2885,
+        "edge32_db": 28.815,
+        "interior_db": 31.8398,
+        "edge_minus_interior_db": -3.0247,
+        "decoded_shape": [
+          124,
+          768,
+          1280,
+          3
+        ]
+      },
+      "control_source": {
+        "keep_db": 32.7394,
+        "edge32_db": 32.5958,
+        "interior_db": 32.7621,
+        "edge_minus_interior_db": -0.1663,
+        "decoded_shape": [
+          124,
+          720,
+          1280,
+          3
+        ]
+      }
+    },
+    "notes": {
+      "single": "外接矩形 [x0,y0)-[x1,y1) を aligned_frames（鏡写し）で組んで単独符号化（製品の経路）",
+      "canvas_*": "1920x1088 の余白を灰色で埋めてキャンバスごと符号化し、外接矩形の潜在を切り出した",
+      "control_source": "元の 1280x720 を単独で符号化→復号（VAE の往復の下限）",
+      "edge32": "保持矩形の 4 辺から内側 32 画素の帯。interior はその内側",
+      "latent_rel_l2": "single を基準にした相対 L2（全チャンネル・全潜在フレーム）。fixed_edge は生成トークンに8 近傍で接する固定トークン、fixed_inner はその内側"
+    },
+    "finished_at": "2026-11-10T13:34:06+09:00"
+  },
+  "previous_invocations": [
+    {
+      "started_at": "2026-11-10T13:34:30+09:00",
+      "finished_at": "2026-11-10T14:57:29+09:00",
+      "gates": [
+        "G1",
+        "G2",
+        "G3",
+        "G4"
+      ],
+      "exit_code": 0,
+      "args": {
+        "gate": "G1,G2,G3,G4",
+        "prepare": false,
+        "dry_run": false,
+        "seed": 1234,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "steps": 4,
+        "attention": "sdpa",
+        "no_lora": false,
+        "vram16_off": false,
+        "out_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10"
+      },
+      "load": {
+        "started_at": "2026-11-10T13:34:30+09:00",
+        "build_report": {
+          "dit": {
+            "prefix": "",
+            "num_layers": 50,
+            "hidden_size": 5376,
+            "heads": 56,
+            "adaln_grid": 1025,
+            "adaln_rank": 8,
+            "int8_layers": 200,
+            "quant_specs": [
+              "int8_tensorwise/convrot=True/g256"
+            ],
+            "unknown": []
+          },
+          "text_encoder": {
+            "num_layers": 50,
+            "int8_layers": 350,
+            "has_visual": true,
+            "metadata": {
+              "minimax_h3_te": {
+                "num_hidden_layers": 50,
+                "output": "unnormalized_hidden_after_layer_50"
+              }
+            }
+          },
+          "video_vae_tensors": 562,
+          "audio_vae_tensors": 917,
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sdpa",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          },
+          "quant_backends": {
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true
+            },
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false
+            }
+          },
+          "device": "cuda"
+        },
+        "seconds": 1.26
+      }
+    },
+    {
+      "started_at": "2026-11-10T16:38:40+09:00",
+      "finished_at": "2026-11-10T16:54:19+09:00",
+      "gates": [
+        "E2"
+      ],
+      "exit_code": 0,
+      "args": {
+        "gate": "E2",
+        "prepare": false,
+        "dry_run": false,
+        "seed": 1234,
+        "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+        "steps": 4,
+        "attention": null,
+        "no_lora": false,
+        "vram16_off": false,
+        "out_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10",
+        "material": "outputs/h3-vsf-calib-2026-11-09/hf-round12/L_s0_1344x768_seed42.mp4",
+        "pads": "300,276,150,170",
+        "canvas": null,
+        "feathers": "1,0",
+        "label": "E2a",
+        "frames": 124,
+        "start_sec": 0.0,
+        "scale": null,
+        "audio_strength": 0.5
+      },
+      "load": {
+        "started_at": "2026-11-10T16:38:40+09:00",
+        "build_report": {
+          "dit": {
+            "prefix": "",
+            "num_layers": 50,
+            "hidden_size": 5376,
+            "heads": 56,
+            "adaln_grid": 1025,
+            "adaln_rank": 8,
+            "int8_layers": 200,
+            "quant_specs": [
+              "int8_tensorwise/convrot=True/g256"
+            ],
+            "unknown": []
+          },
+          "text_encoder": {
+            "num_layers": 50,
+            "int8_layers": 350,
+            "has_visual": true,
+            "metadata": {
+              "minimax_h3_te": {
+                "num_hidden_layers": 50,
+                "output": "unnormalized_hidden_after_layer_50"
+              }
+            }
+          },
+          "video_vae_tensors": 562,
+          "audio_vae_tensors": 917,
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          },
+          "quant_backends": {
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true
+            }
+          },
+          "device": "cuda"
+        },
+        "seconds": 2.02
+      }
+    }
+  ],
+  "load": {
+    "started_at": "2026-11-10T16:54:23+09:00",
+    "build_report": {
+      "dit": {
+        "prefix": "",
+        "num_layers": 50,
+        "hidden_size": 5376,
+        "heads": 56,
+        "adaln_grid": 1025,
+        "adaln_rank": 8,
+        "int8_layers": 200,
+        "quant_specs": [
+          "int8_tensorwise/convrot=True/g256"
+        ],
+        "unknown": []
+      },
+      "text_encoder": {
+        "num_layers": 50,
+        "int8_layers": 350,
+        "has_visual": true,
+        "metadata": {
+          "minimax_h3_te": {
+            "num_hidden_layers": 50,
+            "output": "unnormalized_hidden_after_layer_50"
+          }
+        }
+      },
+      "video_vae_tensors": 562,
+      "audio_vae_tensors": 917,
+      "options": {
+        "blocks_on_gpu": 8,
+        "attention_backend": "sage",
+        "block_swap_prefetch": true,
+        "deterministic": false
+      },
+      "quant_backends": {
+        "triton": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "cuda": {
+          "available": true,
+          "disabled": false,
+          "int8_linear": true
+        },
+        "hip": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        },
+        "eager": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "ascend": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        }
+      },
+      "device": "cuda"
+    },
+    "seconds": 1.37
+  },
+  "finished_at": "2026-11-10T17:02:16+09:00",
+  "exit_code": 0
+}

@@ -314,8 +314,14 @@ class EngineComfortProfile(BaseModel):
     VERIFICATION_LOG §98.11 / Docs/COMFORT_LIMIT_TABLE.md §9.2),
     so when a new family is added, LEAVE THIS ``None`` until that family
     has been calibrated and has received its own ruling ("do not copy the
-    precedent" is part of J1). ``None`` means "no line": the client draws
-    no outpaint comfort warning at all. Advisory-only — the server never
+    precedent" is part of J1). ``None`` means "no outpaint line": on a
+    token-line family the client then draws no outpaint comfort warning at
+    all. A rows-line family (``single_rows_budget`` set; MiniMax H3) also
+    keeps this ``None``: its Outpainting is a single generation at the canvas
+    size, so the client marks it against ``single_rows_budget`` with the
+    canvas's total rows instead (台帳 §1-125; the line itself is unchanged and
+    is checked for Outpainting at the GPU gate before the panel ships).
+    Advisory-only — the server never
     validates a request against it (unlike ``rows``, which the server also
     reads for Alpha Gen's light-mode shrink; see
     ``LimitsConfig.comfort_budgets``). Single source of truth for the

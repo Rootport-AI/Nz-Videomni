@@ -1,0 +1,471 @@
+{
+  "gate": "G5",
+  "label": "G5_362f",
+  "purpose": "快適上限の点（1920x1088・362 枚・4 ステップ・Turbo なし・sage）",
+  "frames": 362,
+  "source_size": [
+    1280,
+    720
+  ],
+  "canvas": [
+    1920,
+    1088
+  ],
+  "pads": {
+    "left": 320,
+    "right": 320,
+    "top": 184,
+    "bottom": 184
+  },
+  "material": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\_material\\G5_src_1280x720_362f.mp4",
+  "predicted_rows": {
+    "video": 218280,
+    "cond": 0,
+    "audio": 1206,
+    "text": 30,
+    "total": 219516,
+    "vs_single_rows_budget": 0
+  },
+  "started_at": "2026-11-10T18:00:55+09:00",
+  "status": "completed",
+  "error": null,
+  "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_362f",
+  "upload": {
+    "video_id": "962983e1-254f-4215-98a0-78b0110c66d6",
+    "original_filename": "G5_src_1280x720_362f.mp4",
+    "stored_path": "uploads/videos/962983e1-254f-4215-98a0-78b0110c66d6/input.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 20980151,
+    "trimmed": false,
+    "frame_count": 362,
+    "fps": 24.0
+  },
+  "tool_args": {
+    "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+    "width": 1920,
+    "height": 1088,
+    "num_frames": 362,
+    "frame_rate": 24.0,
+    "seed": 12345,
+    "attention_backend": "sage",
+    "num_inference_steps": 4,
+    "outpaint_pad_left": 320,
+    "outpaint_pad_right": 320,
+    "outpaint_pad_top": 184,
+    "outpaint_pad_bottom": 184,
+    "outpaint_audio_strength": 0.5,
+    "reference_video_id": "962983e1-254f-4215-98a0-78b0110c66d6"
+  },
+  "job_id": "5a2462c6-c562-44fd-9bc1-40e0a13bf0a5",
+  "wait": {
+    "calls": 29,
+    "seconds": 1855.7,
+    "samples": [
+      {
+        "t": 45.0,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+      },
+      {
+        "t": 95.1,
+        "status": "running",
+        "progress": 0.06,
+        "stage": "encode",
+        "current_step": null
+      },
+      {
+        "t": 120.1,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 150.1,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 180.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 275.2,
+        "status": "running",
+        "progress": 0.06,
+        "stage": "stage1_denoise",
+        "current_step": 0
+      },
+      {
+        "t": 290.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 305.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 375.2,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 425.3,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 490.3,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 630.4,
+        "status": "running",
+        "progress": 0.27,
+        "stage": "stage1_denoise",
+        "current_step": 1
+      },
+      {
+        "t": 680.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 725.4,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+      },
+      {
+        "t": 960.5,
+        "status": "running",
+        "progress": 0.48,
+        "stage": "stage1_denoise",
+        "current_step": 2
+      },
+      {
+        "t": 1040.5,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1070.5,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1085.5,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1215.6,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1255.6,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1305.7,
+        "status": "running",
+        "progress": 0.69,
+        "stage": "stage1_denoise",
+        "current_step": 3
+      },
+      {
+        "t": 1370.7,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+      },
+      {
+        "t": 1570.7,
+        "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+      },
+      {
+        "t": 1665.7,
+        "status": "running",
+        "progress": 0.9,
+        "stage": "decode",
+        "current_step": null
+      },
+      {
+        "t": 1855.7,
+        "status": "completed",
+        "progress": 1.0,
+        "stage": null,
+        "current_step": null
+      }
+    ]
+  },
+  "job_final": {
+    "job_id": "5a2462c6-c562-44fd-9bc1-40e0a13bf0a5",
+    "status": "completed",
+    "progress": 1.0,
+    "current_step": null,
+    "total_steps": null,
+    "stage": null,
+    "clip": null,
+    "clip_count": null,
+    "is_v2v": false,
+    "joined": false,
+    "matte": false,
+    "alpha": null,
+    "created_at": "2026-11-10T09:01:14Z",
+    "started_at": "2026-11-10T09:01:14Z",
+    "completed_at": "2026-11-10T09:32:08Z",
+    "error": null,
+    "request": {
+      "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩いてくる。彼女はこちらに片手を伸ばして微笑む。",
+      "negative_prompt": "",
+      "nag_enabled": false,
+      "nag_scale": 11.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "neg_method": "nag",
+      "vsf_scale": 1.5,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "fused_gguf_dequant_kernel": true,
+      "vae_mode": "default",
+      "embed_mp4_metadata": true,
+      "vram16_mode": true,
+      "width": 1920,
+      "height": 1088,
+      "crop_output": null,
+      "num_frames": 362,
+      "frame_rate": 24.0,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "guidance_scale": 1.0,
+      "seed": 12345,
+      "pipeline": "distilled",
+      "conditioning_images": [],
+      "loras": [],
+      "reference_video_id": null,
+      "conditioning_attention_strength": null,
+      "reference_video_strength": null,
+      "outpaint": {
+        "pad_left": 320,
+        "pad_right": 320,
+        "pad_top": 184,
+        "pad_bottom": 184,
+        "blend_dilation_stage1": 1,
+        "blend_dilation_stage2": 2,
+        "freeze_source_audio": true,
+        "source_video_id": "962983e1-254f-4215-98a0-78b0110c66d6",
+        "audio_strength": 0.5
+      },
+      "inpaint": null,
+      "alpha_gen": null,
+      "source_audio": null,
+      "references": []
+    },
+    "result": {
+      "video_url": "/api/v1/jobs/5a2462c6-c562-44fd-9bc1-40e0a13bf0a5/video",
+      "duration_seconds": 15.083,
+      "resolution": "1920x1088",
+      "file_size_bytes": 15705865,
+      "generation_time_seconds": 1854.13,
+      "seed_used": 12345,
+      "output_path": "outputs/5a2462c6-c562-44fd-9bc1-40e0a13bf0a5/output.mp4",
+      "metadata_path": "outputs/5a2462c6-c562-44fd-9bc1-40e0a13bf0a5/metadata.json"
+    },
+    "timed_out": false,
+    "waited_sec": 44.98499999998603
+  },
+  "seconds_wall": 1858.0,
+  "spans": {
+    "encode": {
+      "label": "text encode",
+      "found": true,
+      "start": 1794301282.175,
+      "end": 1794301515.146,
+      "start_iso": "2026-11-10T18:01:22.175",
+      "end_iso": "2026-11-10T18:05:15.146",
+      "last_done": 5,
+      "total": 4,
+      "log_elapsed_s": 233.0
+    },
+    "denoise": {
+      "label": "stage-1 denoise",
+      "found": true,
+      "start": 1794301527.624,
+      "end": 1794302897.421,
+      "start_iso": "2026-11-10T18:05:27.624",
+      "end_iso": "2026-11-10T18:28:17.421",
+      "last_done": 4,
+      "total": 4,
+      "log_elapsed_s": 1369.8
+    },
+    "decode": {
+      "label": "VAE decode",
+      "found": true,
+      "start": 1794302897.635,
+      "end": 1794303128.492,
+      "start_iso": "2026-11-10T18:28:17.635",
+      "end_iso": "2026-11-10T18:32:08.492",
+      "last_done": 4,
+      "total": 3,
+      "log_elapsed_s": 230.9
+    }
+  },
+  "wddm": {
+    "luid": "luid_0x00000000_0x0000f2a0_phys_0",
+    "samples": 1868,
+    "csv": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_362f\\wddm.csv"
+  },
+  "windows": {
+    "encode": {
+      "evaluated": true,
+      "seconds": 232.97,
+      "wddm_samples": 232,
+      "enough_samples": true,
+      "shared_median_mb": 147.6,
+      "shared_peak_mb": 157.4,
+      "dedicated_median_mb": 6576.8,
+      "dedicated_peak_mb": 6589.7
+    },
+    "denoise": {
+      "evaluated": true,
+      "seconds": 1369.8,
+      "wddm_samples": 1367,
+      "enough_samples": true,
+      "shared_median_mb": 1155.6,
+      "shared_peak_mb": 1182.4,
+      "dedicated_median_mb": 14856.3,
+      "dedicated_peak_mb": 14861.4
+    },
+    "decode": {
+      "evaluated": true,
+      "seconds": 230.86,
+      "wddm_samples": 230,
+      "enough_samples": true,
+      "shared_median_mb": 1171.8,
+      "shared_peak_mb": 1189.1,
+      "dedicated_median_mb": 11526.1,
+      "dedicated_peak_mb": 11527.2
+    },
+    "idle_before_submit": {
+      "evaluated": true,
+      "seconds": 13.66,
+      "wddm_samples": 14,
+      "enough_samples": true,
+      "shared_median_mb": 140.8,
+      "shared_peak_mb": 142.2,
+      "dedicated_median_mb": 914.2,
+      "dedicated_peak_mb": 914.4
+    }
+  },
+  "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-outpaint-gates-2026-11-10\\G5_362f\\5a2462c6-c562-44fd-9bc1-40e0a13bf0a5.mp4",
+  "metadata_summary": {
+    "attention_used": "sage",
+    "vram16_mode_used": "on",
+    "keep_resident_used": "off",
+    "block_swap_prefetch_used": "on",
+    "generation_time_seconds": 1854.13,
+    "peak_vram_reserved_mb": 13932,
+    "seed_used": 12345,
+    "num_inference_steps": 4,
+    "loras": null,
+    "request_outpaint": {
+      "pad_left": 320,
+      "pad_right": 320,
+      "pad_top": 184,
+      "pad_bottom": 184,
+      "blend_dilation_stage1": 1,
+      "blend_dilation_stage2": 2,
+      "freeze_source_audio": true,
+      "source_video_id": "962983e1-254f-4215-98a0-78b0110c66d6",
+      "audio_strength": 0.5
+    }
+  },
+  "denoise": {
+    "peak_vram_mb": 13115,
+    "peak_vram_reserved_mb": 13932,
+    "seconds": 1382.3,
+    "block_swap_prefetch_used": "on",
+    "sequence": {
+      "text": 30,
+      "cond": 0,
+      "audio": 1206,
+      "video": 218280,
+      "total": 219516,
+      "latent_frames": 107,
+      "audio_latents": 603,
+      "grid": [
+        34,
+        60
+      ]
+    },
+    "sequence_total": 219516,
+    "vram16": {
+      "cap_mib": 14023,
+      "cap_fraction": 0.8563,
+      "num_alloc_retries": 12,
+      "num_ooms": 0,
+      "inactive_split_peak_mib": 4248,
+      "blocks_on_gpu": 4,
+      "row_chunk": 4096
+    },
+    "m_per_step": [
+      3,
+      4,
+      4,
+      4
+    ]
+  },
+  "outpaint_record": {
+    "canvas": [
+      1920,
+      1088
+    ],
+    "pads": {
+      "left": 320,
+      "right": 320,
+      "top": 184,
+      "bottom": 184
+    },
+    "source": [
+      1280,
+      720
+    ],
+    "aligned": [
+      320,
+      160,
+      1600,
+      928
+    ],
+    "fixed_tokens": 880,
+    "generated_tokens": 1160,
+    "feather_px": 30,
+    "audio_strength": 0.5,
+    "source_had_audio": true,
+    "audio_latents_encoded": 602,
+    "audio_output": "decoded",
+    "inject_clean": 1.0
+  },
+  "outpaint_keys_check": {
+    "present": true,
+    "count": 12,
+    "missing": [],
+    "extra": []
+  },
+  "judgement": {
+    "rule": "快適上限表 §17.2 規則 v3″",
+    "status": "completed",
+    "oom": false,
+    "oom_stage": null,
+    "prefetch_used": "on",
+    "prefetch_demoted": false,
+    "spill": {
+      "denoise": {
+        "shared_median_mb": 1155.6,
+        "wddm_samples": 1367,
+        "baseline_shared_median_mb": 1173.2,
+        "baseline_label": "G5_56f",
+        "delta_mb": -17.6,
+        "judged": false
+      },
+      "decode": {
+        "shared_median_mb": 1171.8,
+        "wddm_samples": 230,
+        "baseline_shared_median_mb": 1165.0,
+        "baseline_label": "G5_56f",
+        "delta_mb": 6.8,
+        "judged": false
+      }
+    },
+    "verdict": "快適"
+  },
+  "finished_at": "2026-11-10T18:32:10+09:00"
+}

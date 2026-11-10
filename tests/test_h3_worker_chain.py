@@ -37,7 +37,7 @@ GOLDEN_CHAIN_CLIP_KEYS = ["prompt_sha256", "seconds", "latents_sha256", "head_eq
 
 def test_chain_fields():
     assert worker._CHAIN_FIELDS == (
-        worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}
+        worker._GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "outpaint"}
     ) | {"clips", "source", "retake"}
     assert "nag" in worker._CHAIN_FIELDS   # the VSF negative prompt, read as the single job reads it (台帳 §1-127)
     assert worker._CHAIN_CLIP_FIELDS == frozenset({"prompt", "num_frames", "images", "references", "source_audio"})

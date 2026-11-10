@@ -255,6 +255,9 @@ export function EditScreen({
     engineFamily,
     acceleration,
     loraRefreshKey,
+    // §1-125: Retake と同じ 2 つ。`constraints.outpaint` の有無で H3 の形に切り替わる。
+    constraints,
+    loraAudioHidden,
   });
   // Wrapped rather than passed straight through: `onSubmitted` is an OPTIONAL
   // property and `exactOptionalPropertyTypes` forbids handing it an explicit
@@ -266,9 +269,12 @@ export function EditScreen({
   });
   const submitting = submitState.phase === "submitting";
 
+  // §1-125: 格子の 2 行はフォームが使っている格子（LTX 128・H3 32）を名指す。
+  const outpaintCanvasMultiple = outpaintForm.canvasMultiple;
   const outpaintReasonMessages = useMemo(
-    () => buildOutpaintReasonMessages(strings, { loraName: OUTPAINT_LORA_NAME }),
-    [strings],
+    () =>
+      buildOutpaintReasonMessages(strings, { loraName: OUTPAINT_LORA_NAME, canvasMultiple: outpaintCanvasMultiple }),
+    [strings, outpaintCanvasMultiple],
   );
   const t = strings.edit.outpainting;
 
@@ -635,12 +641,19 @@ export function EditScreen({
                 disabled={submitting || serverBusy || !outpaintForm.isValid}
                 onGenerate={() => submit(outpaintForm.buildRequest())}
               />
-              {submitState.phase === "error" && (
-                <div className="card card-error">
-                  <p className="error-code">{submitState.code}</p>
-                  <p>{submitState.message}</p>
-                </div>
-              )}
+              {/* §1-125: 素材に音声トラックが無い 422 だけは、赤いカードの代わりに直し方の
+                  黄色の注意を出す（Retake の `RETAKE_VIDEO_NO_AUDIO` と同じ型）。 */}
+              {submitState.phase === "error" &&
+                (submitState.code === "OUTPAINT_VIDEO_NO_AUDIO" ? (
+                  <p className="warning-banner warning-banner-mild" role="status">
+                    {t.noAudioStrengthWarning}
+                  </p>
+                ) : (
+                  <div className="card card-error">
+                    <p className="error-code">{submitState.code}</p>
+                    <p>{submitState.message}</p>
+                  </div>
+                ))}
               <GenerateReasonsNote reasons={outpaintForm.validityReasons} messages={outpaintReasonMessages} />
             </>
           )}

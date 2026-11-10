@@ -200,7 +200,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   source_video_id / source_audio_id / reference_video_id / end_source_* /
   clips[0].conditioning_images とはすべて排他です。
 
-■ 画角拡張（Outpainting）— submit_generate の outpaint_* の 6 引数
+■ 画角拡張（Outpainting）— submit_generate の outpaint_* の 7 引数
   手元の動画の外側を描き足して画角を広げる機能です。
   outpaint_pad_left / _right / _top / _bottom（px）のいずれかを0より大きく
   すると有効になり、4辺すべて0なら通常の生成のままです。
@@ -208,19 +208,34 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   内側から切り出されます。** 元動画の解像度と一致しなければならないのは
   「残す領域」（width - pad_left - pad_right × height - pad_top -
   pad_bottom）のほうで、サーバーが実測して照合します。
-  幾何条件は4つです: width/height は128の倍数・残す領域が元動画の解像度と
-  一致・残す領域は縦横とも256px以上・元動画のフレーム数が num_frames 以上。
-  reference_video_id（広げる対象の元動画）が必須で、conditioning_images と
-  crop_width/crop_height とは排他です。
-  **in-outpainting という制御系LoRAが必要で、submit_generate が自動で
-  loras へ追加します**（既に同名を入れていれば何もしません）。
-  **in-outpainting が導入されていない環境では404になる**ので、事前に
-  list_loras で存在を確認してください。
-  **upload_video の応答は解像度を返しません。** キャンバス（128の倍数）を
-  逆算するには、アップロード前にローカルで ffprobe 等により元動画の解像度を
-  確認してください。
-  outpaint_blend_dilation_stage1（なじみ幅の段数、既定5）は stage 2 が5:2の
-  比で自動追従するので、指定するのは stage 1 だけです。
+  元動画は、どちらの系統でも reference_video_id に渡します（必須）。
+  conditioning_images と crop_width/crop_height とは排他です。
+  **送り方は系統で違い、submit_generate が選択中のベースモデルに合わせて
+  自動で切り替えます**（list_models の有効なベースモデルの
+  constraints.outpaint があれば MiniMax H3 の形、無ければ LTX の形）。
+  - LTX 2.3 / LTX 2.5: 幾何条件は4つです: width/height は128の倍数・残す
+    領域が元動画の解像度と一致・残す領域は縦横とも256px以上・元動画の
+    フレーム数が num_frames 以上。
+    **in-outpainting という制御系LoRAが必要で、submit_generate が自動で
+    loras へ追加します**（既に同名を入れていれば何もしません）。
+    **in-outpainting が導入されていない環境では404になる**ので、事前に
+    list_loras で存在を確認してください。
+    outpaint_blend_dilation_stage1（なじみ幅の段数、既定5）は stage 2 が5:2の
+    比で自動追従するので、指定するのは stage 1 だけです。音声は
+    outpaint_freeze_source_audio で決めます（outpaint_audio_strength は422）。
+  - MiniMax H3: width/height は32の倍数・num_frames は 17n+5（22以上）・
+    24fps です（残す領域の一致・縦横256px以上・フレーム数の条件は同じ）。
+    元動画の縦横は偶数であること。**LoRA は不要で、何も注入しません。**
+    音声は outpaint_audio_strength（0〜1、省略で既定0.5、1.0 は元の波形）で
+    決めます。音声トラックの無い元動画では outpaint_audio_strength=0 を
+    明示します（省略すると 422 OUTPAINT_VIDEO_NO_AUDIO）。
+    **outpaint_freeze_source_audio は送らないでください**（H3 では422）。
+    outpaint_blend_dilation_stage1 は省略でサーバーの既定
+    （constraints.outpaint.blend_dilation_stage1.default）になり、stage 2 は
+    ありません。
+  **upload_video の応答は解像度を返しません。** キャンバス（LTX は128の倍数、
+  H3 は32の倍数）を逆算するには、アップロード前にローカルで ffprobe 等により
+  元動画の解像度を確認してください。
 
 ■ Alpha Gen（アルファマット生成）— submit_alpha_gen
   手元の動画から、同じ寸法・同じフレーム数の白黒のマット動画（白＝不透明・

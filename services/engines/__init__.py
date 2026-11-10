@@ -292,6 +292,13 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
     ``LoraSpec.audio_strength`` を ``None`` に書き戻す(422 にはしない。
     metadata.json にも無視した値が残らない)。
 
+    最後に、アダプタが ``validate_request`` を宣言していればそれを呼ぶ
+    (MiniMax H3 の Outpainting の規則と既定値の書き戻し。台帳 §1-125)。
+    アダプタは違反を ``ValueError`` で上げ、ここで同じ形の 422 にする
+    (:func:`validate_chain_for_family` と同じ形)。規約表の ``extra`` に
+    書き戻しを混ぜないのは、``extra`` が連結の 1 クリップの見え方
+    (``_ClipView``。``outpaint`` の属性が無い)でも呼ばれるため。
+
     宣言していない系統は素通り(:func:`reject_unsupported` と同じ規約)。
     """
     if "lora_audio_strength" in unsupported_features(family):
@@ -306,6 +313,13 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
         message = rules.normalize_keyframes(request.conditioning_images, request.num_frames)
     if message is not None:
         raise request_validation_failed(message)
+    check = getattr(_adapter(family), "validate_request", None)
+    if check is None:
+        return
+    try:
+        check(request)
+    except ValueError as exc:
+        raise request_validation_failed(str(exc)) from exc
 
 
 def reject_chain(family: str, request: GenerateChainRequest) -> None:

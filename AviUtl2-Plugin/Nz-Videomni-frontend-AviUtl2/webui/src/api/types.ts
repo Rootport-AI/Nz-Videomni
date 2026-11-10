@@ -115,8 +115,24 @@ export interface OutpaintSpec {
    */
   blend_dilation_stage1?: number;
   blend_dilation_stage2?: number;
-  /** 元動画の音声をそのまま残すか。既定 `true`（サーバー側の既定値と同じ）。 */
+  /** 元動画の音声をそのまま残すか。既定 `true`（サーバー側の既定値と同じ）。
+   * §1-125: `constraints.outpaint` を配信するエンジン（MiniMax H3）では送らない
+   * （明示すると 422。音声は {@link audio_strength} で指定する）。 */
   freeze_source_audio?: boolean;
+  /**
+   * §1-125: the source video's upload id (`POST /upload/video`) for an engine
+   * that publishes `constraints.outpaint` (MiniMax H3). Exactly one of the
+   * request's `reference_video_id` and this is sent: LTX keeps
+   * `reference_video_id`（緑のキャンバス）, H3 sends this instead and no
+   * control LoRA. LTX rejects this key with a 422.
+   */
+  source_video_id?: string;
+  /**
+   * §1-125: the source audio's Strength (`0..1`) for an engine that publishes
+   * `constraints.outpaint` (MiniMax H3) — the same meaning as Retake's
+   * `retake.audio_strength`. 省略時はサーバーが配信の既定を書き戻す。LTX では 422。
+   */
+  audio_strength?: number;
 }
 
 /**
@@ -1384,6 +1400,16 @@ export interface BaseModelConstraints {
    * slider instead of the audio radio, no Stage-2 window). Absent/`null` =
    * the LTX Retake (or a backend that predates the key). */
   retake?: { audio_strength: SamplingParamConstraint } | null;
+  /** §1-125: present only for an engine whose Outpainting fixes the source's
+   * tokens instead of the In-Outpainting IC-LoRA (MiniMax H3), with the
+   * source-audio Strength slider and the mask-blur (stage 1) slider's range,
+   * step and default. Its presence switches the Outpainting screen into that
+   * engine's shape. Absent/`null` = the LTX Outpainting (or a backend that
+   * predates the key). */
+  outpaint?: {
+    audio_strength: SamplingParamConstraint;
+    blend_dilation_stage1: SamplingParamConstraint;
+  } | null;
 }
 
 /** `BaseModelConstraints.reference`: the flat seven limits (supervisor ruling

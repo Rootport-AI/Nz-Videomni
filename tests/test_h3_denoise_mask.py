@@ -267,3 +267,72 @@ def test_video_inject_clean_refuses_bad_values(bad):
     clean, noise = _video(), _video(seed=7)
     with pytest.raises(ValueError, match="inject_clean"):
         DM.video_mask(clean, torch.tensor([0.0, 1.0, 1.0]), grid=6, noise=noise, inject_clean=bad)
+
+
+# --------------------------------------------------------------------------- #
+# per-token video values [T', H/32, W/32] (Outpainting, 台帳 §1-125)
+# --------------------------------------------------------------------------- #
+
+def _token_values(t=3, gh=2, gw=3):
+    values = torch.ones(t, gh, gw)
+    values[0, 0, 1] = 0.0
+    values[1, 1, 2] = 0.25
+    values[2] = torch.tensor([[0.0, 1.0, 0.5], [1.0, 0.0, 1.0]])
+    return values
+
+
+def test_video_token_mask_shape_and_rows_are_t_then_h_then_w():
+    from engine_h3.dit import patchify_video
+
+    clean, noise = _video(t=3, lh=4, lw=6), _video(seed=9)
+    values = _token_values()
+    mask = DM.video_mask(clean, values, grid=6, noise=noise)
+    assert mask.m.shape == (1, 1, 3, 4, 6) and mask.m.dtype == torch.float32
+    assert mask.rows.shape == (18,) and torch.equal(mask.rows, values.reshape(-1))
+    # Each token's value covers its 2 x 2 latent cells.
+    for t in range(3):
+        for i in range(2):
+            for j in range(3):
+                cell = mask.m[0, 0, t, 2 * i:2 * i + 2, 2 * j:2 * j + 2]
+                assert bool((cell == values[t, i, j]).all())
+    # patchify_video is the sequence's own order: m broadcast to the state, packed.
+    packed = patchify_video(mask.m.expand(1, 24, 3, 4, 6).contiguous())
+    assert torch.equal(packed[:, 0], mask.rows) and torch.equal(packed.amin(1), packed.amax(1))
+    assert torch.equal(mask.zero, mask.m == 0)
+    assert torch.equal(mask.inject, 0.999 * clean + (1.0 - 0.999) * noise)
+    assert torch.equal(mask.clean, clean)
+
+
+def test_video_token_mask_array_like_inject_one_and_all_ones():
+    clean, noise = _video(t=3, lh=4, lw=6), _video(seed=9)
+    values = _token_values()
+    from_list = DM.video_mask(clean, values.tolist(), grid=6, noise=noise, inject_clean=1.0)
+    from_tensor = DM.video_mask(clean, values, grid=6, noise=noise, inject_clean=1.0)
+    assert torch.equal(from_list.m, from_tensor.m) and torch.equal(from_list.rows, from_tensor.rows)
+    assert torch.equal(from_tensor.inject, clean)
+    assert DM.video_mask(clean, torch.ones(3, 2, 3), grid=6, noise=noise) is None
+
+
+def test_video_token_mask_finish_keeps_the_fixed_cells_exactly():
+    clean, noise = _video(t=3, lh=4, lw=6), _video(seed=9)
+    mask = DM.video_mask(clean, _token_values(), grid=6, noise=noise, inject_clean=1.0)
+    x = _video(t=3, lh=4, lw=6, seed=11)
+    out = DM.finish(x, mask)
+    zero = mask.zero.expand_as(clean)
+    assert torch.equal(out[zero], clean[zero]) and torch.equal(out[~zero], x[~zero])
+
+
+@pytest.mark.parametrize("shape, grid", [((3, 2, 2), 6), ((3, 1, 3), 6), ((2, 2, 3), 6), ((3, 2, 3), 5)])
+def test_video_token_mask_refuses_grid_mismatch(shape, grid):
+    clean, noise = _video(t=3, lh=4, lw=6), _video(seed=9)
+    with pytest.raises(ValueError):
+        DM.video_mask(clean, torch.zeros(shape), grid=grid, noise=noise)
+
+
+@pytest.mark.parametrize("bad", [-0.1, 1.1, float("nan")])
+def test_video_token_mask_refuses_bad_values(bad):
+    clean, noise = _video(t=3, lh=4, lw=6), _video(seed=9)
+    values = _token_values()
+    values[1, 0, 0] = bad
+    with pytest.raises(ValueError):
+        DM.video_mask(clean, values, grid=6, noise=noise)

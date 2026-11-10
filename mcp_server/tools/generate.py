@@ -32,9 +32,12 @@ VERIFICATION_LOG §52。公開はオーナー裁定で、``Docs/PRUNAVAED_WORKOR
 
 ネストオブジェクトを取る2機能も平たい引数で公開する: ``submit_chain`` の
 撮り直し（``retake_*`` 5引数 → ``retake`` ネスト）と、``submit_generate`` の
-画角拡張（``outpaint_*`` 6引数 → ``outpaint`` ネスト）。どちらも正本はAPI側
+画角拡張（``outpaint_*`` 7引数 → ``outpaint`` ネスト）。どちらも正本はAPI側
 （``RetakeSpec`` / ``OutpaintSpec``）で、MCPは引数をネストへ詰め替えて送る
 （``Docs/MCP_SERVER_DESIGN.md`` §2 の D19・D20、記録は VERIFICATION_LOG §86）。
+画角拡張の送り方は系統で違い、有効なベースモデルの ``constraints.outpaint`` の
+有無で切り替える（MiniMax H3 は ``outpaint.source_video_id``・LoRA 注入なし。
+同 D35）。
 
 ``vram16_mode``（MiniMax H3 の VRAM 16GB mode）は ``submit_generate`` に限り
 任意引数で公開する（既定 ``None`` は送らない＝ベースモデルの既定値。H3 では on。
@@ -57,6 +60,7 @@ LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Literal
 
@@ -76,6 +80,8 @@ from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
 _SUBMIT_TIMEOUT = 30.0
 _CHAIN_SUBMIT_TIMEOUT = 30.0
 _ALPHA_SUBMIT_TIMEOUT = 30.0
+
+logger = logging.getLogger(__name__)
 
 # 画角拡張（outpainting）の既定値。正本は
 # ``api/models.py`` の ``OutpaintSpec``（stage1=5 / stage2=2）と、操作パネル側の
@@ -109,6 +115,39 @@ def _outpaint_stage2_from_stage1(r: int) -> int:
     if r <= 0:
         return 0
     return max(1, round(r * 2 / 5))
+
+
+async def _active_base_model_has_outpaint_rules(client: Any) -> bool:
+    """有効なベースモデルが ``constraints.outpaint`` を配信しているか（D35）。
+
+    ``GET /models`` の ``base_models[]`` のうち ``active`` のものを見る。鍵が
+    あれば MiniMax H3 の Outpainting の形（``outpaint.source_video_id``）、
+    無ければ LTX の形（``reference_video_id``＋in-outpainting LoRA。D20）で送る。
+    系統名を直書きせず、操作パネルと同じく鍵の有無で分ける。
+
+    ``/models`` を読めない（エラー応答・接続不能・想定外の形）ときは LTX の形に
+    倒し、理由をログに1行残す。H3 ならサーバーが 422 で断るので、黙って別の
+    結果になることはない。
+    """
+    try:
+        listing = await client.get_json("/models")
+    except ToolError as exc:
+        logger.warning("submit_generate: GET /models を読めないため LTX の形で outpaint を送る: %s", exc)
+        return False
+    base_models = listing.get("base_models") if isinstance(listing, dict) else None
+    if not isinstance(base_models, list):
+        logger.warning(
+            "submit_generate: GET /models に base_models が無いため LTX の形で outpaint を送る"
+        )
+        return False
+    for base_model in base_models:
+        if isinstance(base_model, dict) and base_model.get("active") is True:
+            constraints = base_model.get("constraints")
+            return isinstance(constraints, dict) and constraints.get("outpaint") is not None
+    logger.warning(
+        "submit_generate: GET /models に有効なベースモデルが無いため LTX の形で outpaint を送る"
+    )
+    return False
 
 
 def _snap_frame_rate(value: float) -> float:
@@ -180,8 +219,9 @@ async def submit_generate(
     outpaint_pad_right: int = 0,
     outpaint_pad_top: int = 0,
     outpaint_pad_bottom: int = 0,
-    outpaint_blend_dilation_stage1: int = _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT,
-    outpaint_freeze_source_audio: bool = True,
+    outpaint_blend_dilation_stage1: int | None = None,
+    outpaint_freeze_source_audio: bool | None = None,
+    outpaint_audio_strength: float | None = None,
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
     num_inference_steps: int | None = None,
     shift_video: float | None = None,
@@ -296,31 +336,50 @@ async def submit_generate(
         × ``height - outpaint_pad_top - outpaint_pad_bottom`` のほうです
         （サーバーがffprobeで実測して照合し、食い違えば422で拒否します）。
         元動画がリサイズされることはありません。
-      * 満たすべき幾何条件は4つです。(1) ``width`` / ``height`` は**128の倍数**
-        （参照動画を使うため64ではなく128）。(2) 残す領域が元動画の解像度と
-        完全一致。(3) 残す領域は**縦横とも256px以上**（なじみ処理がキャンバス
-        長辺の約1/10まで内側に及ぶため）。(4) 元動画のフレーム数が
-        ``num_frames`` 以上。
-      * ``reference_video_id`` が**必須**です（画角を広げる対象の元動画。
-        ``upload_video`` で取得）。``conditioning_images`` と
+      * 元動画（``upload_video`` で取得したID）は、どちらの系統でも
+        ``reference_video_id`` に渡します（**必須**）。``conditioning_images`` と
         ``crop_width`` / ``crop_height`` とは排他です。
-      * **画角拡張には ``in-outpainting`` という制御系LoRAが必要で、このツールが
+      * **系統によって送り方が違い、このツールが選択中のベースモデルに合わせて
+        自動で切り替えます**（``list_models`` の有効なベースモデルの
+        ``constraints.outpaint`` があれば MiniMax H3 の形、無ければ LTX の形）。
+      * **LTX 2.3 / LTX 2.5**: 満たすべき幾何条件は4つです。(1) ``width`` /
+        ``height`` は**128の倍数**（参照動画を使うため64ではなく128）。(2) 残す
+        領域が元動画の解像度と完全一致。(3) 残す領域は**縦横とも256px以上**
+        （なじみ処理がキャンバス長辺の約1/10まで内側に及ぶため）。(4) 元動画の
+        フレーム数が ``num_frames`` 以上。
+        **画角拡張には ``in-outpainting`` という制御系LoRAが必要で、このツールが
         自動で ``loras`` へ追加します**（``{"name": "in-outpainting",
         "strength": 1.0}``。あなたが ``loras`` に同名のものを既に入れていれば
         何もしません）。**``in-outpainting`` が導入されていない環境ではLoRAの
         解決に失敗して404になります**——事前に ``list_loras`` で存在を確認して
-        ください。
+        ください。音声は ``outpaint_freeze_source_audio`` で決めます
+        （``outpaint_audio_strength`` は 422 になります）。
+      * **MiniMax H3**: ``width`` / ``height`` は**32の倍数**、``num_frames`` は
+        17n+5（22以上）、``frame_rate`` は24です（残す領域の一致・縦横256px以上・
+        フレーム数の条件は LTX と同じ。正本は ``list_models`` の
+        ``constraints``）。元動画の縦横は偶数であること（奇数は422）。
+        **LoRA は不要で、このツールは何も注入しません**（Turbo などの LoRA は
+        いつもどおり ``loras`` で指定できます）。ステップ数と shift は
+        ``num_inference_steps`` / ``shift_*`` で指定できます。音声は
+        ``outpaint_audio_strength``（0〜1、省略でサーバーの既定 0.5）で決めます。
+        **``outpaint_freeze_source_audio`` は送らないでください**（指定すると
+        送られ、H3 では 422 になります）。音声トラックの無い元動画では
+        ``outpaint_audio_strength=0`` を明示してください（省略すると既定の 0.5
+        になり、422 ``OUTPAINT_VIDEO_NO_AUDIO`` になります）。
       * **アップロード前に、ローカルで ffprobe 等により元動画の解像度と
-        フレーム数を確認し、キャンバス（128の倍数）を逆算してください。
-        ``upload_video`` の応答は解像度を返しません**（``max_frames`` を渡せば
-        フレーム数と ``fps`` だけは返ります）。
+        フレーム数を確認し、キャンバス（LTX は128の倍数、H3 は32の倍数）を逆算
+        してください。``upload_video`` の応答は解像度を返しません**
+        （``max_frames`` を渡せばフレーム数と ``fps`` だけは返ります）。
       * ``outpaint_blend_dilation_stage1`` は継ぎ目のなじみ幅（マスクぼかし）の
-        段数です。実寸のピクセル幅は ``段数 × キャンバス長辺 ÷ 64`` で、
-        1920px幅・既定5段なら約150pxになります。stage 2 の段数は公式ワーク
+        段数です。実寸のピクセル幅は ``段数 × キャンバス長辺 ÷ 64`` です。
+        LTX では1920px幅・既定5段なら約150pxで、stage 2 の段数は公式ワーク
         フローと同じ5:2の比で**自動追従**するので、指定するのはstage 1だけです。
-        既定（5）のままなら ``blend_dilation_stage1`` / ``_stage2`` の
-        両キーとも送りません（このフィールドを知らない古いサーバーでも通る
-        ようにするため）。
+        LTX では省略または5なら ``blend_dilation_stage1`` / ``_stage2`` の両キー
+        とも送りません（このフィールドを知らない古いサーバーでも通るように
+        するため）。H3 では指定したときだけ stage 1 を送り（省略はサーバーの
+        既定）、stage 2 は送りません（H3 には段が1つしかないため）。既定と範囲の
+        正本は ``list_models`` の ``constraints.outpaint.blend_dilation_stage1``
+        です。
 
     Args:
         prompt: 生成プロンプト（必須）。
@@ -454,17 +513,30 @@ async def submit_generate(
         outpaint_pad_bottom: 画角拡張で描き足す幅（px、0〜4096、既定0）。
             **4辺すべて0なら画角拡張は行いません**（``outpaint`` はサーバーへ
             送られません）。1つでも0より大きければ画角拡張になり、
-            ``reference_video_id`` が必須になります。上の「画角拡張」の節に
-            ある幾何条件4つを必ず満たしてください。
-        outpaint_blend_dilation_stage1: 継ぎ目のなじみ幅の段数（0〜15、既定5＝
-            公式ワークフローの値）。stage 2 の段数は5:2の比で自動追従します。
-            **既定のままなら送信しません。** 画角拡張をしない（4辺すべて0）のに
-            既定以外にすると、黙って無視される代わりにエラーになります。
-        outpaint_freeze_source_audio: 元動画の音声を両ステージで凍結するか
-            （既定True＝公式ワークフローと同じ。広がった画角に合わせて音声を
-            作り直させたい場合だけFalseにします）。**既定のままなら送信
-            しません。** 画角拡張をしない（4辺すべて0）のにFalseにすると、
-            黙って無視される代わりにエラーになります。
+            ``reference_video_id``（元動画）が必須になります。上の「画角拡張」の
+            節にある系統ごとの条件を必ず満たしてください。
+        outpaint_blend_dilation_stage1: 継ぎ目のなじみ幅の段数（0〜15）。
+            **省略（``None``）すると送らず、系統の既定になります**（LTX は5＝公式
+            ワークフローの値、H3 は ``list_models`` の
+            ``constraints.outpaint.blend_dilation_stage1.default``）。LTX では
+            stage 2 の段数が5:2の比で自動追従し、5を指定しても送りません。H3 では
+            指定した値をそのまま送り、stage 2 は送りません。画角拡張をしない
+            （4辺すべて0）のに指定すると、黙って無視される代わりにエラーに
+            なります。
+        outpaint_freeze_source_audio: **LTX 専用。** 元動画の音声を両ステージで
+            凍結するか（LTX の既定は True＝公式ワークフローと同じ。広がった画角に
+            合わせて音声を作り直させたい場合だけFalseにします）。省略
+            （``None``）すると送りません。LTX では ``True`` も送りません（既定と
+            同じため）。**H3 では指定すると送られ、422 になります**（H3 は
+            ``outpaint_audio_strength`` を使う）。画角拡張をしない（4辺すべて0）
+            のに指定すると、黙って無視される代わりにエラーになります。
+        outpaint_audio_strength: **MiniMax H3 専用。** 元動画の音声をどれだけ
+            残すか（0〜1。1.0 は元の波形を出力に付け、0 は音声を作り直す）。
+            **省略（``None``）すると送らず、サーバーの既定（0.5）になります。**
+            音声トラックの無い元動画では 0 を明示してください。LTX では指定すると
+            送られ、422 になります（LTX は ``outpaint_freeze_source_audio`` を
+            使う）。画角拡張をしない（4辺すべて0）のに指定すると、黙って無視
+            される代わりにエラーになります。
         embed_mp4_metadata: 完成した ``output.mp4``（と、結合した
             ``joined.mp4``）に、``metadata.json`` と同じ JSON をコンテナの
             ``comment`` タグとして書き込むか（**既定True**＝
@@ -508,12 +580,14 @@ async def submit_generate(
     # 同じカテゴリ）。幾何条件・排他はサーバーの422に任せ、ここでは二重に
     # 持たない。
     if total_outpaint_pad == 0 and (
-        outpaint_blend_dilation_stage1 != _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT
-        or not outpaint_freeze_source_audio
+        outpaint_blend_dilation_stage1 is not None
+        or outpaint_freeze_source_audio is not None
+        or outpaint_audio_strength is not None
     ):
         raise ToolError(
             "OUTPAINT_PADS_ALL_ZERO: outpaint_blend_dilation_stage1 / "
-            "outpaint_freeze_source_audio を指定するには、outpaint_pad_left / "
+            "outpaint_freeze_source_audio / outpaint_audio_strength を指定するには、"
+            "outpaint_pad_left / "
             "_right / _top / _bottom のいずれかを0より大きくしてください"
             "（4辺すべて0だと画角拡張そのものが行われず、指定が無視されます）"
         )
@@ -616,8 +690,12 @@ async def submit_generate(
     if reference_video_strength is not None:
         payload["reference_video_strength"] = reference_video_strength
 
+    client = get_client()
+
     # 画角拡張（outpainting）。ネストオブジェクトは end_source と同じく
-    # 「使うときだけ丸ごと足す」（4辺すべて0＝使わない）。
+    # 「使うときだけ丸ごと足す」（4辺すべて0＝使わない）。系統は名前ではなく
+    # 有効なベースモデルの ``constraints.outpaint`` の有無で見分ける
+    # （``Docs/MCP_SERVER_DESIGN.md`` §2 の D35。H3 だけが出す）。
     if total_outpaint_pad > 0:
         outpaint: dict[str, Any] = {
             "pad_left": outpaint_pad_left,
@@ -625,33 +703,59 @@ async def submit_generate(
             "pad_top": outpaint_pad_top,
             "pad_bottom": outpaint_pad_bottom,
         }
-        # 既定（5）のときは両キーごと省略する -- 操作パネル
-        # （webui/src/modes/edit/useOutpaintForm.ts）と同じ後方互換の規律。
-        # 非既定のときだけ、stage 2 を5:2で追従させて2キーとも送る。
-        if outpaint_blend_dilation_stage1 != _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT:
-            outpaint["blend_dilation_stage1"] = outpaint_blend_dilation_stage1
-            outpaint["blend_dilation_stage2"] = _outpaint_stage2_from_stage1(
-                outpaint_blend_dilation_stage1
-            )
-        if not outpaint_freeze_source_audio:
-            outpaint["freeze_source_audio"] = False
-        payload["outpaint"] = outpaint
+        if await _active_base_model_has_outpaint_rules(client):
+            # MiniMax H3（D35）: 元動画は ``outpaint.source_video_id`` で渡し、
+            # ``reference_video_id`` は送らない（H3 は参照動画の欄を断る）。
+            # in-outpainting LoRA は LTX の仕組みなので注入しない。stage 2 は
+            # H3 に段が無いので送らない。stage 1・音声の Strength・
+            # freeze_source_audio は指定されたときだけ送る（省略はサーバーが
+            # 系統の既定を書き戻す。freeze_source_audio は H3 では 422 が返る
+            # が、黙って落とさない）。
+            source_video_id = payload.pop("reference_video_id", None)
+            if source_video_id is not None:
+                outpaint["source_video_id"] = source_video_id
+            if outpaint_blend_dilation_stage1 is not None:
+                outpaint["blend_dilation_stage1"] = outpaint_blend_dilation_stage1
+            if outpaint_audio_strength is not None:
+                outpaint["audio_strength"] = outpaint_audio_strength
+            if outpaint_freeze_source_audio is not None:
+                outpaint["freeze_source_audio"] = outpaint_freeze_source_audio
+            payload["outpaint"] = outpaint
+        else:
+            # LTX（D20）。本文は D35 の前とバイト単位で同じ。
+            # 既定（5）または省略のときは両キーごと省略する -- 操作パネル
+            # （webui/src/modes/edit/useOutpaintForm.ts）と同じ後方互換の規律。
+            # 非既定のときだけ、stage 2 を5:2で追従させて2キーとも送る。
+            if (
+                outpaint_blend_dilation_stage1 is not None
+                and outpaint_blend_dilation_stage1 != _OUTPAINT_BLEND_DILATION_STAGE1_DEFAULT
+            ):
+                outpaint["blend_dilation_stage1"] = outpaint_blend_dilation_stage1
+                outpaint["blend_dilation_stage2"] = _outpaint_stage2_from_stage1(
+                    outpaint_blend_dilation_stage1
+                )
+            if outpaint_freeze_source_audio is False:
+                outpaint["freeze_source_audio"] = False
+            # 音声の Strength は H3 の欄。LTX のサーバーは 422 で断る
+            # （freeze_source_audio を使う旨の文言）ので、黙って落とさず送る。
+            if outpaint_audio_strength is not None:
+                outpaint["audio_strength"] = outpaint_audio_strength
+            payload["outpaint"] = outpaint
 
-        # `in-outpainting` の自動注入（オーナー裁定）。操作パネルは
-        # このLoRAを固定でピン留めしており、サーバーも outpaint には
-        # preprocess の無い control 系アダプタを要求する（参照動画には control 系が
-        # 要り、preprocess つきは OUTPAINT_PREPROCESS_CONFLICT で断られる）。
-        # エージェントに毎回書かせると忘れて422になるだけなので、パネルと
-        # 同じ振る舞いをここで再現する。重複判定は **name の一致だけ** で行う
-        # -- 呼び出し側が strength 0.7 で明示していたらその指定を尊重する。
-        existing_loras: list[dict[str, Any]] = payload.get("loras", [])
-        if not any(lora.get("name") == _OUTPAINT_LORA_NAME for lora in existing_loras):
-            payload["loras"] = [
-                *existing_loras,
-                {"name": _OUTPAINT_LORA_NAME, "strength": _OUTPAINT_LORA_STRENGTH},
-            ]
+            # `in-outpainting` の自動注入（オーナー裁定）。操作パネルは
+            # このLoRAを固定でピン留めしており、サーバーも outpaint には
+            # preprocess の無い control 系アダプタを要求する（参照動画には control 系が
+            # 要り、preprocess つきは OUTPAINT_PREPROCESS_CONFLICT で断られる）。
+            # エージェントに毎回書かせると忘れて422になるだけなので、パネルと
+            # 同じ振る舞いをここで再現する。重複判定は **name の一致だけ** で行う
+            # -- 呼び出し側が strength 0.7 で明示していたらその指定を尊重する。
+            existing_loras: list[dict[str, Any]] = payload.get("loras", [])
+            if not any(lora.get("name") == _OUTPAINT_LORA_NAME for lora in existing_loras):
+                payload["loras"] = [
+                    *existing_loras,
+                    {"name": _OUTPAINT_LORA_NAME, "strength": _OUTPAINT_LORA_STRENGTH},
+                ]
 
-    client = get_client()
     result = await client.post_json("/generate", json=payload, timeout=_SUBMIT_TIMEOUT)
     return {
         "job_id": result.get("job_id"),

@@ -292,8 +292,10 @@ export const en = {
       padRight: "Right",
       padTop: "Top",
       padBottom: "Bottom",
-      /** 設計方針書 §5-B: the note that goes directly under the four sliders. */
-      gridNote: "The width and height must both be multiples of 128 pixels.",
+      /** 設計方針書 §5-B: the note that goes directly under the four sliders.
+       * §1-125: takes the canvas grid (LTX 128, MiniMax H3 32), like Retake's
+       * grid-taking lines (DEVLOG §163.4). */
+      gridNote: (multiple: number): string => `The width and height must both be multiples of ${multiple} pixels.`,
       /** 設計方針書 §5-D (2026-08-12): the opt-in that mirrors each pad onto its
        * opposite side, so the original video stays centred. Label only — no hint
        * line, keeping §5-C-6's「画面の文字を増やさない」intact. */
@@ -316,6 +318,21 @@ export const en = {
       /** Non-blocking warning: at this width the two opposing bands meet, so
        * essentially the whole original video is inside the blend. */
       blurWarning: "At this value almost the whole of the original video becomes part of the blend.",
+      /** §1-125: {@link blendNote}'s twin for an engine that keeps the original
+       * video's tokens fixed and pastes its pixels back (MiniMax H3). No mask, so
+       * no green advice; the band mixes the original's edge with the generated
+       * picture, and 0 keeps the original untouched. */
+      featherNote: (px: number): string =>
+        `About ${px} px inward from the edge of the original video, the mask blur mixes the original video's edge with the generated picture so that they merge. To keep the original video exactly as it is, set it to 0.`,
+      /** §1-125: the source-audio Strength slider (MiniMax H3). Same meaning as
+       * Retake's `audioStrengthLabel` / `audioStrengthHint`. */
+      audioStrengthLabel: "Audio Strength",
+      audioStrengthHint: "0 regenerates the sound. 1 keeps the original sound.",
+      /** §1-125: the yellow note shown instead of the red error card only when
+       * the server answers 422 `OUTPAINT_VIDEO_NO_AUDIO` (the source video has
+       * no audio track and Audio Strength is above 0). Retake's
+       * `noAudioStrengthWarning` twin. */
+      noAudioStrengthWarning: "This video has no audio track. Set “Audio Strength” to 0.",
       canvasReadout: (width: number, height: number): string => `Generating at ${width} x ${height} px`,
       /** Frame count, shown next to the frame rate under the duration slider. */
       numFramesLabel: "Frames",
@@ -350,15 +367,16 @@ export const en = {
           "The source video's size and length could not be read. Choose the file again, or use a video in a different format.",
         padsZero: "Add at least some amount on one of the four sides.",
         /** 2026-08-11: the pad sliders moved to 1px steps, so the canvas can now
-         * land off the 128 grid. Width and height are deliberately SEPARATE
+         * land off the grid (LTX 128; §1-125 MiniMax H3 32 — the lines take
+         * the grid as an argument). Width and height are deliberately SEPARATE
          * lines — `GenerateReasonsNote` de-dupes on the resolved sentence, so a
          * single shared line would stay put after only one of the two was
          * fixed (owner decision; see `outpaintGeometry.outpaintReasons`). */
-        canvasWidthOffGrid: "The width must be a multiple of 128.",
-        canvasHeightOffGrid: "The height must be a multiple of 128.",
+        canvasWidthOffGrid: (multiple: number): string => `The width must be a multiple of ${multiple}.`,
+        canvasHeightOffGrid: (multiple: number): string => `The height must be a multiple of ${multiple}.`,
         /** 2026-08-11 (第2弾): the 4096 ceiling is a message too, now that the
          * pad inputs no longer cap themselves against the opposite side. Split
-         * into width and height for the same reason as the 128 lines above. */
+         * into width and height for the same reason as the grid lines above. */
         canvasWidthTooLarge: "The width can be at most 4096 pixels.",
         canvasHeightTooLarge: "The height can be at most 4096 pixels.",
         innerTooSmall: (minSide: number): string =>
@@ -2706,13 +2724,18 @@ export const ja: Strings = {
       padRight: "右",
       padTop: "上",
       padBottom: "下",
-      gridNote: "縦横は128ピクセルの倍数でなければならない。",
+      gridNote: (multiple: number): string => `縦横は${multiple}ピクセルの倍数でなければならない。`,
       centeringLabel: "センタリング",
       blurLabel: "マスクブラー",
       blurZero: "0px（膨張なし）",
       blendNote: (px: number): string =>
         `拡張の境界から内側約${px}pxは、元動画と拡張部分が馴染むようにマスクブラーがかかる（※拡張部分にマスクの緑色が残る場合は、マスクブラーを強めること）`,
       blurWarning: "この値では元動画のほぼ全体が混ぜ合わせの対象になります。",
+      featherNote: (px: number): string =>
+        `元動画の縁から内側約${px}pxは、元動画の縁と生成した絵が馴染むようにマスクブラーで混ぜ合わせる（元動画をそのまま残したいときは 0 にする）`,
+      audioStrengthLabel: "音声の Strength",
+      audioStrengthHint: "0 で音声を作り直し、1 で元の音声のままにします。",
+      noAudioStrengthWarning: "この動画には音声トラックがありません。「音声の Strength」を 0 にしてください。",
       canvasReadout: (width: number, height: number): string => `${width} × ${height} pxサイズに拡張して生成`,
       numFramesLabel: "フレーム数",
       previewAlt: (
@@ -2739,8 +2762,8 @@ export const ja: Strings = {
         mediaInfoUnknown:
           "元になる動画の大きさと長さを読み取れませんでした。ファイルを選び直すか、別の形式の動画を使ってください。",
         padsZero: "上下左右のどれかに、描き足す量を設定してください。",
-        canvasWidthOffGrid: "幅は128の倍数でなければなりません。",
-        canvasHeightOffGrid: "高さは128の倍数でなければなりません。",
+        canvasWidthOffGrid: (multiple: number): string => `幅は${multiple}の倍数でなければなりません。`,
+        canvasHeightOffGrid: (multiple: number): string => `高さは${multiple}の倍数でなければなりません。`,
         canvasWidthTooLarge: "幅の上限は4096ピクセルです。",
         canvasHeightTooLarge: "高さの上限は4096ピクセルです。",
         innerTooSmall: (minSide: number): string =>

@@ -240,6 +240,9 @@ def _check_spec(spec: H3ChainSpec) -> None:
             "連結の共通設定（base）にはキーフレーム・音声・参照は付けられません"
             "（冒頭画像はクリップ 0 に、参照はクリップごとに付けます）"
         )
+    if base.outpaint is not None:
+        # 台帳 §1-125: Outpainting is a single job only (its chain is 台帳 §3-59).
+        raise ValueError("Outpainting は連結では使えません（単発の生成で使います）")
     for i, clip in enumerate(spec.clips):
         if i > 0 and clip.images:
             raise ValueError(f"連結のキーフレーム（冒頭画像）はクリップ 0 にだけ付けられます（clips[{i}]）")

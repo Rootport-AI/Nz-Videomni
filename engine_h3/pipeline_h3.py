@@ -209,6 +209,30 @@ class H3ReferenceInput:
     max_sec: float | None = None
 
 
+@dataclass(frozen=True)
+class H3OutpaintInput:
+    """Outpainting (台帳 §1-125): the cut source video, the pads and the two knobs.
+
+    The canvas is the request's ``width`` x ``height``; the source sits at
+    ``(pad_left, pad_top)`` and its size is the canvas minus the pads (checked
+    against the decoded frames). ``pad_*``: pixels added on each side (0 or
+    more, at least one above 0; any integer, the 32-aligned box is the
+    engine's). ``audio_strength`` 0..1: the source audio rows' mask value is
+    ``1 - audio_strength`` (Retake's meaning; 1.0 = the source waveform goes
+    into the mp4, 0.0 = free audio). ``feather_px``: the paste-back's blend band
+    in pixels (0 = a hard paste). 設計正本 ``MINIMAX_H3_DESIGN.md`` §3.1・§3.4、
+    計画 §2.2〜§2.3。
+    """
+
+    path: str
+    pad_left: int = 0
+    pad_right: int = 0
+    pad_top: int = 0
+    pad_bottom: int = 0
+    audio_strength: float = 0.5
+    feather_px: int = 0
+
+
 def ordered_references(refs) -> list:
     """The references in the order the engine uses everywhere: pictures, videos,
     then audios, each kind by ascending ``slot`` (stable)."""
@@ -247,6 +271,8 @@ class H3GenerateRequest:
     negative_prompt: str = ""
     #: VSF: the negative rows' V are multiplied by ``-vsf_scale`` (0..10).
     vsf_scale: float = 1.5
+    #: Outpainting (台帳 §1-125): the source video and its pads; ``None`` = as before.
+    outpaint: H3OutpaintInput | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -340,6 +366,41 @@ def validate_request(req: H3GenerateRequest) -> None:
         raise ValueError(f"VSF の強さは数値で渡してください（{req.vsf_scale!r}）") from None
     if not (math.isfinite(vsf_scale) and 0.0 <= vsf_scale <= 10.0):
         raise ValueError(f"VSF の強さは 0〜10 にしてください（{req.vsf_scale}）")
+    op = req.outpaint
+    if op is not None:
+        # The 32-aligned box is checked by outpaint_geometry.compute_outpaint_geometry
+        # in generate(); here only the block's own values (計画 §6.1).
+        if not str(op.path or "").strip():
+            raise ValueError("Outpainting の元動画のパスが空です")
+        if not os.path.isfile(str(op.path)):
+            raise ValueError(f"Outpainting の元動画が見つかりません（{op.path}）")
+        pads = {"pad_left": op.pad_left, "pad_right": op.pad_right,
+                "pad_top": op.pad_top, "pad_bottom": op.pad_bottom}
+        for name, v in pads.items():
+            if isinstance(v, bool) or not isinstance(v, int):
+                raise ValueError(f"Outpainting の {name} は整数で渡してください（{v!r}）")
+            if v < 0:
+                raise ValueError(f"Outpainting の {name} は 0 以上にしてください（{v}）")
+        if sum(pads.values()) <= 0:
+            raise ValueError("Outpainting の pad の合計は 1 以上にしてください（4 辺とも 0 です）")
+        try:
+            a = float(op.audio_strength)
+        except (TypeError, ValueError):
+            raise ValueError(f"Outpainting の音声の強度は数値で渡してください（{op.audio_strength!r}）") from None
+        if not (math.isfinite(a) and 0.0 <= a <= 1.0):
+            raise ValueError(f"Outpainting の音声の強度は 0〜1 にしてください（{op.audio_strength}）")
+        f = op.feather_px
+        if isinstance(f, bool) or not isinstance(f, int) or f < 0:
+            raise ValueError(f"Outpainting のなじませ幅は 0 以上の整数にしてください（{f!r}）")
+        # The source video decides both the picture and the sound: no key frames,
+        # no A2V audio, no references with it (計画 §2.4 の補足「併用の排他」。
+        # the app's H3 rules refuse these first; this is the engine's backstop).
+        if tuple(req.images or ()):
+            raise ValueError("Outpainting はキーフレームの画像と併用できません")
+        if req.source_audio is not None:
+            raise ValueError("Outpainting は音声からの生成（A2V）と併用できません（音声は元動画のものを使います）")
+        if tuple(req.references or ()):
+            raise ValueError("Outpainting は参照（Ref2VA）と併用できません")
 
 
 def require_fp32_matmul() -> None:
@@ -735,6 +796,7 @@ class H3Pipeline:
         vsf_report: dict = {}
         a2v: dict = {}
         references_summary: dict | None = None
+        outpaint_record: dict = {}
         try:
             # Inside the try: a job refused here is a failed job and releases
             # what is kept, like any other. Still before the text encoder, so a
@@ -790,10 +852,52 @@ class H3Pipeline:
                 })
             # Strength 0 is mask value 1 everywhere: no effect, so nothing is encoded.
             encode_audio = wave is not None and strength > 0.0
+            # Outpainting (台帳 §1-125): the cut source video (and its audio by the
+            # Retake rule) is read here too, before the text encoder; the geometry
+            # checks the decoded size against the canvas minus the pads.
+            op = req.outpaint
+            op_frames = op_wave = op_geom = None
+            op_strength = 0.0
+            if op is not None:
+                from engine_h3 import outpaint_h3 as OH  # noqa: PLC0415
+                from engine_h3.outpaint_geometry import compute_outpaint_geometry  # noqa: PLC0415
+
+                op_strength = float(op.audio_strength)
+                op_frames, op_wave, op_info = OH.read_outpaint_source(
+                    op.path, int(req.num_frames), int(req.frame_rate), op_strength, log=self._log,
+                )
+                op_geom = compute_outpaint_geometry(
+                    op_info["source_size"][0], op_info["source_size"][1], int(req.width), int(req.height),
+                    op.pad_left, op.pad_right, op.pad_top, op.pad_bottom,
+                )
+                g = op_geom
+                outpaint_record.update({
+                    "canvas": [g.canvas_w, g.canvas_h],
+                    "pads": {"left": g.pad_left, "right": g.pad_right, "top": g.pad_top, "bottom": g.pad_bottom},
+                    "source": [g.source_w, g.source_h],
+                    "aligned": [g.x0, g.y0, g.x1, g.y1],
+                    "fixed_tokens": int(g.fixed_count),
+                    "generated_tokens": int(g.generated_count),
+                    "feather_px": int(op.feather_px),
+                    "audio_strength": op_strength,
+                    "source_had_audio": bool(op_info["source_had_audio"]),
+                    "audio_latents_encoded": 0,
+                    "audio_output": None,
+                    "inject_clean": float(OH.OUTPAINT_INJECT_CLEAN),
+                })
+                self._log(
+                    f"outpaint: canvas {g.canvas_w}x{g.canvas_h} pads L{g.pad_left} R{g.pad_right} "
+                    f"T{g.pad_top} B{g.pad_bottom} source {g.source_w}x{g.source_h} "
+                    f"aligned [{g.x0},{g.y0})-[{g.x1},{g.y1}) tokens fixed={g.fixed_count} "
+                    f"generated={g.generated_count} feather={int(op.feather_px)}px"
+                )
+            # The key frames' VAE step also counts the Outpainting source's encode
+            # (they never meet in one job), as the chain counts a retake window.
+            has_cond = bool(canvases) or op is not None
             # VSF (台帳 §1-127): a negative prompt adds one text encoder forward.
             has_neg = bool(req.negative_prompt.strip())
             encode_total = encode_steps(
-                has_cond=bool(canvases), has_audio=encode_audio, has_refs=bool(ref_media), has_neg=has_neg,
+                has_cond=has_cond, has_audio=encode_audio, has_refs=bool(ref_media), has_neg=has_neg,
             )
             negative_hidden = None
             # Only a VSF job passes the key: every other job's call is the same as before.
@@ -801,7 +905,7 @@ class H3Pipeline:
             with torch.no_grad():
                 with phases.phase("encode") as entry:
                     encoded = self._encode(
-                        req.prompt, phases, images=vision_images, has_cond=bool(canvases),
+                        req.prompt, phases, images=vision_images, has_cond=has_cond,
                         has_audio=encode_audio, refs=self._te_references(ref_media), **neg_kw,
                     )
                     if has_neg:
@@ -851,27 +955,85 @@ class H3Pipeline:
                     a2v["encoder_tensors"] = entry["encoder_tensors"]
                     audio_fix = (clean_audio, torch.full((a_lat,), 1.0 - strength, dtype=torch.float32))
                     del clean_audio
+                video_fix = None
+                op_te_a = 0
+                if op is not None:
+                    # The source alone at the 32-aligned box (the gaps mirrored), placed
+                    # on the canvas latent; its tokens inside the kept rectangle are fixed.
+                    from engine_h3.outpaint_geometry import aligned_frames  # noqa: PLC0415
+
+                    with phases.phase("source_encode") as entry:
+                        entry["source_size"] = [op_geom.source_w, op_geom.source_h]
+                        entry["aligned"] = [op_geom.x0, op_geom.y0, op_geom.x1, op_geom.y1]
+                        aligned_u8 = aligned_frames(op_frames, op_geom)
+                        clean_bbox, clean_op_a = self._encode_source_tail(
+                            aligned_u8, op_wave, entry, 4 + int(has_neg), encode_total,
+                        )
+                        del aligned_u8
+                    video_fix, audio_fix = OH.outpaint_fix(
+                        clean_bbox, clean_op_a, op_geom, op_strength, latent_frames(int(req.num_frames)), a_lat,
+                    )
+                    op_te_a = 0 if clean_op_a is None else int(clean_op_a.shape[2])
+                    del clean_bbox, clean_op_a
+                    outpaint_record["audio_latents_encoded"] = op_te_a
+                    if op_wave is not None and op_strength < 1.0:
+                        op_wave = None   # kept only to be muxed at strength 1.0
+                    self._log(
+                        "outpaint: fixed rows from the source video "
+                        f"({op_geom.fixed_count} tokens x {latent_frames(int(req.num_frames))} latent frames; "
+                        f"audio_strength={op_strength}, audio latents encoded {op_te_a})"
+                    )
+                # Only an Outpainting job passes the keys: every other job's call is the same as before.
+                op_kw = (
+                    {"video_fix": video_fix, "video_inject_clean": float(OH.OUTPAINT_INJECT_CLEAN)}
+                    if op is not None else {}
+                )
                 with phases.phase("denoise") as entry:
                     video_lat, audio_lat, prefetch_used = self._denoise(
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
                         lora_report=lora_report, audio_fix=audio_fix, refs=ref_rows,
                         negative_hidden=negative_hidden, vsf_scale=float(req.vsf_scale), vsf_report=vsf_report,
+                        **op_kw,
                     )
-                del text_hidden, text_tags, cond_clean, audio_fix, ref_rows, negative_hidden
+                if op is not None:
+                    OH.check_outpaint_fixed(video_lat, video_fix, audio_lat, audio_fix, op_strength, op_te_a)
+                del text_hidden, text_tags, cond_clean, audio_fix, ref_rows, negative_hidden, video_fix, op_kw
                 _free_cuda()
+                composite_kw: dict = {}
+                if op is not None:
+                    from engine_h3.outpaint_geometry import composite, feather_weights  # noqa: PLC0415
+
+                    weights = feather_weights(op_geom, int(op.feather_px))
+
+                    def paste_back(frames_t: torch.Tensor) -> torch.Tensor:
+                        # The decoded CPU uint8 tensor, written in place through numpy.
+                        frames_t = frames_t.contiguous()
+                        composite(frames_t.numpy(), op_frames, weights, op_geom)
+                        return frames_t
+
+                    composite_kw = {"composite": paste_back}
                 with phases.phase("decode") as entry:
                     # Strength 1.0 keeps the audio latents as they are: the mp4
                     # gets the source waveform itself, not its decoded copy.
                     source_wave = wave if (wave is not None and strength == 1.0) else None
-                    size_bytes = self._decode(req, video_lat, audio_lat, entry, keep=keep, source_wave=source_wave)
+                    if op is not None:
+                        source_wave = op_wave if op_strength == 1.0 else None
+                    size_bytes = self._decode(
+                        req, video_lat, audio_lat, entry, keep=keep, source_wave=source_wave, **composite_kw,
+                    )
                     if source is not None:
                         # Only for an A2V job: every other job's decode record is unchanged.
                         entry["audio_output"] = "original" if source_wave is not None else "decoded"
                         a2v["audio_output"] = entry["audio_output"]
                         a2v["muxed_audio_samples"] = entry.get("audio_samples")
+                    if op is not None:
+                        outpaint_record["audio_output"] = (
+                            "original" if source_wave is not None else "decoded" if op_te_a > 0 else "generated"
+                        )
                     del source_wave
-                del video_lat, audio_lat, wave
+                # The source pixels are held until the paste-back is done.
+                del video_lat, audio_lat, wave, op_frames, op_wave, composite_kw
             ok = True
         finally:
             if not (ok and keep):
@@ -891,6 +1053,8 @@ class H3Pipeline:
             h3["references"] = references_summary   # only for a Ref2VA job, the same way
         if req.negative_prompt.strip():
             h3["vsf"] = vsf_report      # only for a VSF job, the same way
+        if req.outpaint is not None:
+            h3["outpaint"] = outpaint_record   # only for an Outpainting job, the same way
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -1440,10 +1604,12 @@ class H3Pipeline:
         audio_fix=None, video_fix=None, refs=None, video_inject_clean: float | None = None,
         negative_hidden=None, vsf_scale: float = 1.5, vsf_report: dict | None = None,
     ):
-        """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, one mask
-        value per audio latent / per latent frame)`` for a stream whose rows are
-        (partly) kept (``engine_h3.denoise_mask``; Docs/MINIMAX_H3_DESIGN.md §3.1);
-        None = generated as usual. The masks are built after the noise is drawn
+        """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, mask
+        values)`` for a stream whose rows are (partly) kept
+        (``engine_h3.denoise_mask``; Docs/MINIMAX_H3_DESIGN.md §3.1): one value
+        per audio latent; for the video one per latent frame ``[T']`` or one per
+        token ``[T', gh, gw]`` (Outpainting, 台帳 §1-125; the shape is checked by
+        ``denoise_mask.video_mask``). None = generated as usual. The masks are built after the noise is drawn
         (the video mask reuses the initial video noise), so the draws and their
         order do not depend on them. ``video_inject_clean``: the video mask's
         ``inject_clean`` (None = its default 0.999; the H3 chain passes 1.0,
@@ -1742,7 +1908,7 @@ class H3Pipeline:
 
     def _decode(
         self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False, source_wave=None,
-        *, trim_head: int = 0, handle_path: str | None = None,
+        *, trim_head: int = 0, handle_path: str | None = None, composite=None,
     ) -> int:
         """Video decoder, audio VAE, mp4. ``source_wave`` (A2V at strength 1.0):
         the source waveform ``[2, N]`` float32 goes into the mp4 instead of the
@@ -1755,7 +1921,13 @@ class H3Pipeline:
         decoded timeline's length). The untrimmed audio, cut to the timeline,
         is first written to ``handle_path`` as a 16-bit wav (the JOIN's audio
         handle); a failure there is logged and leaves ``entry["audio_handle"]``
-        None, never fails the job. 0 (the default) = as before."""
+        None, never fails the job. 0 (the default) = as before.
+
+        ``composite`` (Outpainting, 台帳 §1-125): a function applied to the
+        decoded frames (the CPU uint8 ``[F, H, W, 3]`` tensor ``vae.decode``
+        returns whole) right after the frame count check and before the audio;
+        it returns frames of the same shape (the source pixels pasted back,
+        計画 §6.1 の置き場の判断 2). None (the default) = as before."""
         from engine_h3.audio_vae import H3AudioVAE  # noqa: PLC0415
         from engine_h3.media_out import audio_keep_samples, write_mp4  # noqa: PLC0415
         from engine_h3.video_vae import H3VideoDecoder  # noqa: PLC0415
@@ -1781,6 +1953,11 @@ class H3Pipeline:
             _free_cuda()
         if int(frames.shape[0]) != int(req.num_frames):
             raise RuntimeError(f"decode: {frames.shape[0]} frames decoded, {req.num_frames} expected")
+        if composite is not None:
+            shape = tuple(frames.shape)
+            frames = composite(frames)
+            if tuple(frames.shape) != shape:
+                raise RuntimeError(f"decode: composite returned {list(frames.shape)}, expected {list(shape)}")
         self._progress("decode", 1, 3)
 
         if source_wave is not None:

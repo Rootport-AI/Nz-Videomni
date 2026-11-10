@@ -43,8 +43,8 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras], [source_audio], [references], [nag]}
-      One T2V, I2V or A2V job. Omitted steps / shifts take the engine defaults
+   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint]}
+      One T2V, I2V, A2V or Outpainting job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
       else is refused with a reason. Keys this
@@ -70,6 +70,16 @@ Protocol (one JSON object per line; parent -> worker):
       ``{"negative_prompt", "method", "vsf_scale"}`` (``method`` must be "vsf";
       ``negative_prompt`` a non-empty string; ``vsf_scale`` 0..10, defaults to
       1.5; ``engine_h3.vsf``). Unknown inner keys are logged once and ignored.
+      ``outpaint`` (台帳 §1-125): absent / null = not an Outpainting job, else
+      ``{"source_path", "pad_left", "pad_right", "pad_top", "pad_bottom",
+      "audio_strength", "feather_px"}`` (all required; the canvas is
+      ``width`` x ``height``, the source sits at (pad_left, pad_top);
+      ``source_path`` is the app's cut of the source video, exactly
+      ``num_frames`` frames at 24 fps; ``audio_strength`` 0..1 as Retake's;
+      ``feather_px`` the paste-back's blend band;
+      ``engine_h3.pipeline_h3.H3OutpaintInput``). Not with ``images`` /
+      ``source_audio`` / ``references``. Unknown inner keys (the LTX worker's
+      ``blend_dilation_stage1`` etc.) are logged once and ignored.
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
@@ -98,7 +108,7 @@ Protocol (one JSON object per line; parent -> worker):
       ``retake.<key>``). The other keys mean what they mean for
       ``generate`` and apply to every clip (the LoRA too; ``nag`` is read once
       for the chain: clip 0 encodes the negative and every clip reuses it). The top-level
-      ``images`` / ``source_audio`` / ``references`` and any other key are
+      ``images`` / ``source_audio`` / ``references`` / ``outpaint`` and any other key are
       logged and ignored, as are unknown keys inside a clip. A failure is
       reported with ``error`` and the process stays alive.
   {"op": "shutdown"}
@@ -124,7 +134,11 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, h3: {phases, quant_backends, [loras], [a2v], [references], [vsf]}}
+             images_used, h3: {phases, quant_backends, [loras], [a2v], [references], [vsf], [outpaint]}}
+            (``h3.outpaint`` only for an Outpainting job, 台帳 §1-125: canvas
+            [W_c, H_c], pads, source [W_s, H_s], aligned [x0, y0, x1, y1],
+            fixed_tokens, generated_tokens, feather_px, audio_strength,
+            source_had_audio, audio_output, inject_clean)
             (``h3.vsf`` only for a job with a negative prompt: rows [start, stop],
             scale, m_neg, m_text; ``engine_h3.vsf``)
             (``h3.loras`` only for a job with LoRA: one entry per file, its
@@ -260,7 +274,7 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode", "loras", "source_audio", "references", "nag",
+    "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -276,7 +290,7 @@ _NAG_FIELDS = frozenset({"negative_prompt", "method", "vsf_scale"})
 #: job's, less what is per clip or unused (the frame count, the key frames and
 #: references are per clip; ``nag`` is read as the single job reads it), plus
 #: ``clips``, the input video ``source`` (台帳 §1-121) and ``retake`` (台帳 §1-123).
-_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references"}) | {
+_CHAIN_FIELDS = (_GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "outpaint"}) | {
     "clips", "source", "retake",
 }
 #: The keys of one ``clips`` entry this engine reads (``references``: 台帳 §1-109;
@@ -287,6 +301,10 @@ _CHAIN_CLIP_FIELDS = frozenset({"prompt", "num_frames", "images", "references", 
 _SOURCE_FIELDS = frozenset({"path", "context_frames"})
 #: The keys of ``retake`` this engine reads (台帳 §1-123; the 22-frame head and tail are fixed, not sent).
 _RETAKE_FIELDS = frozenset({"path", "audio_strength"})
+#: The keys of ``outpaint`` this engine reads (台帳 §1-125; the canvas is the job's ``width`` / ``height``).
+_OUTPAINT_FIELDS = frozenset({
+    "source_path", "pad_left", "pad_right", "pad_top", "pad_bottom", "audio_strength", "feather_px",
+})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -456,6 +474,48 @@ def _source_audio(msg: dict) -> tuple:
     return H3AudioInput(path=path, strength=float(strength)), ignored
 
 
+def _outpaint_summary(op) -> tuple:
+    """The log's ``outpaint=``: ``(file name, (left, right, top, bottom), audio_strength, feather_px)``."""
+    return (Path(op.path).name, (op.pad_left, op.pad_right, op.pad_top, op.pad_bottom), op.audio_strength,
+            op.feather_px)
+
+
+def _outpaint(msg: dict) -> tuple:
+    """``outpaint`` -> ``(H3OutpaintInput | None, ignored inner keys)`` (台帳 §1-125).
+
+    Absent / null = not an Outpainting job. The shape (an object with a
+    non-empty string ``source_path``, four integer pads, a finite number
+    ``audio_strength`` and an integer ``feather_px``; every key required, the
+    app sends them all) is checked here; the ranges, the exclusions and the
+    file itself are the pipeline's ``validate_request``, the 32-aligned box
+    ``engine_h3.outpaint_geometry``. Keys the LTX worker reads
+    (``blend_dilation_stage1`` etc.) are among the ignored keys.
+    """
+    import math  # noqa: PLC0415
+
+    from engine_h3.pipeline_h3 import H3OutpaintInput  # noqa: PLC0415
+
+    raw = msg.get("outpaint")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"outpaint はオブジェクトで渡してください（{type(raw).__name__}）")
+    path = raw.get("source_path")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"outpaint には空でない文字列の source_path が必要です（{path!r}）")
+    ints = {}
+    for key in ("pad_left", "pad_right", "pad_top", "pad_bottom", "feather_px"):
+        v = raw.get(key)
+        if isinstance(v, bool) or not isinstance(v, int):
+            raise ValueError(f"outpaint の {key} は整数で渡してください（{v!r}）")
+        ints[key] = v
+    strength = raw.get("audio_strength")
+    if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength):
+        raise ValueError(f"outpaint の audio_strength は有限の数値で渡してください（{strength!r}）")
+    ignored = sorted(k for k in raw if k not in _OUTPAINT_FIELDS)
+    return H3OutpaintInput(path=path, audio_strength=float(strength), **ints), ignored
+
+
 def _nag(msg: dict) -> tuple:
     """``nag`` -> ``(negative_prompt, vsf_scale, ignored inner keys)`` (VSF, 台帳 §1-127).
 
@@ -531,7 +591,7 @@ def _references(msg: dict) -> tuple[tuple, list[str]]:
 
 def _generate_request(
     msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
-    references: tuple | None = None, *, negative_prompt: str = "", vsf_scale: float = 1.5,
+    references: tuple | None = None, *, negative_prompt: str = "", vsf_scale: float = 1.5, outpaint=None,
 ):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
@@ -545,6 +605,8 @@ def _generate_request(
     ``negative_prompt`` / ``vsf_scale``: the ``nag`` already parsed by
     :func:`_nag` in ``_do_generate`` / ``_do_generate_chain`` (never read from
     the message here); the defaults are "none".
+    ``outpaint``: the already parsed ``H3OutpaintInput``; ``None`` falls back to
+    parsing the message (a message without the key is not an Outpainting job).
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -559,6 +621,8 @@ def _generate_request(
         source_audio, _ignored = _source_audio(msg)
     if references is None:
         references, _ignored = _references(msg)
+    if outpaint is None:
+        outpaint, _ignored = _outpaint(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -580,6 +644,7 @@ def _generate_request(
         references=references,
         negative_prompt=negative_prompt,
         vsf_scale=vsf_scale,
+        outpaint=outpaint,
     )
 
 
@@ -592,15 +657,17 @@ def _do_generate(msg: dict) -> None:
     source_audio, audio_ignored = _source_audio(msg)
     references, ref_ignored = _references(msg)
     negative_prompt, vsf_scale, nag_ignored = _nag(msg)
+    outpaint, outpaint_ignored = _outpaint(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
     ignored += [f"source_audio.{k}" for k in audio_ignored]
     ignored += [f"references[].{k}" for k in ref_ignored]
     ignored += [f"nag.{k}" for k in nag_ignored]
+    ignored += [f"outpaint.{k}" for k in outpaint_ignored]
     req = _generate_request(
         msg, images=images, loras=loras, source_audio=source_audio, references=references,
-        negative_prompt=negative_prompt, vsf_scale=vsf_scale,
+        negative_prompt=negative_prompt, vsf_scale=vsf_scale, outpaint=outpaint,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -618,6 +685,10 @@ def _do_generate(msg: dict) -> None:
         + (
             f"references={[(r.kind, r.slot, Path(r.path).name, r.max_sec) for r in req.references]} "
             if req.references else ""
+        )
+        + (
+            f"outpaint={_outpaint_summary(req.outpaint)} "
+            if req.outpaint is not None else ""
         )
         + (f"neg=vsf(scale={req.vsf_scale}) " if req.negative_prompt else "neg=off ")
         + f"-> {req.output_path}"

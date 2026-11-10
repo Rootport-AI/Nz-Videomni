@@ -27,8 +27,11 @@ A mask whose values are all 1 is never built (the builders return None), and
 every helper returns its input object itself for ``None``: the no-mask path
 adds no tensor operation at all. Everything here is float32.
 
-Granularity (V1): video per latent frame ``[T']`` (one value for the frame's
-``grid`` rows), audio per latent ``[A]`` (shared by both channels).
+Granularity: audio per latent ``[A]`` (shared by both channels); video
+either per latent frame ``[T']`` (one value for the frame's ``grid`` rows) or
+per token ``[T', H/32, W/32]`` (one value per DiT token, i.e. per 2 x 2 latent
+cells; Outpainting, 台帳 §1-125, Docs/MINIMAX_H3_DESIGN.md §3.1。トークン単位の
+マスクは保持矩形の固定に使う).
 """
 
 from __future__ import annotations
@@ -50,7 +53,7 @@ class StreamMask:
     """One stream's mask, built once per job (after the noise is drawn).
 
     * ``m``: float32, broadcastable to the state (audio ``[1, 1, A]``, video
-      ``[1, 1, T', 1, 1]``).
+      ``[1, 1, T', 1, 1]``, or ``[1, 1, T', H/16, W/16]`` per token).
     * ``rows``: float32 ``[rows]`` in the packed sequence's order (audio:
       channel 0's A values then channel 1's; video: t -> h -> w).
     * ``clean``: the original latent, float32, the state's shape.
@@ -101,7 +104,11 @@ def video_mask(
 
     ``grid``: token rows per latent frame (``(H/32) * (W/32)``); the video rows
     are t -> h -> w (``engine_h3.dit.patchify_video``), so each frame's value
-    is repeated ``grid`` times in a row. ``noise``: the job's initial video
+    is repeated ``grid`` times in a row. ``per_frame`` may instead be one value
+    per token ``[T', H/32, W/32]`` (a 3-D tensor or array-like; Outpainting,
+    台帳 §1-125): then ``m`` is ``[1, 1, T', H/16, W/16]`` (each token's value
+    spread over its 2 x 2 latent cells), ``rows`` is the values in t -> h -> w
+    order, and ``grid`` must equal ``(H/32) * (W/32)``. ``noise``: the job's initial video
     noise (the same draw the state started from); ``inject`` is
     ``c clean + (1 - c) noise``, fixed for the whole job, with ``c`` =
     ``inject_clean`` (finite, in [0, 1]; None = ``VIDEO_INJECT_CLEAN``, 0.999).
@@ -117,6 +124,8 @@ def video_mask(
         raise ValueError(f"video mask: inject_clean must be finite and in [0, 1] ({inject_clean!r})")
     c = float(c)
     frames = int(clean.shape[2])
+    if torch.as_tensor(per_frame).dim() == 3:
+        return _video_token_mask(clean, per_frame, grid=grid, noise=noise, c=c)
     values = _values(per_frame, frames, "video", clean.device)
     if bool((values == 1).all()):
         return None
@@ -126,6 +135,36 @@ def video_mask(
     m = values.view(1, 1, frames, 1, 1)
     rows = values.repeat_interleave(int(grid))
     return StreamMask(m=m, rows=rows, clean=clean32, inject=inject, zero=m == 0)
+
+
+def _video_token_mask(
+    clean: torch.Tensor, per_token, *, grid: int, noise: torch.Tensor, c: float,
+) -> StreamMask | None:
+    """``video_mask`` for one value per token ``[T', H/32, W/32]`` (``clean`` / ``noise`` / ``c`` already checked).
+
+    The token (t, i, j) covers the latent cells ``[2i, 2i+2) x [2j, 2j+2)`` of
+    frame t (``engine_h3.dit.patchify_video``'s patch (1, 2, 2)), so ``m`` is
+    the values spread twice along both spatial axes, and ``rows`` is the values
+    flattened t -> h -> w (the packed sequence's order).
+    """
+    frames, lat_h, lat_w = int(clean.shape[2]), int(clean.shape[3]), int(clean.shape[4])
+    if lat_h % 2 or lat_w % 2:
+        raise ValueError(f"video mask: per-token values need an even latent grid ({list(clean.shape)})")
+    gh, gw = lat_h // 2, lat_w // 2
+    shape = tuple(int(s) for s in torch.as_tensor(per_token).shape)
+    if shape != (frames, gh, gw):
+        raise ValueError(f"video mask: per-token values {list(shape)} do not match [T', H/32, W/32] "
+                         f"{[frames, gh, gw]}")
+    if int(grid) != gh * gw:
+        raise ValueError(f"video mask: grid {int(grid)} does not match the token grid {gh} x {gw}")
+    values = _values(per_token, frames * gh * gw, "video", clean.device)
+    if bool((values == 1).all()):
+        return None
+    clean32 = clean.to(torch.float32)
+    noise32 = noise.to(device=clean.device, dtype=torch.float32)
+    inject = c * clean32 + (1.0 - c) * noise32
+    m = values.view(1, 1, frames, gh, gw).repeat_interleave(2, dim=3).repeat_interleave(2, dim=4)
+    return StreamMask(m=m, rows=values, clean=clean32, inject=inject, zero=m == 0)
 
 
 def dit_input(x: torch.Tensor, mask: StreamMask | None) -> torch.Tensor:

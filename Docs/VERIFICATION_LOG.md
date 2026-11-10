@@ -23086,3 +23086,117 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - 弾 2（API・アプリ層・配信・操作パネル・MCP・文書）に 2026-11-10 に着手しました。
 - GPU の門 G5（快適上限の線の直下と直上の 2 点）・G6（20 ステップの完走）と、実機の門 G7（オーナーが操作パネルの右クリックから確かめる）は未実施です。
 - 保管庫（205.10）には、R4 の報告書（`reports/R4_boundary_line_precedents.md`）と E2 の 3 本の `runs/E2*/result.json` を足し、`summary.json`・`summary.md`・`README.md` に E1・E2 の記述を足しました。
+
+> **【2026-11-10 追記】門 G5・G6 の結果は 205.19・205.20、配布は 205.22。**
+
+### 205.19 門 G5（快適上限の点。2026-11-10）
+
+**結論**: Outpainting の点も、DiT に入る列の総行数 S〔映像・音声・text の行の合計〕の 1 本の線（配信の `single_rows_budget` 219,516。快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §17.5 の (a)）で分かれました。S が線と同じ値になる 362 枚は快適で、1 段上の 379 枚はノイズ除去の段の cap〔VRAM 16GB mode の割り当て器の上限〕での OOM〔GPU メモリ不足〕でした。退避も先読みの降格もありません。**配信値は変えません**（Outpainting は H3 では `outpaint_budget` を持たず、操作パネルは Single と同じ線で印を出す。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.6）。印の意味は快適上限表 §17 と同じ「超えると失敗する」です。線の扱いは快適上限表 §20 です。
+
+**経路と条件**: 台本は保管庫の `h3_outpaint_gate_api.py`（条件の正本は保管庫の `README.md` の「弾 2 の GPU の門 G5・G6」）で、**MCP サーバー（stdio の実プロトコル）→ 一時サーバー（ポート 18699・`_rt`）→ バックエンド → エンジン**の経路で回しました。製品コードは変えていません。1 本ごとに新しいサーバーのプロセスを起こし、終わりに止めました。回した時刻は 17:57〜18:37 です。
+
+| 項目 | 値 |
+|---|---|
+| 重みと構成 | FL2VA int8 ConvRot（`minimax_h3_fl2va_pruned_int8_convrot.safetensors`）・attention は sage・4 ステップ・Turbo LoRA なし・seed 12345・較正の文（text 30 行）・VRAM 16GB mode on・先読み on・常駐 off・fps 24。快適上限表 §17.1 の較正と同じ |
+| 幾何 | キャンバス 1920×1088、元の動画 1280×720（`H3-Ref-1080p-30s.mp4` の先頭を縮めたもの。3 本で枚数だけ違う）、pad 左右 320・上下 184、外接矩形 [320, 160)〜[1600, 928)、固定トークン 880／生成トークン 1,160（潜在フレームごと） |
+| Outpainting の値 | `audio_strength` 0.5・なじませ 1 段＝30 画素（サーバーの既定の書き戻し）・注入係数 1.0。56 枚と 362 枚は `metadata.json` の `h3.outpaint` で、379 枚（失敗したので `metadata.json` が無い）はワーカーのログで確かめた |
+| 同居プロセス | 門の間、AviUtl2 と操作パネルは開いていなかった（門の後の tasklist に無し）。送信前の静かな区間の専用 GPU メモリは 908〜921MB |
+| cap | 14,023MiB（56 枚・362 枚）。較正（§196.1）は AviUtl2 と操作パネルを開いたまま測っており、13,999〜14,025MiB |
+| 判定規則 | 快適上限表 §17.2 の v3″（① OOM、② 退避＝ノイズ除去と復号の窓で WDDM〔Windows の GPU メモリ管理〕の共有メモリの中央値が基準点より +300MB 以上、③ 先読みの降格）。基準点は 56 枚 |
+
+**点の選び方**: Outpainting には条件行（cond）が無く、S＝映像の行＋音声の行＋text の行です。固定行は映像の行の一部として数え、行を増やしません（快適上限表 §20.3）。1920×1088 では、345 枚が S 209,260、362 枚が 219,516（配信の線と同じ値）、379 枚が 229,774 です。そこで線の上の点を 362 枚、1 段上を 379 枚にしました。台本の README と計画は較正の c（345）と U（362）を例に挙げていましたが、それは FL2VA・K=1（条件行と、text に入るキーフレームの行がある形）の値で、Outpainting では同じ枚数でも S が小さくなるので、点を 1 段ずつ上げました。56 枚は基準点（S 34,896。較正の `b1080` と同じ長さ）です。
+
+| 本 | 枚数 | S（実測） | 判定 | ノイズ除去の山 割り当て／予約（MiB） | cap | 再試行／OOM 回数 | inactive split の山（MiB） | Δ共有 ノイズ除去／復号（MB） | ノイズ除去の秒 | 生成の秒 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| G5_56f | 56 | 34,896 | 快適（基準点） | 4,169／5,624 | 14,023 | 0／0 | 600 | –（基準。中央値 1,173.2／1,165.0） | 81.57 | 184.65 |
+| G5_362f | 362 | 219,516 | **快適** | 13,115／13,932 | 14,023 | 12／0 | 4,248 | −17.6／+6.8 | 1,382.3 | 1,854.13 |
+| G5_379f | 379 | 229,774（式。実測なし） | **OOM**（ノイズ除去の段・ステップ 0 の開始から 0.8 秒後） | – | – | – | – | –（ノイズ除去の窓の標本 0） | – | –（壁時計 268） |
+
+- 「再試行」は `num_alloc_retries`（割り当て器が上限に当たって手元の空きを返し、確保をやり直した回数。§196.6 の 5）、「inactive split」は分割されたセグメントの中の使っていない部分の山です。出典は各本の `summary_row.json` と `metadata.json`（`h3.phases.denoise`）です。
+- S の実測（`h3.phases.denoise.sequence.total`）は 56 枚と 362 枚で予測と差 0 でした。379 枚の S は式の値で、ワーカーのログの潜在フレーム数 112・text 30 行と合います。
+- 362 枚の内訳: 映像 218,280（2,040 行×潜在 107）・音声 1,206・text 30。先読みは on のままで、降格はありません。
+- 362 枚の工程の秒（server.log の窓）: 「text encode」の窓 233.0 秒・stage-1 denoise 1,369.8 秒・VAE decode 230.9 秒。「text encode」の窓には、`metadata.json` の TE〔テキストエンコーダー〕の段 17.82 秒と、元動画の符号化（`source_encode`）215.22 秒が入っています。復号の段の割り当て／予約の山は 8,276／10,598MiB です。
+- 362 枚の 1 ステップの秒は、§196.3 の表 1 と同じ定義（〔`h3.phases.denoise.seconds` − `h3.phases.denoise.dit.read_seconds`〕÷ステップ数。較正台 `calib.py` の `sec_per_step_meta` と同じ式）で 342.71 秒（〔1,382.3−11.47〕÷4）で、同じ S の r1080_362 の 341.96 秒とほぼ同じです。時間モデル（§196.6 の 4）の予測 341.75 秒との差は +0.3% です。
+
+**379 枚の OOM**: server.log の 18:37:05.442 に stage-1 denoise が始まり、18:37:06.267 に `Job … OOM:` が記録されました。文言（`server_log_excerpt.txt`）は「Tried to allocate 450.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.09 GiB is free. 13.69 GiB allowed; Of the allocated memory 12.65 GiB is allocated by PyTorch, and 842.47 MiB is reserved by PyTorch but unallocated」です。
+
+- 場所: トレースバックは `engine_h3/pipeline_h3.py` の `_denoise`（1817 行）→ `engine_h3/dit.py` のブロック（678 行）を通り、最後の確保は `torch.empty((b, h_kv, head_dim, padded_len), …)` でした。この文は SageAttention のパッケージの中では `sageattention/quant.py:275`（v の量子化の一時張量）の 1 か所だけで、§196.6 の 3 の s1440_209 と同じ場所です（ログのトレースバックはファイル名の行が省略されていたので、文の一致で特定した）。
+- 型: 予約済みの空きは 842MiB しかなく、割り当てそのものが上限の近くまで上がった形です（§196.6 の 3 の s1440_209 と同じ型）。文言の値から計算すると、「予約＋要求−許可」は約 +0.22GiB です。
+- 分類: サーバーは `services/pipeline_manager.py` の `_is_oom` で OOM と分類しました。エンジンは例外を `VRAM16_OOM_MESSAGE`（「VRAM 16GB mode でも GPU メモリが足りません …」）に包んでいました。OOM の後、サーバーはパイプラインを降ろしました（`Unloading pipeline (REAL worker).`）。
+
+**台本の判定の抜け**: 台本は 379 枚を「判定なし（ジョブが failed）」とし、終了コードは 3（OOM 以外の失敗）でした。規則 ① は `job.error` の先頭の `GPU_OOM:` を見ますが、MCP の `wait_for_job` が 18:37:07 に返した状態は `status: failed`・`error: null` で、台本が記録した `job_final` も `error` が null だったためです（原因は 205.23）。OOM であることはサーバーのログとワーカーのトレースバックで確定しているので、本節では規則 ① の OOM と判定します。
+
+**較正との比較**（§196.3 の表 3 の r1080_362。Ref2VA・K=0・参照なしで、S は同じ 219,516）:
+
+| 項目 | r1080_362（較正） | G5_362f（Outpainting） | 差 |
+|---|---|---|---|
+| cap（MiB） | 13,999 | 14,023 | +24 |
+| ノイズ除去の予約／割り当ての山（MiB） | 13,888／12,949 | 13,932／13,115 | +44／+166 |
+| cap までの余裕（MiB） | 111 | 91 | −20 |
+| 再試行 | 9 | 12 | +3 |
+| 復号の予約／割り当ての山（MiB） | 10,564／8,276 | 10,598／8,276 | +34／0 |
+| Δ共有 ノイズ除去／復号（MB） | −74.5／−14.1 | −17.6／+6.8 | — |
+
+- 固定行のマスクが割り当ての山を約 160MiB 上げ、予約は cap の内に収まる、という §199.3（連結の固定行つきクリップ）の観察と同じ向きです。
+- G5_362f は 1 回だけの点で、上限の近く（余裕 91MiB）を通ります。今回は AviUtl2 と操作パネルを閉じていたので cap が較正より 24MiB 高く、同居プロセスの VRAM が多い環境では反転しうる（§196.10 の 4・快適上限表 §17.7 の 5 と同じ留保）。
+
+**待ちの記録の注記**: 4 本とも、MCP の `wait_for_job` の呼び出しが途中で何度か `BACKEND_UNREACHABLE`（「Server disconnected without sending a response」など）で失敗しました（362 枚では標本 25 回のうち 18 回）。台本は再試行し、ジョブそのものは影響を受けていません。同じ型の一時的な失敗は §121.10 にも記録があります。原因は調べていません。
+
+### 205.20 門 G6（20 ステップの完走。2026-11-10）
+
+**結論**: 1920×1088×124 枚・20 ステップ・Turbo なし・sage の 1 本が完走しました。保持矩形〔元の動画を置いた領域〕の画質は再符号化の天井に近い水準で、境界の勾配比は弾 1 の E2（205.15）と同じ水準でした。線は出ていません。
+
+| 項目 | 値 |
+|---|---|
+| 時刻 | 18:37:20〜18:58:51（205.19 と同じ経路・新しいサーバーのプロセス） |
+| 素材 | VSF の較正で作った線の無い素材 `L_s0_1344x768_seed42.mp4`（1344×768・124 枚・AAC 32kHz）の写し。E2c_r1（205.15）と同じ素材・同じ pad |
+| 幾何 | キャンバス 1920×1088、pad 288／288／160／160、外接矩形 [288, 160)〜[1632, 928)、固定 1,008／生成 1,032 トークン、なじませ 30 画素 |
+| サンプリング | 20 ステップ・Turbo なし・sage・seed 1234。プロンプトは弾 1 と同じ英文（`request.json`） |
+| 音声 | `audio_strength` 0.5。音声は復号したもの（`audio_output` "decoded"）で、符号化した音声の潜在は 206 |
+
+- **結果**: completed。生成 1,286.48 秒（ノイズ除去 1,105.56 秒）。ノイズ除去の段の割り当て／予約の山は 6,007／8,936MiB、ジョブ全体の予約の山は復号の段の 10,518MiB です。S は 75,937（映像 75,480・音声 414・text 43）、cap 14,023MiB・再試行 0・OOM 0・先読み on。`metadata.json` の `h3.outpaint` に 12 の鍵がそろい、欠けも余分もありません。
+- 1 ステップの秒は 205.19 と同じ定義で 54.71 秒（〔1,105.56−11.43〕÷20）、時間モデルの予測 55.13 秒との差は −0.8% です。
+- **画質**（弾 1 と同じ判定器 `h3_outpaint_gate.measure_run`。量の定義は 205.7）:
+
+| 量 | G6_20steps | 参考: E2c_r1（4 ステップ・Turbo。205.15） |
+|---|---|---|
+| 保持矩形の PSNR〔画質の一致度〕 対照比（dB） | 38.68 | 38.79 |
+| 芯〔なじませの重みが 1 の画素〕の PSNR 対照比（dB） | 39.50 | 39.58 |
+| 保持矩形／芯の PSNR 切り出し mp4 比（dB） | 38.32／39.09 | — |
+| 勾配比 左／右／上／下 | 1.12／1.07／1.19／1.23 | — |
+| 勾配比 縦の最大／横の最大 | 1.12／1.23 | 1.14／1.25 |
+
+- 対照は、サーバーの切り出し `_outpaint_source.mp4` を同じ `write_mp4` で書き直したもので、対照自身の切り出し比の PSNR は 39.41dB（再符号化 1 回分の天井）です。保持矩形（対照比 38.68dB）はこの天井より 0.73dB 低く、芯（切り出し比 39.09dB）は 0.32dB 低い値です。芯の画素数は 909,072 です。
+- pad の帯の標準偏差は 左 50.0・右 53.4・上 70.7・下 32.3 で、平らな帯（絵が出ていない状態）ではありません。
+- 出力は h264・yuv420p・24fps・124 枚、音声は AAC・32kHz・ステレオ・5.167 秒です。
+- **MCP の経路の確認**: `submit_generate` には `reference_video_id` と `outpaint_*` を渡しました（`request.json`）。MCP は `constraints.outpaint` の有無で系統を見分けて、元動画の ID を `outpaint.source_video_id` へ移し、in-outpainting の LoRA を注入しませんでした（`metadata.json` の `request` で `reference_video_id` が null・`loras` が空）。サーバーは `blend_dilation_stage1: 1`・`audio_strength: 0.5` を書き戻し、`freeze_source_audio`（true）と `blend_dilation_stage2`（2）はスキーマの既定のままでした（明示していないので 422 にはならない）。G5 の 2 本（56 枚・362 枚）の `metadata.json` も同じ形です。
+- **遠隔目視**: 非公開の Hugging Face データセット `Rootport/Nz-LTX23-eval-clips` の `round13-h3-outpaint/` に、`G6_20steps_1920x1088_r1_s0.5_seed1234.mp4`・`source_G6_20steps.mp4`・`sheet_G6_20steps.png` を足し、`README.md` に行を足しました（2026-11-10 夜。監督が上げた。コミット `06cebcd5a93290dfed994573fc962842c10e83ed`）。G5 の 3 本は画質の門ではないので上げていません。
+
+### 205.21 弾 2 の機械の門とコミット（2026-11-10）
+
+| 対象 | 門 | 結果 | コミット（dev） |
+|---|---|---|---|
+| エンジン（`.venv-engine-h3`・`scripts\run_h3_pytest.py`） | 弾 1 の H3 のテスト一式 | 612 件合格（205.6） | `e465c67` |
+| アプリ（`.venv`） | pytest 全件 | 3,983 件合格 | `7c8da5f` |
+| MCP | `tests/test_mcp_tools_generate.py` | 140 件合格 | `07d2c19` |
+| 操作パネル（webui） | `npm run typecheck`・`npx vitest run --exclude "**/backend.integration.test.ts"` | 型検査合格・3,746 件合格 | `759437e` |
+| 文書 | 記録簿 §205.11〜18 | — | `8685b08` |
+| 文書 | 設計正本・仕様書 v0.5.118 ほか | — | `8838093` |
+| 保管庫 | 台本 `h3_outpaint_gate_api.py` と README の節 | — | `72f01f7` |
+
+### 205.22 配布（2026-11-10 19:06）
+
+- 監督の指示で `scripts\build.ps1`（Release・埋め込み Web UI）→ `scripts\deploy.ps1` を実行し、実機 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用コピー `AviUtl2-Plugin\NzVideomni.aux2` の 2 か所が同じ大きさ（1,590,272 バイト）に更新されました。新しい文言「音声の Strength」「この動画には音声トラックがありません」を両方のバイナリで検出しました。Language ファイルも配置しました。AviUtl2 は動いていませんでした。
+- **配布の順の注意**: バックエンドだけが先に更新されると、配布済みの古い操作パネルでも H3 の Outpainting のサブタブが開き（配信の `unsupported_features` から `outpaint` が消えるため）、LTX の形（`reference_video_id`＋in-outpainting の LoRA）で送って 422 になります。そのため、配布用コピーの aux2 とバックエンドは同じコミット列で main へ入れます。main へのマージは、オーナーの実機の門 G7 の合格の後に `--no-ff` で行います（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125 の「オーナー判断待ち」）。
+
+### 205.23 発見: 失敗したジョブの `error` が `status` より後に書かれる（2026-11-10）
+
+- **事実（コード）**: `services/pipeline_manager.py` の `run_job` の `except Exception`（1143 行〜）は、`job.completed_at` → `job.status = JobStatus.failed`（1145 行）→ OOM なら `_cleanup_after_error()`（1149 行。`self.runner.unload()` でエンジンのワーカーを同期的に降ろし、`safe_memory_cleanup()` を呼ぶ）、OOM でなければ `logger.exception` → `job.error = "<符号>: …"`（1154 行）の順に書きます。連結のジョブ（`run_chain_job`）の同じ箇所（1921〜1935 行）も同じ順です（`status` は 1923 行、`_cleanup_after_error()` は 1927 行、`job.error` は 1932 行）。この間に `GET /jobs/{id}` を取った客は、`status: failed`・`error: null` を見ます。
+- **観測**: G5_379f（205.19）で、サーバーが OOM を記録したのは 18:37:06.267、降ろしを始めたのも同じ時刻でした。その直後の 18:37:07 に台本の `wait_for_job`（MCP）が取った状態は `status: failed`・`error: null` で、台本の `job_final` も `error` が null でした（`G5_379f\summary_row.json` の `wait` と `job_final`、`_rt\server.console.log`）。台本はその直後にサーバーを止めたので、`job.error` が最終的に書かれたかは観測していません（コードの順序からは書かれるはずです）。
+- **影響（推測）**: 操作パネルや MCP の利用者は、失敗を知った瞬間の 1 回の取得で原因の文言を読めないことがありえます。終了状態なので再取得しない客は、空のエラーのまま止まります。OOM の経路はワーカーを降ろす時間の分だけ窓が長く、OOM でない経路の窓は短いと読めます（窓の長さは測っていない）。
+- **台帳**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-279 に起票しました（監督。2026-11-10）。
+
+### 205.24 保管庫への写しと残りの門（2026-11-10）
+
+- **保管庫**（[`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/)）に、G5・G6 の一次記録を写しました: `summary_api.json`・`summary_api.md`・`run_G5_G6.console.log`（根）、`runs_api/G5_56f/`・`runs_api/G5_362f/`・`runs_api/G5_379f/`・`runs_api/G6_20steps/`（各本の `summary_row.json`・`request.json`・`server_log_excerpt.txt`・`worker_log_excerpt.txt`、完走した本の `metadata.json`、G5 の `wddm.csv`、G6 の `measure_request.json`・`measure_result.json`）。動画・`_rt\`・`logs_api\` は写していません（git の追跡外の `outputs\h3-outpaint-gates-2026-11-10\` に残る）。保管庫の `README.md` の「弾 2」の節を、実際に回した本に合わせて直しました。
+- **残りの門**: 実機の門 G7（オーナーが操作パネルの右クリックから確かめる。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125 のチェックリスト）と、その合格の後の main へのマージ（205.22）です。

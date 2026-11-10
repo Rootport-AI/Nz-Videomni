@@ -58,14 +58,13 @@ const LTX: BaseModelConstraints = {
  * material it cannot take joined. 台帳 §1-121: `v2v` and `chain_start_image`
  * left again (its chain continues a source video and starts from an opening
  * image), leaving `end_source` and `a2v`. §1-123: `retake` left (H3 runs a
- * Retake). */
+ * Retake). §1-125: `outpaint` left (H3 runs an Outpainting). */
 const H3_UNSUPPORTED = [
   "loras",
   "reference_video",
   "nag",
   "two_stage_hq",
   "guidance_scale",
-  "outpaint",
   "inpaint",
   "alpha_gen",
   "prune_vaed",
@@ -186,6 +185,18 @@ describe("generationConstraints", () => {
     expect(frameLimitsFor(c, 481)).toEqual(frameLimitsFor(LTX_GENERATION_CONSTRAINTS, 481));
     expect(c.sampling).toBeNull();
     expect(c.retake).toBeNull();
+    expect(c.outpaint).toBeNull();
+  });
+
+  it("§1-125: copies the served Outpainting sliders; absent or null (LTX, the fallback) means the LTX Outpainting", () => {
+    const audio = { min: 0, max: 1, step: 0.05, default: 0.5 };
+    const blend = { min: 0, max: 15, step: 1, default: 1 };
+    expect(
+      resolveGenerationConstraints({ ...H3, outpaint: { audio_strength: audio, blend_dilation_stage1: blend } }).outpaint,
+    ).toEqual({ audioStrength: audio, blendDilationStage1: blend });
+    expect(resolveGenerationConstraints(H3).outpaint).toBeNull();
+    expect(resolveGenerationConstraints({ ...H3, outpaint: null }).outpaint).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.outpaint).toBeNull();
   });
 
   it("§1-123: copies the served Retake Strength slider; absent or null (LTX, the fallback) means the LTX Retake", () => {
@@ -234,14 +245,15 @@ describe("comfortProfileMissing", () => {
 });
 
 describe("MiniMax H3's feature names on screen", () => {
-  it("keeps Chained (§1-106) and Edit (§1-123, Retake only) open, closes the Create sections H3 cannot use", () => {
+  it("keeps Chained (§1-106) and Edit (§1-123 Retake, §1-125 Outpainting) open, closes the Create sections H3 cannot use", () => {
     // §1-123: the adapter no longer publishes `retake`, so the Edit tab stays
-    // open with only its Retake sub-tab live (ruling 34 updated).
+    // open with its Retake sub-tab live (ruling 34 updated). §1-125: nor
+    // `outpaint`, so the Outpainting sub-tab opens beside it.
     // §1-106: no `chain` any more, so the Chained tab stays open.
     expect(disabledModesFor(H3_UNSUPPORTED)).toEqual([]);
     expect(editSubTabsDisabledFor(H3_UNSUPPORTED)).toEqual({
       retake: false,
-      outpainting: true,
+      outpainting: false,
       inpainting: true,
       alphaGen: true,
     });

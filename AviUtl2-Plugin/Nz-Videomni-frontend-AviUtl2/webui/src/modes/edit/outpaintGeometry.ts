@@ -159,9 +159,21 @@ export function centerPads(pads: Pads): Pads {
  * constant to keep this module dependency-free. */
 export const MIN_NUM_FRAMES = 9;
 
+/** The `num_frames` lattice (`step * n + offset`) — structurally the same as
+ * `modes/single/paramUtils.ts`'s `FrameGrid`, re-declared so this module keeps
+ * zero imports. */
+export interface OutpaintFrameGrid {
+  step: number;
+  offset: number;
+}
+
+/** LTX の 8n+1。{@link maxNumFrames}・{@link outpaintReasons} の既定値。 */
+export const LTX_OUTPAINT_FRAME_GRID: Readonly<OutpaintFrameGrid> = Object.freeze({ step: 8, offset: 1 });
+
 /**
- * `num_frames` の上限。`durationSec * fps` を切り捨ててから 8n+1 に丸める
- * （下限 9）。
+ * `num_frames` の上限。`durationSec * fps` を切り捨ててから格子（既定は LTX の
+ * 8n+1）に丸める（下限 `minFrames`、既定 9）。§1-125: MiniMax H3 では配信の
+ * `constraints.num_frames` の格子（17n+5）と下限を渡す。
  *
  * D5 (設計書 §4-4): the duration slider's ceiling follows the SOURCE video, so
  * a generation longer than its guide can never even be dialled in. `durationSec`
@@ -169,13 +181,18 @@ export const MIN_NUM_FRAMES = 9;
  * DOWN at both steps — an unknown/zero duration or fps degrades to the 9-frame
  * floor rather than inventing headroom.
  */
-export function maxNumFrames(durationSec: number, fps: number): number {
+export function maxNumFrames(
+  durationSec: number,
+  fps: number,
+  grid: OutpaintFrameGrid = LTX_OUTPAINT_FRAME_GRID,
+  minFrames: number = MIN_NUM_FRAMES,
+): number {
   if (!Number.isFinite(durationSec) || !Number.isFinite(fps) || durationSec <= 0 || fps <= 0) {
-    return MIN_NUM_FRAMES;
+    return minFrames;
   }
   const raw = Math.floor(durationSec * fps);
-  if (raw < MIN_NUM_FRAMES) return MIN_NUM_FRAMES;
-  return Math.floor((raw - 1) / 8) * 8 + 1;
+  if (raw < minFrames) return minFrames;
+  return Math.floor((raw - grid.offset) / grid.step) * grid.step + grid.offset;
 }
 
 /** 潜在フレーム数（VAE が時間方向に 8 分の 1 へ圧縮した後のコマ数）。
@@ -296,6 +313,16 @@ export interface OutpaintReasonsInput {
   maxNumFrames: number;
   /** Is the `in-outpainting` control LoRA present in `GET /loras`? */
   hasOutpaintLora: boolean;
+  /** §1-125: the canvas grid. 省略時は LTX の {@link CANVAS_MULTIPLE}（128）。
+   * MiniMax H3 では配信の `constraints.dimension_multiple`（32）。 */
+  canvasMultiple?: number | undefined;
+  /** §1-125: the `num_frames` lattice. 省略時は LTX の 8n+1。H3 では 17n+5。 */
+  frameGrid?: OutpaintFrameGrid | undefined;
+  /** §1-125: the `num_frames` floor. 省略時は LTX の {@link MIN_NUM_FRAMES}（9）。 */
+  minNumFrames?: number | undefined;
+  /** §1-125: whether the pinned control LoRA is required (`loraMissing`). 省略時は
+   * `true`（LTX）。H3 は IC-LoRA を使わないので `false`。 */
+  requireLora?: boolean | undefined;
 }
 
 /**
@@ -315,14 +342,18 @@ export interface OutpaintReasonsInput {
  */
 export function outpaintReasons(input: OutpaintReasonsInput): string[] {
   const reasons: string[] = [];
+  const canvasMultiple = input.canvasMultiple ?? CANVAS_MULTIPLE;
+  const grid = input.frameGrid ?? LTX_OUTPAINT_FRAME_GRID;
+  const minFrames = input.minNumFrames ?? MIN_NUM_FRAMES;
+  const requireLora = input.requireLora ?? true;
 
   if (input.prompt.trim().length === 0) reasons.push("promptEmpty");
 
   const frames = input.numFrames;
   if (
     !Number.isInteger(frames) ||
-    (frames - 1) % 8 !== 0 ||
-    frames < MIN_NUM_FRAMES ||
+    (frames - grid.offset) % grid.step !== 0 ||
+    frames < minFrames ||
     frames > input.maxNumFrames
   ) {
     reasons.push("numFramesOffGrid");
@@ -369,12 +400,12 @@ export function outpaintReasons(input: OutpaintReasonsInput): string[] {
       // 同じ軸で 2 行出るのは抑制しない —— どちらも本当に直す必要がある。
       if (canvas.width > MAX_CANVAS_SIDE) reasons.push("canvasWidthTooLarge");
       if (canvas.height > MAX_CANVAS_SIDE) reasons.push("canvasHeightTooLarge");
-      if (canvas.width % CANVAS_MULTIPLE !== 0) reasons.push("canvasWidthOffGrid");
-      if (canvas.height % CANVAS_MULTIPLE !== 0) reasons.push("canvasHeightOffGrid");
+      if (canvas.width % canvasMultiple !== 0) reasons.push("canvasWidthOffGrid");
+      if (canvas.height % canvasMultiple !== 0) reasons.push("canvasHeightOffGrid");
     }
   }
 
-  if (!input.hasOutpaintLora) reasons.push("loraMissing");
+  if (requireLora && !input.hasOutpaintLora) reasons.push("loraMissing");
 
   return reasons;
 }

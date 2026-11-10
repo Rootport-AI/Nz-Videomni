@@ -405,6 +405,15 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
     // `GET /models` publishes it (`RequestRules.retake_audio_strength`). LTX
     // publishes no `retake` block.
     retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    // §1-125: the Outpainting source-audio Strength and mask-blur (stage 1)
+    // sliders, as the real `GET /models` publishes them
+    // (`RequestRules.outpaint_*`). LTX publishes no `outpaint` block. The
+    // single `/generate` handler below takes the H3 body (`outpaint` with
+    // `source_video_id`, a 32-multiple canvas, 17n+5 frames) and answers 202.
+    outpaint: {
+      audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
+      blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
+    },
   },
 };
 
@@ -577,6 +586,9 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   // §1-123: `retake` LEFT (H3 runs a Retake now; the chain handler below
   // takes `retake` with `audio_strength` and answers 202, as it does for
   // LTX), so Edit's tab opens with only the Retake sub-tab live.
+  // §1-125: `outpaint` LEFT too (H3 runs an Outpainting by fixing the
+  // source's tokens; the single handler takes `outpaint.source_video_id`), so
+  // the Outpainting sub-tab opens beside Retake.
   // 台帳 §1-104: `loras` left (H3 runs Style / Turbo LoRAs now) and
   // `lora_audio_strength` joined at the end (one strength per LoRA).
   // §1-106: `chain` LEFT (H3 chains now) and the chain material it
@@ -589,7 +601,6 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "nag", // the NAG method only (VSF is accepted)
     "two_stage_hq",
     "guidance_scale",
-    "outpaint",
     "inpaint",
     "alpha_gen",
     "prune_vaed",

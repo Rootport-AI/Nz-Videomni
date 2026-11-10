@@ -1,19 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, createApiClient } from "../../api/client";
 import type { ApiClient } from "../../api/client";
-import type { AppConfig, GenerateRequest } from "../../api/types";
+import type { AppConfig, GenerateRequest, SamplingConstraints, SamplingParamConstraint } from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
+import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
 import { accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { resolveSequenceRowsBudget } from "../../shell/comfortTable";
+import {
+  fixedFrameRate as fixedFrameRateOf,
+  frameLimitsFor,
+  LTX_GENERATION_CONSTRAINTS,
+} from "../../shell/generationConstraints";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
+import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
 import { resolveOutpaintComfortBudget } from "../../shell/outpaintBudget";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
 import { useLoras } from "../inventory/useLoras";
-import { FALLBACK_APP_CONFIG, MIN_NUM_FRAMES } from "../single/defaultConfig";
+import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
-import { FRAME_RATE_FALLBACK, FRAME_RATE_MIN, snapFrameRate, snapNumFrames } from "../single/paramUtils";
+import {
+  clamp,
+  FRAME_RATE_FALLBACK,
+  FRAME_RATE_MIN,
+  isValidNumFrames,
+  snapFrameRate,
+  snapNumFrames,
+} from "../single/paramUtils";
+import type { FrameGrid } from "../single/paramUtils";
+import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import type { SamplingValues } from "../single/samplingValues";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが、ファイル
 // 移動はしない —— 他ワークストリームが chained/ を占有しているため、ここで動かす
 // と衝突する。Create（`modes/single/useGenerationForm.ts`）も同じ理由でこのフック
@@ -27,6 +46,7 @@ import {
   centerPads,
   clampPad,
   comfortTokenEstimate,
+  CANVAS_MULTIPLE,
   DEFAULT_BLEND_DILATION_STAGE1,
   isOverComfortBudget,
   maxNumFrames,
@@ -112,6 +132,18 @@ export interface UseOutpaintFormDeps {
    * `refreshKey` (the server's LoRA list follows the base model). Omitted ⇒
    * fetched once on mount, as before. */
   loraRefreshKey?: string | undefined;
+  /** §1-125: the loaded base model's numeric rules
+   * (`useBaseModels().activeConstraints`, the same input Retake takes). The
+   * form branches on ONE thing — whether `constraints.outpaint` is present
+   * (MiniMax H3) — and otherwise reads the canvas grid, the frame grid, the
+   * fixed fps and the sampling sliders off it. 省略時は LTX の規則
+   * （`LTX_GENERATION_CONSTRAINTS`）で、LTX の画面・要求は従来と同じ。 */
+  constraints?: GenerationConstraints | undefined;
+  /** §1-125: whether the engine takes no LoRA audio strength
+   * (`featureScope.loraAudioStrengthHiddenFor`, as Retake). `true` drops
+   * `loras[].audio_strength` from the prompt's LoRA tags. Read on the H3 shape
+   * only (LTX's Outpainting sends the pinned control LoRA, never the tags). */
+  loraAudioHidden?: boolean | undefined;
 }
 
 export interface UseOutpaintFormResult {
@@ -146,12 +178,38 @@ export interface UseOutpaintFormResult {
    * (`canvasWidthOffGrid` / `canvasHeightOffGrid`) instead. `{0,0}` while the
    * source size is unknown. */
   canvas: { width: number; height: number };
+  /** §1-125: the canvas grid the off-grid gate checks (LTX 128, H3 32 from
+   * `constraints.dimensionMultiple`). The panel's grid note and the reason
+   * lines quote it. */
+  canvasMultiple: number;
+  /** §1-125: `true` when the loaded base model publishes
+   * `constraints.outpaint` (MiniMax H3) — no pinned control LoRA, the source
+   * goes as `outpaint.source_video_id`, the audio is a Strength slider, the
+   * comfort marker is the sequence-rows line. The panel reads only this flag
+   * and the values below; it never names an engine. */
+  h3: boolean;
 
   /** マスクブラーの膨張段数（stage 1）。`0..15`。UI はこの段数を実寸ピクセルへ
    * 直して見せるだけで、状態としては段数のまま持つ —— キャンバスが変われば
    * 同じ段数でも実寸は変わるので、ピクセルを保存すると嘘になる。 */
   blendDilation: number;
   setBlendDilation: (value: number) => void;
+  /** The mask-blur slider's range. LTX: the constants `0..15`. H3: the served
+   * `constraints.outpaint.blend_dilation_stage1`. */
+  blendDilationRange: { min: number; max: number; step: number };
+
+  /** §1-125: the source-audio Strength slider (range, step, default as
+   * served). `null` on LTX (the audio is kept via `freeze_source_audio`). */
+  audioStrengthRange: SamplingParamConstraint | null;
+  /** The source-audio Strength, or `null` when {@link audioStrengthRange} is. */
+  audioStrength: number | null;
+  /** Clamps into the range; a no-op while {@link audioStrengthRange} is `null`. */
+  setAudioStrength: (value: number) => void;
+  /** §1-125: the three sampling sliders (same parts as Retake). `null` = none
+   * served (LTX). */
+  sampling: SamplingValues | null;
+  samplingConstraints: SamplingConstraints | null;
+  setSamplingValue: (key: keyof SamplingValues, value: number) => void;
 
   /** The `num_frames` that will actually be sent: the stored value capped by
    * {@link numFramesCeiling}. DERIVED every render, never stored (§4-4). */
@@ -160,8 +218,15 @@ export interface UseOutpaintFormResult {
    * rate. Re-derived every render for the same reason. */
   numFramesCeiling: number;
   setNumFrames: (value: number, snap: boolean) => void;
+  /** The `num_frames` lattice and floor the duration slider steps on (LTX
+   * 8n+1 / 9, H3 17n+5 / 22 from `constraints`). */
+  frameGrid: FrameGrid;
+  minNumFrames: number;
   frameRate: number;
   setFrameRate: (value: number) => void;
+  /** §1-125: the fps the engine is fixed at (H3 24), or `null` when the user
+   * may choose (LTX). The panel then shows the fps box disabled. */
+  fixedFrameRate: number | null;
   seed: number;
   setSeed: (value: number) => void;
 
@@ -177,8 +242,14 @@ export interface UseOutpaintFormResult {
    * 系統に仮の閾値を当てないので、警告そのものが出ない（§3-135）。 */
   isOverComfortBudget: boolean;
   /** The rough token count the warning quotes — `outpaintGeometry`'s
-   * `comfortTokenEstimate` of the EXTENDED canvas. */
+   * `comfortTokenEstimate` of the EXTENDED canvas. §1-125: on the H3 shape it
+   * is the sequence rows S (`h3SequenceRows(...).total`) of the canvas. */
   comfortTokens: number;
+  /** §1-125: the duration slider's comfort tick on the H3 shape —
+   * `h3ComfortFrames` of the canvas against the served `single_rows_budget`.
+   * `null` on LTX (the panel keeps its `spill_free_frames` tick), with no line
+   * served, or while the source is unmeasured. */
+  comfortFrames: number | null;
 
   /** The `POST /generate` body. Only meaningful while `isValid`. */
   buildRequest: () => GenerateRequest;
@@ -210,6 +281,18 @@ export interface UseOutpaintFormResult {
  */
 export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintFormResult {
   const { nativeBridge, initialIntent, config, engineFamily, acceleration, loraRefreshKey } = deps;
+  // §1-125: 読み込み中のベースモデルの規則。分岐は `h3`（`constraints.outpaint` の有無）の
+  // 1 つに集める（手本 `useRetakeForm`）。フレームの格子・固定 fps・サンプリングは
+  // 分岐せずに読む —— ただしキャンバスの格子だけは LTX では `dimensionMultiple`（64）
+  // ではなく参照動画の 128 なので、`h3` のときだけ配信値を使う。
+  const rules = deps.constraints ?? LTX_GENERATION_CONSTRAINTS;
+  const outpaintRules = rules.outpaint;
+  const h3 = outpaintRules !== null;
+  const canvasMultiple = h3 ? rules.dimensionMultiple : CANVAS_MULTIPLE;
+  const frameGrid = rules.frameGrid;
+  const minFrames = rules.minNumFrames;
+  const fixedFps = fixedFrameRateOf(rules);
+  const loraAudioHidden = deps.loraAudioHidden ?? false;
   const apiClient = useMemo<ApiClient>(
     () => deps.apiClient ?? (nativeBridge ? createApiClient(nativeBridge) : defaultApiClient),
     [deps.apiClient, nativeBridge],
@@ -223,8 +306,14 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   // 「センタリング」（§5-D）。入力の書き込み方だけを変えるスイッチで、リクエストの
   // 中身にはならない。
   const [centering, setCenteringState] = useState(false);
-  const [blendDilation, setBlendDilationState] = useState(DEFAULT_BLEND_DILATION_STAGE1);
-  const [numFramesInput, setNumFramesInput] = useState(FALLBACK_APP_CONFIG.generation_defaults.num_frames);
+  // マスクブラーの初期値。LTX は公式の既定 5、H3 は配信の既定（§1-125）。
+  const blendRange = outpaintRules?.blendDilationStage1 ?? null;
+  const [blendDilation, setBlendDilationState] = useState(() => initialBlendDilation(blendRange));
+  // 既定のフレーム数が格子に乗らないエンジンでは乗せてから始める（既定の 345 は
+  // LTX の 8n+1 にも H3 の 17n+5 にも乗るので、今は素通し）。
+  const [numFramesInput, setNumFramesInput] = useState(() =>
+    initialNumFrames(FALLBACK_APP_CONFIG.generation_defaults.num_frames, rules),
+  );
   // 台帳§3-71/§3-72: 生成 fps は必ず整数（`paramUtils.snapFrameRate` が正本）。
   // 初期値も通す —— 既定を非整数へ変えたときに、このパネルだけ素通しになるのを
   // 防ぐため。フォールバックは定数（`?? FALLBACK_APP_CONFIG…` と繋ぐと、スナップ
@@ -232,13 +321,37 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   // 前後の `num_frames`・`seed`）が実 config ではなく `FALLBACK_APP_CONFIG` を
   // 直読みしている件は引き続き**別件**である —— §3-135 で `deps.config` を
   // 受け取るようにしたが、それを見るのは画角拡張の快適予算だけ。
-  const [frameRate, setFrameRateState] = useState(
+  const [frameRateState, setFrameRateState] = useState(
     () => snapFrameRate(FALLBACK_APP_CONFIG.generation_defaults.frame_rate) ?? FRAME_RATE_FALLBACK,
   );
   /** fps 欄の setter。空欄（`Number("")` = 0）・非有限・範囲外は他パネルと同じ
    * 意味論（0 以下 → 1、60 超 → 60、小数 → 四捨五入）。 */
   const setFrameRate = useCallback((raw: number) => setFrameRateState(snapFrameRate(raw) ?? FRAME_RATE_MIN), []);
+  // §1-125: 固定 fps のエンジン（H3 の 24）では状態の値を使わず、常に固定値で数え・送る
+  // （手本 `useRetakeForm`）。
+  const frameRate = fixedFps ?? frameRateState;
   const [seed, setSeed] = useState(FALLBACK_APP_CONFIG.generation_defaults.seed);
+
+  // §1-125: 元動画の音声の Strength（H3 だけ）と、サンプリングの 3 項目（配信があるときだけ）。
+  const audioStrengthRange = outpaintRules?.audioStrength ?? null;
+  const [audioStrength, setAudioStrengthState] = useState<number | null>(() => audioStrengthRange?.default ?? null);
+  const setAudioStrength = useCallback(
+    (raw: number) => {
+      if (!audioStrengthRange || !Number.isFinite(raw)) return;
+      setAudioStrengthState(clamp(raw, audioStrengthRange.min, audioStrengthRange.max));
+    },
+    [audioStrengthRange],
+  );
+  const samplingConstraints = rules.sampling;
+  const [sampling, setSampling] = useState<SamplingValues | null>(() => samplingDefaults(samplingConstraints));
+  const setSamplingValue = useCallback(
+    (key: keyof SamplingValues, raw: number) => {
+      const value = clampSamplingValue(samplingConstraints, key, raw);
+      if (value === null) return;
+      setSampling((prev) => (prev ? { ...prev, [key]: value } : prev));
+    },
+    [samplingConstraints],
+  );
 
   const source = useSourceUpload("video", nativeBridge ? { nativeBridge } : {});
   const { uploadPath } = source;
@@ -379,18 +492,33 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   );
 
   // --- マスクブラー --------------------------------------------------------
-  const setBlendDilation = useCallback((value: number) => {
-    if (!Number.isFinite(value)) return;
-    setBlendDilationState(Math.min(BLEND_DILATION_MAX, Math.max(BLEND_DILATION_MIN, Math.round(value))));
-  }, []);
+  // 範囲は LTX では定数（0..15）、H3 では配信値（§1-125）。
+  const blendDilationRange = useMemo(
+    () =>
+      blendRange
+        ? { min: blendRange.min, max: blendRange.max, step: blendRange.step }
+        : { min: BLEND_DILATION_MIN, max: BLEND_DILATION_MAX, step: 1 },
+    [blendRange],
+  );
+  const setBlendDilation = useCallback(
+    (value: number) => {
+      if (!Number.isFinite(value)) return;
+      setBlendDilationState(Math.min(blendDilationRange.max, Math.max(blendDilationRange.min, Math.round(value))));
+    },
+    [blendDilationRange],
+  );
 
   // --- duration -----------------------------------------------------------
-  // Derived, never stored (§4-4). `maxNumFrames` floors at 9 for an unknown
-  // duration, but an unknown duration is already a `mediaInfoUnknown` block, so
-  // the panel is never generating off that floor.
+  // Derived, never stored (§4-4). `maxNumFrames` floors at the grid's minimum
+  // for an unknown duration, but an unknown duration is already a
+  // `mediaInfoUnknown` block, so the panel is never generating off that floor.
+  // §1-125: the engine's own ceiling (`constraints.num_frames.max`, H3 345) caps
+  // the config's too, floored onto the grid (`frameLimitsFor`; with the LTX
+  // rules this is the config's 481 unchanged).
+  const configCeiling = frameLimitsFor(rules, FALLBACK_APP_CONFIG.limits.max_num_frames).maxNumFrames;
   const numFramesCeiling = Math.min(
-    FALLBACK_APP_CONFIG.limits.max_num_frames,
-    mediaInfo.durationSec > 0 ? maxNumFrames(mediaInfo.durationSec, frameRate) : FALLBACK_APP_CONFIG.limits.max_num_frames,
+    configCeiling,
+    mediaInfo.durationSec > 0 ? maxNumFrames(mediaInfo.durationSec, frameRate, frameGrid, minFrames) : configCeiling,
   );
   const numFrames = Math.min(numFramesInput, numFramesCeiling);
 
@@ -398,13 +526,33 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     (value: number, snap: boolean) => {
       // Free typing passes through untouched (mirroring Create's field), so the
       // user can type "104" without the first keystroke rewriting the box; the
-      // 8n+1 grid is a submit gate (`numFramesOffGrid`), not a live correction.
-      setNumFramesInput(snap ? snapNumFrames(value, MIN_NUM_FRAMES, numFramesCeiling) : value);
+      // frame grid (LTX 8n+1, H3 17n+5) is a submit gate (`numFramesOffGrid`),
+      // not a live correction.
+      setNumFramesInput(snap ? snapNumFrames(value, minFrames, numFramesCeiling, frameGrid) : value);
     },
-    [numFramesCeiling],
+    [numFramesCeiling, minFrames, frameGrid],
   );
 
+  // --- 配信への追従（§1-125） ---------------------------------------------
+  // 読み込み中のベースモデルの規則が変わったら追従する（フォームがマウントされた
+  // ままベースモデルを切り替えた場合や、`GET /models` が後から届いた場合。
+  // `useRetakeForm` の `appliedRulesRef` と同じ形）。初回は飛ばし（上の初期化が
+  // この規則を使っている）、中身が変わったときだけ走る。なじませ・音声の Strength・
+  // サンプリングは新しい配信の既定へ戻し、フレーム数は新しい格子から外れていれば
+  // 乗せ直す。fps は送信値が `fixedFps ?? frameRateState` なので触らなくてよい。
+  const appliedRulesRef = useRef(rules);
+  useEffect(() => {
+    if (appliedRulesRef.current === rules) return;
+    appliedRulesRef.current = rules;
+    setBlendDilationState(initialBlendDilation(blendRange));
+    setAudioStrengthState(audioStrengthRange?.default ?? null);
+    setSampling(samplingDefaults(samplingConstraints));
+    setNumFramesInput((prev) => initialNumFrames(prev, rules));
+  }, [rules, blendRange, audioStrengthRange, samplingConstraints]);
+
   // --- the pinned control LoRA -------------------------------------------
+  // §1-125: H3 は IC-LoRA を使わないので、ピン留めの判定（`loraMissing`）をしない。
+  // 一覧の取得は Hooks の規則のため両系統で続ける（結果を読まないだけ）。
   const lorasState = useLoras({ apiClient, refreshKey: loraRefreshKey });
   const hasOutpaintLora =
     lorasState.status === "ready" &&
@@ -423,6 +571,10 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     numFrames,
     maxNumFrames: numFramesCeiling,
     hasOutpaintLora,
+    canvasMultiple,
+    frameGrid,
+    minNumFrames: minFrames,
+    requireLora: !h3,
   });
   const isValid = validityReasons.length === 0;
 
@@ -431,12 +583,54 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   // 表示と判定で食い違う。予算はサーバー配信の表からエンジン系統で引き（§3-135）、
   // **線が無ければ（`null`）警告を出さない**。超過は WARNING だけで `isValid`
   // には一切関与しない。
-  const comfortBudget = resolveOutpaintComfortBudget((config ?? FALLBACK_APP_CONFIG).limits, engineFamily);
-  const comfortTokens = comfortTokenEstimate(canvas.width, canvas.height, numFrames);
-  const overComfort =
-    known && comfortBudget !== null && isOverComfortBudget(canvas.width, canvas.height, numFrames, comfortBudget);
+  //
+  // §1-125: H3 は `outpaint_budget` を配信しない（null）。代わりに Single の線
+  // `single_rows_budget` を共用し、拡張後キャンバスの総行数 S（`h3SequenceRows`。
+  // キーフレームも Reference も無い）で警告と目盛りを出す。固定行は行数を増やさない。
+  const limits = (config ?? FALLBACK_APP_CONFIG).limits;
+  const comfortBudget = h3 ? null : resolveOutpaintComfortBudget(limits, engineFamily);
+  const rowsBudget = h3 ? resolveSequenceRowsBudget(limits, engineFamily) : null;
+  const h3Shape = { width: canvas.width, height: canvas.height, ...H3_NO_CONDITIONING };
+  const h3Rows = h3 && known ? h3SequenceRows(h3Shape, numFrames) : null;
+  const comfortTokens = h3 ? (h3Rows?.total ?? 0) : comfortTokenEstimate(canvas.width, canvas.height, numFrames);
+  const overComfort = h3
+    ? rowsBudget !== null && h3Rows !== null && h3Rows.total > rowsBudget
+    : known && comfortBudget !== null && isOverComfortBudget(canvas.width, canvas.height, numFrames, comfortBudget);
+  const comfortFrames =
+    h3 && known && rowsBudget !== null ? h3ComfortFrames(h3Shape, rowsBudget, minFrames, numFramesCeiling) : null;
 
   const buildRequest = useCallback((): GenerateRequest => {
+    if (h3) {
+      // §1-125: H3 の形。`reference_video_id` と `in-outpainting` のピン留めは送らない
+      // （元動画は `outpaint.source_video_id`）。LoRA は Retake と同じくプロンプトの
+      // LoRA タグから取る。`blend_dilation_stage1` は**常に送る** —— 「既定なら省く」を
+      // 残すと、利用者が 5 を選んでもサーバーが配信の既定を書き戻してしまう。
+      // `blend_dilation_stage2` と `freeze_source_audio` は送らない（後者は明示すると 422）。
+      const { strippedPrompt, loras: parsedLoras } = parseLoraPrompt(prompt);
+      const loras = loraAudioHidden ? omitLoraAudioStrength(parsedLoras) : parsedLoras;
+      return {
+        prompt: strippedPrompt.trim(),
+        // タグが 1 つも無ければキーごと省く（Retake の `buildRequest` と同じ作法）。
+        ...(loras.length > 0 ? { loras } : {}),
+        width: canvas.width,
+        height: canvas.height,
+        num_frames: numFrames,
+        frame_rate: frameRate,
+        seed,
+        // サンプリングの 3 項目。配信があるときだけ 3 つとも送る。
+        ...samplingRequestFields(sampling),
+        outpaint: {
+          pad_left: pads.left,
+          pad_right: pads.right,
+          pad_top: pads.top,
+          pad_bottom: pads.bottom,
+          source_video_id: sourceId ?? "",
+          audio_strength: audioStrength ?? audioStrengthRange?.default ?? 0,
+          blend_dilation_stage1: blendDilation,
+        },
+        ...accelerationRequestFields(acceleration),
+      };
+    }
     // 既定（5 / 2）のときは両キーごと省略する —— 送っても意味は同じだが、
     // 省略しておけばこのフィールドを知らない古いサーバーにも通る（後方互換）。
     const blend =
@@ -468,7 +662,23 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
       // server default, keeping this request byte-identical to before.
       ...accelerationRequestFields(acceleration),
     };
-  }, [prompt, canvas.width, canvas.height, numFrames, frameRate, seed, sourceId, pads, blendDilation, acceleration]);
+  }, [
+    h3,
+    loraAudioHidden,
+    sampling,
+    audioStrength,
+    audioStrengthRange,
+    prompt,
+    canvas.width,
+    canvas.height,
+    numFrames,
+    frameRate,
+    seed,
+    sourceId,
+    pads,
+    blendDilation,
+    acceleration,
+  ]);
 
   return {
     source,
@@ -479,13 +689,25 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     centering,
     setCentering,
     canvas,
+    canvasMultiple,
+    h3,
     blendDilation,
     setBlendDilation,
+    blendDilationRange,
+    audioStrengthRange,
+    audioStrength,
+    setAudioStrength,
+    sampling,
+    samplingConstraints,
+    setSamplingValue,
     numFrames,
     numFramesCeiling,
     setNumFrames,
+    frameGrid,
+    minNumFrames: minFrames,
     frameRate,
     setFrameRate,
+    fixedFrameRate: fixedFps,
     seed,
     setSeed,
     hasOutpaintLora,
@@ -493,6 +715,22 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     isValid,
     isOverComfortBudget: overComfort,
     comfortTokens,
+    comfortFrames,
     buildRequest,
   };
+}
+
+/** §1-125: the mask-blur starting value — the served default on the H3 shape
+ * (clamped into its own range), LTX's official 5 otherwise. */
+function initialBlendDilation(range: SamplingParamConstraint | null): number {
+  if (!range) return DEFAULT_BLEND_DILATION_STAGE1;
+  return clamp(Math.round(range.default), range.min, range.max);
+}
+
+/** §1-125: a frame count on `rules`' grid — `value` itself when it already is
+ * (always the case for LTX's default), else snapped into the engine's bounds. */
+function initialNumFrames(value: number, rules: GenerationConstraints): number {
+  if (isValidNumFrames(value, rules.frameGrid)) return value;
+  const { minNumFrames, maxNumFrames: max } = frameLimitsFor(rules, FALLBACK_APP_CONFIG.limits.max_num_frames);
+  return snapNumFrames(value, minNumFrames, max, rules.frameGrid);
 }

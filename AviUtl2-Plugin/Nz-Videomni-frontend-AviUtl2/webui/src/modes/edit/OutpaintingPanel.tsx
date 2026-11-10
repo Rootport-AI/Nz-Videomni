@@ -4,16 +4,12 @@ import { useJobsContext } from "../../jobs/JobsContext";
 import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
 import { useFileDrop } from "../../shell/useFileDrop";
-import { FALLBACK_APP_CONFIG, MIN_NUM_FRAMES } from "../single/defaultConfig";
+import { SamplingFields } from "../single/CommonGenerationFields";
+import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
+import { FloatSliderField } from "../single/FloatSliderField";
 import { formatDurationHint, FRAME_RATE_MAX, FRAME_RATE_MIN, isStepEvent } from "../single/paramUtils";
 import { resolveSpillFreeFrames } from "../single/spillUtils";
-import {
-  BLEND_DILATION_MAX,
-  BLEND_DILATION_MIN,
-  featherWidthPx,
-  MAX_PAD,
-  PAD_SLIDER_MAX,
-} from "./outpaintGeometry";
+import { featherWidthPx, MAX_PAD, PAD_SLIDER_MAX } from "./outpaintGeometry";
 import { OutpaintPreview } from "./OutpaintPreview";
 import { OUTPAINT_VIDEO_EXTENSIONS } from "./useOutpaintForm";
 import type { PadSide, UseOutpaintFormResult } from "./useOutpaintForm";
@@ -72,6 +68,14 @@ export interface OutpaintingPanelProps {
  *  - form state of its own. `EditScreen` owns the hook and hands the result in,
  *    because the Generate button it gates sits in that screen's generation
  *    column — the same split as `SingleScreen` / `GenerationForm`.
+ *
+ * §1-125: `form.h3`（読み込み中のベースモデルが `constraints.outpaint` を配信する。
+ * MiniMax H3）のときは、格子の説明が 32、尺のスライダーが 17n+5、fps は固定表示、
+ * マスクブラーの説明は緑の助言の無い `featherNote`、音声の Strength のスライダーと
+ * サンプリングのスライダーが加わり、尺の目盛りは `spill_free_frames` ではなく
+ * 総行数の線（`form.comfortFrames`）になる。どれもフックが解決した値を読むだけで、
+ * パネルはエンジン名を知らない（手本 `RetakePanel`）。ピン留めの LoRA はそもそも
+ * 画面に出ていないので、H3 でも描き分けは要らない。
  */
 export function OutpaintingPanel({ form, disabled, nativeBridge }: OutpaintingPanelProps) {
   const strings = useStrings();
@@ -99,10 +103,17 @@ export function OutpaintingPanel({ form, disabled, nativeBridge }: OutpaintingPa
   // Gated on `known`: with no source measured the canvas is 0x0, and the
   // nearest-area fallback would answer with the SMALLEST entry in the table —
   // a tick and a warning about a resolution nobody has chosen yet.
-  const spillThresholdFrames = known
-    ? resolveSpillFreeFrames(FALLBACK_APP_CONFIG.limits.spill_free_frames, form.canvas.width, form.canvas.height)
-    : null;
-  const isOverSpillThreshold = spillThresholdFrames !== null && form.numFrames > spillThresholdFrames;
+  //
+  // §1-125: H3 では `spill_free_frames` の表を引かず、フックが総行数の線から導いた
+  // 目盛り（`form.comfortFrames`）だけを描く。超過の警告は下の `comfortWarning`
+  // （同じ線で判定）が担うので、「2〜4 倍遅く」の文言は H3 では出さない。
+  const spillThresholdFrames = form.h3
+    ? form.comfortFrames
+    : known
+      ? resolveSpillFreeFrames(FALLBACK_APP_CONFIG.limits.spill_free_frames, form.canvas.width, form.canvas.height)
+      : null;
+  const isOverSpillThreshold = !form.h3 && spillThresholdFrames !== null && form.numFrames > spillThresholdFrames;
+  const strengthRange = form.audioStrengthRange;
 
   return (
     <section className="edit-panel outpaint-panel">
@@ -146,19 +157,20 @@ export function OutpaintingPanel({ form, disabled, nativeBridge }: OutpaintingPa
             {/* 必須説明文。アライメント撤去後も残す（オーナー決定 2026-08-11）
                 —— ブロック理由は右カラムに出るので、スライダーの手元にも常設の
                 説明が要る。 */}
-            <p className="field-hint">{t.gridNote}</p>
+            <p className="field-hint">{t.gridNote(form.canvasMultiple)}</p>
           </div>
 
           {/* マスクブラー。内部は膨張段数 (0-15、サーバーの範囲そのまま)、
-              目に見える数字はすべて実寸ピクセル。 */}
+              目に見える数字はすべて実寸ピクセル。§1-125: 両系統で同じ部品・同じ px
+              表示。範囲は H3 では配信値（`form.blendDilationRange`）。 */}
           <label className="field">
             <span className="field-label">{t.blurLabel}</span>
             <input
               type="range"
               aria-label={t.blurLabel}
-              min={BLEND_DILATION_MIN}
-              max={BLEND_DILATION_MAX}
-              step={1}
+              min={form.blendDilationRange.min}
+              max={form.blendDilationRange.max}
+              step={form.blendDilationRange.step}
               value={form.blendDilation}
               disabled={disabled}
               onChange={(e) => form.setBlendDilation(Number(e.target.value))}
@@ -168,24 +180,45 @@ export function OutpaintingPanel({ form, disabled, nativeBridge }: OutpaintingPa
                 この値を上げる」という助言は 2026-08-09 にこの一文へ畳み込んだ
                 （旧 `blurGreenNote` は廃止）—— 同じスライダーの話が2段落に
                 分かれて見えていたため。 */}
-            <p className="field-hint">{t.blendNote(featherPx)}</p>
+            {/* §1-125: H3 にはマスクの緑が無いので、緑の助言の無い説明（元動画の縁を
+                生成と混ぜる・0 で元動画のまま）に替える。 */}
+            <p className="field-hint">{form.h3 ? t.featherNote(featherPx) : t.blendNote(featherPx)}</p>
             {featherCoversSource && <p className="warning-banner warning-banner-mild">{t.blurWarning}</p>}
           </label>
         </>
+      )}
+
+      {/* §1-125: 元動画の音声の Strength（H3 だけ。Retake と同じ部品・同じ並び:
+          スライダーの下に説明 1 行。範囲・刻み・既定は配信値）。 */}
+      {strengthRange !== null && (
+        <div className="field">
+          <FloatSliderField
+            inline
+            label={t.audioStrengthLabel}
+            value={form.audioStrength ?? strengthRange.default}
+            min={strengthRange.min}
+            max={strengthRange.max}
+            step={strengthRange.step}
+            disabled={disabled}
+            onChange={form.setAudioStrength}
+          />
+          <p className="field-hint">{t.audioStrengthHint}</p>
+        </div>
       )}
 
       {/* 尺・フレーム数・フレームレート・シード。共有の `DurationField` /
           `FrameRateSeedFields` は使わない —— このパネルだけ「スライダー」と
           「数値ボックス＋フレームレート横並び」を別の行に分けるため。挙動
           （8n+1 きざみ、自由入力はそのまま通す、上限は元動画長から毎描画
-          導出）は共有側と同じにしてある。 */}
+          導出）は共有側と同じにしてある。§1-125: 下限と刻みは配信の格子
+          （LTX 9・8、H3 22・17）。 */}
       <label className="field">
         <span className="field-label">{strings.single.duration.label}</span>
         <input
           type="range"
-          min={MIN_NUM_FRAMES}
+          min={form.minNumFrames}
           max={form.numFramesCeiling}
-          step={8}
+          step={form.frameGrid.step}
           value={form.numFrames}
           disabled={disabled}
           list={spillThresholdFrames != null ? OUTPAINT_SPILL_TICK_ID : undefined}
@@ -211,28 +244,45 @@ export function OutpaintingPanel({ form, disabled, nativeBridge }: OutpaintingPa
           <span className="field-label">{t.numFramesLabel}</span>
           <input
             type="number"
-            min={MIN_NUM_FRAMES}
+            min={form.minNumFrames}
             max={form.numFramesCeiling}
-            step={8}
+            step={form.frameGrid.step}
             value={form.numFrames}
             disabled={disabled}
             onChange={(e) => form.setNumFrames(Number(e.target.value), isStepEvent(e.nativeEvent))}
           />
         </label>
-        <label className="field field-inline">
+        {/* §1-125: エンジンが fps を固定しているとき（H3 は 24）は押せない欄で値だけ
+            見せる（`RetakePanel` と同じ見せ方）。 */}
+        <label
+          className="field field-inline"
+          title={
+            form.fixedFrameRate !== null ? strings.single.duration.fpsFixedTooltip(form.fixedFrameRate) : undefined
+          }
+        >
           <span className="field-label">{strings.single.duration.fps}</span>
           <input
             type="number"
             min={FRAME_RATE_MIN}
             max={FRAME_RATE_MAX}
             value={form.frameRate}
-            disabled={disabled}
+            disabled={disabled || form.fixedFrameRate !== null}
             onChange={(e) => form.setFrameRate(Number(e.target.value))}
           />
         </label>
       </div>
 
       <SeedField seed={form.seed} disabled={disabled} onChange={form.setSeed} />
+
+      {/* §1-125: サンプリングの 3 項目（配信があるときだけ。Retake と同じ部品）。 */}
+      {form.sampling && form.samplingConstraints && (
+        <SamplingFields
+          constraints={form.samplingConstraints}
+          values={form.sampling}
+          disabled={disabled}
+          onChange={form.setSamplingValue}
+        />
+      )}
 
       {/* 快適上限 (§4-5): 警告のみ。生成は止めない。尺スライダーの spill 目盛り
           とは別物 —— あちらは「この解像度での尺の目安」、こちらは解像度と尺を

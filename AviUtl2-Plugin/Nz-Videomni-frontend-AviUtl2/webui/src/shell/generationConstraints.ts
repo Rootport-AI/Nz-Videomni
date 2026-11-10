@@ -26,7 +26,8 @@ import type { ReferenceRules } from "../modes/single/referenceRules";
  * numbers off it; which engine produced them is the server's fact.
  *
  * The numeric rules are read by Create (Single), Chained (§1-106), Edit's
- * Retake (§1-123) and their right-click seeds; the other Edit sub-tabs and
+ * Retake (§1-123), Edit's Outpainting (§1-125) and their right-click seeds;
+ * the other Edit sub-tabs and
  * Batch keep their LTX constants on purpose (an engine whose rules differ
  * closes those screens through its `unsupported_features`). {@link GenerationConstraints.promptTokenLimit} is
  * the exception: the shell reads it for the prompt token counters of every
@@ -85,6 +86,15 @@ export interface GenerationConstraints {
    * radio, no Stage-2 window, sampling sliders (no featureScope entry, like
    * {@link chain}). */
   retake: { audioStrength: SamplingParamConstraint } | null;
+  /** §1-125: the Outpainting source-audio Strength slider and the mask-blur
+   * (stage 1) slider (range, step, default), flattened from
+   * `constraints.outpaint`, or `null` when the server publishes no `outpaint`
+   * block (LTX, fallback). Its presence alone switches the Outpainting form
+   * into that engine's shape — no pinned control LoRA, `source_video_id`
+   * instead of `reference_video_id`, the canvas on {@link dimensionMultiple},
+   * the frames on {@link frameGrid}, sampling sliders (no featureScope entry,
+   * like {@link retake}). */
+  outpaint: { audioStrength: SamplingParamConstraint; blendDilationStage1: SamplingParamConstraint } | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -102,6 +112,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   reference: null,
   chain: null,
   retake: null,
+  outpaint: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -143,6 +154,12 @@ export function resolveGenerationConstraints(
         : { overlapFrames: raw.chain.overlap_frames }
       : null,
     retake: raw.retake ? { audioStrength: raw.retake.audio_strength } : null,
+    outpaint: raw.outpaint
+      ? {
+          audioStrength: raw.outpaint.audio_strength,
+          blendDilationStage1: raw.outpaint.blend_dilation_stage1,
+        }
+      : null,
   };
 }
 

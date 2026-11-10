@@ -202,17 +202,19 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "MiniMax H3 (§1-123): the Edit tab stays live with only the Retake sub-tab open",
+    "MiniMax H3 (§1-123／§1-125): the Edit tab stays live with the Retake and Outpainting sub-tabs open",
     async () => {
-      // The H3 adapter no longer publishes `retake`; Outpainting / Inpainting /
-      // Alpha Gen stay closed, so `CONTAINER_TARGETS` keeps the tab open.
+      // The H3 adapter no longer publishes `retake` (§1-123) nor `outpaint`
+      // (§1-125); Inpainting / Alpha Gen stay closed, so `CONTAINER_TARGETS`
+      // keeps the tab open.
       await renderApp();
       await switchTo("MiniMaxH3");
       await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
       expect(screen.getByRole("tab", { name: "Edit" })).not.toBeDisabled();
       const strip = document.querySelector(".edit-subtabs") as HTMLElement;
       expect(within(strip).getByRole("tab", { name: /^Retake/, hidden: true })).not.toBeDisabled();
-      for (const name of ["Outpainting", "Inpainting", "Alpha Gen"]) {
+      expect(within(strip).getByRole("tab", { name: /^Outpainting/, hidden: true })).not.toBeDisabled();
+      for (const name of ["Inpainting", "Alpha Gen"]) {
         expect(within(strip).getByRole("tab", { name: new RegExp(`^${name}`), hidden: true })).toBeDisabled();
       }
     },
@@ -254,10 +256,9 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       };
     }
 
-    it.each([
-      ["outpaintVideo", /Outpainting is not available on the selected base model/i],
-      ["inpaintVideo", /Inpainting is not available on the selected base model/i],
-    ] as const)(
+    // §1-125: `outpaintVideo` left this table (H3 runs an Outpainting now; see
+    // the test below the Retake one).
+    it.each([["inpaintVideo", /Inpainting is not available on the selected base model/i]] as const)(
       "H3: %s is refused with the sub-tab's note — no tab switch, no upload, no reservation",
       async (action, note) => {
         const bridge = createMockBridge({ delayMs: 0 });
@@ -289,11 +290,37 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
         await waitFor(() => expect(screen.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true"), {
           timeout: 5_000,
         });
-        const edit = singlePanel();
+        // §1-125: scoped to the Retake panel — the always-mounted Outpainting
+        // panel carries its own "Audio Strength" slider on H3.
+        const edit = singlePanel().querySelector(".retake-panel") as HTMLElement;
         await waitFor(() => expect(within(edit).getByText("Audio Strength")).toBeInTheDocument());
         expect(within(edit).queryByText("Picture and sound")).not.toBeInTheDocument();
         expect(within(edit).queryByText("Stage-2 (upscale pass) clip length")).not.toBeInTheDocument();
         expect(within(edit).getByText("The join keeps 22 frames at the front and 22 at the back.")).toBeInTheDocument();
+      },
+      20_000,
+    );
+
+    it(
+      "H3 (§1-125): the Outpainting right-click opens Edit on Outpainting with the Strength slider and a fixed 24 fps",
+      async () => {
+        const bridge = createMockBridge({ delayMs: 0 });
+        await renderApp(bridge);
+        await switchTo("MiniMaxH3");
+        await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
+        act(() => {
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "outpaintVideo", selection: videoSelection() });
+        });
+        await waitFor(() => expect(screen.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true"), {
+          timeout: 5_000,
+        });
+        const edit = singlePanel();
+        const outpaint = edit.querySelector(".outpaint-panel") as HTMLElement;
+        await waitFor(() => expect(within(outpaint).getByText("Audio Strength")).toBeInTheDocument());
+        const fps = within(outpaint).getByRole("spinbutton", { name: /fps/i }) as HTMLInputElement;
+        expect(fps).toBeDisabled();
+        expect(fps.value).toBe("24");
+        expect(within(outpaint).getByRole("spinbutton", { name: "Frames" })).toHaveAttribute("step", "17");
       },
       20_000,
     );

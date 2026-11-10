@@ -36,7 +36,7 @@ LTX 2.3 ／ LTX 2.5 ／ MiniMax H3 動画生成 REST API バックエンド（16
 
 | 項目 | 値 |
 |------|----|
-| 版 | **v0.5.118**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
+| 版 | **v0.5.119**（**正本は下の「改訂履歴」の最終行である。本欄はその写しなので、履歴へ1行足したら必ずここも合わせること**——過去に2度、履歴だけ進んで本欄が取り残された） |
 | 日付 | **2026-11-10**（v0.5 本体は 2026-07-02。以後の更新は下の改訂履歴を参照） |
 | 対象 | LTX 2.3 ／ LTX 2.5 ／ MiniMax H3 動画生成 REST API バックエンド（16GB VRAM 向け・アプリ1プロセス＋エンジン系統ごとのワーカー・FastAPI + Gradio） |
 | 前版 | `LTX23_Backend_Specification_v04_Phase1_T2V_I2V.md`（v04・全面改訂の元。本書で置換） |
@@ -172,6 +172,7 @@ LTX 2.3 ／ LTX 2.5 ／ MiniMax H3 動画生成 REST API バックエンド（16
 | v0.5.116 | 2026-11-09 | **MiniMax H3 の `vsf_scale` の既定 1.5・範囲 0〜10 を、較正の結果 LTX と共有のまま確定した（応答・鍵・型・既定・422 の文言は変わらない。記述の更新だけ。台帳 `Docs/PENDING_TASKS_CLOSED.md` 3-278）**。**§6.2** の表の `vsf_scale` の行と **§6.6** の H3 の注記から「仮の値」を外した。較正の記録と裁定は `Docs/VERIFICATION_LOG.md` §203、設計は `Docs/MINIMAX_H3_DESIGN.md` §3.5。 |
 | v0.5.117 | 2026-11-09 | **MiniMax H3 の連結の各クリップに、そのクリップの A2V〔音声から映像を作る機能〕の音声を付けられるようにした（`ChainClip.source_audio`。H3 では受理範囲が広がる加算。台帳 `Docs/PENDING_TASKS.md` §1-120）**。形は `{audio_id, strength, offset_frames}` で、`offset_frames` はそのクリップの開始位置を音声の時間軸のフレームで表す（操作パネルの割り当ては `S_i` を送る）。V2V（`source_video`）・撮り直し（`retake`）との併用はスキーマの 422 `VALIDATION_ERROR`、`references` との併用は受ける。最上位の `source_audio`（LTX の長尺 A2V）は H3 では今までどおり 422 `a2v` で、`unsupported_features` の `a2v` は残る。`GET /models` の H3 の `constraints.chain` に `source_audio`（`strength` の範囲と既定）を加えた（操作パネルが Chained の音声カードを割り当ての形で開く信号）。事前検査は全クリップの 404 の後に音声ごとに 1 回測り、クリップごとの長さを見る（422 `SOURCE_AUDIO_TOO_SHORT`／`SOURCE_AUDIO_SILENT`。`detail` の頭に `clips[i].source_audio: `）。記録は `metadata.json` の最上位 `a2v: {"clips": [ … | null ]}` と `h3.clips[i].a2v`。**LTX 2.3／2.5 で変わる点**: ① これまで pydantic が黙って捨てていた `clips[i].source_audio` が、422 `FEATURE_UNSUPPORTED`（機能名 `source_audio`。`detail` は「クリップごとの A2V は MiniMax H3 専用です。LTX の A2V は Chained の音声で使えます。」）になる（拒否表の最後の行なので、既存の「最初に違反した欄が勝つ」順は変わらない。`unsupported_features` は不変）。② 全ての連結の `metadata.json` の `request.clips[i]` に `"source_audio": null` が増える（足すだけの差）。**§6.1**（`/generate/chain` の注。H3 が断る機能の列挙から、11-08 に開いた Retake が残っていたのも直した）・**§6.2**（単発の A2V の補足の「連結」の項）・**§6.2b (e)**・**(f)**・**(h)**（受ける欄・`GET /models`・新しい「クリップごとの A2V」・進捗・LTX への加算）・**§6.6**（`h3`・`a2v` の行）・**§6.8**（`SOURCE_AUDIO_*` の 3 行）・**§6.10(f)**（入れ子の `ChainClip` は 5 件・拒否表は 5 行）を合わせた。設計は `Docs/MINIMAX_H3_DESIGN.md` §3.3 の「クリップごとの A2V」・裁定 98、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §166。 |
 | v0.5.118 | 2026-11-10 | **MiniMax H3 が Outpainting（`POST /generate` の `outpaint`。元の動画の外側へキャンバスを広げて描き足す機能）を受けるようにした（H3 では受理範囲が広がる加算。LTX 2.3／2.5 の挙動の変わる箇所は下の 2 点だけ。台帳 `Docs/PENDING_TASKS.md` §1-125）**。`OutpaintSpec` に H3 専用の `source_video_id`（元動画のアップロード ID）と `audio_strength`（元の音声の Strength。0〜1）を加算した。H3 は元動画を `outpaint.source_video_id` で受け（`reference_video_id` は従来どおり 422 `reference_video`）、`blend_dilation_stage1` を貼り戻しのなじませ幅の段数として使い、`blend_dilation_stage2` は無視し、`freeze_source_audio` の明示を 422 で断る。省略した `blend_dilation_stage1`・`audio_strength` には配信の既定を書き戻す。A2V（`source_audio`）・Ref2VA（`references`）との併用は 422。受付に 3 つのコード（404 `OUTPAINT_SOURCE_NOT_FOUND`・422 `OUTPAINT_SOURCE_ODD_SIZE`・422 `OUTPAINT_VIDEO_NO_AUDIO`）を新設し、フレーム数は要求の fps に換算した枚数で照合する。中間ファイルは `_outpaint_source.mp4`、記録は `metadata.json` の `h3.outpaint`。H3 の `unsupported_features` から `outpaint` が消え、`GET /models` の H3 の `constraints` に `outpaint`（2 つの範囲と既定）が加わった。**LTX 2.3／2.5 で変わる点**: ① スキーマの規則が「`reference_video_id` が要る」から「`reference_video_id` と `outpaint.source_video_id` のちょうど一方」になり、違反の 422 の文言が変わる。② 新しい 2 欄を送ると LTX の系統の規則が 422 `VALIDATION_ERROR` で断る（`metadata.json` の `request.outpaint` と OpenAPI に `source_video_id: null`・`audio_strength: null` が増える）。**§6.2**（`outpaint` の行・凍結制約 12 とその補足）／**§6.2b**（(e) の `constraints.outpaint`・(f)）／**§6.3**（`OutpaintSpec` の 2 行と「系統ごとの扱い」）／**§6.6**（`h3` の行）／**§6.7**（`single_rows_budget`）／**§6.8**（Outpainting のコードの列挙）／**§6.10**（冒頭の注と (d) の注）／**§8.1**（`_outpaint_source.mp4`）を合わせた。設計は `Docs/MINIMAX_H3_DESIGN.md` §3.6・裁定 99、記録は `Docs/VERIFICATION_LOG.md` §205、MCP は `Docs/MCP_SERVER_DESIGN.md` D35。 |
+| v0.5.119 | 2026-11-10 | **失敗したジョブの終端の `status=failed` を、後片付け（OOM のあとのワーカーの降ろし）の後に最後に書くようにした（API の形・エラーコード・文言は変わらない。変わるのは書く順と、降ろしの間の受付の挙動だけ。台帳 `Docs/PENDING_TASKS_CLOSED.md` 1-279）**。`failed` を読めた時点で `error` も読める。降ろしの間（約 2 秒、上限約 35 秒）はジョブが `running` に見え、その間の `POST /generate`・`/pipeline/load`・`/pipeline/unload` は 409、DELETE は `cancel_requested` を立てるだけになる（これまでは `failed`・`error: null` に見え、次のジョブが 202 で受け付けられ、DELETE が記録と出力フォルダを消した）。**§6.8** の注記・**§7.4** の例外処理を合わせ、**§15.3** の `GPU_OOM` の「UI 側は案内を出す」を操作パネルの実態（`error` の本文を表示する）に訂正した。記録は `Docs/VERIFICATION_LOG.md` §206。 |
 
 ### 0.2 スコープ
 
@@ -1620,7 +1621,7 @@ Alpha Gen は、普通の RGB 動画から、同じ大きさ・同じフレー�
 | `UNAUTHORIZED` | 401 | api_key 設定時の Bearer 不一致/欠落（`deps.require_auth`） |
 | `VALIDATION_ERROR` | 422 | Pydantic バリデーション失敗（`main.py` の RequestValidationError ハンドラ。`detail` は `loc/msg/type` の配列）。系統の規則（§6.2b）の違反も同じ形で返る（MiniMax H3 の連結で `source_video.context_frames` が 22 以外のときの `msg` は §6.2 の「連結の `source_video`（V2V）の `context_frames` の補足」。2026-11-02。撮り直しのときの系統ごとの `msg` は §6.2 の「チェーンの `retake`（撮り直し）の系統ごとの規則の補足」と §6.2b (h) の「Retake」。2026-11-08） |
 
-> `GPU_OOM` / `GENERATION_FAILED` はジョブ実行スレッド（`run_job`）内で `job.error` 文字列（`"{code}: {message} ({detail})"`）として記録される。ジョブは `failed` で終了し、HTTP としては後続の `GET /jobs/{job_id}` の `error` フィールドで観測される。
+> `GPU_OOM` / `GENERATION_FAILED` はジョブ実行スレッド（`run_job`）内で `job.error` 文字列（`"{code}: {message} ({detail})"`）として記録される。ジョブは `failed` で終了し、HTTP としては後続の `GET /jobs/{job_id}` の `error` フィールドで観測される。**`failed` は後片付け（OOM のあとのワーカーの降ろし）の後に、`error`・`completed_at` に続けて最後に書くので、`failed` を読めた時点で `error` も読める**（連結の `run_chain_job` も同じ）。降ろしの間（約 2 秒、上限約 35 秒）はジョブが `running` のままで、その間の生成・切替（`/pipeline/load`）・`/pipeline/unload` は 409、削除は `cancel_requested` を立てるだけになる（2026-11-10。台帳 `Docs/PENDING_TASKS_CLOSED.md` 1-279、記録は `Docs/VERIFICATION_LOG.md` §206）。
 
 関連: §7（ジョブ管理）, §11（config.yaml）, §4（backend 選択）, §10（解像度・尺の能力 = Docs/RESOLUTION_DURATION_CAPABILITY.md）。
 
@@ -1921,7 +1922,7 @@ LTX 2.5 が持っているのは **基本生成（T2V／I2V）＋クリップ連
 - パイプラインの load / unload / auto-load ライフサイクルを所有（内部 state: `unloaded/loading/ready/running/error`）。
 - `run_job(job)`: バックグラウンドスレッドで 1 ジョブを終端まで実行する。runner 未ロードかつ `model.auto_load_on_generate` が true なら自動ロード（false なら `PIPELINE_LOAD_FAILED`）。conditioning 画像パスを `upload_store.path_for` で解決し、`runner.generate(...)` に委譲。
 - 完了後 `_finalize` で `JobResult` を組み、`_write_metadata` で **metadata.json を書くのは PipelineManager**（runner ではない）。
-- 例外処理: OOM（`_is_oom` 判定）は `GPU_OOM` + `_cleanup_after_error()`（unload + memory cleanup）、それ以外は `GENERATION_FAILED`。いずれもジョブは `failed`。
+- 例外処理: OOM（`_is_oom` 判定）は `GPU_OOM` + `_cleanup_after_error()`（unload + memory cleanup）、それ以外は `GENERATION_FAILED`。いずれもジョブは `failed`。書く順は「後片付け → `error` → `completed_at` → `status=failed`（最後）」で、後片付けは `try`、終端の 3 つの書き込みは `finally` に置く（`run_chain_job` も同じ。`status` は同時 1 ジョブの関門 `create_if_idle`／`has_active` と DELETE の判定を兼ねるため。降ろしの間の見え方は §6.8 の注記、記録は `Docs/VERIFICATION_LOG.md` §206）。
 
 **エンジンのファサード**: `PipelineManager` から見た推論エンジンの接点は**エンジン系統ごとに 1 クラス**で、いずれも mock / real の 2 backend を隠蔽する。
 
@@ -2470,7 +2471,7 @@ AviUtl2 拡張機能との連携は**本プロジェクトの最終目的**で�
 エラーコードと HTTP ステータスの**表は §6.8 が正本**（重複させない）。本章では運用面のみ補足する。
 
 - `JOB_BUSY`（409）: 実行中ジョブがある状態での新規 `POST /generate`。単一ジョブ設計（§13.2）の正常な busy 応答。
-- `GPU_OOM`（503）: 16GB を超える設定での OOM。UI 側は解像度/フレーム数を下げる案内を出す（spill-free 閾値は 付録A / `Docs/RESOLUTION_DURATION_CAPABILITY.md`）。
+- `GPU_OOM`（503）: 16GB を超える設定での OOM。操作パネルは `GPU_OOM` を見て独自の案内を出さず、ジョブの `error` の本文（`GPU_OOM: CUDA out of memory during generation (<例外の文>)`）を表示する。本文の案内は系統で違う: MiniMax H3 は VRAM 16GB mode の OOM の文（`engine_h3/pipeline_h3.py` の `VRAM16_OOM_MESSAGE`。裁定 47）が例外の文になり、「解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください」が入る。LTX 2.3／2.5 は CUDA の例外の文がそのまま入り、`api/errors.py` の `gpu_oom` の既定の案内 "Try smaller resolution or fewer frames." は例外の文が空のときだけ使われる（2026-11-10 に実態に合わせて訂正。`Docs/VERIFICATION_LOG.md` §206.2・§206.11）（spill-free 閾値は 付録A / `Docs/RESOLUTION_DURATION_CAPABILITY.md`）。
 - `IMAGE_NOT_FOUND`（404）: `conditioning_images` の `image_id` が未アップロード。
 
 ---

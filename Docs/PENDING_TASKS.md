@@ -35,13 +35,6 @@
 - **留意**: 機能名 `inpaint` で閉じている。マスクの細粒化（トークン単位）は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125（Outpainting）で実装したものを流用する。
 - **出典**: オーナー指示 2026-11-02。
 
-### 1-279. 失敗したジョブの `error` が `status` より後に書かれ、一瞬「失敗・エラーなし」に見える（起票：2026-11-10）
-
-- **概要**: `services/pipeline_manager.py` の `run_job` の `except Exception` は、`job.status = JobStatus.failed` を書いてから、OOM ならエンジンのワーカーを同期的に降ろし（`_cleanup_after_error()`）、その後で `job.error` を書く。この間に `GET /jobs/{id}` を取った客は `status: failed`・`error: null` を見る。連結のジョブ（`run_chain_job`）の同じ箇所も同じ順である。直し方の候補は、`job.error` を組み立ててから `status` を failed にする順序の入れ替え。
-- **前提**: 門 G5 の 379 枚の OOM で、MCP の `wait_for_job` が失敗の直後に取った状態が `error: null` だった（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.23）。その後に書かれたかは観測していない（コードの順序からは書かれるはず）。
-- **留意**: 影響は推測で、失敗を知った瞬間の 1 回の取得で原因の文言を読めず、再取得しない客（操作パネル・MCP）は空のエラーのまま止まりうる。OOM の経路はワーカーを降ろす分だけ窓が長い。
-- **出典**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.23。起票は監督（2026-11-10）。
-
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。

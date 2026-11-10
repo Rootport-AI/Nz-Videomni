@@ -43,7 +43,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   num_inference_steps / shift_video / shift_audio（省略で既定 20 / 12 / 3）
   が選べます。H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
   既定 on。切るときだけ false）も選べ、収まらないときはジョブが failed になり、
-  get_job の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を
+  job_status の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を
   下げるか、VRAM 16GB mode を切ってください）を含みます。LTX で vram16_mode=true を送ると 422
   FEATURE_UNSUPPORTED です。H3 は単発の T2V と I2V（キーフレームは最大 10 枚・
   frame_idx は 0〜num_frames−1 の任意のフレーム・strength は指定しない）

@@ -554,7 +554,7 @@ async def submit_generate(
             VRAM 16GB に収める。精度は変えない）。**省略（``None``）すると
             送らず、ベースモデルの既定値になります（H3 は on）。** H3 で切る
             ときだけ ``False`` を指定してください。それでも収まらないときは
-            ジョブが failed になり、``get_job`` の ``error`` が
+            ジョブが failed になり、``job_status`` の ``error`` が
             ``GPU_OOM: …`` で始まって案内（解像度かフレーム数を下げるか、
             VRAM 16GB mode を切ってください）を含みます。
             **LTX 2.3 / LTX 2.5 では ``True`` を送ると 422 FEATURE_UNSUPPORTED

@@ -1141,17 +1141,24 @@ class PipelineManager:
             )
 
         except Exception as exc:
-            job.completed_at = now_iso()
-            job.status = JobStatus.failed
-            if _is_oom(exc):
+            # The terminal status is written LAST, after the clean-up (台帳 1-279):
+            # status doubles as the admission guard (create_if_idle / has_active) and DELETE's test.
+            oom = _is_oom(exc)
+            if oom:
                 err = gpu_oom(job_id=job.job_id, detail=str(exc))
                 logger.error("Job %s OOM: %s", job.job_id, exc)
-                self._cleanup_after_error()
             else:
                 err = generation_failed(job_id=job.job_id, detail=str(exc))
                 logger.exception("Job %s failed", job.job_id)
-                self.state = self.STATE_READY if self.runner.loaded else self.STATE_UNLOADED
-            job.error = f"{err.code}: {err.message} ({err.detail})" if err.detail else f"{err.code}: {err.message}"
+            try:
+                if oom:
+                    self._cleanup_after_error()
+                else:
+                    self.state = self.STATE_READY if self.runner.loaded else self.STATE_UNLOADED
+            finally:
+                job.error = f"{err.code}: {err.message} ({err.detail})" if err.detail else f"{err.code}: {err.message}"
+                job.completed_at = now_iso()
+                job.status = JobStatus.failed
         finally:
             safe_memory_cleanup()
 
@@ -1919,20 +1926,27 @@ class PipelineManager:
             )
 
         except Exception as exc:
-            job.completed_at = now_iso()
-            job.status = JobStatus.failed
-            if _is_oom(exc):
+            # The terminal status is written LAST, after the clean-up (台帳 1-279):
+            # status doubles as the admission guard (create_chain_if_idle / has_active) and DELETE's test.
+            oom = _is_oom(exc)
+            if oom:
                 err = gpu_oom(job_id=job.job_id, detail=str(exc))
                 logger.error("Chain job %s OOM: %s", job.job_id, exc)
-                self._cleanup_after_error()
             else:
                 err = generation_failed(job_id=job.job_id, detail=str(exc))
                 logger.exception("Chain job %s failed", job.job_id)
-                self.state = self.STATE_READY if self.runner.loaded else self.STATE_UNLOADED
-            job.error = (
-                f"{err.code}: {err.message} ({err.detail})" if err.detail
-                else f"{err.code}: {err.message}"
-            )
+            try:
+                if oom:
+                    self._cleanup_after_error()
+                else:
+                    self.state = self.STATE_READY if self.runner.loaded else self.STATE_UNLOADED
+            finally:
+                job.error = (
+                    f"{err.code}: {err.message} ({err.detail})" if err.detail
+                    else f"{err.code}: {err.message}"
+                )
+                job.completed_at = now_iso()
+                job.status = JobStatus.failed
         finally:
             safe_memory_cleanup()
 

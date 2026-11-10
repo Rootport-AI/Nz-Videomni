@@ -3372,3 +3372,18 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **派生**: 失敗したジョブの `error` が `status` より後に書かれる件は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-279（2026-11-10 起票）。
 - **状態**: 完結（日付 2026-11-10）。**main へは dev を `--no-ff` でマージします**（配布用の aux2 とバックエンドを同じコミット列で入れる。理由は記録簿 §205.22）。コミットのハッシュは git の履歴を正とします。
 - **正本・出典**: 設計は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.6 と裁定 99、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `OutpaintSpec`、快適上限は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §20、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §168、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205（弾 1 の G0〜G4 は §205.7、G5・G6 は §205.19〜§205.20、G7 は §205.25）、門の台本と記録の写しは保管庫 [`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/README.md)。起票はオーナー指示 2026-11-02、裁定はオーナー 2026-11-10（記録簿 §205.16）。
+
+### 1-279. 失敗したジョブの `error` が `status` より後に書かれ、一瞬「失敗・エラーなし」に見える（起票：2026-11-10、クローズ：2026-11-10）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-279 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-279（2026-11-10 起票。発見は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.23。Outpainting の門 G5 の 379 枚の OOM〔GPU のメモリ不足〕で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` が `status: failed`・`error: null` を受けた）。**同書側は欠番**。採番規定の変更（本書冒頭。オーナー裁定 2026-11-02）により、番号を変えずに持ち込みました。同じ日に議論・計画・修正してクローズしました。
+- **到達条件**: 失敗したジョブで、`failed` を読めた時点で `error` も読めること。**達成しました。**
+- **何が完了したか**: 単発（`run_job`）と連結（`run_chain_job`）の失敗の経路を「後片付け（OOM ならエンジンのワーカーの降ろし）→ `error` → `completed_at` → `status=failed`（最後）」の順にし、後片付けを `try`、終端の書き込みを `finally` に置きました（`services/pipeline_manager.py`）。閉じた経路は 3 つです: ① OOM のとき約 2 秒 `failed`・`error: null` に見える窓、② 降ろしの最中に次のジョブが 202（受け付けた応答）で受け付けられる経路、③ 降ろしの最中の DELETE と `purge_terminal_jobs` が記録と出力フォルダを消す経路。降ろしの間はジョブが `running` に見え、その間の生成・切替・降ろし・削除は 409（使用中の応答）か `cancel_requested` になります。あわせて、テスト用フィクスチャ `thread_dispatch_client`（`tests/test_smoke.py`）を本物のワーカーが起動しない形に直し、MCP の説明文の存在しないツール名 `get_job` を `job_status` に直しました。
+- **合格の根拠**: 修正前のコードでの再現（モック。記録簿 §206.7）、修正後の新しいテストと機械の門（同 §206.9）、GPU の門（同 §206.10）合格（MCP の `wait_for_job` が `failed` と同時に `GPU_OOM:` の `error` を返し、門の台本の判定が「判定なし」から OOM に変わった）。
+- **主な裁定**（オーナー裁定 2026-11-10「直そう。判断は監督の推奨で」）: 失敗の終端 `status` は後片付けの後に最後に書く・成功の経路（と `spawn_job_thread` の失敗処理）は触らない・客の側（操作パネル・MCP・Gradio・バッチの実行器・門の台本）では直さない（源で 1 か所直す）。理由と、計画の敵対的レビューの採否は記録簿 §206.5・§206.6。
+- **教訓**:
+  - 終端の `status` は、客への終端の合図だけでなく、同時 1 ジョブの関門と DELETE の判定を兼ねる。だから最後に書く（記録簿 §206.4）。
+  - 門の台本は `job.error` だけで OOM を判定しない（記録簿 §205.23。1-125 の教訓の再掲）。
+  - `backend: auto` のテスト用フィクスチャは、`models_dir` を一時フォルダへ向けないと、重みのある機械で本物のワーカーが起動する。テストを実行する前に、モックが選ばれていることの見張りを置く（記録簿 §206.8。オーナーの実機のジョブは完走し、失敗は無かった）。
+- **派生**: 起票候補（本文なしの `/pipeline/load` の守り・キャンセル前の早期終了の READY・GPU の負荷が高い段での `wait_for_job` の接続の切断）は記録簿 §206.11。起票はオーナー判断。仕様書 §15.3 の食い違いは本件で直しました（同 §206.11 の 3）。
+- **状態**: 完結（日付 2026-11-10）。**main へは dev を `--no-ff` でマージします**。コミットのハッシュは git の履歴を正とします。
+- **正本・出典**: 挙動の契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.8 の注記・§7.4・§15.3（v0.5.119）、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D4、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206、発見は同 §205.23。起票は監督 2026-11-10、裁定はオーナー 2026-11-10。

@@ -23195,7 +23195,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - **事実（コード）**: `services/pipeline_manager.py` の `run_job` の `except Exception`（1143 行〜）は、`job.completed_at` → `job.status = JobStatus.failed`（1145 行）→ OOM なら `_cleanup_after_error()`（1149 行。`self.runner.unload()` でエンジンのワーカーを同期的に降ろし、`safe_memory_cleanup()` を呼ぶ）、OOM でなければ `logger.exception` → `job.error = "<符号>: …"`（1154 行）の順に書きます。連結のジョブ（`run_chain_job`）の同じ箇所（1921〜1935 行）も同じ順です（`status` は 1923 行、`_cleanup_after_error()` は 1927 行、`job.error` は 1932 行）。この間に `GET /jobs/{id}` を取った客は、`status: failed`・`error: null` を見ます。
 - **観測**: G5_379f（205.19）で、サーバーが OOM を記録したのは 18:37:06.267、降ろしを始めたのも同じ時刻でした。その直後の 18:37:07 に台本の `wait_for_job`（MCP）が取った状態は `status: failed`・`error: null` で、台本の `job_final` も `error` が null でした（`G5_379f\summary_row.json` の `wait` と `job_final`、`_rt\server.console.log`）。台本はその直後にサーバーを止めたので、`job.error` が最終的に書かれたかは観測していません（コードの順序からは書かれるはずです）。
 - **影響（推測）**: 操作パネルや MCP の利用者は、失敗を知った瞬間の 1 回の取得で原因の文言を読めないことがありえます。終了状態なので再取得しない客は、空のエラーのまま止まります。OOM の経路はワーカーを降ろす時間の分だけ窓が長く、OOM でない経路の窓は短いと読めます（窓の長さは測っていない）。
-- **台帳**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-279 に起票しました（監督。2026-11-10）。
+- **台帳**: [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-279 に起票しました（監督。2026-11-10）。（2026-11-10 追記）§206 で修正し、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-279 へクローズしました。
 
 ### 205.24 保管庫への写しと残りの門（2026-11-10）
 
@@ -23261,3 +23261,186 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 
 - 台帳の §2 の 1-125 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の 1-125 へ移しました（オーナー指示「クローズに進んでほしい」。2026-11-10）。
 - dev を main へ `--no-ff` でマージします。配布用の aux2 とバックエンドは同じコミット列で入れます（理由は 205.22）。ハッシュは git の履歴を正とします。
+
+## 206. ★台帳 §1-279 失敗したジョブの終端の状態を後片付けの後に書く（2026-11-10）
+
+### 206.1 結論
+
+- **失敗したジョブの `status=failed` を、後片付け（OOM〔GPU のメモリ不足〕のあとにエンジンのワーカーを降ろす処理）の後に、`error`・`completed_at` に続けて最後に書くようにしました。`failed` を読めた時点で `error` も読めます。** 変えたのは単発（`run_job`）と連結（`run_chain_job`）の失敗の経路だけで、成功の経路は触っていません。
+- 閉じた経路は 3 つです。① OOM のとき約 2 秒、`GET /jobs/{id}` が `failed`・`error: null` に見える窓。② 降ろしの最中に次のジョブが 202（受け付けた応答）で受け付けられ、降ろし途中のワーカーへ生成が送られる経路。③ 降ろしの最中の DELETE（と MCP〔AI エージェント向けの道具の口〕の `purge_terminal_jobs`）が、まだ後片付けをしているジョブの記録と出力フォルダを消す経路。
+- 修正前のコードで ① と ② をモックで再現し（206.7）、修正後は新しいテストと全件が合格しました（206.9）。GPU の門（206.10）にも合格し、MCP の `wait_for_job` が `failed` と同時に `GPU_OOM:` の `error` を返しました。
+- テストの実行中に、既存のテスト用フィクスチャから本物の LTX のワーカーが起動する事故がありました（206.8）。そのとき動いていたオーナーの実機のジョブは完走し、失敗はありませんでした。フィクスチャを直し、新しいテストにモックが選ばれていることの見張りを置きました。
+- 台帳の 1-279 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズしました（206.12）。
+- 計画書はセッション限りなので、要点を本節に残します（200.2 と同じ作法）。
+
+### 206.2 オーナーの問いと客の表
+
+- **起点**: 205.23 の発見と、台帳 §1-279 の起票（2026-11-10）。
+- **オーナーの問い（2026-11-10）**: 「本当に直すべき不具合か。ローカル実行で一度に 1 ジョブしか送れない UI なのに、OOM 後に `GET /jobs/{id}` で `failed`・`error: null` を見る客とは誰か。普通の利用者やそのエージェントが見る頻度は」。
+- **調査（Opus・読み取り専用。2026-11-10）の答え**: 客〔ジョブを待って `GET /jobs` を読む側〕ごとの振る舞いは次のとおりです。
+
+| 客 | 窓に当たったときの振る舞い |
+|---|---|
+| 操作パネルのタイムラインの仮置きの文字（`webui/src/jobs/JobsContext.tsx:107-108`） | 最初の `failed` で止まり、「Failed: unknown error」のまま残る |
+| バッチ A2V の実行器・i2v-long の実行器 | 1 秒ごとに取り、最初の `failed` で止まる。`error` が空なら "failed" を記録する |
+| MCP の `wait_for_job`（`mcp_server/tools/jobs.py:110-146`） | 2 秒ごとに取り、最初の `failed` で即返す（`error: null`） |
+| Gradio の単発 | 最初の `failed` で止まり、「failed: None」と出す |
+| Gradio のバッチ | 最初の `failed` で止まり、CSV に "failed" と書く |
+| 門の台本 | 最初の `failed` で止まる（205.23 では「判定なし」になった） |
+| 操作パネルのジョブ台帳のカード（`useJobsPoll.ts`） | `GET /jobs` を 2 秒ごとに取り直すので、次の取得で埋まる |
+| Gradio の一覧 | 取り直すので埋まる |
+
+- aux2（AviUtl2 のプラグイン。C++）はジョブの状態を取りません。
+- 操作パネルには、`GPU_OOM` を見て助言を出す処理がありません。利用者に届く案内は `error` の本文だけです（仕様書の記述との食い違いは 206.11 の 3）。
+- **`error` の本文の案内は系統〔ベースモデルの種類〕で違います（コードの読解）**。`run_job` と `run_chain_job` は例外の文（`str(exc)`）を `detail` に渡し、`error` は「`GPU_OOM: CUDA out of memory during generation (<例外の文>)`」の形になります。
+  - **MiniMax H3**（VRAM 16GB mode が既定で on）: 例外の文が VRAM 16GB mode の OOM の文（`engine_h3/pipeline_h3.py` の `VRAM16_OOM_MESSAGE`。裁定 47）なので、本文に「解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください」の案内が入ります。計画の「案内は `error` の本文にしかない」は H3 についてはそのまま正しい記述です。
+  - **LTX 2.3／2.5**: CUDA の例外の文がそのまま入り、案内の文は入りません。`gpu_oom`（`api/errors.py`）の `detail` の既定の案内 "Try smaller resolution or fewer frames." は、例外の文が空のときだけ使われます。
+
+### 206.3 窓の実測
+
+- **窓は OOM のときだけ約 2 秒です。** 2026-11-01 の較正では、OOM から 0.60〜1.96 秒後に取った 7 回は `error` が null で、1.94 秒後に取った 1 回だけ読めました。OOM の 7 点のうち 6 点が null でした。2026-11-03 の r1080_277 は、取り直すと `GPU_OOM:` が入っていました。出典は 192.7・194.14 と保管庫の [`Outputs-archive/comfort-calib-h3-2026-11-01/RESULTS.md`](Outputs-archive/comfort-calib-h3-2026-11-01/RESULTS.md) です。
+- OOM でない失敗は、`status` と `error` の間にログの出力しか挟まらないので、窓はほぼ 0 です（コードの読解）。
+- **頻度**: OOM の頻度そのものです（実数はありません）。取得の間隔（1〜2 秒）と窓がほぼ同じ長さなので、OOM が起きればほぼ毎回この状態を通ります。
+- **監督の見立て（推測）**: 人間の利用者は、カードが 2 秒で直るのでほぼ気づきません。エージェント（MCP）は OOM のたびに理由を失います。直す価値はあるが、優先度は低い、と判断しました。
+
+### 206.4 仮説と根拠（コードの読解。206.7 でモックで確かめた）
+
+- **仮説**: 失敗の終端の `status` が、同時 1 ジョブの関門と DELETE の判定を兼ねているため、`status=failed` を書いた瞬間に、まだ降ろしている途中のサーバーへ次の要求が通る。
+- **根拠**:
+  - 同時 1 ジョブの関門 `create_if_idle`（連結は `create_chain_if_idle`。`services/job_store.py:145-156`）と、`/pipeline/load`（切替）・`/pipeline/unload` の `has_active()`（`api/pipeline.py:106-107`・`:172-173`）は、「queued か running のジョブがあるか」で判定します。
+  - ジョブはジョブごとの専用スレッドで動き、キューも直列化もありません（`api/generate.py:49-62`・`:348`）。
+  - 降ろしの間、state は RUNNING のままで、`runner.loaded` は `proc.poll() is None`（ワーカーのプロセスが生きているか）で真です（`services/engines/ltx/adapter.py:1861-1862`・`:2227-2243`）。したがって、降ろしの最中に次のジョブが 202 で受け付けられ、読み込みをせずに降ろし途中のワーカーへ生成を送ります。バッチ A2V の実行器は、失敗の直後に次の行を送ります。
+  - 窓の間の DELETE（`api/jobs.py:194-213`）は、ジョブが動いていれば `cancel_requested=True` を返すだけですが、終端と見れば記録と出力フォルダを消します。MCP の `purge_terminal_jobs` も同じです。
+  - 順序を固定しているテストはありませんでした（最終状態だけを見るのは `tests/test_engine_h3_adapter.py`・`tests/test_base_model_axis.py`・`tests/test_smoke.py`）。
+
+### 206.5 設計（オーナー裁定 2026-11-10「直そう。判断は監督の推奨で」）
+
+- **原則: 失敗の終端 `status=failed` は、サーバーが次のジョブを受けられる状態になってから、最後に書く。** `status` は客への終端の合図と、受付の関門（`create_if_idle`・`has_active`）の両方を兼ねているので、ほかの書き込み（state・`error`・`completed_at`）より後に置きます。
+- **順序（計画の案 (b)）**: 単発 `run_job` と連結 `run_chain_job` の `except` 節（`services/pipeline_manager.py`）を、次の順にしました。
+  1. 文言の組み立て（`gpu_oom(...)` か `generation_failed(...)`）とログ。
+  2. 後片付け。OOM なら `_cleanup_after_error()`（中身は変えない。降ろし → `safe_memory_cleanup()` → state UNLOADED）、OOM でなければ state を READY か UNLOADED に。
+  3. `job.error`（文言は今までと同じ）。
+  4. `job.completed_at`（降ろしの後の時刻になる）。
+  5. `job.status = failed`（最後）。
+  - 2 を `try`、3〜5 を `finally` に置きます。後片付けが例外で抜けても終端が必ず書かれ、ジョブが `running` のまま残って以降の要求が全部 409（使用中の応答）になる事故を防ぐためです。
+- **成功の経路と `spawn_job_thread` の失敗処理（`api/generate.py:59-61`）は触らない**。成功の経路の `status=completed` の後の書き込みには数マイクロ秒の窓がありますが、間に降ろしのような長い処理は無く、実害を観測していません。並べ替えても「running なのに result がある」という逆向きの瞬間が残るだけで、範囲を広げる価値がありません。`spawn_job_thread` の失敗処理には降ろしが無いので、同じ理由で外しました。
+- **副作用（受け入れた。すべて良い方向か無害）**: OOM のとき、降ろしの約 2 秒（上限約 35 秒）はジョブが `running` に見え、`progress` は失敗した時点の値のままです。その間の `POST /generate`・`/pipeline/load`・`/pipeline/unload` は 409 になり、DELETE と `purge_terminal_jobs` は `cancel_requested` を立てるだけで記録とフォルダを消しません。MCP の `wait_for_job` とバッチの実行器は、待ちが約 2 秒延びます。操作パネルの「使用中」の表示も約 2 秒長く続きます。
+- **採らなかった案**:
+  - (a)「`error` を `status` より先に書くだけ」: 窓は閉じますが、降ろし中の受け付けと DELETE の経路が残ります。
+  - 「客の側で `failed` のときに取り直す」: 止まる客それぞれに同じ処理を足すことになり、源で 1 か所直すほうが単純です。
+  - 「`unload()` にロックを足す」「降ろしの間は `loaded` を偽にする」: `status` を最後に書けば関門が閉じるので不要です。
+
+### 206.6 敵対的レビューの採否（2026-11-10。レビュー担当 Opus。重要 3・軽微 5・提案 3）
+
+採否はオーナー指定の 2 つのフィルタ（①過剰設計やスパゲッティ化の危険が無いか、②調査で裏付けが取れるか）で決めました。「反映先」の §番号は計画書の節です。
+
+| 番号 | 重要度 | 指摘 | 採否 | 反映先・理由 |
+|---|---|---|---|---|
+| 重-1 | 重要 | 「降ろしの間の DELETE は今と同じ」は誤り。今は `failed` なので記録と出力フォルダが消える | 採用 | §1・§2。裏取り済み（`api/jobs.py:194-213`）。直すと `cancel_requested` を立てるだけになる |
+| 重-2 | 重要 | 成功の経路の入れ替えは 2 行では原則を満たさず、`result`・`progress`・`completed_at` も動かす必要がある | 採用（成功の経路を範囲外に） | §2・§7。窓は数マイクロ秒で、並べ替えても逆向きの瞬間が残るだけ。範囲を広げる価値が無い |
+| 重-3 | 重要 | テスト案: `thread_dispatch_client` は `test_smoke.py` だけ・連結は `generate_chain`・注入が 2 本目にも効いて競合する | 採用 | §3.2。フィクスチャは import、注入は 1 回、`threading.Event` で合わせる |
+| 軽-1 | 軽微 | 後片付けが例外で抜けると `running` のまま残り、以降が全部 409 | 採用 | §2。`try/finally` の 1 段。今より悪い失敗の形を作らないため |
+| 軽-2 | 軽微 | `completed_at` と unload 終了の時刻比較は秒単位で不安定 | 採用 | §3.2。比較をやめ、入っていることだけ見る |
+| 軽-3 | 軽微 | `/pipeline/load`・`/pipeline/unload` も `has_active` で守られ、直すと閉じる | 採用 | §1・§2 の副作用に追記 |
+| 軽-4 | 軽微 | 連結の関門は `create_chain_if_idle` | 採用 | §1 |
+| 軽-5 | 軽微 | 仕様書 §15.3 の「UI 側は案内を出す」が操作パネルの実態と食い違う | 採用（文書担当が読んで判断） | §3.4 |
+| 提-1 | 提案 | 仕様書の更新箇所は §7.4・§6.8（§7.2 も候補） | 採用 | §3.4 |
+| 提-2 | 提案 | `spawn_job_thread` の失敗処理も原則の対象にするなら揃える | 採用（両方外す） | §2・§7。成功の経路と同じ理由で触らない |
+| 提-3 | 提案 | 本文なしの `/pipeline/load` の守り・キャンセル前の早期終了の READY | 範囲外（記録のみ） | §8 の起票候補。起票はオーナー判断（本節 206.11） |
+
+### 206.7 修正前の再現（モック）
+
+新しいテスト `tests/test_job_terminal_order.py` を、修正前のコードで走らせました。OOM は `pm.runner.generate`（連結は `generate_chain`）を 1 回だけ "CUDA out of memory" を投げる関数に差し替えて注入し、`unload` は 1.2 秒眠る版に差し替えて、降ろしの始まりと終わりを `threading.Event` で知らせます。取得は 10ms ごとです。
+
+| テスト | 取得の回数 | うち「failed・error null」 | 降ろしの最中の 2 本目 | 判定 |
+|---|---|---|---|---|
+| T1（単発・OOM） | 98 | 96 | `POST /generate` が 202 で受け付けられ、モックなので `completed` で終わった | 不合格 |
+| T2（連結・OOM） | 86 | 84 | `POST /generate/chain` が 202 | 不合格 |
+| T3（単発・OOM でない失敗） | — | — | — | 合格 |
+
+- **仮説（206.4）はモックで再現しました。** 窓（①）と、降ろしの最中の受け付け（②）の両方です。
+
+### 206.8 テストの実行で本物のワーカーが起動した事故とフィクスチャの修正
+
+- **何が起きたか**: 最初の修正前の実行（23:31〜23:33）で、既存のフィクスチャ `thread_dispatch_client`（`tests/test_smoke.py`）の `backend: auto` が、この機械では**本物の LTX のワーカー**を選びました。ワーカーが 2 回起動し、Gemma（テキストエンコーダ）を `cuda:0` に読み込みました。
+- **原因**: フィクスチャの docstring は「重みの無い一時フォルダなので auto はモックに落ちる」と書いていましたが、`model.models_dir` を一時フォルダへ向けていなかったため、重みのある機械では成り立っていませんでした。
+- **実機への影響**: そのとき、オーナーの実機のバックエンド（127.0.0.1:18620。H3 を読み込み済み）でジョブ c3f7f765（1280×768×124 枚・4 ステップ）が 23:31:31〜23:34:56 に動いていました。完走し、失敗はありませんでした。唯一の痕跡は所要時間で、同じ条件の直前の 1 本（41968528、169.13 秒）より約 36 秒遅い 204.79 秒でした。
+- **対応**: 実装担当は気づいた時点で止めて報告しました。責任は監督にあります（フィクスチャの docstring を信じ、この機械でモックに落ちるかを確かめなかった）。
+- **対処**:
+  - フィクスチャに、`model.models_dir` を空の一時フォルダへ向ける 1 行を足し、docstring の前提を実際に成り立たせました（`tests/test_smoke.py`）。
+  - 新しいテストの冒頭に見張りを置きました（`pm.runner._real_available() is False` の assert と、実体があれば `_MockBackend` であること）。T0 では `load()` の後の実体が `_MockBackend` であることを確かめます。
+  - やり直しの実行のログでは、`[ltx_worker]`・`cuda:0`・`auto-selected: REAL` は 0 件でした。
+- この事故を受けて、オーナーは実機のサーバーを閉じ、GPU の門の実行を了承しました（206.10）。
+
+### 206.9 修正と機械の門
+
+- **修正**: 206.5 の順序どおり（`services/pipeline_manager.py` の `except` 節 2 か所）。`except` 節の冒頭に、終端の status を後片付けの後に最後に書く理由（台帳 1-279。status は受付の関門と DELETE の判定を兼ねる）のコメントを置きました。
+- **新しいテスト（修正後）**: 4 本合格。
+
+| テスト | 取得の回数 | うち「failed・error null」 | 降ろしの最中の 2 本目 | 終わった後 |
+|---|---|---|---|---|
+| T0（見張り） | — | — | — | 実体が `_MockBackend` |
+| T1（単発・OOM） | 105 | 0 | 409 `JOB_BUSY` | ジョブ 1 は `failed`・`error` は `GPU_OOM:` で始まる・`completed_at` あり・`pm.state` は unloaded |
+| T2（連結・OOM） | 104 | 0 | 409 | T1 と同じ |
+| T3（単発・OOM でない失敗） | — | — | — | `failed` を観測した時点で `error` が `GENERATION_FAILED:` で始まる |
+
+- **機械の門（アプリの venv）**: 門の 7 ファイル（`tests/test_job_terminal_order.py`・`tests/test_engine_h3_adapter.py`・`tests/test_base_model_axis.py`・`tests/test_smoke.py`・`tests/test_pipeline_unload_guard.py`・`tests/test_chain_job_cancel.py`・`tests/test_mcp_tools_jobs.py`）で 221 passed。全件で 3987 passed・78 skipped・失敗 0。
+- **コミット（dev）**: `0145cd5`（MCP の説明文の訂正。存在しないツール名 `get_job` を `job_status` に。`mcp_server/server.py` の INSTRUCTIONS・`submit_generate` の docstring・[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D28。挙動の変更なし）、`ad69d68`（本体の修正・新しいテスト・フィクスチャ）。
+- 操作パネル・MCP・Gradio・バッチの実行器・門の台本のコードは変えていません（客の見え方は変わらないか、良くなるだけ）。
+
+### 206.10 GPU の門（2026-11-10 23:53〜23:59。合格）
+
+#### 結論
+
+- **合格しました。** 修正後のサーバーで、MCP の `wait_for_job` が `failed` を返した応答に、`GPU_OOM:` で始まる `error` が同時に入っていました。`failed` なのに `error` が null の応答は 0 回でした。
+- 台本の判定は、前回（2026-11-10 の G5_379f。205.19）の「判定なし（ジョブが failed）」から、修正後は「非快適（① OOM）」へ正しく変わりました。
+
+#### 条件
+
+- 台本: 保管庫の [`Outputs-archive/h3-outpaint-2026-11-10/h3_outpaint_gate_api.py`](Outputs-archive/h3-outpaint-2026-11-10/h3_outpaint_gate_api.py)（`--gate G5 --frames 379 --label G5_379f_after_1-279`）。1920×1088×379 枚で、G5_379f と同じ条件です。
+- コード: HEAD `ad69d68`、作業ツリーに差分なし。検証担当は Opus。GPU の使用はオーナーの了承済み（206.8）。
+- 事前確認: 127.0.0.1:18620（オーナーの実機のバックエンド）は接続拒否、`nvidia-smi` に Python のプロセスなし。
+- 素材は作り直さず、既存の `_material\G5_src_1280x720_379f.mp4` を使いました。
+
+#### 結果
+
+| 項目 | 値 |
+|---|---|
+| 判定（`summary_row.json` の `judgement.verdict`） | 「非快適（① OOM）」。`oom` は true、`oom_stage` は denoise。台本の終了コードは 0 |
+| `failed` を返した `wait_for_job` | 23:59:02 に始まった 1 回（所要 0.02 秒）。その応答の `error` は `GPU_OOM: CUDA out of memory during generation (RuntimeError('VRAM 16GB mode でも GPU メモリが足りません …` で始まる（H3 の案内の文つき。206.2） |
+| `failed` かつ `error` が null の応答 | 0 回。`job_status` は呼ばれていない |
+| 降ろしの時間 | OOM のログ 23:58:58.271（`Job 20e10a3c… OOM:`）と同じ時刻に「Unloading pipeline (REAL worker).」。`completed_at` は 2026-11-10T14:59:00Z（日本時間 23:59:00。秒単位）。差は 1.7〜2.7 秒（秒単位の丸めを含む）で、修正前の見積り「約 2 秒」（206.3）と合う |
+| OOM の後に `running` を返した応答 | 0 回。降ろしの間に `wait_for_job` の応答がなかった（接続中だった呼び出しは OOM の約 1.3 秒前に `Server disconnected` で切れ、次の呼び出しが 23:59:02 だった） |
+
+- **降ろしの間に `running` が見えること（206.5 の副作用）は、この 1 本では観測できていません。** 上の表のとおり、その間に応答がなかったためです。
+
+#### 各段の記録
+
+- `load_pipeline` は 4.3 秒（主の重み 19.53GiB は生成中に 10.7 秒で読まれた）。文章と元動画の符号化は 23:54:35〜23:58:45（249.8 秒）。ノイズ除去は 23:58:56.958 に始まり、1.3 秒後に OOM しました。
+- 根の例外: 「Tried to allocate 450.00 MiB … 1.03 GiB is free. 13.69 GiB allowed; 12.65 GiB is allocated by PyTorch, 842.47 MiB reserved but unallocated」。
+- `wddm.csv`（WDDM〔Windows の GPU メモリ管理〕の記録）: 専用メモリの最大は 14,651.7MB（23:58:58.090）、共有メモリの最大は 1,166.8MB でした。共有メモリは、基準点 G5_56f のノイズ除去の窓の中央値 1,173.2MB とほぼ同じ水準です。標本が 2 点なので、VRAM 溢れ（退避）の判定はしません。
+- **`BACKEND_UNREACHABLE`（接続できない）**: `wait_for_job` の 7 回の呼び出しのうち 3 回（23:54:27・23:57:37・23:58:32 に開始）で起き、台本は再試行で続けました。205.19・121.10 と同じ型です。うち 1 回は、OOM の約 1.3 秒前（ノイズ除去の開始とほぼ同時）の切断でした。起票候補として 206.11 の 4 に記録しました。
+- 終了後: 18699 番のポートは到達不能、Python のプロセスなし、GPU の使用量は 581MiB でした。
+- `summary_api.json` の `runs` には `G5_379f_after_1-279` が末尾に足され、元の `G5_379f` も残っています。
+
+#### 記録の限界（事実）
+
+- 台本は `wait_for_job` の応答の中身を `mcp_calls` に保存しません（台本の 775 行目付近）。`wait.samples` は、状態・段・ステップの組が変わったときだけ記録します（885〜890 行目付近）。そのため、OOM より前に `running` を返した 2 回の応答の中身は残っていません。
+
+#### 記録の置き場
+
+- 一次記録: `outputs\h3-outpaint-gates-2026-11-10\G5_379f_after_1-279\`（`summary_row.json`・`server_log_excerpt.txt`・`worker_log_excerpt.txt`・`wddm.csv`）、`logs_api\mcp_calls_20261110_235401_G5_379f_after_1-279.json`、`_rt\server.console.log`（218 行目以降）。
+- 写しは保管庫の [`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/) の `runs_api/G5_379f_after_1-279/` です。
+
+### 206.11 起票候補（本件の範囲外。起票はせず記録のみ。起票はオーナー判断）
+
+1. 本文を付けない `/pipeline/load` には `has_active` の守りが無く、降ろしの最中に読み込みが割り込むと、後片付けが state を UNLOADED で上書きする経路が残る。
+2. キャンセル前の早期終了（`services/pipeline_manager.py:696`・`:1553`）が、読み込み済みかを見ずに state を READY と書く。
+3. 仕様書 §15.3 の「UI 側は解像度/フレーム数を下げる案内を出す」は、操作パネルの実態（独自の案内は無く、`error` の本文を表示する）と食い違っていた。**本件で仕様書を直しました**（[`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.119。本文の案内が系統で違うこと〔H3 は VRAM 16GB mode の OOM の文で「解像度かフレーム数を下げるか、VRAM 16GB mode を切ってください」が入り、LTX は CUDA の例外の文がそのまま入る〕も 206.2 のとおり書き添えた）。
+4. GPU の負荷が高い段で、MCP の `wait_for_job` の接続が切れる（`Server disconnected`。`BACKEND_UNREACHABLE` として返り、台本は再試行で続く）。原因は調べていない。121.10・205.19・206.10。
+
+### 206.12 完結
+
+- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-279 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の 1-279 へ移しました（2026-11-10）。
+- 仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) の §6.8 の注記・§7.4・§15.3 と、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) の D4（`wait_for_job`）を合わせました。
+- dev を main へ `--no-ff` でマージします。ハッシュは git の履歴を正とします。

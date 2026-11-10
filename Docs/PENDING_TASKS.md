@@ -85,7 +85,7 @@
 - **概要**: 操作パネル（`webui`）のテストコードは製品コードより多く、同じ振る舞いを複数の層で重ねて確かめている箇所が多い。全件を繰り返し走らせるたびに、時間の隙間やモックの持ち越しに頼るテストが 1〜2 件ずつ新たに落ちる。不安定なテストは本項に集める（規則は末尾「本台帳の位置づけ（運用規則）」）。**不要なテストコードを減らす作業を、不安定の修正より優先する。**（この優先は本項の中での順序であり、§1 や他の §3 の項目との順位は変えない。） 数と履歴は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163。
 - **既知の不安定なテスト**: `webui/src/modes/chained/SourceInputPanel.test.tsx` の "dropping a video switches to v2v mode …"（同 §162.4）。
 - **進め方の候補**: 棚卸し（区域・層ごとの件数と所要・確かめている内容・不安定の履歴・重複）→ 削除の基準の確定（オーナー裁定）→ 層ごとに削減 → 全件の繰り返しで確認。基準の候補は同 §163.4。件数を目安に削らず、基準に照らして 1 件ずつ判断する（敵対的レビューで足したテストが退行を捕まえた例があるため）。
-- **既知の不安定なテスト（追記）**: `webui/src/shell/AppShell.minimaxH3.test.tsx` の「code review m-8: NAG on with an EMPTY body on LTX does not block Generate once on MiniMax H3」が全件実行で 1 回落ち（Generate ボタンが見つからない）、単体と全件の再実行では合格（2026-10-23。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173.2）。
+- **既知の不安定なテスト（追記）**: `webui/src/shell/AppShell.minimaxH3.test.tsx` の「code review m-8 (reversed by §1-127): NAG on with an EMPTY body blocks Generate on MiniMax H3 too」が全件実行で 1 回落ち（Generate ボタンが見つからない）、単体と全件の再実行では合格（2026-10-23。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173.2）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「✒ … right-clicked video opens the accordion」（2026-10-31 に 9 回中 2 回・変更前の HEAD でも 8 回中 1 回。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §187.7・§188.4）と、`AlphaControls.test.tsx` の「from the matte, with no MOV yet …」（全件実行で 1 回。単独では通る。同 §188.4）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」が全件実行で 1 回、5 秒の時限切れで落ちた（負荷による）。単独（4 件）と 2 回目の全件実行では合格（2026-11-02。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193）。
 - **状態**: 未着手（最初の一手は棚卸し）。
@@ -94,7 +94,7 @@
 
 #### 3-243. MiniMax H3 の Gradio UI の整理（起票：2026-10-21）
 
-- **概要**: Gradio には、H3 が拒否する機能の操作部が見えたまま残っている（Clip Chain タブ〔LTX の格子を送るので H3 では 422〕、音声から動画生成のアコーディオン（H3 は単発の `source_audio` で受けられる。設計正本 §3.1）、バッチ A2V のアコーディオン、Style LoRA タブ、参照動画による制御のアコーディオン、ネガティブプロンプトのアコーディオン）。使うと 422 になる。操作パネルと同じく、機能名で閉じるか灰色にするかを部品ごとに決めて整える。閉じる仕組みは `gradio_ui/feature_scope.py` の表（既に PrunaVAED・埋め込み処理器の常駐・VRAM 16GB mode・Fused GGUF・キーフレームの強度を閉じている）。
+- **概要**: Gradio には、H3 が拒否する機能の操作部が見えたまま残っている（Clip Chain タブ〔LTX の格子を送るので H3 では 422〕、音声から動画生成のアコーディオン（H3 は単発の `source_audio` で受けられる。設計正本 §3.1）、バッチ A2V のアコーディオン、Style LoRA タブ、参照動画による制御のアコーディオン、ネガティブプロンプトの NAG 方式）。使うと 422 になる。操作パネルと同じく、機能名で閉じるか灰色にするかを部品ごとに決めて整える。閉じる仕組みは `gradio_ui/feature_scope.py` の表（既に PrunaVAED・埋め込み処理器の常駐・VRAM 16GB mode・Fused GGUF・キーフレームの強度を閉じている）。
 - **前提**: H3 の機能実装が一通り完了してから着手する。開発途上で閉じると、機能を足すたびに開け直す手間が出るため、それまでは触らない（オーナー裁定 2026-10-21）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §166.10（観測）・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-244（§1-102 ② の取り下げ）。
 

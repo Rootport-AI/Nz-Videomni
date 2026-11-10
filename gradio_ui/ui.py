@@ -1286,8 +1286,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # refresh_model_dropdowns once the ACTIVE base model does not
                 # name ``vram16_mode`` in its unsupported_features (both LTX
                 # families do), hidden + reset otherwise (feature_scope.py).
-                # Wired into the SINGLE Generate flow only (H3 refuses every
-                # chain), ahead of the trailing Acceleration block shared with
+                # Wired into the SINGLE Generate flow only (Gradio's chain flow
+                # is LTX-only), ahead of the trailing Acceleration block shared with
                 # the Chain flow -- see dispatch() below.
                 accel_vram16 = reg(gr.Checkbox(
                     value=VRAM16_MODE_DEFAULT_H3,

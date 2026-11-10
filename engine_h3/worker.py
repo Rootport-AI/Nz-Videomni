@@ -76,7 +76,7 @@ Protocol (one JSON object per line; parent -> worker):
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
    [loras], [source], [retake], [nag]}
       One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
-      of ``{"prompt", "num_frames", [references], [images]}`` (2..24 clips, 1..24
+      of ``{"prompt", "num_frames", [references], [images], [source_audio]}`` (2..24 clips, 1..24
       with a ``source``, exactly 1 with a ``retake``; each prompt is the clip's whole text, the top-level
       ``prompt`` is not used), clip i runs with seed ``seed + i``, and the clips
       are joined on a fixed 22-frame overlap into ONE mp4 at ``output_path``.
@@ -143,7 +143,8 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             prompt_sha256 / seconds / latents_sha256 / head_equals_prev_tail,
             plus, for a clip with references only, ``references``
             ({pictures, videos, audios} counts) and ``seconds.reference_encode``,
-            plus, for a chain with a negative prompt only, ``vsf`` (the
+            plus, for a clip with its own audio only, ``a2v`` (and
+            ``seconds.audio_encode`` when it was encoded), plus, for a chain with a negative prompt only, ``vsf`` (the
             clip's ``h3.vsf``), and ``h3``: overlap_frames / inject_clean / decode; with a
             ``source``, also ``v2v``: the LTX chain's sixteen keys, whose
             ``audio_handle_filename`` names the ``<stem>_audio_handle.wav``

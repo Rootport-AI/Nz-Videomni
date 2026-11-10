@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -18,7 +18,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 | 次の作業の入口（α版の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-239） |
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
-| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184、参照付きの連結は §185〜§186、連結の V2V と冒頭画像は §193、Retake は §200、ネガティブプロンプト（VSF）は §201〜§202） |
+| [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184、参照付きの連結は §185〜§186、連結の V2V と冒頭画像は §193、Retake は §200、ネガティブプロンプト（VSF）は §201〜§203、クリップごとの A2V とバッチ A2V は §204） |
 | `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
@@ -30,7 +30,7 @@
 2. 重みは公式系 FL2VA の**枝刈り（AdaLN の枝を表に畳んだ版）int8 ConvRot** の DiT と、**int8 ConvRot のテキストエンコーダ**、Comfy-Org 配布の映像 VAE と音声 VAE である。int8 の行列積は comfy-kitchen の CUDA 拡張に任せ、CPU オフロードは本製品の block swap と先読みに載せる。VRAM 16GB で動かす。
 3. 推論は CFG なし・1 ステップ 1 回の前向き計算で、映像と音声を同じ系列の中で同時にノイズ除去する。ステップ数と shift は要求の項目として API と操作パネルから渡し、ワーカーの引数で受け取る（§9）。
 4. ノイズ除去の段には「VRAM 16GB mode」（既定 on）がある。活性化をヘッド群と行の塊に分けて VRAM の山を下げ、共有メモリへの退避を防ぐ（§6.5）。
-5. 単発の A2V（音声から映像）は、音声の行を元の音声の潜在に寄せる「行ごとの連続値マスク」で行う（§3.1）。
+5. 単発の A2V（音声から映像）は、音声の行を元の音声の潜在に寄せる「行ごとの連続値マスク」で行う（§3.1）。同じ仕組みで、連結のクリップごとの A2V（§3.3）も動く。ネガティブプロンプトは VSF 方式だけを持つ（§3.5）。
 6. Ref2VA（参照素材からの生成）は、参照の画像・動画・音声を符号化した行を系列に足し、テキストエンコーダーには札と視覚ブロックで見せる。重みは Ref2VA 用の別のファイルで、Settings で選んで読み込む（§3.2）。
 
 ---
@@ -68,6 +68,7 @@
   > **訂正（2026-10-21）**: 2026-10-18 の目視の所感では、A2V カードとバッチ A2V を非表示にするよう求めていた（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 の ②）。オーナーは 2026-10-21 にこれを取り下げた。A2V（台帳 §1-103）とバッチ A2V を近日実装するので、いま隠してもすぐ戻すことになるためである。灰色のままとする。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171。
   > **更新（2026-10-25）**: Single の A2V カードは、H3 では単発の `/generate` に送る形で開いた（裁定 74・§3.1）。バッチ A2V は `chain` の行で灰色のままである。
   > **更新（2026-10-29）**: H3 の `unsupported_features` から `chain` を外した（T2V の連結を開けた。裁定 85・§3.3）。バッチ A2V と Chained の音声パネルは、代わりに `a2v` の行で灰色のままである。
+  > **更新（2026-11-09）**: Chained の音声パネルとバッチ A2V は開いた（裁定 98）。
   > **更新（2026-11-02）**: Chained の素材（末尾）は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-47 へ送ったので、灰色ではなく非表示にした。IC-LoRA の参照動画は、Single に加えて Chained のパネルも非表示にした（どちらも操作パネルの機能の表で隠す。裁定 90）。
   > **更新（2026-11-09）**: H3 のネガティブプロンプトは VSF〔Value Sign Flip。負のプロンプトの行の V（値）の符号を反転する方式〕で動くようになった（§3.5）。機能名 `nag` の意味は「NAG〔Normalized Attention Guidance。負のプロンプトのために注意を 2 回計算して混ぜる方式〕方式が使えない」に狭まった。アコーディオンは H3 でも操作でき、灰色になるのは NAG のラジオだけである。LTX で NAG を選んだまま H3 に切り替えると、方式は VSF に書き換わる（LTX に戻しても NAG へは戻さない）。アコーディオン全体の注意の帯は廃止した（裁定 88 の更新）。
 - **裁定 36 【オーナー裁定】**: ライセンスは README に明記する（名称・適用除外地域・取得者の自己責任）。インストーラは取得前に注意文とライセンスの URL を表示するだけで、同意の入力は作らない（§10）。
@@ -286,7 +287,7 @@
   - **状態**: 完結（2026-11-08。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。GPU の門・目視・実機の全項目合格。記録簿 §200.7・§200.9〜§200.11）。プロンプトの効きやすい条件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-277。
 - **裁定 97 【オーナー裁定】**: MiniMax H3 のネガティブプロンプトは VSF 方式だけ（§3.5）。`vsf_scale` の既定 1.5・範囲 0〜10・スライダーの刻み・ヒント文は LTX と共有のまま分けない（2026-11-09 の較正の結果。記録簿 §201.12・§203.11）。
   - **状態**: 完結（2026-11-10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-127・3-278。門・目視・較正・実機の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§203。実機確認は §202.11）。
-- **裁定 98 【オーナー裁定・監督裁定】**: H3 の Chained で長い音声から口の動きを合わせる機能（クリップごとの A2V。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-120）と、Single タブのバッチ A2V の H3 対応（同 §1-126）を開いたときの裁定（2026-11-09）。仕組みの正本は §3.3 の「クリップごとの A2V」、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §166（Chained）・§167（バッチ）にある。計画の敵対的レビューの採否・実装差分のレビュー・門は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) にだけ書く（本書には写さない）。
+- **裁定 98 【オーナー裁定・監督裁定】**: H3 の Chained で長い音声から口の動きを合わせる機能（クリップごとの A2V。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120）と、Single タブのバッチ A2V の H3 対応（同 1-126）を開いたときの裁定（2026-11-09）。仕組みの正本は §3.3 の「クリップごとの A2V」、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §166（Chained）・§167（バッチ）にある。計画の敵対的レビューの採否・実装差分のレビュー・門は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204 にだけ書く（本書には写さない）。
   - **音声を切らずに割り当てる（オーナー裁定）**: 長い音声は Chained の A2V アコーディオン（長い音声のカード）に 1 本だけ入れ、「各クリップに割り当て」で各クリップの Reference アコーディオンの Audios カードに、同じ音声の ID・Audio to video のチェック・担当区間のバッジで入れる。音声を切った別のファイルは作らない（アップロードを増やさない）。バッジは各クリップの長さから毎回計算して描き、保存しない。割り当ては References のチェックを自動でオンにする。
   - **API の形（監督の裁定）**: 各クリップに `source_audio {audio_id, strength, offset_frames}` を持たせ、割り当てでは全クリップに同じ ID とそのクリップの開始位置 `S_i` を送る。最上位の `source_audio`（LTX の長尺 A2V）は H3 では断ったままにし、`unsupported_features` の `a2v` は残す。操作パネルが割り当ての形で開く信号は `constraints.chain.source_audio` で、LTX は欄を機能名 `source_audio`（単発の拒否で公開済みの名前）で断る。新しい機能名は作らない。
   - **参照との併用は操作パネルで止める（オーナー裁定）**: A2V を宣言したクリップの他の参照カードは、Single と同じ規則（A2V を宣言したら他の参照は送らない）で灰色にして送らない。目視で確かめる組み合わせを増やさないためで、サーバーは Single と同じく併用を受ける。

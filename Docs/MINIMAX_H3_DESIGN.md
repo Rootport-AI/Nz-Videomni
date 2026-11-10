@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。GPU の門 G5・G6 は合格し、操作パネルは配布済み。残りは実機の門 G7。§13）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -66,7 +66,7 @@
 - **裁定 33 【オーナー裁定】**: 映像 VAE は符号化器と復号器に分けて組み、T2V では符号化器を読まない（§8）。
 - **裁定 34 【オーナー裁定】**: 操作パネルの Edit タブは、H3 では 4 つのサブタブ（Retake・Outpainting・Inpainting・Alpha Gen）が全部閉じるため、既存の規則によりタブごと灰色になる。裁定 30 の「グレーアウトして配置だけ決めておく」はこの形で満たす。
   > **更新（2026-11-08）**: 裁定 96 で Retake を開いたので、H3 の Edit タブは開き、生きるのは Retake のサブタブだけになった（Outpainting・Inpainting・Alpha Gen は灰色のまま。右クリックからそれらへ送ると案内の一行で止まる。§3.4）。
-  > **更新（2026-11-10）**: 裁定 99 で Outpainting を開くので、生きるサブタブは Retake と Outpainting になる（Inpainting・Alpha Gen は灰色のまま。右クリックからそれらへ送ると案内の一行で止まる）。配信から `outpaint` が消えるとサブタブと右クリックの門は自動で開く（§3.6 の「操作パネル」）。門 G5 は 2026-11-10 に合格し（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.19）、操作パネルは同日に配布した（同 §205.22）。
+  > **更新（2026-11-10）**: 裁定 99 で Outpainting を開くので、生きるサブタブは Retake と Outpainting になる（Inpainting・Alpha Gen は灰色のまま。右クリックからそれらへ送ると案内の一行で止まる）。配信から `outpaint` が消えるとサブタブと右クリックの門は自動で開く（§3.6 の「操作パネル」）。門 G5 は 2026-11-10 に合格し（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.19）、操作パネルは同日に配布した（同 §205.22）。オーナーの実機の門 G7（右クリックから Outpainting のサブタブが開き、Inpainting・Alpha Gen は灰色のまま）も同日に合格した（同 §205.25）。
 - **裁定 35 【オーナー裁定】**: NAG のアコーディオンは H3 では非表示でなく灰色にし、要求に NAG の項目を載せない（非表示にすると、有効にしたまま解除できず全ジョブが 422 になるため）。IC-LoRA の参照動画のアコーディオンは非表示にする。Single の A2V カードとバッチ A2V は H3 では `chain` の行で灰色にする（連結要求そのもののため）。
   > **訂正（2026-10-21）**: 2026-10-18 の目視の所感では、A2V カードとバッチ A2V を非表示にするよう求めていた（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 の ②）。オーナーは 2026-10-21 にこれを取り下げた。A2V（台帳 §1-103）とバッチ A2V を近日実装するので、いま隠してもすぐ戻すことになるためである。灰色のままとする。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171。
   > **更新（2026-10-25）**: Single の A2V カードは、H3 では単発の `/generate` に送る形で開いた（裁定 74・§3.1）。バッチ A2V は `chain` の行で灰色のままである。
@@ -304,7 +304,7 @@
   - **バッチ A2V は単発の経路へ（オーナー裁定）**: H3 ではバッチの各行を単発の `POST /generate` の `source_audio` で送り、連結の改修を待たない。行の音声は 1 クリップに収まる長さだけを使う（超える行は従来どおり Skip）。短すぎる行に新しい Skip 理由を足さないのは監督の裁定（CSV 仕様の語彙は 2 つの GUI の共通契約のため）で、サーバーの 422 で `Failed` になる。
   - **進め方（オーナー裁定）**: 裁定 90 と同じ（コーディング担当は設計を勝手に変えず、疑問があれば手を止めてエスカレーションする。計画は敵対的レビューを受け、指摘は「過剰設計・スパゲッティ化の危険」と「調査で裏付けが取れるか」の 2 点で採否を決める）。
   - **状態**: 完結（2026-11-10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120・1-126。GPU の門・目視・実機の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204.5・§204.6）。
-- **裁定 99 【オーナー裁定・監督裁定】**: H3 の Outpainting（元の動画の外側へキャンバスを広げて描き足す機能。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-125。2026-11-10）を開くときの裁定です。仕組みの正本は §3.6、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `OutpaintSpec`、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §168、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D35 にあります。調査・計画の敵対的レビューの採否・門・目視の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205 にだけ書きます（本書には写しません）。
+- **裁定 99 【オーナー裁定・監督裁定】**: H3 の Outpainting（元の動画の外側へキャンバスを広げて描き足す機能。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。2026-11-10）を開くときの裁定です。仕組みの正本は §3.6、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `OutpaintSpec`、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §168、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D35 にあります。調査・計画の敵対的レビューの採否・門・目視の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205 にだけ書きます（本書には写しません）。
   - **順序と方針（オーナー裁定）**: 台帳 §1-124（Inpainting）より先に Outpainting でトークン単位の固定の実績を作り、§1-124 がそれを流用する。設計はベースモデルに最適な形が主で、既存の部品の流用は従とする。
   - **① ジョブの形（オーナー裁定）**: 単発の `POST /generate` の `outpaint` ブロック。固定行の注入は潜在そのまま（注入係数 1.0）、時刻の上限は 0.999（裁定 84-2。連結・Retake と同じ）。
   - **② pad〔元の動画の各辺に足す画素数〕（オーナー裁定）**: LTX と同じく 1 画素刻みで自由。利用者への制約はキャンバスが 32 の倍数（H3 の既存の規則）であることだけで、内部で 32 にそろえた外接矩形を作って処理する。
@@ -316,7 +316,7 @@
   - **⑧ Gradio（オーナー裁定）**: 見送る（LTX にも Outpainting の画面が無い）。範囲はバックエンド＋操作パネル＋MCP。
   - **受付の細目（監督の裁定）**: 元動画の縦横が奇数なら 422（切り出しが yuv420p で符号化できないため）。`freeze_source_audio` は `true` の明示も 422。元動画が無いときの 404 は専用のコード。フレーム数の照合は 24fps に換算した枚数で行う。A2V・Ref2VA の参照・キーフレームとの併用は 422。なじませ幅の丸めは半分切り上げ。アプリ層の分岐は系統名ではなく要求の形（`outpaint.source_video_id` の有無）で行う。理由は §3.6 の「API とフィーチャースコープ」。
   - **進め方（オーナー裁定）**: 裁定 90 と同じ（コーディング担当は設計を勝手に変えず、疑問があれば手を止めてエスカレーションする。計画は敵対的レビューを受け、指摘は「過剰設計・スパゲッティ化の危険」と「調査で裏付けが取れるか」の 2 点で採否を決める）。
-  - **状態（2026-11-10）**: 弾 1（エンジンと GPU の門 G0〜G4）は go（記録簿 §205.16）。弾 2（API・アプリ層・配信・操作パネル・MCP・文書）は dev に入り、GPU の門 G5（快適上限）・G6（20 ステップの完走）に合格した（記録簿 §205.19・§205.20）。操作パネルは配布済み（記録簿 §205.22）。残りは実機の門 G7（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125）。
+  - **状態**: 完結（2026-11-10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125）。弾 1（エンジンと GPU の門 G0〜G4）は go（記録簿 §205.16）、弾 2 の GPU の門 G5（快適上限）・G6（20 ステップの完走）は記録簿 §205.19・§205.20、配布は §205.22、オーナーの実機の門 G7（6 項目すべて合格）は §205.25。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -1025,6 +1025,7 @@ MCP の `submit_generate` は、pad が指定されたら `GET /models` を引�
 - **なじませ幅が保持矩形を覆いうる**: F が保持矩形の短辺の半分を超えると、元の画素がそのまま残る領域が無くなる。新しい制限は作らず、操作パネルの既存の警告を流用する。
 - **縁のトークンの中身**: 固定する縁のトークンは、符号化器が元の縁の外側を鏡写しで折り込んだ潜在である。同じ作りの TwoAbove/ComfyUI-H3VideoOutpaint は「帯に面した縁の潜在行を固定すると継ぎ目に枠が出る」と書き、その行を固定から外している（数値の記録や比較の公開は無い。記録簿 §205.13）。本製品では線の無い素材で四辺とも線が出なかったので（§205.15）、縁は固定したままにした。線の無い素材で線が出る例が見つかれば、そのときに再訪する。
 - **快適上限は Single と同じ線**: 門 G5 で、線ちょうどの S の点が快適、1 段上が OOM で、Single の線 `single_rows_budget` の共用を確かめた（快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) 第 20 節。記録簿 §205.19）。測ったのは pad・元の動画・キャンバスの寸法の 1 組で、上限の近くを通る 1 回だけの点である（留保は快適上限表 §20.6）。
+- **重みは FL2VA で実測し、FL2VA を推奨する**: 門と実機の生成はすべて FL2VA の重みである。Ref2VA の重みでも断らないが、実測していない（Outpainting では参照を付けられないので、Ref2VA の重みは必ず参照 0 件で動く。理由と出典は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.25）。
 - **範囲外**: Outpainting の連結（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-59）・元動画の途中からの窓（`window_start_sec`）・pad 以外の配置（拡縮）・なじませの別の方式（ぼかし・ピラミッド）・保持矩形 256 の下限の見直し。トークン単位のマスクは台帳 §1-124（Inpainting）が流用する。
 
 ### 採らなかった案
@@ -1408,7 +1409,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | Retake（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-123。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §200、操作パネルはフロントエンド `Docs/DEVLOG.md` §163） | 弾 1＝幾何、弾 2＝エンジンとワーカー、弾 3＝API・アダプタ・モック・配信、弾 4＝操作パネル、弾 5＝MCP、弾 6＝文書。差分のレビュー・機械の門・モックの端から端・GPU の門は記録簿 §200（裁定 96・§3.4） |
 | ネガティブプロンプト（VSF。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-127。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202、操作パネルはフロントエンド `Docs/DEVLOG.md` §165） | 第 1 弾＝単発の最小実装と目視の実験（記録簿 §201）、第 2 弾＝連結と Retake への配線・操作パネル・文書（同 §202。§3.5） |
 | クリップごとの A2V とバッチ A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120・1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
-| Outpainting（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-125。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205、操作パネルはフロントエンド `Docs/DEVLOG.md` §168） | 弾 1＝調査・幾何・エンジン・ワーカー・CPU の門・GPU の門 G0〜G4・遠隔目視（go。記録簿 §205.16）、弾 2＝API・アプリ層・アダプタ・配信・操作パネル・MCP・文書。GPU の門 G5（快適上限の 2 点）・G6（20 ステップの完走）は合格し（記録簿 §205.19・§205.20）、操作パネルは配布済み（§205.22）。実機の門 G7 は未実施（裁定 99・§3.6） |
+| Outpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205、操作パネルはフロントエンド `Docs/DEVLOG.md` §168） | 弾 1＝調査・幾何・エンジン・ワーカー・CPU の門・GPU の門 G0〜G4・遠隔目視（go。記録簿 §205.16）、弾 2＝API・アプリ層・アダプタ・配信・操作パネル・MCP・文書。GPU の門 G5（快適上限の 2 点）・G6（20 ステップの完走）は合格し（記録簿 §205.19・§205.20）、操作パネルは配布済み（§205.22）。オーナーの実機の門 G7 も合格した（§205.25。裁定 99・§3.6） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。
@@ -1444,6 +1445,6 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 - **テキストエンコーダの int8 と bf16 の差**: 画像 2 枚のときに大きい件（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.7 (a)）は診断していない。台帳 §4-43。
 - **快適上限の較正（CLOSED 3-268。快適上限表 §17）への含意**: 条件行はキーフレーム 1 枚につき grid 行増える（K 枚で K×grid 行）。系列が長くなるので、較正ではキーフレームの枚数も条件に入る。10 枚のときの VRAM の山は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §170.6 の 1-G4 に記録してある（条件行が 10 枚でも、ノイズ除去の山は 2 枚のときと同じ。山は復号で決まる）。
 - **ヘッダの揺れのうち後回しにしたもの**: コミュニティ版の読み込み、非枝刈り版、groupsize の混在への対応範囲。
-- **Outpainting の残り（§3.6）**: 実機の門 G7（オーナーの右クリックからの確認。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125）が未実施である。GPU の門 G5・G6 は合格し、操作パネルは配布した（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.19・§205.20・§205.22）。限界は §3.6 の「既知の限界」。
+- **Outpainting の残り（§3.6）**: 門はすべて合格し、完結した（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。実機の門 G7 は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.25）。残るのは §3.6 の「既知の限界」である。
 - **連結の残り**: §3.3 の「既知の限界・範囲外」を参照。焼けは、13 本（1,348 フレーム）でコントラストの強まりをオーナーが感じた（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §184.6）。対処は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-45。
 - **A2V の残り（§3.1）**: (1) 0 < m < 1 の品質には一次資料の評価が無く、目視でしか決められない（既定 0.5 はオーナーの目視で決めた。裁定 76）。(2)（決着。裁定 84）。(3) 1 本の A2V ジョブで ffprobe が数回呼ばれる（前の検査・実行・mock。実装差分のレビュー R5 の M9。実害が小さいので後回し。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §178）。(4) キーフレームの条件行はノイズ増しが 0.999（`KEYFRAME_NOISE_AUG`。§3）に固定で、強度を変えられない（裁定 57）。これが先頭画像ありの A2V に硬さが残る一因かもしれない（推測。確かめていない）。

@@ -22833,6 +22833,7 @@ main への `--no-ff` のマージは、同じ dev に乗る台帳 [`PENDING_TAS
   - G0: 元の動画だけを符号化した場合の保持矩形（元の動画を置いた領域）の PSNR〔画質の一致度。大きいほど元に近い〕は 32.67dB で、VAE の往復の下限 32.74dB とほぼ同じでした。キャンバスごと符号化すると、保持矩形の辺から内側 32 画素の帯が内側より 3.0〜3.5dB 悪くなりました。単独で符号化する設計の根拠を実測で確かめた形です。
   - 生成: 貼り戻しの芯（なじませの重みが 1 の画素）の PSNR は 1920×1088 の 5 本で 37.80〜38.09dB で、再符号化の対照（38.15dB）とほぼ同じです。なじませなし（r=0）は上下の辺の境界の勾配比が 9.87／9.67 と大きく、硬い継ぎ目が数値に出ました。r=1 と r=3 の差は小さく、既定は r=1 が推奨の候補です（裁定はオーナーの目視の後）。
 - 数値の正本は本節です。条件の正本は保管庫の `README.md`、計算の生の値は同じ保管庫の `summary.json`・`G0_result.json` です（205.10）。
+- **（2026-11-10 追記）弾 1 は go（205.16）。弾 2 の GPU の門 G5・G6（205.19・205.20）とオーナーの実機の門 G7（205.25）にも合格し、台帳の 1-125 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズしました。**
 
 ### 205.2 経緯とオーナー裁定
 
@@ -23087,7 +23088,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - GPU の門 G5（快適上限の線の直下と直上の 2 点）・G6（20 ステップの完走）と、実機の門 G7（オーナーが操作パネルの右クリックから確かめる）は未実施です。
 - 保管庫（205.10）には、R4 の報告書（`reports/R4_boundary_line_precedents.md`）と E2 の 3 本の `runs/E2*/result.json` を足し、`summary.json`・`summary.md`・`README.md` に E1・E2 の記述を足しました。
 
-> **【2026-11-10 追記】門 G5・G6 の結果は 205.19・205.20、配布は 205.22。**
+> **【2026-11-10 追記】門 G5・G6 の結果は 205.19・205.20、配布は 205.22、実機の門 G7 は 205.25（合格）。**
 
 ### 205.19 門 G5（快適上限の点。2026-11-10）
 
@@ -23187,7 +23188,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 ### 205.22 配布（2026-11-10 19:06）
 
 - 監督の指示で `scripts\build.ps1`（Release・埋め込み Web UI）→ `scripts\deploy.ps1` を実行し、実機 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用コピー `AviUtl2-Plugin\NzVideomni.aux2` の 2 か所が同じ大きさ（1,590,272 バイト）に更新されました。新しい文言「音声の Strength」「この動画には音声トラックがありません」を両方のバイナリで検出しました。Language ファイルも配置しました。AviUtl2 は動いていませんでした。
-- **配布の順の注意**: バックエンドだけが先に更新されると、配布済みの古い操作パネルでも H3 の Outpainting のサブタブが開き（配信の `unsupported_features` から `outpaint` が消えるため）、LTX の形（`reference_video_id`＋in-outpainting の LoRA）で送って 422 になります。そのため、配布用コピーの aux2 とバックエンドは同じコミット列で main へ入れます。main へのマージは、オーナーの実機の門 G7 の合格の後に `--no-ff` で行います（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125 の「オーナー判断待ち」）。
+- **配布の順の注意**: バックエンドだけが先に更新されると、配布済みの古い操作パネルでも H3 の Outpainting のサブタブが開き（配信の `unsupported_features` から `outpaint` が消えるため）、LTX の形（`reference_video_id`＋in-outpainting の LoRA）で送って 422 になります。そのため、配布用コピーの aux2 とバックエンドは同じコミット列で main へ入れます。main へのマージは、オーナーの実機の門 G7 の合格の後に `--no-ff` で行います（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125 の「オーナー判断待ち」）。（2026-11-10 追記）G7 は合格し（205.25）、1-125 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズしました。
 
 ### 205.23 発見: 失敗したジョブの `error` が `status` より後に書かれる（2026-11-10）
 
@@ -23199,4 +23200,64 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 ### 205.24 保管庫への写しと残りの門（2026-11-10）
 
 - **保管庫**（[`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/)）に、G5・G6 の一次記録を写しました: `summary_api.json`・`summary_api.md`・`run_G5_G6.console.log`（根）、`runs_api/G5_56f/`・`runs_api/G5_362f/`・`runs_api/G5_379f/`・`runs_api/G6_20steps/`（各本の `summary_row.json`・`request.json`・`server_log_excerpt.txt`・`worker_log_excerpt.txt`、完走した本の `metadata.json`、G5 の `wddm.csv`、G6 の `measure_request.json`・`measure_result.json`）。動画・`_rt\`・`logs_api\` は写していません（git の追跡外の `outputs\h3-outpaint-gates-2026-11-10\` に残る）。保管庫の `README.md` の「弾 2」の節を、実際に回した本に合わせて直しました。
-- **残りの門**: 実機の門 G7（オーナーが操作パネルの右クリックから確かめる。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125 のチェックリスト）と、その合格の後の main へのマージ（205.22）です。
+- **残りの門**: 実機の門 G7（オーナーが操作パネルの右クリックから確かめる。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-125 のチェックリスト）と、その合格の後の main へのマージ（205.22）です。（2026-11-10 追記）G7 は 6 項目すべて合格し、1-125 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズしました（205.25）。
+
+### 205.25 実機の門 G7（オーナー、2026-11-10 夜）と完結
+
+#### 結論
+
+- **オーナーの実機の門 G7 は 6 項目すべて合格しました。** 音声の Strength 1.0 の「元の音声がそのまま入る」だけは、実機では確かめずに合格扱いにしました（0.5 でも耳では元との差がほぼ分からず、1.0 で完全に一致するかは機械でしか確かめられないため。元の波形が入ることは門 G4 の実測で確かめてある。205.7）。
+- 台帳の 1-125 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へクローズし、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の §2 は空になったので見出しごと削除しました。
+- チェックリストの文言に 3 か所の誤りがありました（下の「チェックリストの文言の訂正」）。クローズの記録には訂正後の文言で残しました。
+- オーナーの質問「FL2VA と Ref2VA のどちらの重みが推奨か」への答えは **FL2VA** です（下の「FL2VA と Ref2VA の問答」）。
+
+#### オーナーの観察（項目ごとの要点）
+
+| 項目 | オーナーの観察 | 判定 |
+|---|---|---|
+| 1. 右クリックから開く | 「この動画に描き足す (Outpainting)」で Edit タブの Outpainting のサブタブが開き、動画が入った。Inpainting・Alpha Gen は灰色のまま | 合格 |
+| 2. H3 の画面 | pad は 1 ピクセル刻み・格子の説明は 32 の倍数・尺は 17n+5。マスクブラーの表示は 20 で、何本か生成した後は 31 になっていた。音声の Strength の既定は 0.5。ステップ数・Shift 映像・Shift 音声のスライダー 3 本が出た。ピン留めの LoRA と「LoRA が無い」の判定は出なかった | 合格（fps の項・マスクブラー・「サンプリングの 3 本」の問いは下の訂正と説明で決着） |
+| 3. 生成と重ね合わせ | 範囲を指定して 1 本生成し（`1ad51cc2`）、指定どおりの大きさの動画ができた。元の動画の上に重ねると、残した領域がずれずに重なり、境目は目立たなかった | 合格 |
+| 4. 音声の Strength 1／0 | 1：未検証で合格扱い（上の結論）。0：音声が作り直された | 合格 |
+| 5. 音声の無い動画 | Strength 0.5 のままで赤いカードではなく「この動画には音声トラックがありません。…」の黄色の注意が出た。0 にすると生成できた（`4e16d2cd`） | 合格 |
+| 6. LTX 2.3／2.5 | Outpainting の画面が前と同じ（128 の倍数・8n+1・ピン留めの LoRA・緑の説明・音声の Strength なし）で、生成も前と同じに動いた | 合格 |
+
+#### 実機の 2 本（`outputs/<job_id>/metadata.json` から監督が読み取った事実）
+
+| ジョブ | 完了時刻 | 元動画 | pad（左・右・上・下） | キャンバス | フレーム数 | ステップ | LoRA | 注意 | なじませ幅 `feather_px` | 音声 | 固定／生成トークン | 生成時間 | `peak_vram_reserved_mb` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1ad51cc2-4b00-4558-8bb0-bf028e0320ca | 21:41 | 960×540（音声あり） | 160・160・114・114 | 1280×768 | 73 | 4 | `minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16`（強度 1.0） | sage | 20 | `audio_strength` 0.5・`audio_output` decoded | 480／480 | 125.05 s | 7554 |
+| 4e16d2cd-d6c0-4282-8fab-9bd045ea1bbb | 22:14 | 1920×1080（音声なし） | 16・16・20・20 | 1952×1120 | 175 | 4 | 同上 | sage | 31 | `audio_strength` 0.0・`audio_output` generated | 1947／188 | 894.01 s | 12640 |
+
+- 重みはどちらも `minimax_h3_fl2va_pruned_int8_convrot.safetensors`（FL2VA）です。`blend_dilation_stage1` はどちらも 1（既定）でした。
+- 2 本目は pad が 32 未満なので、32 にそろえた外接矩形がキャンバス全体（`aligned` [0, 0, 1952, 1120]）になり、縁のトークンはすべて生成側になりました（設計どおり。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.6 の「幾何」）。
+
+#### チェックリストの文言の訂正（3 点）
+
+1. **「fps が 24 で押せない」→「fps は 24 の固定表示で操作できない」**。意図は後者で、言葉が悪かった（オーナーは「記載ミスか」と問うた。H3 は 24fps だけを受ける）。
+2. **「サンプリングの 3 本が出る」→「サンプリングのスライダー 3 本（ステップ数・Shift 映像・Shift 音声）が出る」**。「3 本」が何を指すか書いていなかった。
+3. **「既定のまま生成」→「範囲を指定して生成し、元の動画に重ねて確かめる」**。既定のまま（pad 0）では残した領域との一致や境目を評価できない、というオーナーの指摘による。合格条件は「評価できる操作」で書くべきだった。
+
+#### マスクブラーの 20 と 31（設計どおり）
+
+- つまみの単位は段で、既定は 1 段です。表示される画素数は「段 × キャンバスの長辺 ÷ 64」で、LTX と同じ式です（操作パネルは `Math.round`、サーバーは `floor(x+0.5)` で丸め、結果は一致する）。
+- 1 本目は長辺 1280 で 1×1280÷64＝20、2 本目は長辺 1952 で 1×1952÷64＝30.5 を丸めて 31 です。metadata の `feather_px` も 20 と 31 でした（上の表）。オーナーの記憶の 30 は、長辺 1920 のときの値です。
+- 何本か生成した後に表示が 31 に変わったのは、キャンバスの長辺が変わったためです（段は 1 のまま）。
+
+#### FL2VA と Ref2VA の問答（2026-11-10）
+
+オーナーの質問「Outpainting には FL2VA と Ref2VA のどちらの重みが推奨か」に、監督が調査担当の一次資料の調査（2026-11-10）をもとに答えました。
+
+**結論: FL2VA を推奨します。** 根拠は次の 4 点です。
+
+1. **Outpainting では Ref2VA の重みが必ず参照 0 件で動く。** Outpainting は参照素材を付けられません（`references` との併用は 422〔受付で断る応答〕。設計正本 §3.6）。MiniMax の公式配信サーバー（SGLang）と配置ガイド（https://platform.minimax.io/docs/guides/local-deploy-h3 の「include at least one reference condition for Ref2VA」）は、Ref2VA に参照を 1 件以上求めています。ComfyUI と DiffSynth は 0 件を通します。2 つの重みの品質を比べた一次資料はありません（設計正本 §3.2 の既述）。
+2. **参照なしで潜在をその場で固定する前例は、すべて FL2VA の重み。** WanGP（`models/minimax_h3/minimax_h3_handler.py`。空間の Outpainting の設定 `video_guide_outpainting` は FL2VA の分岐にしか無い）、TwoAbove/ComfyUI-H3VideoOutpaint（README の要件「MiniMax H3 FL2VA model」）、DiffSynth の `examples/minimax_h3/model_inference/MiniMax-H3-Retake.py`（`FL2VA/transformer/...` を読む）、ComfyUI PR #15375 の時間方向の延長の例 `droz_MiniMaxH3_BasicMaskedExtension_v1.4.json`。同じ PR で Ref2VA の重みが使われているのは、参照画像つきで被写体を差し替える修復の例（`droz_MiniMaxH3_PerRowMasking_Example_v2.json` ほか）だけです。
+3. **本製品の実測はすべて FL2VA。** 門 G1〜G6 と実機の 2 本は FL2VA の重みです。Ref2VA の重みと潜在の固定を組み合わせた実測は、連結の記録 §185 の C1（Ref2VA・参照なし。継ぎ目 2 か所とも連続。ただし同節では参考の腕で、結論の主役にしていない）だけで、これは時間方向であって Outpainting ではありません。
+4. **Turbo LoRA〔少ないステップで回すための追加の学習重み〕も FL2VA 用。** 実機の LoRA フォルダにあるのは `minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16` ほか 2 本で、Ref2VA 用の Turbo はありません。配布元 `lightx2v/Minimax-H3-Turbo` には Ref2VA 用の Turbo（`minimax_h3_ref2v_turbo_4step_v0.1`・`4step_v1.0_768p`・`8step_v1.0_768p`・`8step_v1.1_768p` と、それぞれの `_comfyui_bf16` 版）があります。FL2VA 用の Turbo を Ref2VA の重みに当てたときの品質は確かめていません（設計正本 §6.6 の範囲外に既述）。
+
+**付記（事実。起票はせず、オーナーの判断に委ねた）**: 本製品は Ref2VA の重みでも Outpainting・Retake・連結を断りません。重みの種類で分岐する処理は、エンジンにもアダプタにもありません（`transformer_role` は `GET /models` で配信され、読むのは Single・Chained の画面だけ）。裁定 82 の注意文 ②「Ref2VA モデルがロードされています。参照資料を使わない場合、FL2VA モデルまたは Hybrid モデルのほうが高精度です」は Single と Chained に出て、Edit タブ（Retake・Outpainting）では出ません。
+
+#### 完結
+
+- 台帳の §2 の 1-125 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の 1-125 へ移しました（オーナー指示「クローズに進んでほしい」。2026-11-10）。
+- dev を main へ `--no-ff` でマージします。配布用の aux2 とバックエンドは同じコミット列で入れます（理由は 205.22）。ハッシュは git の履歴を正とします。

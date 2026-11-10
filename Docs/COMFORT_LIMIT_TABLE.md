@@ -24,7 +24,7 @@
 - 「1280×768 換算のコマ数」は、単発の予算に収まる最大のコマ数（第1.3節の式）。プリセットの 345／161／81 は LTX 2.3 4bit の線 42,840 に収まる値である（§付記の追記）。
 - 画角拡張（Outpainting）の予算は種別で分けない別軸の線で、第9節（`ltx`＝42,240・`ltx25`＝46,080）。
 
-**MiniMax H3（`h3`）の線 — 行の表ではなく、総行数の 1 本の線（Single は 2026-11-07、Chained の各クリップは 2026-11-08、Edit タブの Outpainting は 2026-11-10 から配信。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-119・1-276、[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-125）。**
+**MiniMax H3（`h3`）の線 — 行の表ではなく、総行数の 1 本の線（Single は 2026-11-07、Chained の各クリップは 2026-11-08、Edit タブの Outpainting は 2026-11-10 から配信。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-119・1-276・1-125）。**
 
 - **配信の形**: 記述子 `scripts/manifests/40-minimaxh3.json` の `comfort` は `{"single_rows_budget": 219516}` だけを持ち、`rows` は持たない。値は DiT〔ノイズ除去の本体〕に入る総行数 S の線で、根拠は第17.5節の (a)（参照なし・快適の最大の点 r1080_362 の S）。S の式は第17.3節（映像・条件行・音声・text）と第18.2節（参照）。重みの種別と加速設定では分けない（H3 の重みは int8 ConvRot の 1 種類で、種別の判定 `services/weight_class.py` は広げていない）。サーバーはこの値を読まない（助言専用）。
 - **印の出し方**: 操作パネルの Single タブは、解像度・K〔キーフレームの枚数〕・参照素材から S を計算し、17n+5 の梯子の上で S ≤ 線 を満たす最大のフレーム数に印を出す（`webui/src/shell/h3SequenceRows.ts`）。Chained タブは、各クリップの長さのスライダーに、同じ式・同じ線でクリップごとに印を出す（クリップごとの式の入力と、線を共用する根拠は第19節）。**印の意味は LTX の「超えると遅くなる」ではなく「超えると VRAM 不足で生成に失敗する可能性がある」**（第17.5節の (d)）で、印を超えると「VRAM不足で生成に失敗する可能性があります。」が出る（Single と Chained で共用の文言）。この系統かどうかは「プロファイルの `single_rows_budget` が null でないか」で決める（サーバーは LTX のプロファイルにも null を配るので、鍵の有無では決めない）。この系統では LTX の行の照合も `spill_free_frames` への落ちも行わない（値が不正なら印を出さない）。Edit タブの Outpainting も、キャンバスの寸法とフレーム数から S を数え、同じ線で印を出す（条件行・参照の行は 0。線を共用する根拠は第20節）。Gradio UI は LTX の式の溢れ警告を隠すだけで、H3 の印は作らない（`gradio_ui/constraints.py` の `comfort_table_missing`）。Outpainting 以外の Edit 系と Settings の表には出さない。

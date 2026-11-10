@@ -214,7 +214,7 @@ def run_entry(r: dict) -> dict:
 def write_readme(hf: Path, rows: list[dict], names: dict[str, str], sheets: list[str], source_ok: bool,
                  g0: dict, g0_files: list[str]) -> None:
     L = [
-        "# round13-h3-outpaint-gates — MiniMax H3 の Outpainting の GPU の門（2026-11-10）",
+        "# round13-h3-outpaint — MiniMax H3 の Outpainting の GPU の門（2026-11-10）",
         "",
         "元の動画（1280×720・124 フレーム・24fps）の外側へキャンバスを広げ、外側を生成で描き足す機能（Outpainting。"
         "台帳 PENDING_TASKS.md §1-125）の門の動画です。保持矩形（元の動画を置いた位置）の画質、継ぎ目、動きの連続を目で確かめます。"

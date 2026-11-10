@@ -1125,3 +1125,169 @@ URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。調査�
 | 二次資料: smhfacct/Minimax-H3-fl2va-ref2va-hybrid-models | 2026-10-31 取得 | モデルカード（公式ではない。出典の記載なし） |
 
 調査の報告の原本は、作業場の `h3refchain\R3_primary_sources.md`（セッション限り）。
+
+## §17 Outpainting（空間のトークン固定）の一次資料調査（2026-11-10）
+
+台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-125（MiniMax H3 の Outpainting＝元の動画の外側へキャンバスを広げて描き足す機能）の設計のために、2026-11-10 に行った一次資料の調査（R3）の記録である。ダウンロードしたコードは読んだだけで、実行していない。GPL-3.0 のコード（ComfyUI 本体・drozbay）と、OSI〔オープンソースの認定団体〕の承認外のライセンスのコード（WanGP）は、仕様として読んだだけで写していない。本製品での採否（元の映像の単独の符号化と潜在の貼り付け・復号後の画素の貼り戻し）と計測の結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205 が正本で、本節には本製品の数値を書かない。報告の原本は保管庫 [`Outputs-archive/h3-outpaint-2026-11-10/reports/`](Outputs-archive/h3-outpaint-2026-11-10/reports/) の `R3_primary_sources_h3_spatial_mask.md`。
+
+### 17.1 結論
+
+- **H3 の生態系には Outpainting の前例がある。** 2026-11-09 時点の WanGP（独自ライセンス）に 2 つの経路がある。
+  - FL2VA の重みで、固定する行の時刻を止める方式（WanGP の呼び名は「Grouped Rows」）。本製品の固定行と同じ考え方である。作り方は「元の映像だけを符号化し、潜在 0 のキャンバスへ貼る」で、余白は 32 画素の倍数に丸める。
+  - Alibaba PAI の Fun ControlNet の修復の枝を使う方式。
+  - どちらも最後に元の画素を貼り戻していない。継ぎ目や画質を測った記録は見つからなかった。
+- **ComfyUI 本体の H3 の denoise mask は空間方向も受ける。** 映像は 2×2 の潜在マス（1 トークン＝32 画素四方）ごとに最大値へ寄せる。つまり「トークンの中に生成の画素が 1 つでもあれば、そのトークンは生成」。vLLM-Omni も同じ形の空間マスクを持つ。
+- **H3 の映像 VAE〔映像を潜在へ圧縮する符号化器と復号器〕の符号化器は、畳み込みと GroupNorm〔チャネルの組ごとに平均と分散で正規化する層〕でできている。** 空間の詰め物は鏡写しで、256 画素のタイルごとに独立に符号化する。GroupNorm はタイルの全画素から統計を取るので、キャンバスごと符号化すると、余白の画素は境界のトークンに限らずタイル全体の潜在に効きうる（推測。構造からの導出）。
+- **復号器は ViT〔画像を小片の列として扱う変換器〕型で、タイルの中は全結合の注意である。** 固定した潜在を復号した画素も、同じタイルの生成された潜在の影響を受け、元の画素とビット一致はしない（推測。構造からの導出）。画素の貼り戻しとぼかした縁は、コミュニティの修復の流れでよく使われている。
+- **硬い固定の落とし穴の報告はあるが、H3 の空間の Outpainting の継ぎ目を名指しした報告は見つからなかった**（17.5）。
+
+### 17.2 H3 の生態系の前例
+
+**ComfyUI 本体（GPL-3.0。commit `61e524bdba7a4e193b45c2697f1af83c1beb86d6`・2026-11-09）**
+
+- `comfy/model_base.py` の H3 の処理は、潜在の解像度のマスクを受け取り、映像は DiT〔ノイズ除去の本体の変換器〕の 2×2 パッチごとに最大値へ寄せて元の解像度へ戻す。端数は複製で埋め、値は 1/256 刻みに切り上げる。音声は潜在 1 個単位。
+- `comfy/ldm/minimax/model.py` の `mask_row_values` が、マスクを `[T, H, W]` から 2×2 パッチ単位の行の値に変える。行の時刻は `1 − m·σ` を映像 0.999 で頭打ちにする。意味は §16.6 と同じで、空間方向も同じ式で扱う。
+- `scale_latent_inpaint` は、固定の領域に `0.999·clean + 0.001·noise` を入れ直す。トークンの格子へ寄せたマスクと元のマスクとの差の分だけ、状態を混ぜ戻す。
+- **PR #15375**（drozbay。2026-08-07 作成・2026-08-18 マージ。https://github.com/Comfy-Org/ComfyUI/pull/15375 ）: 説明文は「Video masks snap to the 2x2 latent patch grid, audio masks to whole latent frames」。素朴な画素単位のマスクは「will not match the timesteps assigned to the 2x2 latent grids unless by coincidence」で乱れを生むので、モデルの側で寄せるように直した。初めは 0／1 に丸めていたが、後のコミットで連続値を許した。修復の例のワークフローはあるが、Outpainting と継ぎ目への言及は無い。
+- **Issue #15981**（2026-08-30 作成・2026-09-08 クローズ。PR #15988 で修正。https://github.com/Comfy-Org/ComfyUI/issues/15981 ）: 「passing any denoise_mask to MiniMax-H3 overlays a repeating grid on the output」。周波数の分析で 16×16 画素の山が出た。原因は、速度から x0 への換算に全体の σ を使っていたこと。本製品の設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.1 の式は、行ごとの掛け直しを含む形である（推測。式を突き合わせた判断）。
+- **Issue #16516**（2026-09-24 作成・未解決。https://github.com/Comfy-Org/ComfyUI/issues/16516 ）: 修復の例は元の映像を別に符号化して Set Latent Noise Mask を通す。元の映像を参照にもつながないと忠実さが下がる（Jonseed）。「H3 inpainting did not preserve the camera movement, position, and motion」（dream-1ab、2026-09-27）。継ぎ目・画素の合成・Outpainting への言及は無い。
+- Fun ControlNet の適用ノード（`comfy_extras/nodes_minimax_h3.py` の `MiniMaxH3FunControlNetApply`）: `mask`（1＝作り直す）と元の映像を受け、マスクの外の画素だけを残した映像を符号化して制御の枝に渡す。新しい重みでは穴を ImageNet の平均色（正規化すると 0 になる中間の灰色）で埋め、旧版の重みでは黒で埋める。denoise mask による固定ではない。公式の文書（https://docs.comfy.org/tutorials/video/minimax/minimax-h3-fun-controlnet 。日付の記載なし）にも Outpainting と画素の合成は書かれていない。
+
+**Alibaba PAI の Fun ControlNet と VideoX-Fun（コードは Apache-2.0、重みは H3 Community License）**
+
+- モデルカード（https://huggingface.co/alibaba-pai/MiniMax-H3-Fun-Controlnet-Union ・ https://huggingface.co/alibaba-pai/MiniMax-H3-Fun-Controlnet-Union-2.0 ）: 修復では制御の入力を 49 チャネル（潜在＋マスクした潜在＋マスク）に広げ、制御の枝は 50 ブロックのうち 5 か所に付く。2.0 は穴を正規化の後に 0（中間の灰色）にし、旧方式（正規化の前に 0＝ほぼ −2 の極端な暗さ）より「improves how filled regions blend with kept regions」とある。Outpainting は書かれていない。
+- **学習コードの注釈**（`scripts/minimax_h3_fun/train_control.py`。commit `e8c314fbfa494d0429bbef605c9f6112b79a7ead`。https://github.com/aigc-apps/VideoX-Fun ）: 要旨は「Wan 2.1's recipe: zero the masked pixels after the normalization … instead of the legacy pre-normalization zero that lands near -2 as an extreme dark signal and contaminates the kept regions through the VAE's receptive field」。**詰め物が VAE の受容野を通して残す領域を汚す、と作者自身が書いている。**
+- 学習のマスクの種類（`videox_fun/data/utils.py` の `get_random_mask`）は 10 種類で、画面の縁を帯状に開ける Outpainting 型のマスクは無い（長方形が端に接することはある）。
+- Issue #509（2026-08-25。https://github.com/aigc-apps/VideoX-Fun/issues/509 ）: 旧版について協力者の返信は「This version's inpainting isn't very good」。
+
+**WanGP（deepbeepmeep/WanGP。WanGP Community License 2.0。GitHub の判定は NOASSERTION。main `5b63ae9d4c0e8578929c95c4c5e09162f4520d93`・2026-11-09）**
+
+- 「Spatial Outpainting」がある。経路は 2 つ。
+  - Fun ControlNet の経路: 元の長方形を見える文脈として渡し、新しい縁を自動でマスクして生成する。説明文は「The original area can still change slightly」「the original rectangle is guided, not copied pixel for pixel」。
+  - FL2VA の経路: 「MiniMax H3 outpainting requires Mask Denoising Mode to be set to Grouped Rows」。Grouped Rows は「conditioning timestep for fixed rows; denoising timestep for editable rows」で既定値。もう 1 つの選択肢 Shared Timestep は固定と生成の行を同じ時刻で進める。
+- 元の映像の符号化（`pipeline.py` の `_encode_video_source`）: Outpainting では**元の長方形だけを VAE で符号化し、0 で埋めたキャンバスの潜在の (上端÷16, 左端÷16) に貼る。**
+- 余白は 32 画素の倍数に丸める（`quantize_margins=32`）。マスクは 2×2 パッチの最大値に寄せる。固定する行の入れ直しは `0.999·clean + 0.001·noise` で、ComfyUI と同じ値。
+- 画素の貼り戻し（`_keep_source_outside_mask`）: マスクを短辺の 1.5% だけ広げてから 2 回ぼかし、元の画素を戻す（注釈は「the rest of the picture stays exact」）。ただし呼ぶのは Remake のモードだけで、**Outpainting の経路では呼んでいない**（この版）。別に、与えたキーフレームの画素を復号の後に戻す処理がある（注釈は「restore exact supplied pixels after the VAE round trip」）。VAE を往復すると画素が一致しないことを作者は前提にしている。
+- 定数の注釈: 潜在の受け渡しの実験は「worsened the first outpainting join」なので既定では切っている（時間方向の継ぎ目の話）。
+- 説明文の助言: 「Use a lower masking strength (<0.75) to facilitate continuity with masked areas」。計測の記録は無い。
+- 継ぎ目・色ずれ・画質の比較の記録は見つからなかった（探した範囲は README と `models/minimax_h3/` の 3 ファイル）。
+- 経緯: jmanhype/wangp-dspy の PR #201（2026-09-26。https://github.com/jmanhype/wangp-dspy/pull/201 ）に、その時点の WanGP の H3 では Outpainting の項目が注釈で外されていた記録がある。11-09 の版では有効なので、9 月末から 11 月の間に入ったとみられる（推測）。
+
+**その他の実装**
+
+- **vLLM-Omni**（Apache-2.0。commit `813618b5`。`vllm_omni/diffusion/models/minimax_h3/latent_mask.py`。PR #7465 は 2026-09-20 マージ。https://github.com/vllm-project/vllm-omni/pull/7465 ）: 潜在の格子の大きさの映像マスク `[T', H, W]` を受け、DiT 用には 2×2 の最大値で切り上げ、復元用には潜在マスの精度を保つ。最後に x0 を潜在マスの単位で clean と混ぜる。意味は ComfyUI に合わせている（0＝残す・1＝作り直す・端数は連続に混ぜる）。画質は自動検査の範囲外と書く。Outpainting と継ぎ目への言及は無い。
+- **LongMedia**（Apache-2.0。`409e4cb0`）: `MiniMaxH3LatentLabVideoInpaint` は、マスクを三線形補間で潜在の格子に写し、内側と外側の強さを別々に与えて `noise_mask` にする。`_crop_pad_stream` は、ある潜在を 0 で埋めた別の大きさの潜在へ中央合わせで貼る（用途は映像と音声の合成で、Outpainting の名前は付いていない）。
+- **drozbay/MaskVidExperiments**（GPL-3.0。`c32ed8c1`。https://github.com/drozbay/MaskVidExperiments ）: 「Mask To Latent Space」は画素のマスクを H3 の 2×2 トークンの格子とフレームの周期に寄せる。「Subject Uncrop」は処理した切り抜きを**ぼかした縁で元の画面に貼り戻す**（「pixel-exact when the crop size was not changed」）。Outpainting は無い。
+- **DiffSynth-Studio**（Apache-2.0。`fdad57bd`・2026-11-09）: Retake のマスクは潜在フレームの単位で作り、空間の全面へ広げる。モデルの関数は空間のマスクも通せる形だが、2×2 の最大値ではなく左上のマスを取る（推測。`patchify_video(mask)[:, 0]` の読み）。入口は時間方向だけ。Fun ControlNet の受け口（`minimax_h3_controlnet.py`）が新しく入った。
+- **MiniMax 公式**（`MiniMax-AI/MiniMax-H3`。`199b7d0e`・2026-10-28。コードは Apache-2.0、重みは H3 Community License）: 「video editing」「video continuation」の作業の種類はあるが、参照の動画の言葉による編集である。inpainting・outpainting・空間マスクの記述は見つけられなかった。
+
+### 17.3 H3 の映像 VAE の構造
+
+出典は公式の `FL2VA/video_vae/` の設定とコード（`config.json`・`vae_cnn.py`・`norm.py`・`klvae.py`）と DiffSynth の `minimax_h3_video_vae.py`。本製品の `engine_h3/video_vae.py` も読んで照合した。
+
+| 項目 | 値 |
+|---|---|
+| 空間の圧縮 | 16 倍（`space_down = [2,2,2,2,1,1]`） |
+| 時間の圧縮 | 4 倍。17 フレームの塊ごとに符号化（§16.2） |
+| 潜在のチャネル | 24 |
+| DiT のパッチ | [1,2,2]（1 トークン＝潜在 2×2＝32 画素四方） |
+| 符号化器 | 3D 畳み込みだけの網。各段に ResNet ブロック 2 個（3×3×3 の畳み込み 2 本）。入口と出口も 3×3×3 |
+| 空間の詰め物 | **鏡写し（`reflect`）**。ダウンサンプル（3×3・ストライド 2）は右と下にだけ 1 画素を鏡写しで足す（非対称） |
+| 正規化 | GroupNorm 32 組。時間方向は混ぜず、潜在の時刻ごとに空間の全画素で統計を取る（`use_t_isolated_gn: true`） |
+| 時間の因果性 | 符号化器は因果で、17 フレームの塊の中に閉じる |
+| 復号器 | ViT 型（36 層・32 ヘッド×64・RoPE〔位置の回転埋め込み〕）。因果ではなく、タイルの中では全トークンが互いに注意する |
+| 入力の正規化 | ImageNet の平均と標準偏差。ImageNet の平均色の画素は 0 になる |
+| タイル | 符号化・復号とも空間のタイル（256 画素・重なり 64 画素以上）。タイルは独立に処理し、重なりを線形に混ぜる。時間方向の復号は 7 潜在の窓 |
+
+- **タイルの区切り**（事実）: 長さが 256 画素以下ならタイルは 1 枚。それより長ければ重なりを 64 画素以上にして必要な最少の枚数に区切る。したがって、**元の映像だけを符号化したときとキャンバスごと符号化したときでは、タイルの区切りが違う。**
+- **空間の受容野の見積もり（推測。算術）**: 最後の潜在 1 マスから入力へ逆にたどると、畳み込みの理論上の受容野は幅 441 画素で、受け持ちのマスの外へ左・上に 205 画素、右・下に 220 画素（潜在でおよそ 13 マス、トークンでおよそ 6〜7 個）。ただし、
+  1. 理論上の上限で、実際に効く範囲は中心に寄った釣鐘型でずっと狭いのが普通である。
+  2. タイル（256 画素）は受容野より小さいので、畳み込みの受容野はタイルの中で切れ、タイルの端では鏡写しの詰め物がその先の代わりになる。
+  3. GroupNorm は 1 枚のタイル・1 つの潜在の時刻の全画素から平均と分散を取る。タイルに余白が入ると、そのタイルの全部の潜在が（大きさは別として）変わる。
+  4. タイルの重なりの混ぜ合わせ（潜在で 4 マス以上）により、隣のタイルの影響が混ぜ合わせの幅だけ入る。
+- 空間の Outpainting では全フレームで同じ位置に余白が入るので、時間方向の受容野は問題にならない（推測）。
+- **復号の受容野（推測。構造からの導出）**: ある画素の値は、同じタイル・同じ窓のすべての潜在に依存しうる。固定した潜在が clean とビット一致していても、同じタイルに生成した潜在があれば復号結果は変わりうる。VAE はもともと非可逆で、clean の潜在だけでも元の画素には戻らない。参考に、タイルの独立な復号が見た目に出た事例として ComfyUI の issue #15548（2026-08-12）がある（題名だけを読んだ）。
+
+### 17.4 他の動画 DiT の例
+
+| 実装 | 広げた領域の詰め物（画素） | 広げた領域の潜在 | 固定の方式 | 最後の画素の貼り戻し |
+|---|---|---|---|---|
+| Wan VACE（Apache-2.0。`ali-vilab/VACE` の `48eb44f1`） | 灰色（`MASK_COLOR = 'gray'`）。マスクの内側を 0 にした「inactive」と外側を 0 にした「reactive」を別々に符号化する | 全面をノイズから生成 | 固定ではなく文脈の枝で導く（元の領域も作り直す） | 生成の関数には無い。`MASK_BLUR` を使うと、マスクを元の領域へ食い込ませる（既定は 0） |
+| ComfyUI の Wan2.1 VACE の修復の雛形（二次資料。https://comfy.org/hub/workflows/wan2-1-vace-inpainting-a1bb55d904c9/ ） | — | — | — | ImageCompositeMasked で元の映像へ合成する（「crucial for blending the inpainted regions with the original video」） |
+| H3 Fun ControlNet（VideoX-Fun・ComfyUI） | ImageNet の平均色（正規化後に 0）。2.0 で黒から変えた | 全面を生成 | 制御の枝で導く | 書かれていない |
+| WanGP の H3 FL2VA の Outpainting | 使わない（元を単独で符号化する） | 潜在 0 のキャンバスに元の潜在を貼る | 固定する行の時刻を止める | Outpainting では無い（Remake には縁をぼかした貼り戻しがある） |
+| HunyuanVideo・CogVideoX | 公式の Outpainting は見つけられなかった。CogVideoX-Fun の修復の旧方式は「正規化の前に 0（黒）」で、VideoX-Fun 自身が正規化の後に 0 へ移した | — | — | — |
+
+- 「元を単独で符号化して潜在を貼る」やり方は、WanGP の H3 の実装と、LongMedia の中央合わせの貼り付け（用途は Outpainting ではない）でだけ見つけた。広く知られた慣行と言える証拠は見つけられなかった。VACE と Fun ControlNet は「キャンバスに置いて灰色で埋め、まとめて符号化する」方式である。
+- 画像の拡散での既知の事実:
+  - Blended Latent Diffusion（Avrahami ほか、arXiv 2206.02779）は「the inherent inability of this LDM to accurately reconstruct images」に対して最適化による解決を提案する。潜在で背景を固定しても、VAE を通すと背景は元に戻らない、という問題意識である。
+  - RePaint（Lugmayr ほか、arXiv 2201.09865）は、既知の領域を毎ステップ差し替える方式は「is performed without considering the generated parts of the image」で、「cannot correct mistakes that lead to disharmonious boundaries in the subsequent steps」と書く。
+- LTX の潜在による条件付け（IC-LoRA・緑のキャンバス・脱緑のブレンド）は本プロジェクトの既知の事項で、今回は調べ直していない。
+
+### 17.5 硬い固定の落とし穴の報告
+
+| 報告 | 方向 | 内容 | 状態 |
+|---|---|---|---|
+| ComfyUI #15981 | 空間・時間 | マスクを渡すと 16 画素の格子が出る。原因は速度から x0 への換算の σ | #15988 で修正済み |
+| ComfyUI PR #15375 の説明 | 空間 | 画素単位のマスクが 2×2 トークンの時刻とずれると乱れる。モデルの側で寄せて解決 | 解決 |
+| ComfyUI #16516 | 空間（修復） | 修復で、カメラの動き・位置・運動が保たれない。参照につながないと忠実さが下がる | 未解決 |
+| ttulttul（MIT。§16.12） | 時間 | 潜在を硬くつなぐと継ぎ目でちらつく。行ごとの時刻を入れる前の時期 | — |
+| H3 Continuum #13（§16.3） | 時間 | クリップを重ねると焼ける | 未解決 |
+| WanGP の説明文 | 空間 | 固定を緩める（<0.75）と連続しやすいという助言。潜在の受け渡しは最初の継ぎ目を悪くした | 助言だけで計測なし |
+| VideoX-Fun #509 | 空間 | 旧版の修復は「isn't very good」 | 2.0 で改良 |
+| 本製品の A2V の目視（設計正本 §3.1） | 音声の全固定 | Strength 1.0 で口の動きが硬い | 原因は確かめていない |
+| RePaint | 画像 | 差し替えだけでは境界が調和しない | — |
+
+- **H3 の空間の Outpainting で、継ぎ目・内容の不一致・時刻が混ざることによる劣化を名指しした報告は見つけられなかった。**
+- 一方で、ComfyUI 本体・vLLM-Omni・LongMedia・drozbay・WanGP が、空間のマスクで行の時刻を止める方式を採っている。WanGP はこれを既定にし、Outpainting の必須条件にしている。
+- 探した範囲: GitHub の issue の検索（`repo:Comfy-Org/ComfyUI minimax mask`・`H3 inpaint`・`minimax h3 outpaint`・`minimax h3 inpaint`）、ComfyUI の H3 の PR と issue、VideoX-Fun・WanGP・LongMedia・vLLM-Omni・drozbay・DiffSynth のコードと文書、ウェブ検索（「MiniMax H3 outpainting」ほか）。Reddit・Discord・CivitAI の記事は調べていない。
+
+### 17.6 推測（事実からの導出。確かめていない）
+
+1. 生成の領域（マスクの値 1）の clean の値は、本製品の式では使われない（設計正本 §3.1 の式で m＝1 なら clean が 0 倍される）。したがって、広げた領域の潜在に何を入れても DiT の計算は変わらない。余白の選び方が効くのは、キャンバスごと符号化するときに、符号化器を通して固定の領域の clean を変える経路だけで、元を単独で符号化して貼れば余白の問題そのものが消える。
+2. キャンバスごと符号化すると、余白の影響は GroupNorm の統計を通してタイルの全部の潜在に及びうる。大きさは、余白が ImageNet の平均色（正規化後に 0）のときが最も小さいと見込まれる（VideoX-Fun が黒から灰色へ移した理由と同じ）。
+3. 単独で符号化すると、元の映像の端は鏡写しの詰め物で符号化される。端のトークンは「元の外側が鏡写しで続く」と読んだ潜在になり、生成の側との意味のずれは端の 1 トークン列あたりに出るかもしれない。
+4. 貼る位置が 16 画素（潜在 1 マス）の倍数なら潜在に乗るが、トークンの境目にそろえるには 32 画素の倍数が要る。32 の倍数でないと境目のトークンは生成の側になり、その中の元の画素の部分も作り直される。
+5. 復号器がタイルの中で全結合なので、固定の領域も画素は変わり、貼り戻しが要る。貼り戻すと境目の内側は元の画素、外側は生成の画素になり、色や明るさの差が線として出うる。前例はどれもぼかした縁を使う（drozbay はぼかした縁、WanGP の Remake は 1.5% 広げて 2 回ぼかす、VACE は `MASK_BLUR`）が、幅の決め手は見つからなかった。
+
+### 17.7 ライセンスの扱い
+
+| 出典 | ライセンス | 扱い |
+|---|---|---|
+| ComfyUI 本体 | GPL-3.0 | 仕様として読むだけ。コードは写さない |
+| drozbay/MaskVidExperiments | GPL-3.0 | 同上（README を読んだ） |
+| WanGP | WanGP Community License 2.0（OSI の承認外） | 仕様として読むだけ。コードは写さない |
+| vLLM-Omni・LongMedia・DiffSynth-Studio・VideoX-Fun・Wan VACE | Apache-2.0 | 参考にできる |
+| MiniMax 公式 | コードは Apache-2.0、重みは H3 Community License | 参考にできる |
+| Fun ControlNet の重み | H3 Community License | 本製品では使っていない |
+
+### 17.8 未確認
+
+1. H3 の空間の Outpainting で、継ぎ目や画質を測った記録（どの実装にも無い）。→ 本製品で計測した。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205。
+2. 余白の種類ごとの差、単独の符号化とキャンバスごとの符号化の比較の記録（見つからなかった）。→ 本製品の門 G0 で測った。同 §205。
+3. なじませの幅や方式を H3 で比べた記録（見つからなかった）。
+4. H3 Continuum（MIT）・SGLang・Hugging Face の公式モデルカードの空間マスク（今回は調べ直していない。§16 の範囲では Continuum は時間方向の固定だけ）。
+5. ComfyUI issue #15548 の本文（題名だけを読んだ）。
+6. Reddit・Discord・CivitAI の記事。
+
+### 17.9 出典の一覧
+
+取得はすべて 2026-11-10。
+
+| 出典 | 版 | ライセンス | 読んだ場所 |
+|---|---|---|---|
+| Comfy-Org/ComfyUI | `61e524bdba7a4e193b45c2697f1af83c1beb86d6`（2026-11-09） | GPL-3.0（仕様として読んだだけ） | `comfy/model_base.py`・`comfy/ldm/minimax/model.py`・`comfy_extras/nodes_minimax_h3.py`。PR #15375・issue #15981・#16516、#15548 の題名 |
+| docs.comfy.org の minimax-h3-fun-controlnet | 日付の記載なし | — | https://docs.comfy.org/tutorials/video/minimax/minimax-h3-fun-controlnet |
+| MiniMax-AI/MiniMax-H3 | `199b7d0e1fd95e7b3eafa8c15eca692534142427`（2026-10-28） | コードは Apache-2.0、重みは H3 Community License | `FL2VA/video_vae/*`・README・`.claude/skills/h3-prompt-writing/references/ref-en.txt` |
+| modelscope/DiffSynth-Studio | `fdad57bd94d3fbac8a72c44920dd0a23b719ebb9`（2026-11-09） | Apache-2.0 | `diffsynth/models/minimax_h3_video_vae.py`・`minimax_h3_controlnet.py`・`diffsynth/pipelines/minimax_h3_audio_video.py` |
+| aigc-apps/VideoX-Fun | `e8c314fbfa494d0429bbef605c9f6112b79a7ead` | Apache-2.0 | `scripts/minimax_h3_fun/train_control.py`・`examples/minimax_h3_fun/predict_v2v_control_inpaint.py`・`videox_fun/data/utils.py`、issue #509 |
+| HF alibaba-pai/MiniMax-H3-Fun-Controlnet-Union・-2.0 | 日付の記載なし | H3 Community License | モデルカード |
+| deepbeepmeep/WanGP | main `5b63ae9d4c0e8578929c95c4c5e09162f4520d93`（2026-11-09） | WanGP Community License 2.0（OSI の承認外。仕様として読んだだけ） | `models/minimax_h3/minimax_h3_handler.py`・`pipeline.py`・`constants.py`・README |
+| vllm-project/vllm-omni | `813618b5a22b9106d324aed5057fa14c295eddc6`。PR #7465 は 2026-09-20 マージ | Apache-2.0 | `vllm_omni/diffusion/models/minimax_h3/latent_mask.py` |
+| vizart-vj/ComfyUI-MiniMax-H3-LongMedia | `409e4cb03c85cf455bf195d5185d106c0d821487`（2026-09-29） | Apache-2.0 | `nodes.py`・`latent_ops.py`・文書 |
+| drozbay/MaskVidExperiments | `c32ed8c17e6fe892a174ebf25fe98b1317de97fb` | GPL-3.0 | README |
+| ali-vilab/VACE | `48eb44f1c4be87cc65a98bff985a26976841e9f3` | Apache-2.0 | `vace/annotators/outpainting.py`・`vace/models/wan/wan_vace.py`・`vace/configs/video_preproccess.py` |
+| ComfyUI の Wan2.1 VACE の修復の雛形（二次資料） | — | — | https://comfy.org/hub/workflows/wan2-1-vace-inpainting-a1bb55d904c9/ |
+| jmanhype/wangp-dspy PR #201 | 2026-09-26 | 不明 | https://github.com/jmanhype/wangp-dspy/pull/201 |
+| Blended Latent Diffusion・RePaint | arXiv 2206.02779・2201.09865 | 論文 | — |
+| 本製品 | dev（2026-11-10 の作業ツリー） | — | `engine_h3/video_vae.py`、設計正本 §3・§3.1、本書 §13・§15・§16 |

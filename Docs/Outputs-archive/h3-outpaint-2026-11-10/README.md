@@ -187,4 +187,4 @@ G1〜G4（各本）:
 - 読むもの: `summary.json`（`runs[]` の条件・`metrics`・`seconds`・`peak_vram_mb`、`conditions.seed`。無ければ各本の `result.json` と台本と同じ既定の条件）、`<本>\output.mp4`、`G0\<名前>.mp4`・`G0\result.json`、`_material\src_1280x720_124f.mp4`。
 - 書くもの: 各本の mp4（`<本>_<幅>x<高さ>_r<なじませ段数>_s<音声Strength>_seed<seed>.mp4`）、`source_1280x720_124f.mp4`、`G0_<名前>.mp4`、`sheet_all.png`・`sheet_<本>.png`・`sheet_G0.png`（先頭・中央・末尾の 3 コマ。保持矩形に 1 画素のマゼンタの枠）、`README.md`（条件の表と数値の表）。動画の無い本は飛ばし、表に「未実行」と書きます。何度回してもよく、既存のファイルは消しません。
 - 引数: `--no-sheets`（画像を作らない）、`--out-root`（入力の根の差し替え。試走用）、`--hf-dir`（書き先。既定は `<out-root>\hf-round13`）。
-- 上げるのは前例と同じ書式です（`.venv\Scripts\python.exe -m huggingface_hub.cli.hf upload Rootport/Nz-LTX23-eval-clips <フォルダ> round13-h3-outpaint-gates --repo-type dataset`）。上げる前にオーナーの了承を得ます。
+- 上げるのは前例と同じ書式です（`.venv\Scripts\python.exe -m huggingface_hub.cli.hf upload Rootport/Nz-LTX23-eval-clips <フォルダ> round13-h3-outpaint --repo-type dataset`）。上げる前にオーナーの了承を得ます。

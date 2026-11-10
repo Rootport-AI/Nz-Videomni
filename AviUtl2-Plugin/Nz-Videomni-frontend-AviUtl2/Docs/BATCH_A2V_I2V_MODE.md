@@ -6,7 +6,7 @@
 
 - 作成: 2026-09-15
 - 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-152（起票時は[`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-30）。LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。
-- 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。§2.11（D13）は実機ゲートG1〜G4に合格してクローズしました（CLOSED §3-153）。§2.8 のプロンプトの条件は 2026-10-06 に追加しました（CLOSED §3-220。[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.24 G12 合格）。§2.12（MiniMax H3 の経路）は 2026-11-09 に追加しました（バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-126。実装は [`DEVLOG.md`](DEVLOG.md) §167）。
+- 状態: 完結。実機ゲートG1〜G12は2026-09-15に全項目合格し、オーナーが受容してクローズしました（検証の記録は[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108が正本）。§2.11（D13）は実機ゲートG1〜G4に合格してクローズしました（CLOSED §3-153）。§2.8 のプロンプトの条件は 2026-10-06 に追加しました（CLOSED §3-220。[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.24 G12 合格）。§2.12（MiniMax H3 の経路）は 2026-11-09 に追加しました（バックエンド台帳 [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-126。実装は [`DEVLOG.md`](DEVLOG.md) §167）。
 
 **用語**: 本書では「**i2v**（画像1枚から動画を作るモード）」「**a2v**（音声から口パク動画を作るモード）」という略称をそのまま使います。どちらもこのアプリが以前から持っている生成モードの呼び名で、i2vはImage-to-Video、a2vはAudio-to-Videoの略です。
 
@@ -43,7 +43,7 @@
 4. **行画像の生成強度**は、a2v・i2vのどちらのモードでも同じ規則になりました。**Create画面冒頭のキーフレームカード**（「Shared」を選んだ行が参照するのと同じカード）にスライダー値があればその値を、無ければ既定の0.8を使います。**この規則は今回、バッチa2vの行画像にも及びました**——これまでバッチa2vの行画像は強度1.0で固定でしたが、今回からSharedと同じ値を使うように変わっています（詳しくは§2.5）。
 5. **「Shared」の意味は変わりません。** 画像ドロップダウンの先頭は常に「Shared」で、これを選んだ行はCreate画面のKEYFRAMESカードをそのまま使います。KEYFRAMESが空の状態でSharedの行がある場合、開始できずに既存の警告が出るのも従来どおりです。
 6. **`chunked_upsample`（省メモリの時間分割アップサンプル）チェックボックスは、i2vモードでは灰色になります。** i2vの1行は単発の`POST /generate`で、そもそも時間分割アップサンプルの工程を持たないためです。
-7. **バッチパネルは、仕組みのうえでは両方のベースモデルで動きます（D10）。** パネルが灰色になるかどうかは、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるかどうかだけで決まります（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5でも動作し、今回追加したi2vモードも同じゲートに乗るぶん理屈のうえでは動作します。** ただし**今回の実機ゲートG1〜G12はLTX 2.3だけで実施しました**——LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。**MiniMax H3 は`unsupported_features`に`a2v`を載せますが、単発のA2Vの規約`constraints.source_audio`を配るので、パネルは開きます**（2026-11-09から。§2.12）。
+7. **バッチパネルは、仕組みのうえでは両方のベースモデルで動きます（D10）。** パネルが灰色になるかどうかは、読み込んでいるエンジンの`unsupported_features`（`GET /models`）に`chain`または`a2v`が含まれるかどうかで決まります（`featureScope.ts`の`batchA2vDisabledFor`）。LTX 2.5アダプタは台帳[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-102（2026-09-01クローズ）以降どちらの語も宣言していないため、**バッチa2vは既にLTX 2.5でも動作し、今回追加したi2vモードも同じゲートに乗るぶん理屈のうえでは動作します。** ただし**今回の実機ゲートG1〜G12はLTX 2.3だけで実施しました**——LTX 2.5での実機確認は2026-09-15にオーナーが実施しクローズ済みです（正本はバックエンド[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §108.7、台帳は[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) §3-151）。**MiniMax H3 は`unsupported_features`に`a2v`を載せますが、単発のA2Vの規約`constraints.source_audio`を配るので、パネルは開きます**（2026-11-09から。§2.12）。
 8. **MiniMax H3 でも、a2v・i2vの両モードが使えます**（2026-11-09から）。H3では両モードとも各行を単発の`POST /generate`へ送り、a2vの行は音声を`source_audio`として添えます。行のフレーム数・開始の条件・送る中身はH3の規則に従います（§2.12）。
 
 ## 2. 決まったこと

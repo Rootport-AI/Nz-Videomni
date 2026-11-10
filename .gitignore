@@ -109,3 +109,6 @@ config.yaml.bak
 
 # ローカルのエージェント設定・個人環境パスを含むため追跡除外
 .claude/
+# 保管庫（Docs/Outputs-archive）の GPU の門の実行時フォルダ（_rt）と目視用の mp4 は手元にだけ残す（結果の JSON と台本だけを追跡する）
+Docs/Outputs-archive/**/_rt/
+Docs/Outputs-archive/**/*.mp4

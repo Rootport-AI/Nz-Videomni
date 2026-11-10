@@ -60,8 +60,9 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   ネガティブプロンプトは H3 では VSF 方式だけで、submit_generate でも
   submit_chain でも nag_enabled=true と neg_method="vsf" を指定すれば使えます
   （既定の neg_method="nag" は 422 FEATURE_UNSUPPORTED の nag）。
-  連結の A2V・素材（末尾）、reference_video_id
-  なども 422 FEATURE_UNSUPPORTED になります（使えない機能は
+  連結の最上位の source_audio_id・素材（末尾）・reference_video_id
+  は 422 FEATURE_UNSUPPORTED になります（クリップごとの A2V は API と
+  操作パネルだけ。使えない機能は
   unsupported_features を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
   H3 では loras の各要素の audio_strength は無視されます（422 にはならず、

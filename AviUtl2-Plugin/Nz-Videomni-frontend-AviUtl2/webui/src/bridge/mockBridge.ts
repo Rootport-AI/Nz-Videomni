@@ -582,11 +582,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   // §1-106: `chain` LEFT (H3 chains now) and the chain material it
   // cannot take joined in its place. 台帳 §1-121: `v2v` and `chain_start_image`
   // left again (H3's chain continues a source video and starts from an
-  // opening image), leaving `end_source` and `a2v` (the chain's audio panel
-  // and Batch A2V).
+  // opening image), leaving `end_source` and `a2v` (only the chain-wide
+  // `source_audio`; the panels reopen through constraints, §1-120／§1-126).
   MiniMaxH3: [
     "reference_video",
-    "nag",
+    "nag", // the NAG method only (VSF is accepted)
     "two_stage_hq",
     "guidance_scale",
     "outpaint",
@@ -631,7 +631,8 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   feature: string;
   /** How to read "the user asked for this" for THIS field, when the shared
    * {@link isChainFieldSet} predicate would get it wrong. Every row above the
-   * two added by the NAG/VSF increment is a null/empty/false test, which is
+   * two added by the NAG/VSF increment except `nag_enabled` is a
+   * null/empty/false test, which is
    * what the shared predicate does; `pipeline` and `vae_mode` are the first
    * rows whose DEFAULT is a non-empty string, so without a predicate of their
    * own the shared one would read `"distilled"` / `"default"` as a request and

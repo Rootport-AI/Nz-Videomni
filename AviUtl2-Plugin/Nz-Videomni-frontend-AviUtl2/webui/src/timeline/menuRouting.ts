@@ -177,7 +177,7 @@ export interface MenuRoute extends MenuRouteInfo {
  *    `audioToLongA2v` (2026-08-10) DOES route to **chained**: that Chain audio
  *    path is wired again — as ONE track spread over the whole clip list by the
  *    server, which is a different feature from the骨組み's per-clip audio, and
- *    the only place a multi-clip A2V can live.
+ *    the only place a multi-clip A2V can live（H3 は各クリップへ割り当て。§1-120）.
  *  - Object/layer commands whose output is a *fresh single generation* —
  *    `imageToVideo` (i2v), `addImageKeyframe` (live keyframe append),
  *    `textToVideoHere` (t2v), `imageFromCurrentFrame` (frame-grab i2v) — route
@@ -265,7 +265,7 @@ export const MENU_ROUTING_TABLE: Readonly<Record<string, MenuRouteInfo>> = {
   /** §1-16 長尺A2V (2026-08-10): Chain画面. The long-form sibling of #7.
    * #7/#18 accept an audio OR a video object; the object's own sound over its
    * ribbon range is rendered by native (solo) and attached to the whole clip
-   * chain (`ChainAudioPanel`). Head-aligned placement (B), matching #7. */
+   * chain (`ChainAudioPanel`; H3 は各クリップへ割り当て。§1-120). Head-aligned placement (B), matching #7. */
   audioToLongA2v: {
     targetMode: "chained", intent: "audio-to-long-a2v", needsSelection: true,
     requiredKind: ["audio", "video"], placement: "B",

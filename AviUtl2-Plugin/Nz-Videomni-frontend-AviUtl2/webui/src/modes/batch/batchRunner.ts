@@ -69,7 +69,7 @@ import type { BatchMode, BatchRow, BatchStat } from "./manifestMerge";
 const UNFINISHED_STATS: ReadonlySet<BatchStat> = new Set<BatchStat>(["Waiting", "Failed", "Generating"]);
 
 /** Submit 409 (JOB_BUSY) retry policy, applied to both endpoints this runner
- * posts to (`/api/v1/generate/chain` for a2v, `/api/v1/generate` for i2v) —
+ * posts to (`/api/v1/generate/chain` for a2v, `/api/v1/generate` for i2v（H3 は §1-126 で a2v の行も `/generate`）) —
  * mirrors `batch.py`'s `_JOB_BUSY_MAX_ATTEMPTS`/`_JOB_BUSY_BACKOFF_S`. Overridable per
  * `start()` call (see {@link BatchRunnerStartParams.jobBusyBackoffMs}) purely
  * for test speed — production call sites should leave it at the default. */
@@ -155,7 +155,7 @@ export interface BatchRunnerCommonSettings {
 export interface BatchRunnerStartParams {
   /** Which kind of batch this run is (D1, 2026-09-15), frozen by the caller at
    * `start()` time. `"a2v"` uploads each row's audio and submits
-   * `POST /generate/chain`; `"i2v"` has no audio at all and submits
+   * `POST /generate/chain`（H3 は §1-126 で a2v の行も `/generate`）; `"i2v"` has no audio at all and submits
    * `POST /generate`. Required, with no default: an omitted mode silently
    * falling back to a2v would mean every i2v row looking for an audio file
    * that does not exist. */
@@ -520,7 +520,7 @@ export class BatchRunner {
   }
 
   /** `POST`s one row's payload to `path` (`/api/v1/generate/chain` for a2v,
-   * `/api/v1/generate` for i2v), retrying a 409 (JOB_BUSY) up to
+   * `/api/v1/generate` for i2v（H3 は §1-126 で a2v の行も `/generate`）), retrying a 409 (JOB_BUSY) up to
    * {@link JOB_BUSY_MAX_ATTEMPTS} times with a fixed backoff — mirrors
    * `batch.py`'s `_submit_with_retry`. Returns the `job_id` on success,
    * `null` if 409 persisted through every retry; any other >=400 status

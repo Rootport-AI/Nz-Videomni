@@ -46,7 +46,7 @@ ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 reader does not know holds the bar where it is.
 ``generate_chain`` carries the same keys minus ``num_frames`` / ``images`` /
 ``source_audio`` / ``references``, plus ``clips`` (``[{prompt, num_frames,
-images?, references?}]``; clip 0's ``images`` and a clip's ``references``
+images?, references?, source_audio?}]``; clip 0's ``images`` and a clip's ``references``
 are the single op's shapes and ride only on a clip that has some — an
 absent key is "none") and, for a V2V chain, ``source`` (``{path,
 context_frames}``, the input video's tail the app cut);
@@ -335,8 +335,8 @@ GOVERNED_FIELDS: dict[str, str] = {
 # The chain runs T2V, V2V (an input video's 22-frame tail is clip 0's fixed
 # head) and i2v (clip 0's key frames) clips (裁定 84; 台帳 §1-121), and a
 # one-clip Retake (an input window's 22-frame head and tail are fixed; 台帳
-# §1-123); the end /
-# audio sources the chain schema can carry are refused, and so is a key
+# §1-123); the end source and the top-level audio source are refused (a
+# clip's own ``source_audio`` rides in ``clips``), and so is a key
 # frame's strength (H3 has none; a clip's own references, 裁定 87, ride inside
 # ``clips``). The same four tables as the LTX 2.5 adapter's chain tables, held
 # against ``GenerateChainRequest.model_fields`` by tests/test_engine_h3_adapter.py.
@@ -347,8 +347,8 @@ GOVERNED_FIELDS: dict[str, str] = {
 #: ``nag_enabled`` is refused only with ``neg_method`` other than "vsf" (the
 #: single path's row): the VSF negative prompt rides the chain too, so it is
 #: also HONOURED.
-#: ``clips`` is also HONOURED (the prompts, lengths, clip 0's key frames and
-#: per-clip references): the audit allows exactly these two overlaps, as it
+#: ``clips`` is also HONOURED (the prompts, lengths, clip 0's key frames,
+#: per-clip references and per-clip source audio): the audit allows exactly these two overlaps, as it
 #: allows ``conditioning_images`` and ``nag_enabled`` on the single path.
 #: Its ``clips`` row here refuses only a key frame's ``strength`` (the single
 #: path's ``keyframe_strength``, same sentence), last so every other feature
@@ -440,8 +440,9 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: plus ``fused_gguf_dequant_kernel`` and ``lora_audio_strength``. Derived, so a
 #: refused feature is always published. Outpainting / Inpainting / Alpha Gen
 #: close; the Edit tab stays open with Retake alive (裁定 34, updated
-#: 2026-11-08). ``a2v`` closes the Chained audio panel and Batch A2V; Single's A2V card
-#: goes to ``/generate`` (``constraints.source_audio``), so it stays open.
+#: 2026-11-08). ``a2v`` stays listed, but the operation panel reopens the Chained
+#: audio panel and Batch A2V on H3 from ``constraints.chain.source_audio`` /
+#: ``constraints.source_audio`` (spec §6.2b (f)).
 #: ``fused_gguf_dequant_kernel`` is the one name here the server does NOT
 #: refuse: it stays in :data:`IGNORED_FIELDS` (MiniMax H3 has no GGUF weights,
 #: so a saved OFF must keep passing rather than 422), and is published only

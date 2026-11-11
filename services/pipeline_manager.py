@@ -855,11 +855,75 @@ class PipelineManager:
             # which STORAGE_POLICY.md reserves for material the user may delete
             # at any time. The window and the canvas are kept deliberately: they
             # are the record of what went in to produce what came out.
+            #
+            # MiniMax H3's shape (``inpaint.source_video_id``, 台帳 §1-124)
+            # takes the first branch instead, by the Outpainting rule above (on
+            # the request's shape, not the family): no green canvas and no
+            # reference video. The source is cut from ``window_start_sec`` and
+            # the mask from 0 (it is drawn for the window), both through the
+            # same fps filter to 24 fps and exactly ``num_frames`` frames
+            # (frame-exact or it fails), and handed over as
+            # ``inpaint_source_path`` / ``inpaint_mask_path``. The delivered
+            # size is the source's own (the engine cuts the 32-grid pad off).
             inpaint_source_path = None
             inpaint_mask_path = None
             inpaint_source_size = None
             inpaint_provenance = None
-            if job.request.inpaint is not None:
+            if job.request.inpaint is not None and job.request.inpaint.source_video_id is not None:
+                ipx = job.request.inpaint
+                upload_path = self.video_upload_store.path_for(ipx.source_video_id)
+                mask_upload = self.video_upload_store.path_for(ipx.mask_video_id)
+                source_size = video_io.probe_resolution(upload_path)
+                if source_size is None:
+                    raise generation_failed(
+                        job_id=job.job_id,
+                        detail=f"could not probe the resolution of {upload_path}",
+                    )
+                inpaint_source_size = source_size
+                window_path = output_dir / "_inpaint_window.mp4"
+                cut = video_io.cut_window_mp4(
+                    upload_path,
+                    window_path,
+                    float(ipx.window_start_sec),
+                    int(job.request.num_frames),
+                    24.0,
+                )
+                mask_path = output_dir / "_inpaint_mask.mp4"
+                mask_cut = video_io.cut_window_mp4(
+                    mask_upload,
+                    mask_path,
+                    0.0,
+                    int(job.request.num_frames),
+                    24.0,
+                )
+                inpaint_source_path = window_path
+                inpaint_mask_path = mask_path
+                # The LTX branch's provenance below, with the mask's own cut
+                # added (``mask_resampled`` / ``mask_written_frames``) and no
+                # canvas (there is none). The source's width and height stay
+                # out for the same reason: the engine's record carries them.
+                inpaint_provenance = {
+                    "source_video_id": ipx.source_video_id,
+                    "mask_video_id": ipx.mask_video_id,
+                    "source_fps": cut["source_fps"],
+                    "mask_fps": mask_cut["source_fps"],
+                    "resampled": cut["resampled"],
+                    "mask_resampled": mask_cut["resampled"],
+                    "window_start_sec": float(ipx.window_start_sec),
+                    "window_start_frame": cut["start_frame"],
+                    "window_written_frames": cut["written_frames"],
+                    "mask_written_frames": mask_cut["written_frames"],
+                    "window_has_audio": cut["has_audio"],
+                }
+                logger.info(
+                    "Job %s inpaint (H3) window %.3fs +%df (start_frame=%d, resampled=%s, "
+                    "mask resampled=%s) source %dx%d -> canvas %dx%d",
+                    job.job_id, float(ipx.window_start_sec), job.request.num_frames,
+                    cut["start_frame"], cut["resampled"], mask_cut["resampled"],
+                    source_size[0], source_size[1],
+                    job.request.width, job.request.height,
+                )
+            elif job.request.inpaint is not None:
                 ipx = job.request.inpaint
                 upload_path = reference_video_path
                 mask_upload = self.video_upload_store.path_for(ipx.mask_video_id)
@@ -2377,6 +2441,14 @@ class PipelineManager:
             references_engine = h3_facts.pop("references")
             if not h3_facts:
                 h3_facts = None
+        # An Inpainting job's engine record (``done.h3.inpaint``, 台帳 §1-124)
+        # is lifted out the same way, into ``metadata["inpaint"]`` below.
+        inpaint_engine = None
+        if h3_facts is not None and "inpaint" in h3_facts:
+            h3_facts = dict(h3_facts)
+            inpaint_engine = h3_facts.pop("inpaint")
+            if not h3_facts:
+                h3_facts = None
         if h3_facts is not None:
             metadata["h3"] = h3_facts
         # Single-generate A2V (additive, MiniMax H3 only): the ENGINE's record
@@ -2409,9 +2481,14 @@ class PipelineManager:
         # the same two-source shape ``_write_chain_metadata`` uses for retake.
         # The mock backend reports no engine block, so a mock job's ``inpaint``
         # is the provenance alone, which is exactly the honest answer.
-        if inpaint_provenance is not None or outcome.inpaint is not None:
+        # MiniMax H3's engine block arrives as ``done.h3.inpaint`` (lifted out
+        # above; the H3 mock reports one with ``mock: true``); its key set and
+        # the H3 provenance's are disjoint, so neither side overwrites the
+        # other.
+        if inpaint_provenance is not None or outcome.inpaint is not None or inpaint_engine is not None:
             metadata["inpaint"] = {
                 **(outcome.inpaint or {}),
+                **(inpaint_engine or {}),
                 **(inpaint_provenance or {}),
             }
         # Alpha Gen (additive): only present on a POST /generate/alpha job. The

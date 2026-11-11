@@ -37,7 +37,9 @@ VERIFICATION_LOG §52。公開はオーナー裁定で、``Docs/PRUNAVAED_WORKOR
 （``Docs/MCP_SERVER_DESIGN.md`` §2 の D19・D20、記録は VERIFICATION_LOG §86）。
 画角拡張の送り方は系統で違い、有効なベースモデルの ``constraints.outpaint`` の
 有無で切り替える（MiniMax H3 は ``outpaint.source_video_id``・LoRA 注入なし。
-同 D35）。
+同 D35）。部分の描き直し（``inpaint_*`` 4引数 → ``inpaint`` ネスト）は MiniMax H3
+の形だけを組み、有効なベースモデルの ``constraints.inpaint`` が無ければ（LTX）
+送る前に断る。
 
 ``vram16_mode``（MiniMax H3 の VRAM 16GB mode）は ``submit_generate`` に限り
 任意引数で公開する（既定 ``None`` は送らない＝ベースモデルの既定値。H3 では on。
@@ -117,35 +119,44 @@ def _outpaint_stage2_from_stage1(r: int) -> int:
     return max(1, round(r * 2 / 5))
 
 
-async def _active_base_model_has_outpaint_rules(client: Any) -> bool:
-    """有効なベースモデルが ``constraints.outpaint`` を配信しているか（D35）。
+async def _active_base_model_constraints_has(client: Any, key: str) -> bool:
+    """有効なベースモデルが ``constraints.<key>`` を配信しているか（D35）。
 
-    ``GET /models`` の ``base_models[]`` のうち ``active`` のものを見る。鍵が
-    あれば MiniMax H3 の Outpainting の形（``outpaint.source_video_id``）、
-    無ければ LTX の形（``reference_video_id``＋in-outpainting LoRA。D20）で送る。
-    系統名を直書きせず、操作パネルと同じく鍵の有無で分ける。
+    ``GET /models`` の ``base_models[]`` のうち ``active`` のものを見る。
+    ``key="outpaint"`` なら、鍵があれば MiniMax H3 の Outpainting の形
+    （``outpaint.source_video_id``）、無ければ LTX の形（``reference_video_id``
+    ＋in-outpainting LoRA。D20）で送る。``key="inpaint"`` なら、鍵があれば
+    MiniMax H3 の Inpainting の形（``inpaint.source_video_id``）で送り、無ければ
+    送る前に断る（LTX の Inpainting は MCP では未対応）。系統名を直書きせず、
+    操作パネルと同じく鍵の有無で分ける。
 
-    ``/models`` を読めない（エラー応答・接続不能・想定外の形）ときは LTX の形に
-    倒し、理由をログに1行残す。H3 ならサーバーが 422 で断るので、黙って別の
-    結果になることはない。
+    ``/models`` を読めない（エラー応答・接続不能・想定外の形）ときは「鍵なし」
+    に倒し、理由をログに1行残す。outpaint ならそのまま LTX の形で送り、H3 なら
+    サーバーが 422 で断るので、黙って別の結果になることはない。
     """
     try:
         listing = await client.get_json("/models")
     except ToolError as exc:
-        logger.warning("submit_generate: GET /models を読めないため LTX の形で outpaint を送る: %s", exc)
+        logger.warning(
+            "submit_generate: GET /models を読めないため constraints.%s なしとして扱う: %s",
+            key,
+            exc,
+        )
         return False
     base_models = listing.get("base_models") if isinstance(listing, dict) else None
     if not isinstance(base_models, list):
         logger.warning(
-            "submit_generate: GET /models に base_models が無いため LTX の形で outpaint を送る"
+            "submit_generate: GET /models に base_models が無いため constraints.%s なしとして扱う",
+            key,
         )
         return False
     for base_model in base_models:
         if isinstance(base_model, dict) and base_model.get("active") is True:
             constraints = base_model.get("constraints")
-            return isinstance(constraints, dict) and constraints.get("outpaint") is not None
+            return isinstance(constraints, dict) and constraints.get(key) is not None
     logger.warning(
-        "submit_generate: GET /models に有効なベースモデルが無いため LTX の形で outpaint を送る"
+        "submit_generate: GET /models に有効なベースモデルが無いため constraints.%s なしとして扱う",
+        key,
     )
     return False
 
@@ -222,6 +233,10 @@ async def submit_generate(
     outpaint_blend_dilation_stage1: int | None = None,
     outpaint_freeze_source_audio: bool | None = None,
     outpaint_audio_strength: float | None = None,
+    inpaint_mask_video_id: str | None = None,
+    inpaint_audio_strength: float | None = None,
+    inpaint_blend_dilation_stage1: int | None = None,
+    inpaint_window_start_sec: float | None = None,
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT,
     num_inference_steps: int | None = None,
     shift_video: float | None = None,
@@ -381,6 +396,33 @@ async def submit_generate(
         正本は ``list_models`` の ``constraints.outpaint.blend_dilation_stage1``
         です。
 
+    部分の描き直し（inpainting、マスクの白い所だけを描き直し、外は元動画に戻す。
+    **MiniMax H3 専用**）:
+      * 元動画（``upload_video`` で取得したID）を ``reference_video_id`` に、
+        白黒のマスク動画（``upload_video`` で取得したID。白＝描き直す所）を
+        ``inpaint_mask_video_id`` に渡します（**両方必須**）。このツールが
+        ``reference_video_id`` を ``inpaint.source_video_id`` へ移して送ります
+        （H3 は ``reference_video_id`` の欄を断るため）。マスクは元動画と同じ
+        縦横で、24fps 換算で ``num_frames`` 枚以上が必要です（先頭から使います）。
+      * **``width`` / ``height`` は元動画の実寸を32の倍数に切り上げた値**です
+        （例: 1280x720 → 1280x736）。サーバーは内部で32の倍数まで広げて
+        生成し、出力を元の寸法に切り戻します。切り上げた値と一致しなければ
+        422 ``INPAINT_SOURCE_MISMATCH`` です（詳細に期待値が載ります）。
+        元動画の縦横は偶数・256px以上であること。
+      * ``num_frames`` は 17n+5（22以上）、``frame_rate`` は24です。
+      * ``inpaint_window_start_sec`` は元動画のどこから窓を切り出すか（秒。
+        省略で 0.0＝先頭）。窓の長さは ``num_frames`` で決まります。
+      * ``inpaint_audio_strength`` は元動画の音声をどれだけ残すか（0〜1、
+        省略でサーバーの既定 0.5）。音声トラックの無い元動画では 0 を明示して
+        ください（省略すると 422 ``INPAINT_VIDEO_NO_AUDIO`` になります）。
+      * ``inpaint_blend_dilation_stage1`` はマスクの縁から外へ元の画素に
+        なじませる段数（省略でサーバーの既定。既定と範囲の正本は
+        ``list_models`` の ``constraints.inpaint.blend_dilation_stage1``）。
+      * **LTX 2.3 / LTX 2.5 の Inpainting は MCP では未対応**です。有効な
+        ベースモデルが ``constraints.inpaint`` を配信していない（LTX）と、
+        POST せずにエラーにします。
+      * 画角拡張（``outpaint_pad_*``）と同時には使えません（送る前にエラー）。
+
     Args:
         prompt: 生成プロンプト（必須）。
         negative_prompt: ネガティブプロンプト。``nag_enabled=True`` のときは
@@ -423,7 +465,7 @@ async def submit_generate(
             音声側の重みを一切適用しない（style LoRAが生成音声を壊す事例
             への対処）。MiniMax H3 では ``audio_strength`` は無視される。
         reference_video_id: 制御系IC-LoRA用の参照動画ID（``upload_video`` で
-            取得）。
+            取得）。画角拡張と部分の描き直しでは元動画のID。
         conditioning_attention_strength: 制御系IC-LoRAの追従の強さ（0〜1、
             ``loras`` 指定時のみ）。
         reference_video_strength: 参照動画の条件付け強度（0〜1、``loras``
@@ -537,6 +579,19 @@ async def submit_generate(
             送られ、422 になります（LTX は ``outpaint_freeze_source_audio`` を
             使う）。画角拡張をしない（4辺すべて0）のに指定すると、黙って無視
             される代わりにエラーになります。
+        inpaint_mask_video_id: 部分の描き直しのマスク動画のID（``upload_video``
+            で取得。白＝描き直す所）。**MiniMax H3 専用。** 指定すると
+            ``reference_video_id``（元動画）が必須になります。上の「部分の
+            描き直し」の節の条件を満たしてください。省略で描き直しをしません。
+        inpaint_audio_strength: 元動画の音声をどれだけ残すか（0〜1）。省略
+            （``None``）すると送らず、サーバーの既定（0.5）になります。
+        inpaint_blend_dilation_stage1: マスクの縁のなじませ段数。省略
+            （``None``）すると送らず、サーバーの既定になります。
+        inpaint_window_start_sec: 元動画から窓を切り出す開始位置（秒）。省略
+            （``None``）すると 0.0（先頭）を送ります。
+            ``inpaint_audio_strength`` / ``inpaint_blend_dilation_stage1`` /
+            ``inpaint_window_start_sec`` を ``inpaint_mask_video_id`` なしで
+            指定すると、黙って無視される代わりにエラーになります。
         embed_mp4_metadata: 完成した ``output.mp4``（と、結合した
             ``joined.mp4``）に、``metadata.json`` と同じ JSON をコンテナの
             ``comment`` タグとして書き込むか（**既定True**＝
@@ -590,6 +645,27 @@ async def submit_generate(
             "outpaint_pad_left / "
             "_right / _top / _bottom のいずれかを0より大きくしてください"
             "（4辺すべて0だと画角拡張そのものが行われず、指定が無視されます）"
+        )
+    if inpaint_mask_video_id is None and (
+        inpaint_audio_strength is not None
+        or inpaint_blend_dilation_stage1 is not None
+        or inpaint_window_start_sec is not None
+    ):
+        raise ToolError(
+            "INPAINT_MASK_REQUIRED: inpaint_audio_strength / "
+            "inpaint_blend_dilation_stage1 / inpaint_window_start_sec を指定するには "
+            "inpaint_mask_video_id も指定してください（マスクが無いと部分の描き直し"
+            "そのものが行われず、指定が無視されます）"
+        )
+    if inpaint_mask_video_id is not None and not reference_video_id:
+        raise ToolError(
+            "INPAINT_SOURCE_REQUIRED: inpaint_mask_video_id を指定するには "
+            "reference_video_id に元動画のID（upload_video で取得）も指定してください"
+        )
+    if inpaint_mask_video_id is not None and total_outpaint_pad > 0:
+        raise ToolError(
+            "INPAINT_OUTPAINT_CONFLICT: 部分の描き直し（inpaint_mask_video_id）と"
+            "画角拡張（outpaint_pad_*）は同時に使えません。どちらか一方にしてください"
         )
     if source_audio_strength is not None and source_audio_id is None:
         raise ToolError(
@@ -703,7 +779,7 @@ async def submit_generate(
             "pad_top": outpaint_pad_top,
             "pad_bottom": outpaint_pad_bottom,
         }
-        if await _active_base_model_has_outpaint_rules(client):
+        if await _active_base_model_constraints_has(client, "outpaint"):
             # MiniMax H3（D35）: 元動画は ``outpaint.source_video_id`` で渡し、
             # ``reference_video_id`` は送らない（H3 は参照動画の欄を断る）。
             # in-outpainting LoRA は LTX の仕組みなので注入しない。stage 2 は
@@ -755,6 +831,36 @@ async def submit_generate(
                     *existing_loras,
                     {"name": _OUTPAINT_LORA_NAME, "strength": _OUTPAINT_LORA_STRENGTH},
                 ]
+
+    # 部分の描き直し（inpainting）。MiniMax H3 の形だけを組む。系統は outpaint と
+    # 同じく有効なベースモデルの ``constraints.inpaint`` の有無で見分ける。
+    # 画角拡張との同時指定は上で断っている（outpaint の枝が先に
+    # ``reference_video_id`` を取り出してしまうため）。
+    if inpaint_mask_video_id is not None:
+        if not await _active_base_model_constraints_has(client, "inpaint"):
+            raise ToolError(
+                "INPAINT_UNSUPPORTED: LTX の Inpainting は MCP では未対応です"
+                "（MCP の部分の描き直しは MiniMax H3 のみ対応。有効なベースモデルが "
+                "constraints.inpaint を配信していないか、GET /models を読めませんでした。"
+                "list_models で確かめ、H3 なら load_pipeline(base_model=\"MiniMaxH3\") で"
+                "切り替えてください）"
+            )
+        # 元動画は ``inpaint.source_video_id`` で渡し、``reference_video_id`` は
+        # 送らない（H3 は参照動画の欄を断る）。窓の開始は省略なら 0.0（先頭）。
+        # 音声の Strength・なじませ段数は指定されたときだけ送る（省略はサーバーが
+        # 系統の既定を書き戻す）。
+        inpaint: dict[str, Any] = {
+            "mask_video_id": inpaint_mask_video_id,
+            "source_video_id": payload.pop("reference_video_id"),
+            "window_start_sec": (
+                inpaint_window_start_sec if inpaint_window_start_sec is not None else 0.0
+            ),
+        }
+        if inpaint_audio_strength is not None:
+            inpaint["audio_strength"] = inpaint_audio_strength
+        if inpaint_blend_dilation_stage1 is not None:
+            inpaint["blend_dilation_stage1"] = inpaint_blend_dilation_stage1
+        payload["inpaint"] = inpaint
 
     result = await client.post_json("/generate", json=payload, timeout=_SUBMIT_TIMEOUT)
     return {

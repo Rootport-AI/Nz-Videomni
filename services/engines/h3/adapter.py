@@ -77,6 +77,7 @@ from api.errors import feature_unsupported
 from api.models import (
     GenerateChainRequest,
     GenerateRequest,
+    InpaintSpec,
     OutpaintSpec,
     VRAM16_MODE_DEFAULT_H3,
 )
@@ -210,10 +211,16 @@ REQUEST_RULES = RequestRules(
     # audio's Strength has Retake's meaning (mask value 1 - s on the source's
     # audio latents; 1.0 muxes the original waveform). The feather reuses the
     # schema's ``blend_dilation_stage1`` (0..15) as a step count, turned into
-    # pixels by :func:`_outpaint_feather_px`; the default 1 is the 2026-11-10
+    # pixels by :func:`_feather_px`; the default 1 is the 2026-11-10
     # gate's (Docs/VERIFICATION_LOG.md §205).
     outpaint_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
     outpaint_blend_dilation=SamplingRange(min=0, max=15, step=1, default=1),
+    # Inpainting (台帳 §1-124), published together as constraints["inpaint"]
+    # by the same rule and with the same values as Outpainting's pair: the
+    # source audio's Strength (mask value 1 - s) and the feather
+    # (``inpaint.blend_dilation_stage1`` as a step count, :func:`_feather_px`).
+    inpaint_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
+    inpaint_blend_dilation=SamplingRange(min=0, max=15, step=1, default=1),
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -272,7 +279,6 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("nag_enabled", "nag", lambda r: r.nag_enabled and r.neg_method != "vsf"),
     ("pipeline", "two_stage_hq", lambda r: r.pipeline != "distilled"),
     ("guidance_scale", "guidance_scale", lambda r: r.guidance_scale != 1.0),
-    ("inpaint", "inpaint", lambda r: r.inpaint is not None),
     ("alpha_gen", "alpha_gen", lambda r: r.alpha_gen is not None),
     ("vae_mode", "prune_vaed", lambda r: r.vae_mode != "default"),
     ("keep_resident_embeddings", "keep_resident_embeddings", lambda r: r.keep_resident_embeddings),
@@ -316,6 +322,10 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # the audio Strength and the feather in pixels reach the worker as the
         # ``outpaint`` payload key (:func:`validate_request` holds the shape).
         "outpaint",
+        # Inpainting (台帳 §1-124): the app-cut source's and mask's paths, the
+        # audio Strength and the feather in pixels reach the worker as the
+        # ``inpaint`` payload key (:func:`validate_request` holds the shape).
+        "inpaint",
         # The VSF negative prompt: the ``nag`` payload key ({negative_prompt,
         # method, vsf_scale}); the NAG method is refused above.
         "nag_enabled",
@@ -452,10 +462,12 @@ CHAIN_GOVERNED_FIELDS: dict[str, str] = {
 #: the feature names of both reject tables (single, then the chain's new
 #: ones: ``a2v``, ``end_source``),
 #: plus ``fused_gguf_dequant_kernel`` and ``lora_audio_strength``. Derived, so a
-#: refused feature is always published. Inpainting / Alpha Gen close; the Edit
-#: tab stays open with Retake (裁定 34, updated 2026-11-08) and Outpainting
+#: refused feature is always published. Alpha Gen closes; the Edit
+#: tab stays open with Retake (裁定 34, updated 2026-11-08), Outpainting
 #: (台帳 §1-125: its row left the reject table, so ``outpaint`` is no longer
 #: published; the operation panel's H3 form opens on ``constraints.outpaint``)
+#: and Inpainting (台帳 §1-124: likewise, ``inpaint`` is no longer published;
+#: the H3 form opens on ``constraints.inpaint``)
 #: alive. ``a2v`` stays listed, but the operation panel reopens the Chained
 #: audio panel and Batch A2V on H3 from ``constraints.chain.source_audio`` /
 #: ``constraints.source_audio`` (spec §6.2b (f)).
@@ -631,8 +643,9 @@ def validate_chain(request: GenerateChainRequest) -> None:
 
 
 def validate_request(request: GenerateRequest) -> None:
-    """This family's rules for a single request's ``outpaint`` (台帳 §1-125);
-    raises ``ValueError``. Called by ``services.engines.validate_for_family``
+    """This family's rules for a single request's ``outpaint`` (台帳 §1-125)
+    and ``inpaint`` (台帳 §1-124, :func:`_validate_inpaint`); raises
+    ``ValueError``. Called by ``services.engines.validate_for_family``
     after the numeric rules, so it never sees a chain clip (``_ClipView``).
 
     Nothing to do without ``outpaint``. With it: the source must come as
@@ -649,6 +662,7 @@ def validate_request(request: GenerateRequest) -> None:
     log line (H3 has one stage; a nested field, so :func:`_log_ignored` cannot
     name it).
     """
+    _validate_inpaint(request)
     op = request.outpaint
     if op is None:
         return
@@ -685,13 +699,69 @@ def validate_request(request: GenerateRequest) -> None:
         )
 
 
-def _outpaint_feather_px(request: GenerateRequest) -> int:
+def _validate_inpaint(request: GenerateRequest) -> None:
+    """:func:`validate_request`'s ``inpaint`` half (台帳 §1-124), in the
+    Outpainting half's shape.
+
+    Nothing to do without ``inpaint``. With it: the source must come as
+    ``inpaint.source_video_id`` (an LTX-shaped ``reference_video_id`` was
+    already refused as ``reference_video`` by :func:`reject_unsupported`; this
+    is the backstop behind the API's validator); ``source_audio`` (A2V),
+    ``references`` / ``reference_video_id``, ``outpaint`` and
+    ``conditioning_images`` are refused (the source video already decides the
+    picture and the sound); an omitted ``blend_dilation_stage1`` /
+    ``audio_strength`` becomes the published default (``constraints.inpaint``;
+    the schema's own stage-1 default 5 is LTX's); a ``blend_dilation_stage2``
+    other than the schema default is ignored with one log line (H3 has one
+    stage). ``window_start_sec`` passes through: the app cuts the window with
+    it.
+    """
+    ipx = request.inpaint
+    if ipx is None:
+        return
+    if ipx.source_video_id is None:
+        raise ValueError(
+            "inpaint.source_video_id is required on MiniMax H3 "
+            "(send the source video there, not as reference_video_id)"
+        )
+    if request.source_audio is not None:
+        raise ValueError(
+            "inpaint and source_audio are mutually exclusive on MiniMax H3 "
+            "(the source video already fixes the audio)"
+        )
+    if request.references or request.reference_video_id is not None:
+        raise ValueError(
+            "inpaint and references are mutually exclusive on MiniMax H3 "
+            "(the source video already fixes the frame content)"
+        )
+    if request.outpaint is not None:
+        raise ValueError("inpaint and outpaint are mutually exclusive on MiniMax H3")
+    if request.conditioning_images:
+        raise ValueError(
+            "inpaint and conditioning_images are mutually exclusive on MiniMax H3 "
+            "(the source video already fixes the frame content)"
+        )
+    if "blend_dilation_stage1" not in ipx.model_fields_set:
+        ipx.blend_dilation_stage1 = int(REQUEST_RULES.inpaint_blend_dilation.default)
+    if ipx.audio_strength is None:
+        ipx.audio_strength = float(REQUEST_RULES.inpaint_audio_strength.default)
+    stage2_default = InpaintSpec.model_fields["blend_dilation_stage2"].default
+    if ipx.blend_dilation_stage2 != stage2_default:
+        logger.info(
+            "MiniMax H3 ignores inpaint.blend_dilation_stage2=%r (MiniMax H3's "
+            "Inpainting has one stage; the feather is blend_dilation_stage1)",
+            ipx.blend_dilation_stage2,
+        )
+
+
+def _feather_px(r: int, width: int, height: int) -> int:
     """The paste-back feather in pixels: ``floor(r * max(W, H) / 64 + 0.5)``,
-    ``r`` = ``outpaint.blend_dilation_stage1`` (half rounds up, the operation
-    panel's ``Math.round``; 1 step at a 1920 canvas = 30 px). The formula's one
-    place on the server side; the worker takes the pixels."""
-    r = int(request.outpaint.blend_dilation_stage1)
-    return int(math.floor(r * max(request.width, request.height) / 64 + 0.5))
+    ``r`` = ``blend_dilation_stage1`` of ``outpaint`` / ``inpaint``, ``W`` /
+    ``H`` the canvas (``request.width`` / ``height``; for Inpainting the
+    source rounded up to 32). Half rounds up, the operation panel's
+    ``Math.round``; 1 step at a 1920 canvas = 30 px. The formula's one place
+    on the server side; the worker takes the pixels."""
+    return int(math.floor(int(r) * max(int(width), int(height)) / 64 + 0.5))
 
 
 def _log_ignored(request, table: dict[str, str] | None = None) -> None:
@@ -939,13 +1009,21 @@ class _RealBackendH3(_RealBackend):
         frames; ``PipelineManager.run_job``); ``None`` for every job without
         ``outpaint``. It reaches the worker as ``outpaint.source_path`` with
         the four pads, the audio Strength and the feather in pixels
-        (:func:`_outpaint_feather_px`); the canvas is ``width`` / ``height``,
+        (:func:`_feather_px`); the canvas is ``width`` / ``height``,
         so no ``canvas_*`` keys.
 
-        ``reference_video_path`` and the inpaint paths are accepted for the
-        shared signature and never arrive filled: the fields that would
-        produce them are refused by :func:`reject_unsupported` (re-checked
-        here as the backstop).
+        ``inpaint_source_path`` / ``inpaint_mask_path`` are the app's cuts of
+        ``request.inpaint.source_video_id`` (from ``window_start_sec``) and of
+        ``request.inpaint.mask_video_id`` (from 0), both 24 fps and exactly
+        ``num_frames`` frames, the mask not painted green
+        (``PipelineManager.run_job``); ``None`` for every job without
+        ``inpaint``. They reach the worker as ``inpaint.source_path`` /
+        ``mask_path`` with the audio Strength and the feather in pixels; the
+        canvas (the source rounded up to 32) is ``width`` / ``height``.
+
+        ``reference_video_path`` is accepted for the shared signature and
+        never arrives filled: the field that would produce it is refused by
+        :func:`reject_unsupported` (re-checked here as the backstop).
         """
         if not self.loaded:
             self.load()
@@ -1011,7 +1089,22 @@ class _RealBackendH3(_RealBackend):
                 "pad_top": int(op.pad_top),
                 "pad_bottom": int(op.pad_bottom),
                 "audio_strength": float(op.audio_strength),
-                "feather_px": _outpaint_feather_px(request),
+                "feather_px": _feather_px(op.blend_dilation_stage1, request.width, request.height),
+            }
+
+        inpaint: dict | None = None
+        if request.inpaint is not None:
+            if inpaint_source_path is None or inpaint_mask_path is None:
+                raise RuntimeError(
+                    "MiniMax H3: inpaint が指定されていますが、元動画またはマスクの"
+                    "切り出しのパスが解決されていません（アプリ側の不具合です）。"
+                )
+            ipx = request.inpaint
+            inpaint = {
+                "source_path": str(inpaint_source_path),
+                "mask_path": str(inpaint_mask_path),
+                "audio_strength": float(ipx.audio_strength),
+                "feather_px": _feather_px(ipx.blend_dilation_stage1, request.width, request.height),
             }
 
         if progress_callback:
@@ -1048,6 +1141,10 @@ class _RealBackendH3(_RealBackend):
         # outpaint: only for an Outpainting job (an absent key = none).
         if outpaint is not None:
             payload["outpaint"] = outpaint
+        # inpaint: only for an Inpainting job (an absent key = none; never
+        # together with outpaint, validate_request).
+        if inpaint is not None:
+            payload["inpaint"] = inpaint
         # nag: only for a VSF negative-prompt job (an absent key = none);
         # reject_unsupported has already held neg_method to "vsf".
         if request.nag_enabled:
@@ -1400,12 +1497,81 @@ def _mock_outpaint_record(request: GenerateRequest, source_path: Path | None) ->
         "aligned": None,
         "fixed_tokens": None,
         "generated_tokens": None,
-        "feather_px": _outpaint_feather_px(request),
+        "feather_px": _feather_px(op.blend_dilation_stage1, request.width, request.height),
         "audio_strength": strength,
         "source_had_audio": had_audio,
         "audio_latents_encoded": None,
         "audio_output": audio_output,
         "inject_clean": None,
+        "mock": True,
+    }
+
+
+#: Copies of the engine's ``engine_h3/inpaint_h3.py`` ``MASK_RULE`` and
+#: ``engine_h3/inpaint_geometry.py`` ``CHUNK_FRAMES`` for the mock's record
+#: (the server side does not import the ``engine_h3`` package);
+#: tests/test_engine_h3_adapter.py checks the copies agree.
+INPAINT_MASK_RULE = (
+    "赤 128 以上を白・32 画素のブロックに 1 画素でも白なら生成・17 枚の塊の和集合・"
+    "潜在は塊ごとに 5 個で末尾 3 個を捨てる"
+)
+INPAINT_CHUNK_FRAMES = 17
+
+
+def _mock_inpaint_record(
+    request: GenerateRequest, source_path: Path | None, mask_path: Path | None
+) -> dict:
+    """The mock's ``done.h3.inpaint``: the real worker's keys
+    (engine_h3/pipeline_h3.py) plus ``mock: true``, by
+    :func:`_mock_outpaint_record`'s rule. What the request and the app's cut
+    decide (the canvas, the source size from an ffprobe of the cut, the
+    right / bottom pads up to the 32 grid, the mask rule and the chunk length
+    (the engine's constants), the feather in pixels, the audio Strength,
+    ``source_had_audio`` and the ``audio_output`` that follows, and
+    ``cropped_to`` = the source size ``[w, h]``) is filled in; what only the
+    engine computes (the chunks, the latent frames, the token counts, the
+    encoded audio latents, the injection factor, the self-check, the mask
+    proof) is ``None``."""
+    if source_path is None or mask_path is None:
+        raise RuntimeError(
+            "MiniMax H3 (mock): inpaint が指定されていますが、元動画またはマスクの"
+            "切り出しのパスが解決されていません（アプリ側の不具合です）。"
+        )
+    ipx = request.inpaint
+    strength = float(ipx.audio_strength)
+    had_audio = video_io.has_audio_stream(Path(source_path))
+    if strength == 1.0:
+        audio_output = "original"
+    elif strength > 0 and had_audio:
+        audio_output = "decoded"
+    else:
+        audio_output = "generated"
+    probed = video_io.probe_resolution(Path(source_path))
+    if probed is None:
+        raise RuntimeError(
+            f"MiniMax H3 (mock): inpaint の元動画の解像度を読めません（{source_path}）。"
+        )
+    src_w, src_h = probed
+    return {
+        "canvas": [request.width, request.height],
+        "pads": {"left": 0, "right": request.width - src_w, "top": 0, "bottom": request.height - src_h},
+        "source": [src_w, src_h],
+        "mask_rule": INPAINT_MASK_RULE,
+        "chunk_frames": INPAINT_CHUNK_FRAMES,
+        "chunks": None,
+        "latent_frames": None,
+        "fixed_tokens_total": None,
+        "generated_tokens_total": None,
+        "generated_per_latent_frame": None,
+        "audio_strength": strength,
+        "source_had_audio": had_audio,
+        "audio_latents_encoded": None,
+        "audio_output": audio_output,
+        "feather_px": _feather_px(ipx.blend_dilation_stage1, request.width, request.height),
+        "inject_clean": None,
+        "self_check": None,
+        "mask_proof": None,
+        "cropped_to": [src_w, src_h],
         "mock": True,
     }
 
@@ -1424,6 +1590,13 @@ class _MockBackendH3(_MockBackend):
     (:func:`_mock_outpaint_record`), which lands in
     ``metadata["h3"]["outpaint"]``.
 
+    An Inpainting job's clip is the shared mock's at the SOURCE size (the
+    mask's ffprobed size, reconciled with the canvas on the 32 grid:
+    :meth:`_inpaint_canvas_multiple`); the mock adds the ``inpaint`` record
+    the real worker reports in ``done.h3.inpaint``
+    (:func:`_mock_inpaint_record`), which ``PipelineManager`` merges with the
+    app's provenance into ``metadata["inpaint"]``.
+
     The clip itself is the shared mock's. For an A2V job it adds the ``a2v``
     record the real worker reports in ``done.h3.a2v`` (so
     ``outcome.h3 == {"a2v": {...}}``, and a mock job's metadata carries an
@@ -1432,6 +1605,11 @@ class _MockBackendH3(_MockBackend):
     does not mux audio (its mp4 is silent), so ``muxed_audio_samples`` is
     ``None``.
     """
+
+    def _inpaint_canvas_multiple(self) -> int:
+        """H3's inpaint canvas is the source rounded up to 32 (the shared
+        mock's default is LTX's 128)."""
+        return 32
 
     def generate(
         self,
@@ -1470,6 +1648,14 @@ class _MockBackendH3(_MockBackend):
             outcome = dataclasses.replace(
                 outcome,
                 h3={**(outcome.h3 or {}), "outpaint": _mock_outpaint_record(request, outpaint_source_path)},
+            )
+        if request.inpaint is not None:
+            outcome = dataclasses.replace(
+                outcome,
+                h3={
+                    **(outcome.h3 or {}),
+                    "inpaint": _mock_inpaint_record(request, inpaint_source_path, inpaint_mask_path),
+                },
             )
         if request.source_audio is None:
             return outcome

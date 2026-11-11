@@ -1296,7 +1296,8 @@ class _MockBackend:
         # — the mock's standing rule), the request supplies the canvas side, and
         # the two are checked against each other with the SAME rule the engine's
         # ``InpaintGeometry`` applies: the canvas is the source rounded up to the
-        # 128 grid. That is what makes a mock run able to catch a geometry
+        # 128 grid (:meth:`_inpaint_canvas_multiple`; MiniMax H3's mock: 32).
+        # That is what makes a mock run able to catch a geometry
         # mistake — rendering at whatever the mask happens to be and then
         # asserting the output equals the mask would prove nothing.
         #
@@ -1307,31 +1308,7 @@ class _MockBackend:
         # this feature can see, in tests/test_inpaint_geometry.py.
         render_size: tuple[int, int] | None = None
         if request.inpaint is not None:
-            if inpaint_mask_path is None:
-                raise RuntimeError(
-                    "inpaint: the mask video path never reached the backend; the "
-                    "orchestrator must resolve inpaint.mask_video_id before the job"
-                )
-            probed = video_io.probe_resolution(Path(inpaint_mask_path))
-            if probed is None:
-                raise RuntimeError(
-                    f"inpaint: could not probe the mask video's resolution "
-                    f"({inpaint_mask_path}); the source size cannot be derived"
-                )
-            src_w, src_h = probed
-            if src_w < INPAINT_MIN_SOURCE_SIDE or src_h < INPAINT_MIN_SOURCE_SIDE:
-                raise RuntimeError(
-                    f"inpaint: the source is {src_w}x{src_h}, below the "
-                    f"{INPAINT_MIN_SOURCE_SIDE}px floor"
-                )
-            canvas = (round_up_128(src_w), round_up_128(src_h))
-            if canvas != (request.width, request.height):
-                raise RuntimeError(
-                    f"inpaint geometry mismatch: the source is {src_w}x{src_h}, "
-                    f"whose canvas is {canvas[0]}x{canvas[1]}, but the job asks "
-                    f"for {request.width}x{request.height}"
-                )
-            render_size = probed
+            render_size = self._inpaint_render_size(request, inpaint_mask_path)
 
         start_image: Image.Image | None = None
         if mode == "i2v" and conditioning_image_paths:
@@ -1376,6 +1353,49 @@ class _MockBackend:
             generation_mode=mode,
             backend=self.backend_label,
         )
+
+    def _inpaint_canvas_multiple(self) -> int:
+        """The grid an inpaint canvas is the source rounded up to: LTX's 128
+        (``api.models.round_up_128``). A family mock overrides it (MiniMax
+        H3: 32)."""
+        return 128
+
+    def _inpaint_render_size(
+        self, request: GenerateRequest, inpaint_mask_path: Path | None
+    ) -> tuple[int, int]:
+        """An inpaint job's render size: the mask's ffprobed size (the
+        source's), reconciled with the request's canvas on
+        :meth:`_inpaint_canvas_multiple`'s grid (see the comment at the call
+        site in :meth:`generate`)."""
+        if inpaint_mask_path is None:
+            raise RuntimeError(
+                "inpaint: the mask video path never reached the backend; the "
+                "orchestrator must resolve inpaint.mask_video_id before the job"
+            )
+        probed = video_io.probe_resolution(Path(inpaint_mask_path))
+        if probed is None:
+            raise RuntimeError(
+                f"inpaint: could not probe the mask video's resolution "
+                f"({inpaint_mask_path}); the source size cannot be derived"
+            )
+        src_w, src_h = probed
+        if src_w < INPAINT_MIN_SOURCE_SIDE or src_h < INPAINT_MIN_SOURCE_SIDE:
+            raise RuntimeError(
+                f"inpaint: the source is {src_w}x{src_h}, below the "
+                f"{INPAINT_MIN_SOURCE_SIDE}px floor"
+            )
+        multiple = self._inpaint_canvas_multiple()
+        if multiple == 128:
+            canvas = (round_up_128(src_w), round_up_128(src_h))
+        else:
+            canvas = (-(-src_w // multiple) * multiple, -(-src_h // multiple) * multiple)
+        if canvas != (request.width, request.height):
+            raise RuntimeError(
+                f"inpaint geometry mismatch: the source is {src_w}x{src_h}, "
+                f"whose canvas is {canvas[0]}x{canvas[1]}, but the job asks "
+                f"for {request.width}x{request.height}"
+            )
+        return probed
 
     def generate_chain(
         self,

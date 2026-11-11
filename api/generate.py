@@ -17,6 +17,8 @@ from api.errors import (
     inpaint_mask_resolution_mismatch,
     inpaint_preprocess_conflict,
     inpaint_source_mismatch,
+    inpaint_source_not_found,
+    inpaint_video_no_audio,
     job_busy,
     lora_preprocess_conflict,
     lora_requires_reference,
@@ -38,12 +40,104 @@ from api.models import (
     GenerateRequest,
     GenerateResponse,
     JobStatus,
+    round_up_32,
     round_up_128,
 )
 from services import engines, video_io
 from services.job_store import JobRecord, now_iso
 
 router = APIRouter()
+
+# The fps the app cuts MiniMax H3's inpaint source and mask to
+# (services/pipeline_manager.py, ``cut_window_mp4(..., 24)``), so the mask's
+# frame count is judged on that grid.
+_H3_INPAINT_FPS = 24.0
+
+
+def _preflight_h3_inpaint(
+    context: AppContext, request: GenerateRequest, preprocess_kinds: set[str] | list[str]
+) -> None:
+    """The MiniMax H3 shape of ``inpaint`` (``inpaint.source_video_id``;
+    台帳 §1-124), checked before a job exists, in the order a user can act on
+    them: adapters, source, canvas, mask, window, audio. The pydantic validator
+    has already enforced the shape-only rules (exactly one source route,
+    exclusivity with outpaint / conditioning_images / crop_output).
+    """
+    ip = request.inpaint
+    # (1) A preprocessing control adapter has nothing to read (shared rule).
+    if preprocess_kinds:
+        raise inpaint_preprocess_conflict(sorted(preprocess_kinds))
+
+    # (2) The source upload, under its own field's 404.
+    try:
+        src_path = context.video_upload_store.path_for(ip.source_video_id)
+    except APIError:
+        raise inpaint_source_not_found(ip.source_video_id)
+
+    # (3) The source must be measurable, even-sized (the app's window cut is
+    # libx264 yuv420p) and no smaller than the shared floor.
+    source_size = video_io.probe_resolution(src_path)
+    if source_size is None:
+        raise inpaint_source_mismatch((request.width, request.height), None, multiple=32)
+    src_w, src_h = source_size
+    canvas = (round_up_32(src_w), round_up_32(src_h))
+    if src_w % 2 or src_h % 2:
+        raise inpaint_source_mismatch(
+            canvas,
+            source_size,
+            multiple=32,
+            reason="the source's width and height must both be even",
+        )
+    if src_w < INPAINT_MIN_SOURCE_SIDE or src_h < INPAINT_MIN_SOURCE_SIDE:
+        raise inpaint_source_mismatch(
+            canvas,
+            source_size,
+            multiple=32,
+            reason=f"each source side must be at least {INPAINT_MIN_SOURCE_SIDE}px",
+        )
+
+    # (4) The canvas is the source rounded up to 32 (the engine mirrors the
+    # 0-31px right/bottom pad and crops it off again after decode).
+    if canvas != (request.width, request.height):
+        raise inpaint_source_mismatch(canvas, source_size, multiple=32)
+
+    # (5) The mask: present, and exactly the source's own resolution.
+    try:
+        mask_path = context.video_upload_store.path_for(ip.mask_video_id)
+    except APIError as exc:  # the store raises REFERENCE_VIDEO_NOT_FOUND
+        raise inpaint_mask_not_found(ip.mask_video_id) from exc
+    mask_size = video_io.probe_resolution(mask_path)
+    if mask_size != source_size:
+        raise inpaint_mask_resolution_mismatch(source_size, mask_size)
+
+    # (6) The mask's frame count at 24 fps (the app cuts its first num_frames
+    # frames at 24 fps): the same resampling expression outpainting's source
+    # route uses. At least num_frames, not exactly.
+    mask_frames = video_io.frame_count(mask_path)
+    mask_fps = video_io.probe_fps(mask_path)
+    if mask_fps and abs(mask_fps - _H3_INPAINT_FPS) > 1e-3:
+        mask_frames = int(round(mask_frames * _H3_INPAINT_FPS / mask_fps))
+    if mask_frames < request.num_frames:
+        raise inpaint_mask_frame_mismatch(mask_frames, request.num_frames, rule="at_least")
+
+    # (7) The window has to fit the material (the pipeline manager owns the rule).
+    context.pipeline_manager.preflight_inpaint_window(
+        ip, ip.source_video_id, request.num_frames, request.frame_rate
+    )
+
+    # (8) Audio: an omitted Strength becomes the family's default 0.5, so None
+    # counts as "> 0" here. Same refusal as outpainting's source route.
+    uses_audio = ip.audio_strength is None or ip.audio_strength > 0
+    if uses_audio and not video_io.has_audio_stream(src_path):
+        shown = "default" if ip.audio_strength is None else f"{ip.audio_strength:g}"
+        raise inpaint_video_no_audio(
+            ip.source_video_id,
+            detail=(
+                "the inpaint uses the source video's audio "
+                f"(audio_strength={shown} > 0; send 0 to generate the audio "
+                f"freely), but upload {ip.source_video_id} has no audio stream"
+            ),
+        )
 
 
 def spawn_job_thread(target, job: JobRecord) -> None:
@@ -261,7 +355,15 @@ def generate(
     # validator; everything that needs the registry or a file on disk is here.
     # Five checks, in the order a user can act on them — what is wrong with the
     # adapters, then with the source, then with the mask, then with the window.
-    if request.inpaint is not None:
+    #
+    # The branch is on the REQUEST'S SHAPE, never on the family (台帳 §1-124),
+    # exactly as outpainting's is: ``inpaint.source_video_id`` is MiniMax H3's
+    # shape (32 grid, no control LoRA, mask counted at 24 fps, audio Strength),
+    # ``reference_video_id`` is LTX's (the block after this one, unchanged).
+    if request.inpaint is not None and request.inpaint.source_video_id is not None:
+        _preflight_h3_inpaint(context, request, preprocess_kinds)
+
+    if request.inpaint is not None and request.inpaint.source_video_id is None:
         ip = request.inpaint
         from services import video_io
 

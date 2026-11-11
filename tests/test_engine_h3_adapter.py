@@ -126,13 +126,6 @@ REQUEST_OVERRIDES_H3: dict[str, dict] = {
     "nag": {"nag_enabled": True, "negative_prompt": "blurry"},
     "two_stage_hq": {"pipeline": "two_stage_hq"},
     "guidance_scale": {"guidance_scale": 3.0},
-    "inpaint": {
-        "inpaint": {"mask_video_id": "mask-1"},
-        "reference_video_id": "vid-1",
-        "loras": _LORAS,
-        "width": 768,
-        "height": 512,
-    },
     "alpha_gen": {
         "alpha_gen": {"working_width": 512, "working_height": 384},
         "reference_video_id": "vid-1",
@@ -209,12 +202,12 @@ def test_unsupported_features_is_both_reject_tables_plus_fused_kernel():
     # ``keyframe_strength`` row is the single path's name, listed once. 台帳
     # §1-123: ``retake`` is no longer among them (the chain runs a Retake).
     # 台帳 §1-125: nor is ``outpaint`` (the single path runs Outpainting).
+    # 台帳 §1-124: nor is ``inpaint`` (the single path runs Inpainting).
     assert h3.UNSUPPORTED_FEATURES == (
         "reference_video",
         "nag",
         "two_stage_hq",
         "guidance_scale",
-        "inpaint",
         "alpha_gen",
         "prune_vaed",
         "keep_resident_embeddings",
@@ -328,6 +321,12 @@ H3_CONSTRAINTS = {
     "retake": {"audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5}},
     # Outpainting's audio Strength and feather steps (台帳 §1-125). H3 only.
     "outpaint": {
+        "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5},
+        "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
+    },
+    # Inpainting's audio Strength and feather steps (台帳 §1-124), the same
+    # pair and values. H3 only: LTX has no key.
+    "inpaint": {
         "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5},
         "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
     },
@@ -854,13 +853,236 @@ def test_outpaint_feather_px_is_steps_times_the_long_side_over_64(steps, width, 
         width=width, height=height,
         outpaint={"source_video_id": "v", **pads, "blend_dilation_stage1": steps},
     )
-    assert h3._outpaint_feather_px(req) == expected
+    assert h3._feather_px(req.outpaint.blend_dilation_stage1, req.width, req.height) == expected
 
 
 def test_generate_outpaint_needs_the_cut_source(tmp_path):
     be = _capturing_backend([])
     with pytest.raises(RuntimeError, match="outpaint"):
         be.generate(_validated(outpaint=_outpaint()), tmp_path / "job", seed=1)
+
+
+# --- Inpainting (台帳 §1-124) ----------------------------------------------- #
+
+
+def _inpaint(**over) -> dict:
+    return {"source_video_id": "vid-1", "mask_video_id": "mask-1", **over}
+
+
+def test_validate_request_writes_the_inpaint_defaults_back():
+    req = _validated(inpaint=_inpaint())
+    # 1, not the schema's 5 (LTX's Stage-1 default): H3's published default.
+    assert req.inpaint.blend_dilation_stage1 == 1
+    assert req.inpaint.audio_strength == 0.5
+    # explicit values are kept, a 5 included
+    req = _validated(inpaint=_inpaint(blend_dilation_stage1=5, audio_strength=0.0))
+    assert (req.inpaint.blend_dilation_stage1, req.inpaint.audio_strength) == (5, 0.0)
+    # the window start passes through (the app cuts with it)
+    req = _validated(inpaint=_inpaint(window_start_sec=2.5))
+    assert req.inpaint.window_start_sec == 2.5
+    # nothing happens without inpaint
+    req = _validated()
+    assert req.inpaint is None
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        (
+            {"inpaint": _inpaint(), "source_audio": {"audio_id": "aud-1"}},
+            "inpaint and source_audio are mutually exclusive on MiniMax H3",
+        ),
+        (
+            {"inpaint": _inpaint(), "references": [{"kind": "picture", "id": "img-1", "slot": 1}]},
+            "inpaint and references are mutually exclusive on MiniMax H3",
+        ),
+    ],
+)
+def test_validate_request_inpaint_refusals(overrides, message):
+    req = _request(**overrides)
+    with pytest.raises(APIError) as ei:
+        engines.validate_for_family("h3", req)
+    assert ei.value.code == "VALIDATION_ERROR" and ei.value.status_code == 422
+    assert message in str(ei.value.detail)
+
+
+def test_validate_request_refuses_inpaint_with_outpaint_or_keyframes_as_the_backstop():
+    from api.models import OutpaintSpec  # noqa: PLC0415
+
+    # Unreachable over HTTP (the schema refuses inpaint + outpaint and inpaint
+    # + conditioning_images first); held directly on a request built past it.
+    req = _request(inpaint=_inpaint())
+    req.outpaint = OutpaintSpec(**_outpaint())
+    with pytest.raises(ValueError, match="inpaint and outpaint are mutually exclusive on MiniMax H3"):
+        h3.validate_request(req)
+    req = _request(inpaint=_inpaint())
+    req.conditioning_images = _request(conditioning_images=[_IMG]).conditioning_images
+    with pytest.raises(ValueError, match="inpaint and conditioning_images are mutually exclusive"):
+        h3.validate_request(req)
+
+
+def test_validate_request_needs_the_inpaint_source_video_id_as_the_backstop():
+    req = _request(inpaint=_inpaint())
+    req.inpaint.source_video_id = None
+    with pytest.raises(ValueError, match="inpaint.source_video_id is required on MiniMax H3"):
+        h3.validate_request(req)
+
+
+def test_ltx_shaped_inpaint_is_refused_as_reference_video():
+    req = _request(inpaint={"mask_video_id": "mask-1"}, reference_video_id="vid-1", loras=_LORAS,
+                   width=768, height=512)
+    with pytest.raises(APIError) as ei:
+        h3.reject_unsupported(req)
+    assert ei.value.code == "FEATURE_UNSUPPORTED"
+    assert "'reference_video'" in ei.value.message
+
+
+def test_validate_request_logs_an_ignored_inpaint_stage2(caplog):
+    with caplog.at_level("INFO", logger="h3.runner"):
+        _validated(inpaint=_inpaint())
+        assert "blend_dilation_stage2" not in caplog.text  # the schema default is silent
+        _validated(inpaint=_inpaint(blend_dilation_stage2=7))
+    assert "MiniMax H3 ignores inpaint.blend_dilation_stage2=7" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "width, height, expected", [(1280, 768, 20), (1920, 1088, 30)],
+)
+def test_generate_payload_sends_the_inpaint_block(tmp_path, width, height, expected):
+    captured: list[dict] = []
+    be = _capturing_backend(captured)
+    src = tmp_path / "_inpaint_window.mp4"
+    mask = tmp_path / "_inpaint_mask.mp4"
+    req = _validated(
+        inpaint=_inpaint(blend_dilation_stage2=7, window_start_sec=1.0),
+        width=width, height=height, num_frames=124,
+    )
+    be.generate(req, tmp_path / "job", inpaint_source_path=src, inpaint_mask_path=mask, seed=1)
+    (payload,) = captured
+    keys = list(payload)
+    assert keys.index("inpaint") == keys.index("output_path") - 1
+    assert "outpaint" not in payload
+    # 1 step: floor(1 * max(W, H) / 64 + 0.5). No stage 2, no window start
+    # (the app has already cut the window), no canvas_* (width / height are
+    # the canvas).
+    assert payload["inpaint"] == {
+        "source_path": str(src),
+        "mask_path": str(mask),
+        "audio_strength": 0.5,
+        "feather_px": expected,
+    }
+    assert isinstance(payload["inpaint"]["audio_strength"], float)
+    assert (payload["width"], payload["height"]) == (width, height)
+
+
+def test_generate_inpaint_needs_both_cuts(tmp_path):
+    be = _capturing_backend([])
+    req = _validated(inpaint=_inpaint())
+    with pytest.raises(RuntimeError, match="inpaint"):
+        be.generate(req, tmp_path / "job", seed=1)
+    with pytest.raises(RuntimeError, match="inpaint"):
+        be.generate(req, tmp_path / "job", inpaint_source_path=tmp_path / "s.mp4", seed=1)
+
+
+def test_inpaint_constraints_are_published_on_h3_only():
+    assert h3.REQUEST_RULES.constraints()["inpaint"] == {
+        "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5},
+        "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
+    }
+    assert "inpaint" not in engines.request_constraints("ltx")
+    assert "inpaint" not in engines.request_constraints("ltx25")
+
+
+@pytest.mark.parametrize(
+    "inpaint, message",
+    [
+        ({"mask_video_id": "mask-1", "source_video_id": "vid-1"},
+         "inpaint.source_video_id is only accepted by MiniMax H3"),
+        ({"mask_video_id": "mask-1", "audio_strength": 0.5},
+         "inpaint.audio_strength is only accepted by MiniMax H3"),
+    ],
+)
+@pytest.mark.parametrize("family", ["ltx", "ltx25"])
+def test_ltx_refuses_the_h3_inpaint_fields(family, inpaint, message):
+    body = {"inpaint": inpaint, "width": 768, "height": 512}
+    if "source_video_id" not in inpaint:
+        body.update(reference_video_id="vid-1", loras=_LORAS)
+    req = GenerateRequest(prompt=PROMPT, num_frames=121, **body)
+    with pytest.raises(APIError) as ei:
+        engines.validate_for_family(family, req)
+    assert message in str(ei.value.detail)
+
+
+def _ffmpeg_clip(path: Path, size: str, frames: int, *, audio: bool = False) -> None:
+    import shutil  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
+
+    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        pytest.skip("ffmpeg/ffprobe not on PATH")
+    cmd = [shutil.which("ffmpeg"), "-y", "-v", "error", "-f", "lavfi",
+           "-i", f"testsrc2=size={size}:rate=24:duration=3"]
+    if audio:
+        cmd += ["-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-shortest"]
+    cmd += ["-frames:v", str(frames), "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+
+
+def test_mock_inpaint_renders_at_the_source_size_on_the_32_grid(tmp_path):
+    """The shared mock's reconciliation on H3's grid: a 304x272 source has
+    the 32-grid canvas 320x288 (LTX's 128 grid would say 384x384), and the
+    record carries the right / bottom pads up to it."""
+    src = tmp_path / "_inpaint_window.mp4"
+    mask = tmp_path / "_inpaint_mask.mp4"
+    _ffmpeg_clip(src, "304x272", 22)
+    _ffmpeg_clip(mask, "304x272", 22)
+    be = h3._MockBackendH3.__new__(h3._MockBackendH3)
+    assert be._inpaint_canvas_multiple() == 32
+    req = _validated(inpaint=_inpaint(), width=320, height=288, num_frames=22)
+    assert be._inpaint_render_size(req, mask) == (304, 272)
+    bad = _validated(inpaint=_inpaint(), width=384, height=384, num_frames=22)
+    with pytest.raises(RuntimeError, match="inpaint geometry mismatch"):
+        be._inpaint_render_size(bad, mask)
+    record = h3._mock_inpaint_record(req, src, mask)
+    assert record["canvas"] == [320, 288] and record["source"] == [304, 272]
+    assert record["pads"] == {"left": 0, "right": 16, "top": 0, "bottom": 16}
+    assert record["feather_px"] == 5  # floor(1 * 320 / 64 + 0.5)
+    assert record["audio_strength"] == 0.5
+    assert record["source_had_audio"] is False and record["audio_output"] == "generated"
+    assert record["mock"] is True
+    assert record["mask_rule"] == h3.INPAINT_MASK_RULE and record["chunk_frames"] == 17
+    assert record["cropped_to"] == [304, 272]
+    assert set(record) == {
+        "canvas", "pads", "source", "mask_rule", "chunk_frames", "chunks", "latent_frames",
+        "fixed_tokens_total", "generated_tokens_total", "generated_per_latent_frame",
+        "audio_strength", "source_had_audio", "audio_latents_encoded", "audio_output",
+        "feather_px", "inject_clean", "self_check", "mask_proof", "cropped_to", "mock",
+    }
+
+
+def test_mock_inpaint_constants_are_the_engines():
+    """The adapter's copies of the engine's MASK_RULE / CHUNK_FRAMES (read
+    from the engine sources with ``ast``: no engine import on the app side)."""
+    import ast  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parents[1] / "engine_h3"
+
+    def _const(file: str, name: str):
+        tree = ast.parse((root / file).read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets
+            ):
+                return ast.literal_eval(node.value)
+        raise AssertionError(f"{name} not found in {file}")
+
+    assert h3.INPAINT_MASK_RULE == _const("inpaint_h3.py", "MASK_RULE")
+    assert h3.INPAINT_CHUNK_FRAMES == _const("inpaint_geometry.py", "CHUNK_FRAMES")
+
+
+def test_ltx_mock_keeps_the_128_grid():
+    from services.engines.ltx.adapter import _MockBackend  # noqa: PLC0415
+
+    assert _MockBackend.__new__(_MockBackend)._inpaint_canvas_multiple() == 128
 
 
 # --------------------------------------------------------------------------- #

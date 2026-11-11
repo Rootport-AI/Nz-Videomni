@@ -414,6 +414,13 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
       audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
       blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
     },
+    // §1-124: the Inpainting source-audio Strength and feather (stage 1)
+    // sliders, as the real `GET /models` publishes them
+    // (`RequestRules.inpaint_*`). LTX publishes no `inpaint` block.
+    inpaint: {
+      audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
+      blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
+    },
   },
 };
 
@@ -589,6 +596,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
   // §1-125: `outpaint` LEFT too (H3 runs an Outpainting by fixing the
   // source's tokens; the single handler takes `outpaint.source_video_id`), so
   // the Outpainting sub-tab opens beside Retake.
+  // §1-124: `inpaint` LEFT as well (H3 repaints the mask by fixing the
+  // tokens outside it; the handler takes `inpaint.source_video_id`).
   // 台帳 §1-104: `loras` left (H3 runs Style / Turbo LoRAs now) and
   // `lora_audio_strength` joined at the end (one strength per LoRA).
   // §1-106: `chain` LEFT (H3 chains now) and the chain material it
@@ -601,7 +610,6 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "nag", // the NAG method only (VSF is accepted)
     "two_stage_hq",
     "guidance_scale",
-    "inpaint",
     "alpha_gen",
     "prune_vaed",
     "keep_resident_embeddings",

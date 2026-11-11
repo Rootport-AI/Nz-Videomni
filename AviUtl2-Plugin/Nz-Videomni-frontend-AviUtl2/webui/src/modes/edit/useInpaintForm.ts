@@ -1,28 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppConfig, GenerateRequest } from "../../api/types";
+import type { AppConfig, GenerateRequest, SamplingConstraints, SamplingParamConstraint } from "../../api/types";
 import { BridgeError, TIMELINE_MASK_PROGRESS_EVENT, bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge, TimelineMaskProgressData } from "../../bridge";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
-import { parseLoraPrompt } from "../../lora/loraTags";
+import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
 import { accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
-import { comfortFramesForBudget } from "../../shell/comfortTable";
+import { comfortFramesForBudget, resolveSequenceRowsBudget } from "../../shell/comfortTable";
+import type { GenerationConstraints } from "../../shell/generationConstraints";
+import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
 import { resolveOutpaintComfortBudget } from "../../shell/outpaintBudget";
 import {
   clearInpaintSlots,
+  getInpaintSlots,
   inpaintTargetKey,
   markInpaintUploadStarted,
   setInpaintBusy,
   setInpaintTargetUpload,
   useInpaintSlots,
 } from "../../timeline/inpaintSlots";
-import type { InpaintSlots } from "../../timeline/inpaintSlots";
+import type { InpaintPartialFilterSlot, InpaintSlots } from "../../timeline/inpaintSlots";
 import { mapRangeToMaterialSec } from "../../timeline/retakeWindow";
 import type { RetakeRangeResult } from "../../timeline/retakeWindow";
 import { decideSourceTrim, trimQuery } from "../../timeline/sourceTrim";
 import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
-import { FRAME_RATE_FALLBACK, snapFrameRate, snapNumFrames } from "../single/paramUtils";
+import { FRAME_RATE_FALLBACK, LTX_FRAME_GRID, clamp, snapFrameRate, snapNumFrames } from "../single/paramUtils";
+import type { FrameGrid } from "../single/paramUtils";
+import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import type { SamplingValues } from "../single/samplingValues";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが動かさない
 // —— `useOutpaintForm` / `useRetakeForm` が同じ理由（chained/ は別ワークストリーム
 // の占有領域）でここから直接 import しており、本ファイルはその先例に倣っている。
@@ -36,16 +42,26 @@ import {
   isOverComfortBudget,
 } from "./outpaintGeometry";
 import {
+  H3_INPAINT_FPS,
+  H3_INPAINT_FRAMES_MAX,
+  H3_INPAINT_FRAMES_MIN,
   INPAINT_FRAMES_MAX,
   INPAINT_FRAMES_MIN,
   defaultInpaintFrames,
+  defaultInpaintFramesOnGrid,
   placeInpaintWindow,
+  projectFramesFor,
   roundUpTo128,
+  roundUpTo32,
 } from "./inpaintWindow";
 import type { InpaintWindow } from "./inpaintWindow";
 
 /** 画角拡張と同じ強度で制御系 LoRA を差す（公式ワークフローの 1.0）。 */
 const INPAINT_LORA_STRENGTH = 1.0;
+
+/** 台帳 §1-124: H3 のフレーム数の格子 17n+5（`inpaintWindow.roundUpTo17n5` と同じ格子。
+ * 範囲は `H3_INPAINT_FRAMES_MIN/MAX`）。 */
+const H3_FRAME_GRID: Readonly<FrameGrid> = Object.freeze({ step: 17, offset: 5 });
 
 /** Generate が押せない理由コード。`GenerateReasonsNote` が
  * `editReasonMessages.buildInpaintReasonMessages` の表と突き合わせて 1 行ずつ出す。 */
@@ -116,6 +132,16 @@ export interface UseInpaintFormDeps {
    * その取り違えが構造的に起きない。
    */
   onMaskError?: ((code: string) => void) | undefined;
+  /**
+   * 台帳 §1-124: 読み込み中のベースモデルの規則（`GET /models` の `constraints`）。
+   * `constraints.inpaint` があれば H3 の形（`useOutpaintForm` と同じ規約）。省略時・
+   * `inpaint` が `null` のときは LTX の形で、要求も画面も従来と同じ。
+   */
+  constraints?: GenerationConstraints | null | undefined;
+  /** 台帳 §1-124: エンジンが LoRA の音声強度を受け取らないか
+   * （`featureScope.loraAudioStrengthHiddenFor`）。H3 の形でだけ読む
+   * （`true` ならタグ由来 LoRA の `audio_strength` を落とす）。 */
+  loraAudioHidden?: boolean | undefined;
 }
 
 export interface UseInpaintFormResult {
@@ -153,6 +179,14 @@ export interface UseInpaintFormResult {
   commitNumFrames: (value: number) => void;
   minFrames: number;
   maxFrames: number;
+  /** フレーム数の格子（スライダーの step。LTX 8n+1、H3 17n+5）。 */
+  frameGrid: FrameGrid;
+  /** 台帳 §1-124: エンジンが固定している生成 fps（H3 は 24）。`null` ＝ プロジェクトの
+   * fps で生成する（LTX）。 */
+  fixedFrameRate: number | null;
+  /** 台帳 §1-124: `constraints.inpaint` が配信されている（MiniMax H3）。画面はこの
+   * フラグと下の値だけを読み、エンジン名は知らない。 */
+  h3: boolean;
 
   seed: number;
   setSeed: (value: number) => void;
@@ -167,6 +201,20 @@ export interface UseInpaintFormResult {
   blendStage2: number;
   setBlendStage1: (value: number) => void;
   setBlendStage2: (value: number) => void;
+  /** Stage-1（H3 では「なじませ段数」1 本）の範囲。LTX は定数 `0..15`、H3 は
+   * 配信の `constraints.inpaint.blendDilationStage1`。 */
+  blendRange: { min: number; max: number; step: number };
+
+  /** 台帳 §1-124: 元動画の音声の Strength（H3 だけ。範囲・刻み・既定は配信値）。
+   * LTX では `null`。 */
+  audioStrengthRange: SamplingParamConstraint | null;
+  audioStrength: number | null;
+  /** 範囲へクランプする。{@link audioStrengthRange} が `null` の間は何もしない。 */
+  setAudioStrength: (value: number) => void;
+  /** 台帳 §1-124: サンプリングの 3 項目（H3 だけ。Outpainting の H3 と同じ部品）。 */
+  sampling: SamplingValues | null;
+  samplingConstraints: SamplingConstraints | null;
+  setSamplingValue: (key: keyof SamplingValues, value: number) => void;
 
   /** 確定した窓（毎描画導出。置けなければ `null`）。 */
   window: InpaintWindow | null;
@@ -235,6 +283,15 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   const config = deps.config ?? FALLBACK_APP_CONFIG;
   const prompt = deps.prompt ?? "";
   const bridge = nativeBridge ?? defaultBridge;
+  // 台帳 §1-124: H3 の形かどうかの分岐はここ 1 か所（手本 `useOutpaintForm`）。
+  // `constraints.inpaint` があること自体が「H3 の形で開く」合図。
+  const inpaintRules = deps.constraints?.inpaint ?? null;
+  const h3 = inpaintRules !== null;
+  const loraAudioHidden = deps.loraAudioHidden ?? false;
+  const minFrames = h3 ? H3_INPAINT_FRAMES_MIN : INPAINT_FRAMES_MIN;
+  const maxFrames = h3 ? H3_INPAINT_FRAMES_MAX : INPAINT_FRAMES_MAX;
+  const frameGrid: FrameGrid = h3 ? H3_FRAME_GRID : LTX_FRAME_GRID;
+  const fixedFps = h3 ? H3_INPAINT_FPS : null;
 
   const slots = useInpaintSlots();
   const partialFilter = slots.partialFilter;
@@ -269,16 +326,51 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   // 既定 5 / 2 は公式ワークフロー（node 5266 / 5226）と同じ値。丸めとクランプの
   // 式は `useOutpaintForm.setBlendDilation` と同じもの ——「受け付ける値」の
   // 定義が 2 か所に割れないよう、定数も関数の形もそちらへ揃えてある。
-  const [blendStage1, setBlendStage1State] = useState(DEFAULT_BLEND_DILATION_STAGE1);
+  // 台帳 §1-124: H3 では Stage-1 を「なじませ段数」1 本として使い、範囲・既定は配信値
+  // （既定 1）。Stage-2 は H3 では送らない（状態は LTX のために持ち続ける）。
+  const blendRules = inpaintRules?.blendDilationStage1 ?? null;
+  const blendRange = useMemo(
+    () =>
+      blendRules
+        ? { min: blendRules.min, max: blendRules.max, step: blendRules.step }
+        : { min: BLEND_DILATION_MIN, max: BLEND_DILATION_MAX, step: 1 },
+    [blendRules],
+  );
+  const [blendStage1, setBlendStage1State] = useState(() => initialBlendStage1(blendRules));
   const [blendStage2, setBlendStage2State] = useState(DEFAULT_BLEND_DILATION_STAGE2);
-  const setBlendStage1 = useCallback((value: number) => {
-    if (!Number.isFinite(value)) return;
-    setBlendStage1State(Math.min(BLEND_DILATION_MAX, Math.max(BLEND_DILATION_MIN, Math.round(value))));
-  }, []);
+  const setBlendStage1 = useCallback(
+    (value: number) => {
+      if (!Number.isFinite(value)) return;
+      setBlendStage1State(Math.min(blendRange.max, Math.max(blendRange.min, Math.round(value))));
+    },
+    [blendRange],
+  );
   const setBlendStage2 = useCallback((value: number) => {
     if (!Number.isFinite(value)) return;
     setBlendStage2State(Math.min(BLEND_DILATION_MAX, Math.max(BLEND_DILATION_MIN, Math.round(value))));
   }, []);
+
+  // --- 音声の Strength とサンプリング（台帳 §1-124。H3 だけ） ----------------
+  // 部品・式は `useOutpaintForm` と同じ。LTX ではどちらも `null`（画面にも要求にも出ない）。
+  const audioStrengthRange = inpaintRules?.audioStrength ?? null;
+  const [audioStrength, setAudioStrengthState] = useState<number | null>(() => audioStrengthRange?.default ?? null);
+  const setAudioStrength = useCallback(
+    (raw: number) => {
+      if (!audioStrengthRange || !Number.isFinite(raw)) return;
+      setAudioStrengthState(clamp(raw, audioStrengthRange.min, audioStrengthRange.max));
+    },
+    [audioStrengthRange],
+  );
+  const samplingConstraints = h3 ? (deps.constraints?.sampling ?? null) : null;
+  const [sampling, setSampling] = useState<SamplingValues | null>(() => samplingDefaults(samplingConstraints));
+  const setSamplingValue = useCallback(
+    (key: keyof SamplingValues, raw: number) => {
+      const value = clampSamplingValue(samplingConstraints, key, raw);
+      if (value === null) return;
+      setSampling((prev) => (prev ? { ...prev, [key]: value } : prev));
+    },
+    [samplingConstraints],
+  );
 
   // --- 対象動画のアップロード（対象 1 つにつき 1 回） ------------------------
   const source = useSourceUpload("video", nativeBridge ? { nativeBridge } : {});
@@ -326,10 +418,10 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   // --- フレーム数（部分フィルタが来るたびに再シード） ----------------------
   // lazy initializer が保管庫を直読みするので、右クリック直後の**最初の描画**
   // から正しい値が出る（effect の 1 テンポ遅れで既定値がちらつかない）。
+  // 台帳 §1-124: H3 では部分フィルタの長さを 24fps に換算して 17n+5 へ切り上げる
+  // （`seedNumFrames`）。部分フィルタが無いうちの値は `fallbackNumFrames`。
   const [numFrames, setNumFramesState] = useState(() =>
-    slots.partialFilter
-      ? defaultInpaintFrames(slots.partialFilter.frameStart, slots.partialFilter.frameEnd)
-      : FALLBACK_APP_CONFIG.generation_defaults.num_frames,
+    slots.partialFilter ? seedNumFrames(slots.partialFilter, h3) : fallbackNumFrames(h3),
   );
   // 再シードの判定は**部分フィルタスロットの改訂番号**だけ（`inpaintSlots.ts`
   // の `version` の doc 参照）。対象動画を差し替えただけで打ち直した値が既定へ
@@ -339,13 +431,16 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     if (slots.version === seededVersionRef.current) return;
     seededVersionRef.current = slots.version;
     if (!slots.partialFilter) return;
-    setNumFramesState(defaultInpaintFrames(slots.partialFilter.frameStart, slots.partialFilter.frameEnd));
-  }, [slots.version, slots.partialFilter]);
+    setNumFramesState(seedNumFrames(slots.partialFilter, h3));
+  }, [slots.version, slots.partialFilter, h3]);
 
-  const setNumFrames = useCallback((raw: number, snap = true) => {
-    if (!Number.isFinite(raw)) return;
-    setNumFramesState(snap ? snapNumFrames(raw, INPAINT_FRAMES_MIN, INPAINT_FRAMES_MAX) : raw);
-  }, []);
+  const setNumFrames = useCallback(
+    (raw: number, snap = true) => {
+      if (!Number.isFinite(raw)) return;
+      setNumFramesState(snap ? snapNumFrames(raw, minFrames, maxFrames, frameGrid) : raw);
+    },
+    [minFrames, maxFrames, frameGrid],
+  );
   /**
    * 値が確定した瞬間に 8n+1 の格子へ乗せる。
    *
@@ -354,22 +449,54 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
    * いない）。ならば「確定時に必ず正しい値になる」方を選ぶ —— 手打ち中の
    * 途中の数字は素通しのままなので、入力の邪魔にはならない。
    */
-  const commitNumFrames = useCallback((raw: number) => {
-    if (!Number.isFinite(raw)) return;
-    setNumFramesState(snapNumFrames(raw, INPAINT_FRAMES_MIN, INPAINT_FRAMES_MAX));
-  }, []);
+  const commitNumFrames = useCallback(
+    (raw: number) => {
+      if (!Number.isFinite(raw)) return;
+      setNumFramesState(snapNumFrames(raw, minFrames, maxFrames, frameGrid));
+    },
+    [minFrames, maxFrames, frameGrid],
+  );
+
+  // --- 配信への追従（台帳 §1-124） -----------------------------------------
+  // フォームがマウントされたままベースモデルが切り替わった・`GET /models` が後から
+  // 届いた場合（`useOutpaintForm` の `appliedRulesRef` と同じ形）。初回は飛ばし、
+  // 規則の中身が変わったときだけ、なじませ段数・音声の Strength・サンプリングを
+  // 新しい配信の既定へ戻す。フレーム数は「何フレームを何 fps で」の意味が変わるので、
+  // 部分フィルタがあればそこから引き直し、無ければ新しい格子へ乗せ直す。
+  const appliedRulesRef = useRef(inpaintRules);
+  const appliedSamplingRef = useRef(samplingConstraints);
+  useEffect(() => {
+    if (appliedRulesRef.current === inpaintRules && appliedSamplingRef.current === samplingConstraints) return;
+    appliedRulesRef.current = inpaintRules;
+    appliedSamplingRef.current = samplingConstraints;
+    setBlendStage1State(initialBlendStage1(inpaintRules?.blendDilationStage1 ?? null));
+    setAudioStrengthState(inpaintRules?.audioStrength.default ?? null);
+    setSampling(samplingDefaults(samplingConstraints));
+    const filter = getInpaintSlots().partialFilter;
+    setNumFramesState((prev) =>
+      filter ? seedNumFrames(filter, h3) : snapNumFrames(prev, minFrames, maxFrames, frameGrid),
+    );
+  }, [inpaintRules, samplingConstraints, h3, minFrames, maxFrames, frameGrid]);
 
   // --- 窓（毎描画導出・状態として持たない） --------------------------------
+  // プロジェクトの fps（スナップ前の rate/scale）。H3 は 24fps で生成するので、
+  // 窓・マスク・席はこの fps に換算したフレーム数で置く（`projectFramesFor`。切り上げ）。
+  const projectRate = partialFilter?.rate ?? editInfo?.rate ?? 0;
+  const projectScale = partialFilter?.scale ?? editInfo?.scale ?? 0;
+  const projectFps = projectRate > 0 && projectScale > 0 ? projectRate / projectScale : 0;
+  /** 窓の長さ（プロジェクトのフレーム数）。LTX はプロジェクト fps で生成するので
+   * フレーム数欄の値そのもの。H3 で fps が読めなければ `null`（窓を置かない）。 */
+  const windowFrames = h3 ? (projectFps > 0 ? projectFramesFor(numFrames, projectFps) : null) : numFrames;
   const placedWindow = useMemo<InpaintWindow | null>(() => {
-    if (!partialFilter || !target) return null;
+    if (!partialFilter || !target || windowFrames === null) return null;
     return placeInpaintWindow({
       filterStart: partialFilter.frameStart,
       filterEnd: partialFilter.frameEnd,
       ribbonStart: target.item.frameStart,
       ribbonEnd: target.item.frameEnd,
-      frames: numFrames,
+      frames: windowFrames,
     });
-  }, [partialFilter, target, numFrames]);
+  }, [partialFilter, target, windowFrames]);
 
   const mapping = useMemo<RetakeRangeResult | null>(() => {
     if (!target || !placedWindow) return null;
@@ -386,33 +513,47 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   const projectHeight = editInfo?.height ?? 0;
   const targetWidth = target?.item.mediaWidth ?? 0;
   const targetHeight = target?.item.mediaHeight ?? 0;
-  const canvasWidth = roundUpTo128(targetWidth);
-  const canvasHeight = roundUpTo128(targetHeight);
+  // 台帳 §1-124: H3 は 32 の倍数（未知の 0 は 0 のまま返り、`mediaInfoUnknown` が止める）。
+  const canvasWidth = h3 ? roundUpTo32(targetWidth) : roundUpTo128(targetWidth);
+  const canvasHeight = h3 ? roundUpTo32(targetHeight) : roundUpTo128(targetHeight);
 
   // 生成 fps はプロジェクトの rate/scale。部分フィルタのスナップショットが
   // 先に届くので普通はそちらから取れ、まだ無ければ `getEditInfo` の値を使う。
   // §3-71/§3-72: 整数へのスナップは `paramUtils.snapFrameRate` が唯一の正本。
-  const frameRate = useMemo(() => {
+  const projectFrameRate = useMemo(() => {
     const rate = partialFilter?.rate ?? editInfo?.rate ?? 0;
     const scale = partialFilter?.scale ?? editInfo?.scale ?? 0;
     if (!(rate > 0) || !(scale > 0)) return FRAME_RATE_FALLBACK;
     return snapFrameRate(rate / scale) ?? FRAME_RATE_FALLBACK;
   }, [partialFilter?.rate, partialFilter?.scale, editInfo?.rate, editInfo?.scale]);
+  // 台帳 §1-124: H3 は 24fps 固定で生成する（プロジェクトの fps は送らない）。
+  const frameRate = fixedFps ?? projectFrameRate;
 
   // --- 快適上限（助言のみ） ------------------------------------------------
   // 線は画角拡張と同じ配信値（`outpaint_budget`）。評価するのは**キャンバス寸**
   // ——実際に生成が回る大きさがそれだから。
-  const comfortBudget = resolveOutpaintComfortBudget(config.limits, engineFamily);
-  const comfortTokens = comfortTokenEstimate(canvasWidth, canvasHeight, numFrames);
+  //
+  // 台帳 §1-124: H3 は `useOutpaintForm` の H3 と同じ部品で、Single の線
+  // `single_rows_budget` を共用し、キャンバスの総行数 S（`h3SequenceRows`。
+  // キーフレームも Reference も無い。固定トークンは行数を増やさない）で警告と目盛りを出す。
   const canvasKnown = canvasWidth > 0 && canvasHeight > 0;
+  const comfortBudget = h3 ? null : resolveOutpaintComfortBudget(config.limits, engineFamily);
+  const rowsBudget = h3 ? resolveSequenceRowsBudget(config.limits, engineFamily) : null;
+  const h3Shape = { width: canvasWidth, height: canvasHeight, ...H3_NO_CONDITIONING };
+  const h3Rows = h3 && canvasKnown ? h3SequenceRows(h3Shape, numFrames) : null;
+  const comfortTokens = h3 ? (h3Rows?.total ?? 0) : comfortTokenEstimate(canvasWidth, canvasHeight, numFrames);
   // 判定式は書き直さず、画角拡張と**同じ関数**を呼ぶ（敵対的レビュー m5）——
   // 「超えたか」の定義が 2 箇所に分かれると、片方だけ直る事故になる。
-  const overComfort =
-    canvasKnown && comfortBudget !== null && isOverComfortBudget(canvasWidth, canvasHeight, numFrames, comfortBudget);
+  const overComfort = h3
+    ? rowsBudget !== null && h3Rows !== null && h3Rows.total > rowsBudget
+    : canvasKnown && comfortBudget !== null && isOverComfortBudget(canvasWidth, canvasHeight, numFrames, comfortBudget);
   // スライダーに打つ目盛り。式の逆関数は `shell/comfortTable.ts` が正本で、
   // 32（潜在1マス＝32px角）と 8（潜在1枚＝8フレーム）は LTX の VAE 幾何。
-  const comfortFrames =
-    canvasKnown && comfortBudget !== null
+  const comfortFrames = h3
+    ? canvasKnown && rowsBudget !== null
+      ? h3ComfortFrames(h3Shape, rowsBudget, minFrames, maxFrames)
+      : null
+    : canvasKnown && comfortBudget !== null
       ? comfortFramesForBudget(canvasWidth, canvasHeight, comfortBudget, INPAINT_FRAMES_MIN, INPAINT_FRAMES_MAX, 32, 8)
       : null;
 
@@ -509,7 +650,9 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
       }
     }
   }
-  if (partialFilter && target && (!placedWindow || !mapping?.ok || mapping.frameCount !== numFrames)) {
+  // `mapping.frameCount` はプロジェクトのフレーム数なので、比べる相手は窓の長さ
+  // （H3 では 24fps の F をプロジェクトの fps へ換算した値。台帳 §1-124 の R1）。
+  if (partialFilter && target && (!placedWindow || !mapping?.ok || mapping.frameCount !== windowFrames)) {
     // 窓がリボンに収まらない／素材秒へ写せない／写した結果が短くなった
     // （＝静止フレームの尻尾に掛かっている）。どれも「その長さでは描き替え
     // られない」なので 1 つの理由にまとめる。
@@ -525,10 +668,13 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
       layer: target.item.layer,
       frameStart: placedWindow.windowStart,
       frameEnd: placedWindow.windowEnd,
-      numFrames: placedWindow.frames,
+      // 台帳 §1-124（M1）: 席の予約とジョブの紐づけは「生成の枚数 × 生成 fps」。H3 は
+      // `{F, 24}`（Retake の placement と同じ）—— プロジェクトのフレーム数で予約すると
+      // 席が伸びる。LTX は窓の長さ＝フレーム数欄の値なので従来と同じ値。
+      numFrames: h3 ? numFrames : placedWindow.frames,
       genFps: frameRate,
     };
-  }, [target, placedWindow, frameRate]);
+  }, [target, placedWindow, frameRate, h3, numFrames]);
 
   const buildRequest = useCallback(
     (maskVideoId: string): GenerateRequest => {
@@ -539,6 +685,35 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
       // 指示文と `loras[]` に分け、両方を送る。空欄は正当な使い方なので、
       // ここでは何も足さない。
       const { strippedPrompt, loras } = parseLoraPrompt(prompt);
+      if (h3) {
+        // 台帳 §1-124: H3 の形（`useOutpaintForm` の H3 と同じ系統）。元動画は
+        // `inpaint.source_video_id` で送り、`reference_video_id` と `in-outpainting` の
+        // 固定 LoRA は送らない（H3 は IC-LoRA を使わない）。LoRA はタグ由来だけで、
+        // 1 つも無ければキーごと省く。`blend_dilation_stage2` は送らない。
+        // `window_start_sec` は LTX と同じく送る（アプリが元動画をそこから切り出す）。
+        const h3Loras = loraAudioHidden ? omitLoraAudioStrength(loras) : loras;
+        return {
+          prompt: strippedPrompt.trim(),
+          ...(h3Loras.length > 0 ? { loras: h3Loras } : {}),
+          // 元の実寸を 32 の倍数へ切り上げたキャンバス。
+          width: canvasWidth,
+          height: canvasHeight,
+          num_frames: numFrames,
+          frame_rate: frameRate,
+          seed,
+          // サンプリングの 3 項目。配信があるときだけ 3 つとも送る。
+          ...samplingRequestFields(sampling),
+          inpaint: {
+            mask_video_id: maskVideoId,
+            source_video_id: targetVideoId ?? "",
+            window_start_sec: Math.max(0, windowStartSec),
+            audio_strength: audioStrength ?? audioStrengthRange?.default ?? 0,
+            // なじませ段数は**常に**送る（既定のままでも。画面の数字と送った値を揃える）。
+            blend_dilation_stage1: blendStage1,
+          },
+          ...accelerationRequestFields(acceleration),
+        };
+      }
       return {
         prompt: strippedPrompt.trim(),
         // 送るのは**キャンバス**（素材寸を 128 の倍数へ切り上げたもの）。余白は
@@ -576,6 +751,11 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
       blendStage2,
       targetVideoId,
       acceleration,
+      h3,
+      loraAudioHidden,
+      sampling,
+      audioStrength,
+      audioStrengthRange,
     ],
   );
 
@@ -583,14 +763,17 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     clearInpaintSlots();
     source.clear();
     setSeed(config.generation_defaults.seed);
-    setBlendStage1State(DEFAULT_BLEND_DILATION_STAGE1);
+    // 台帳 §1-124: なじませ段数・音声の Strength・サンプリングはいまの配信の既定へ。
+    setBlendStage1State(initialBlendStage1(blendRules));
     setBlendStage2State(DEFAULT_BLEND_DILATION_STAGE2);
+    setAudioStrengthState(audioStrengthRange?.default ?? null);
+    setSampling(samplingDefaults(samplingConstraints));
     setMaskErrorCode("");
     setMaskProgress(null);
     setMaskPhase("idle");
     // 予約席は**触らない**: Inpainting は Generate 押下時にしか席を取らない
     // （右クリックの `placement` は `null`）ので、❌ の時点で片付けるものが無い。
-  }, [source, config.generation_defaults.seed]);
+  }, [source, config.generation_defaults.seed, blendRules, audioStrengthRange, samplingConstraints]);
 
   return {
     slots,
@@ -607,14 +790,24 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     numFrames,
     setNumFrames,
     commitNumFrames,
-    minFrames: INPAINT_FRAMES_MIN,
-    maxFrames: INPAINT_FRAMES_MAX,
+    minFrames,
+    maxFrames,
+    frameGrid,
+    fixedFrameRate: fixedFps,
+    h3,
     seed,
     setSeed,
     blendStage1,
     blendStage2,
     setBlendStage1,
     setBlendStage2,
+    blendRange,
+    audioStrengthRange,
+    audioStrength,
+    setAudioStrength,
+    sampling,
+    samplingConstraints,
+    setSamplingValue,
     window: placedWindow,
     mapping,
     isOverComfortBudget: overComfort,
@@ -630,4 +823,27 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     buildRequest,
     clearAll,
   };
+}
+
+/** 台帳 §1-124: なじませ段数（Stage-1）の初期値。H3 は配信の既定（範囲へクランプ）、
+ * LTX は公式ワークフローの 5。 */
+function initialBlendStage1(range: SamplingParamConstraint | null): number {
+  if (!range) return DEFAULT_BLEND_DILATION_STAGE1;
+  return clamp(Math.round(range.default), range.min, range.max);
+}
+
+/** 部分フィルタからフレーム数欄の既定値を作る。LTX はその長さを 8n+1 へ切り上げ、
+ * H3 は 24fps に換算してから 17n+5 へ切り上げる（台帳 §1-124。プロジェクトの fps は
+ * スナップ前の rate/scale）。 */
+function seedNumFrames(filter: InpaintPartialFilterSlot, h3: boolean): number {
+  if (!h3) return defaultInpaintFrames(filter.frameStart, filter.frameEnd);
+  const projectFps = filter.rate > 0 && filter.scale > 0 ? filter.rate / filter.scale : 0;
+  return defaultInpaintFramesOnGrid(filter.frameEnd - filter.frameStart + 1, projectFps);
+}
+
+/** 部分フィルタがまだ無いときのフレーム数欄。LTX は従来どおり組み込みの既定値
+ * そのもの、H3 はそれを 17n+5・[22, 345] へ乗せた値。 */
+function fallbackNumFrames(h3: boolean): number {
+  const value = FALLBACK_APP_CONFIG.generation_defaults.num_frames;
+  return h3 ? snapNumFrames(value, H3_INPAINT_FRAMES_MIN, H3_INPAINT_FRAMES_MAX, H3_FRAME_GRID) : value;
 }

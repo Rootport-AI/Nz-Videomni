@@ -58,14 +58,14 @@ const LTX: BaseModelConstraints = {
  * material it cannot take joined. 台帳 §1-121: `v2v` and `chain_start_image`
  * left again (its chain continues a source video and starts from an opening
  * image), leaving `end_source` and `a2v`. §1-123: `retake` left (H3 runs a
- * Retake). §1-125: `outpaint` left (H3 runs an Outpainting). */
+ * Retake). §1-125: `outpaint` left (H3 runs an Outpainting). §1-124:
+ * `inpaint` left (H3 runs an Inpainting). */
 const H3_UNSUPPORTED = [
   "loras",
   "reference_video",
   "nag",
   "two_stage_hq",
   "guidance_scale",
-  "inpaint",
   "alpha_gen",
   "prune_vaed",
   "keep_resident_embeddings",
@@ -186,6 +186,20 @@ describe("generationConstraints", () => {
     expect(c.sampling).toBeNull();
     expect(c.retake).toBeNull();
     expect(c.outpaint).toBeNull();
+    expect(c.inpaint).toBeNull();
+  });
+
+  it("§1-124: copies the served Inpainting sliders; absent or null (LTX, an older backend, the fallback) means the LTX Inpainting", () => {
+    const audio = { min: 0, max: 1, step: 0.05, default: 0.5 };
+    const blend = { min: 0, max: 15, step: 1, default: 1 };
+    expect(
+      resolveGenerationConstraints({ ...H3, inpaint: { audio_strength: audio, blend_dilation_stage1: blend } }).inpaint,
+    ).toEqual({ audioStrength: audio, blendDilationStage1: blend });
+    // An older backend publishes H3's block without the key: no throw, `null`.
+    expect(resolveGenerationConstraints(H3).inpaint).toBeNull();
+    expect(resolveGenerationConstraints({ ...H3, inpaint: null }).inpaint).toBeNull();
+    expect(resolveGenerationConstraints(LTX).inpaint).toBeNull();
+    expect(LTX_GENERATION_CONSTRAINTS.inpaint).toBeNull();
   });
 
   it("§1-125: copies the served Outpainting sliders; absent or null (LTX, the fallback) means the LTX Outpainting", () => {
@@ -245,16 +259,17 @@ describe("comfortProfileMissing", () => {
 });
 
 describe("MiniMax H3's feature names on screen", () => {
-  it("keeps Chained (§1-106) and Edit (§1-123 Retake, §1-125 Outpainting) open, closes the Create sections H3 cannot use", () => {
+  it("keeps Chained (§1-106) and Edit (§1-123 Retake, §1-125 Outpainting, §1-124 Inpainting) open, closes the Create sections H3 cannot use", () => {
     // §1-123: the adapter no longer publishes `retake`, so the Edit tab stays
     // open with its Retake sub-tab live (ruling 34 updated). §1-125: nor
-    // `outpaint`, so the Outpainting sub-tab opens beside it.
+    // `outpaint`, so the Outpainting sub-tab opens beside it. §1-124: nor
+    // `inpaint`, so the Inpainting sub-tab opens too.
     // §1-106: no `chain` any more, so the Chained tab stays open.
     expect(disabledModesFor(H3_UNSUPPORTED)).toEqual([]);
     expect(editSubTabsDisabledFor(H3_UNSUPPORTED)).toEqual({
       retake: false,
       outpainting: false,
-      inpainting: true,
+      inpainting: false,
       alphaGen: true,
     });
     // Create's A2V card: H3 publishes `constraints.source_audio`, so it rides

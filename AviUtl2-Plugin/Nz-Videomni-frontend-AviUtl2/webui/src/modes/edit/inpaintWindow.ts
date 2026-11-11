@@ -156,3 +156,75 @@ export function roundUpTo128(px: number): number {
   if (!Number.isFinite(px) || px <= 0) return 0;
   return Math.ceil(px / 128) * 128;
 }
+
+// ---------------------------------------------------------------------------
+// MiniMax H3 の Inpainting（台帳 §1-124）。
+//
+// 上の LTX 用の定数・関数（8n+1・[9, 481]・128 の倍数）は一切変えない。H3 は
+// 格子が 17n+5・窓が [22, 345]・キャンバスが 32 の倍数・生成 fps が 24 固定で、
+// フレーム数欄の値 F は **24fps の枚数**。プロジェクトのタイムライン上の長さへは
+// {@link projectFramesFor} で換算する。
+// ---------------------------------------------------------------------------
+
+/** H3 のフレーム数欄の下限（17n+5 の格子の最小値）。 */
+export const H3_INPAINT_FRAMES_MIN = 22;
+
+/** H3 のフレーム数欄の上限（17n+5 の格子に乗る 345）。 */
+export const H3_INPAINT_FRAMES_MAX = 345;
+
+/** H3 の生成 fps（固定）。フレーム数欄の値はこの fps での枚数。 */
+export const H3_INPAINT_FPS = 24;
+
+/** 17n+5 の格子の刻み。 */
+const H3_FRAME_GRID = 17;
+
+/**
+ * 素材の実寸を 32 の倍数へ**切り上げた** H3 のキャンバス寸。
+ *
+ * 0 以下と有限でない値は 0 を返す（0 は寸法が未知の印としてそのまま返す。
+ * {@link roundUpTo128} と同じく、`mediaInfoUnknown` のゲートまで届けるため）。
+ */
+export function roundUpTo32(px: number): number {
+  if (!Number.isFinite(px) || px <= 0) return 0;
+  return Math.ceil(px / 32) * 32;
+}
+
+/**
+ * `frames` を 17n+5 の格子へ**切り上げる**（{@link roundUpTo8n1} の H3 版）。
+ *
+ * 下限 {@link H3_INPAINT_FRAMES_MIN} でクランプし、上限はクランプしない ——
+ * 頭を打つのは既定値を作る {@link defaultInpaintFramesOnGrid} の仕事。
+ */
+export function roundUpTo17n5(frames: number): number {
+  if (!Number.isFinite(frames)) return H3_INPAINT_FRAMES_MIN;
+  if (frames <= H3_INPAINT_FRAMES_MIN) return H3_INPAINT_FRAMES_MIN;
+  const steps = Math.ceil((frames - H3_INPAINT_FRAMES_MIN) / H3_FRAME_GRID);
+  return steps * H3_FRAME_GRID + H3_INPAINT_FRAMES_MIN;
+}
+
+/**
+ * 24fps の枚数 `numFrames24` を、プロジェクトのフレーム数へ換算する。
+ *
+ * **切り上げ**（`Math.ceil`）。Retake の `toProjectRange` の `round` は写さない
+ * —— マスクの長さが 24fps 換算で F を割ると、実行時の窓の切り出しが失敗する。
+ * `projectFps` が 0 以下や有限でなければ換算せずにそのまま返す。
+ */
+export function projectFramesFor(numFrames24: number, projectFps: number): number {
+  if (!Number.isFinite(projectFps) || projectFps <= 0) return numFrames24;
+  return Math.ceil((numFrames24 * projectFps) / H3_INPAINT_FPS);
+}
+
+/**
+ * H3 で部分フィルタが来たときに、フレーム数欄へ入れる既定値（24fps の枚数）。
+ *
+ * 部分フィルタの長さ（プロジェクトのフレーム数）を 24fps に換算（切り上げ）→
+ * 17n+5 へ切り上げ → [{@link H3_INPAINT_FRAMES_MIN}, {@link H3_INPAINT_FRAMES_MAX}]
+ * でクランプ。`projectFps` が 0 以下や有限でなければ換算しない。
+ */
+export function defaultInpaintFramesOnGrid(partialFilterFrames: number, projectFps: number): number {
+  const frames24 =
+    Number.isFinite(projectFps) && projectFps > 0
+      ? Math.ceil((partialFilterFrames * H3_INPAINT_FPS) / projectFps)
+      : partialFilterFrames;
+  return Math.min(H3_INPAINT_FRAMES_MAX, roundUpTo17n5(frames24));
+}

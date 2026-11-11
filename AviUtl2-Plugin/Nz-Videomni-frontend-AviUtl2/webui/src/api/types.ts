@@ -160,10 +160,15 @@ export interface OutpaintSpec {
  * 128の倍数へ切り上げたもの）で、余白はサーバーが素材の実寸から導出する
  * ——請求に余白は載せない。出力解像度は素材の実寸に戻される。
  *
+ * 系列ごとの形（台帳 §1-124。{@link OutpaintSpec} と同じ分け方）:
+ *  - LTX 形: 素材は `reference_video_id`、キャンバスは 128 の倍数、制御 LoRA 1 本、`blend_dilation_stage1`/`_stage2` を送り `source_video_id`・`audio_strength` は送らない。
+ *  - H3 形: 素材は `inpaint.source_video_id`、キャンバスは 32 の倍数、LoRA なし、`blend_dilation_stage1`（なじませ）と `audio_strength` を送り `blend_dilation_stage2` は送らない。
+ *
  */
 export interface InpaintSpec {
   mask_video_id: string;
-  window_start_sec: number;
+  /** 省略時はサーバー既定 0.0（窓は素材の先頭から）。 */
+  window_start_sec?: number;
   /**
    * マスク周囲の「のりしろ」＝ブレンドの膨張段数。パネルの数値欄がそのまま
    * 載る値で、既定は 5 / 2（{@link OutpaintSpec} と同じ範囲 `0..15`）。
@@ -176,7 +181,13 @@ export interface InpaintSpec {
    * （`VERIFICATION_LOG.md` §105.3 の実測: `r2 × 長辺 ÷ 64 ＋ 18px`）。
    */
   blend_dilation_stage1: number;
-  blend_dilation_stage2: number;
+  /** LTX 形だけが送る（H3 は 1 段なのでサーバーが無視する）。 */
+  blend_dilation_stage2?: number;
+  /** §1-124 H3 形: 素材動画の `POST /upload/video` ID（LTX 形は
+   * `GenerateRequest.reference_video_id` を使い、この欄は断られる）。 */
+  source_video_id?: string;
+  /** §1-124 H3 形: 素材音声の Strength（0..1）。LTX 形は断られる。 */
+  audio_strength?: number;
 }
 
 /** §1-107: the MiniMax H3 transformer kinds the server can tell apart
@@ -1407,6 +1418,16 @@ export interface BaseModelConstraints {
    * engine's shape. Absent/`null` = the LTX Outpainting (or a backend that
    * predates the key). */
   outpaint?: {
+    audio_strength: SamplingParamConstraint;
+    blend_dilation_stage1: SamplingParamConstraint;
+  } | null;
+  /** §1-124: present only for an engine whose Inpainting fixes the source's
+   * tokens outside the mask instead of the In-Outpainting IC-LoRA (MiniMax
+   * H3), with the source-audio Strength slider and the feather (stage 1)
+   * slider's range, step and default. Its presence switches the Inpainting
+   * screen into that engine's shape. Absent/`null` = the LTX Inpainting (or a
+   * backend that predates the key). */
+  inpaint?: {
     audio_strength: SamplingParamConstraint;
     blend_dilation_stage1: SamplingParamConstraint;
   } | null;

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  H3_INPAINT_FRAMES_MAX,
+  H3_INPAINT_FRAMES_MIN,
+  H3_INPAINT_FPS,
   INPAINT_FRAMES_MAX,
   INPAINT_FRAMES_MIN,
   defaultInpaintFrames,
+  defaultInpaintFramesOnGrid,
   placeInpaintWindow,
+  projectFramesFor,
   roundUpTo128,
+  roundUpTo17n5,
+  roundUpTo32,
   roundUpTo8n1,
 } from "./inpaintWindow";
 
@@ -148,5 +155,79 @@ describe("roundUpTo128", () => {
     expect(roundUpTo128(0)).toBe(0);
     expect(roundUpTo128(-10)).toBe(0);
     expect(roundUpTo128(Number.NaN)).toBe(0);
+  });
+});
+
+// 台帳 §1-124: MiniMax H3 の Inpainting（17n+5・[22, 345]・32 の倍数・24fps 固定）。
+
+describe("H3 constants", () => {
+  it("pins the H3 bounds and fps", () => {
+    expect(H3_INPAINT_FRAMES_MIN).toBe(22);
+    expect(H3_INPAINT_FRAMES_MAX).toBe(345);
+    expect(H3_INPAINT_FPS).toBe(24);
+  });
+});
+
+describe("roundUpTo32", () => {
+  it("rounds up onto the 32-multiple canvas grid", () => {
+    expect(roundUpTo32(768)).toBe(768);
+    expect(roundUpTo32(1080)).toBe(1088);
+    expect(roundUpTo32(1)).toBe(32);
+  });
+
+  it("keeps 'unknown' as 0 rather than inventing a size", () => {
+    expect(roundUpTo32(0)).toBe(0);
+    expect(roundUpTo32(-10)).toBe(0);
+    expect(roundUpTo32(Number.NaN)).toBe(0);
+  });
+});
+
+describe("roundUpTo17n5", () => {
+  it("rounds UP onto 17n+5, leaving grid values alone", () => {
+    expect(roundUpTo17n5(22)).toBe(22);
+    expect(roundUpTo17n5(23)).toBe(39);
+    expect(roundUpTo17n5(39)).toBe(39);
+    expect(roundUpTo17n5(40)).toBe(56);
+    expect(roundUpTo17n5(73)).toBe(73);
+    expect(roundUpTo17n5(124)).toBe(124);
+    expect(roundUpTo17n5(345)).toBe(345);
+  });
+
+  it("clamps to the floor of 22", () => {
+    expect(roundUpTo17n5(1)).toBe(22);
+    expect(roundUpTo17n5(0)).toBe(22);
+    expect(roundUpTo17n5(-5)).toBe(22);
+    expect(roundUpTo17n5(Number.NaN)).toBe(22);
+  });
+});
+
+describe("projectFramesFor", () => {
+  it("is the identity at 24 fps", () => {
+    expect(projectFramesFor(73, 24)).toBe(73);
+  });
+
+  it("rounds UP when converting to the project fps", () => {
+    // 切り上げでないと、マスクの長さが 24fps 換算で F を割る。
+    expect(projectFramesFor(73, 30)).toBe(92); // ceil(91.25)
+    expect(projectFramesFor(73, 60)).toBe(183); // ceil(182.5)
+    expect(projectFramesFor(73, 23.976)).toBe(73); // ceil(72.93)
+  });
+
+  it("falls back to the identity for a broken fps", () => {
+    expect(projectFramesFor(73, 0)).toBe(73);
+    expect(projectFramesFor(73, -30)).toBe(73);
+    expect(projectFramesFor(73, Number.NaN)).toBe(73);
+  });
+});
+
+describe("defaultInpaintFramesOnGrid", () => {
+  it("converts to 24 fps, rounds up onto 17n+5", () => {
+    expect(defaultInpaintFramesOnGrid(90, 30)).toBe(73); // 72 -> 73
+    expect(defaultInpaintFramesOnGrid(300, 60)).toBe(124); // 120 -> 124
+  });
+
+  it("clamps to [22, 345]", () => {
+    expect(defaultInpaintFramesOnGrid(10, 24)).toBe(22);
+    expect(defaultInpaintFramesOnGrid(10000, 24)).toBe(345);
   });
 });

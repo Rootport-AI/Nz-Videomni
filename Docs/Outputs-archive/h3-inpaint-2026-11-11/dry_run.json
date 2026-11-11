@@ -1,0 +1,509 @@
+{
+  "script": "outputs\\h3-inpaint-spike-2026-11-11\\h3_inpaint_spike.py",
+  "started_at": "2026-11-11T19:49:42+09:00",
+  "conditions": {
+    "prompt": "Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair and wears a red dress, red outfit. Steady camera.",
+    "negative_prompt": "",
+    "seed": 1234,
+    "steps": 20,
+    "lora": null,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "attention": "sage",
+    "vram16_mode": true,
+    "blocks_on_gpu": 8,
+    "block_swap_prefetch": true,
+    "deterministic": false,
+    "keep_resident": true,
+    "num_frames": 73,
+    "canvas": [
+      1280,
+      800
+    ],
+    "pads": {
+      "pad_left": 0,
+      "pad_right": 0,
+      "pad_top": 0,
+      "pad_bottom": 32
+    },
+    "feather_px": 0,
+    "audio_strength": 0.5,
+    "inject_clean": 1.0,
+    "paste_back": "しない（engine_h3.outpaint_geometry.composite を素通しに差し替え）",
+    "token_values": "max(幾何の値, Inpainting マスク) -> [22, 25, 40]",
+    "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+  },
+  "checks": {
+    "material": {
+      "passed": true,
+      "detail": {
+        "frames": 73,
+        "size": [
+          1280,
+          768
+        ],
+        "audio": {
+          "codec_name": "pcm_s16le",
+          "sample_rate": "32000",
+          "channels": 2,
+          "duration": "3.041656"
+        },
+        "audio_codec": "pcm_s16le",
+        "read_outpaint_source_s05": {
+          "source_size": [
+            1280,
+            768
+          ],
+          "frames_read": 73,
+          "source_had_audio": true,
+          "required_samples": 97333,
+          "read_samples": 97333
+        },
+        "wave_shape_s05": [
+          2,
+          97333
+        ]
+      }
+    },
+    "mask": {
+      "passed": true,
+      "detail": {
+        "source": "uploads\\h3-inpaint-development\\mask-768p.mp4",
+        "probe": {
+          "path": "uploads\\h3-inpaint-development\\mask-768p.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "avg_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": 121
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "44100",
+            "channels": 2,
+            "duration": "5.038730"
+          }
+        },
+        "frames_read": 73,
+        "rule": "赤 >= 128 を白・32x32 のブロックに 1 画素でも白なら 1・時間は 17 枚の塊ごとの和集合・潜在は塊ごとに 5 個で末尾 3 個を捨てる",
+        "chunks": [
+          [
+            0,
+            17
+          ],
+          [
+            17,
+            34
+          ],
+          [
+            34,
+            51
+          ],
+          [
+            51,
+            68
+          ],
+          [
+            68,
+            73
+          ]
+        ],
+        "token_mask_shape": [
+          22,
+          24,
+          40
+        ],
+        "padded_shape": [
+          22,
+          25,
+          40
+        ],
+        "chunk_token_counts": [
+          82,
+          93,
+          114,
+          121,
+          118
+        ],
+        "per_latent_mask_tokens": [
+          82,
+          82,
+          82,
+          82,
+          82,
+          93,
+          93,
+          93,
+          93,
+          93,
+          114,
+          114,
+          114,
+          114,
+          114,
+          121,
+          121,
+          121,
+          121,
+          121,
+          118,
+          118
+        ],
+        "pixel_white_ratio_f": {
+          "0": 0.05399,
+          "36": 0.07023,
+          "72": 0.09272
+        },
+        "saved": "outputs\\h3-inpaint-spike-2026-11-11\\token_mask_73.npy"
+      }
+    },
+    "geometry": {
+      "passed": true,
+      "detail": {
+        "canvas": [
+          1280,
+          800
+        ],
+        "source": [
+          1280,
+          768
+        ],
+        "aligned": [
+          0,
+          0,
+          1280,
+          768
+        ],
+        "aligned_size": [
+          1280,
+          768
+        ],
+        "grid": [
+          40,
+          25
+        ],
+        "fixed_tokens": 960,
+        "generated_tokens": 40,
+        "latent_offset_yx": [
+          0,
+          0
+        ],
+        "source_offset_in_aligned_yx": [
+          0,
+          0
+        ],
+        "latent_frames": 22
+      }
+    },
+    "latent_frames": {
+      "passed": true,
+      "detail": {
+        "latent_frames": 22,
+        "audio_latents": 122
+      }
+    },
+    "wrapper": {
+      "passed": true,
+      "detail": {
+        "reached": {
+          "OH.outpaint_fix_is_wrapper": true,
+          "late_import_composite_is_stub": true,
+          "restored": true
+        },
+        "fix_calls": 1,
+        "composite_calls": 1,
+        "clean_bbox_shape": [
+          1,
+          24,
+          22,
+          48,
+          80
+        ],
+        "clean_a_shape": [
+          2,
+          32,
+          121
+        ],
+        "expected_generated_per_latent_frame（マスク+下 1 行 40）": [
+          122,
+          122,
+          122,
+          122,
+          122,
+          133,
+          133,
+          133,
+          133,
+          133,
+          154,
+          154,
+          154,
+          154,
+          154,
+          161,
+          161,
+          161,
+          161,
+          161,
+          158,
+          158
+        ],
+        "fix_record": {
+          "values_shape": [
+            22,
+            25,
+            40
+          ],
+          "geometry_generated_tokens_total": 880,
+          "fixed_tokens_total": 18834,
+          "generated_tokens_total": 3166,
+          "other_values": 0,
+          "generated_per_latent_frame": [
+            122,
+            122,
+            122,
+            122,
+            122,
+            133,
+            133,
+            133,
+            133,
+            133,
+            154,
+            154,
+            154,
+            154,
+            154,
+            161,
+            161,
+            161,
+            161,
+            161,
+            158,
+            158
+          ],
+          "fixed_per_latent_frame": [
+            878,
+            878,
+            878,
+            878,
+            878,
+            867,
+            867,
+            867,
+            867,
+            867,
+            846,
+            846,
+            846,
+            846,
+            846,
+            839,
+            839,
+            839,
+            839,
+            839,
+            842,
+            842
+          ],
+          "clean_v_shape": [
+            1,
+            24,
+            22,
+            50,
+            80
+          ],
+          "audio_fix": {
+            "clean_shape": [
+              2,
+              32,
+              122
+            ],
+            "values_unique": [
+              0.5,
+              1.0
+            ],
+            "values_count_lt1": 121
+          }
+        }
+      }
+    },
+    "video_mask": {
+      "passed": true,
+      "detail": {
+        "m_shape": [
+          1,
+          1,
+          22,
+          50,
+          80
+        ],
+        "rows": 22000,
+        "zero_cells": 75336,
+        "fixed_tokens_x4": 75336
+      }
+    },
+    "check_outpaint_fixed": {
+      "passed": true,
+      "detail": "passed"
+    },
+    "validate_request": {
+      "passed": true,
+      "detail": "passed"
+    }
+  },
+  "mask": {
+    "source": "uploads\\h3-inpaint-development\\mask-768p.mp4",
+    "probe": {
+      "path": "uploads\\h3-inpaint-development\\mask-768p.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.041667",
+        "nb_read_frames": 121
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.038730"
+      }
+    },
+    "frames_read": 73,
+    "rule": "赤 >= 128 を白・32x32 のブロックに 1 画素でも白なら 1・時間は 17 枚の塊ごとの和集合・潜在は塊ごとに 5 個で末尾 3 個を捨てる",
+    "chunks": [
+      [
+        0,
+        17
+      ],
+      [
+        17,
+        34
+      ],
+      [
+        34,
+        51
+      ],
+      [
+        51,
+        68
+      ],
+      [
+        68,
+        73
+      ]
+    ],
+    "token_mask_shape": [
+      22,
+      24,
+      40
+    ],
+    "padded_shape": [
+      22,
+      25,
+      40
+    ],
+    "chunk_token_counts": [
+      82,
+      93,
+      114,
+      121,
+      118
+    ],
+    "per_latent_mask_tokens": [
+      82,
+      82,
+      82,
+      82,
+      82,
+      93,
+      93,
+      93,
+      93,
+      93,
+      114,
+      114,
+      114,
+      114,
+      114,
+      121,
+      121,
+      121,
+      121,
+      121,
+      118,
+      118
+    ],
+    "pixel_white_ratio_f": {
+      "0": 0.05399,
+      "36": 0.07023,
+      "72": 0.09272
+    },
+    "saved": "outputs\\h3-inpaint-spike-2026-11-11\\token_mask_73.npy"
+  },
+  "spike_counts_per_latent": [
+    122,
+    122,
+    122,
+    122,
+    122,
+    133,
+    133,
+    133,
+    133,
+    133,
+    154,
+    154,
+    154,
+    154,
+    154,
+    161,
+    161,
+    161,
+    161,
+    161,
+    158,
+    158
+  ],
+  "request": {
+    "prompt": "Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair and wears a red dress, red outfit. Steady camera.",
+    "seed": 1234,
+    "width": 1280,
+    "height": 800,
+    "num_frames": 73,
+    "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\output.mp4",
+    "frame_rate": 24,
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images": [],
+    "keep_resident": true,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "vram16_mode": true,
+    "loras": [],
+    "source_audio": null,
+    "references": [],
+    "negative_prompt": "",
+    "vsf_scale": 1.5,
+    "outpaint": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\_material\\src_1280x768_73f.mp4",
+      "pad_left": 0,
+      "pad_right": 0,
+      "pad_top": 0,
+      "pad_bottom": 32,
+      "audio_strength": 0.5,
+      "feather_px": 0
+    }
+  },
+  "all_passed": true,
+  "finished_at": "2026-11-11T19:49:43+09:00"
+}

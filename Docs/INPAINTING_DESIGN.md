@@ -5,8 +5,8 @@
 **生きた文書（Inpainting機能の設計正本）。** AviUtl2のタイムラインに置いた**部分フィルタ**（AviUtl2のメディアオブジェクトの一種。枠の内側だけに、後から足した効果を掛ける）の枠を白黒のマスク動画へ焼き、その白い領域の内側だけを動画生成モデルに描き替えさせる機能を記述します。**Inpainting**（インペインティング）とは、絵の一部を塗り潰して、その部分だけを作り直すことです。
 
 - 作成: 2026-09-14
-- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾＝LTX 2.3 の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、同書 §3-150（LTX 2.5 への対応の完結の記録）。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-8(C)・§4-25 は本書を参照する）
-- 状態: **完結（LTX 2.3・LTX 2.5 の両方で提供しています）。** どちらも main へ merge 済みです。第1弾の完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105 です。LTX 2.5 への対応の完結の記録は同じく [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-150、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107 で、LTX 2.5 での姿は本書 §6.3 です
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾＝LTX 2.3 の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、同書 §3-150（LTX 2.5 への対応の完結の記録）、MiniMax H3 への対応は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-8(C)・§4-25 は本書を参照する）
+- 状態: **完結（LTX 2.3・LTX 2.5 の両方で提供しています）。** どちらも main へ merge 済みです。第1弾の完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105 です。LTX 2.5 への対応の完結の記録は同じく [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-150、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107 で、LTX 2.5 での姿は本書 §6.3 です。MiniMax H3 はバックエンドが受け付けるようになり（2026-11-12）、操作パネルの Inpainting サブタブを H3 で開くのは次の弾です（本書 §6.4）
 
 **本書には現在の設計だけを現在形で書きます。** 第1部「決まったこと」は、実装を担当する人が**第1部だけを読めば着手できる**ことを目標に書いてあります。第2部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
 
@@ -227,6 +227,8 @@
 
 ## 6. API契約
 
+§6.1〜§6.3 は LTX 2.3・LTX 2.5 の契約です。MiniMax H3 での差分は §6.4 にあります。
+
 ### 6.1 入口は単発生成
 
 **`POST /generate` に `inpaint` ブロックを1つ足します。** 画角拡張（`outpaint`）の隣です。**このブロックが無い要求は、これまでと1バイトも変わりません。** クリップ連結の経路には載せません。
@@ -270,7 +272,7 @@ inpaint:
 
 ### 6.3 LTX 2.5 での扱い
 
-**LTX 2.3 でも LTX 2.5 でも使えます。** 上の契約（§6.1・§6.2）はエンジン系統に依存しません——要求の形も、ブロックの4つのフィールドも、検証の規則も、エラーの符号も同じです。LTX 2.5 側の駆動部は `engine25/inpaint25.py` で、使う制御アダプタは **LTX 2.3 が配布している In-Outpainting IC-LoRA そのもの**です（公式の手引きも公式のワークフローもこの組み合わせです。裏づけは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107.1）。
+**LTX 2.3 でも LTX 2.5 でも使えます。** 上の契約（§6.1・§6.2）は LTX の 2 つのエンジン系統の間では変わりません——要求の形も、ブロックの4つのフィールドも、検証の規則も、エラーの符号も同じです。LTX 2.5 側の駆動部は `engine25/inpaint25.py` で、使う制御アダプタは **LTX 2.3 が配布している In-Outpainting IC-LoRA そのもの**です（公式の手引きも公式のワークフローもこの組み合わせです。裏づけは [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107.1）。
 
 **LTX 2.5 側だけの違いは4点あります。どれもエンジンの内側の話で、契約には現れません。**
 
@@ -281,7 +283,15 @@ inpaint:
 
 **`metadata.json` の `inpaint` ブロックは、LTX 2.5 のほうが厚くなります。** §7.6 のキーに加えて、LTX 2.5 の画角拡張が持っている事実（音声の凍結の証明・音声の分岐・元の素材に音声があったかどうかなど）と、外側の復元の VRAM の峰 `restore_peak_vram_mb` が載ります。**`mask_proof` は両方のエンジンが同じ形で書きます。**
 
-**エンジンごとに機能を断る仕組みそのものは残してあります**（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6）。いまはどちらのエンジンも `inpaint` を断らないので、**Inpainting サブタブを灰色にするエンジンはありません。**
+**エンジンごとに機能を断る仕組みそのものは残してあります**（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6）。いまはどちらのエンジンも `inpaint` を断らないので、**Inpainting サブタブを灰色にするエンジンはありません。** MiniMax H3 もサーバーは 2026-11-12 から `inpaint` を断りません。H3 の形で送る操作パネルは次の弾で作ります（§6.4）。
+
+### 6.4 MiniMax H3 での扱い
+
+**MiniMax H3 でも、マスクは同じ白黒のマスク動画で受け取ります。** プラグイン側の作り方（§5。`timeline.renderMaskVideo`）は変えていません。違うのは受け取った後の扱いで、マスクの受け渡しに固有の違いは下の 3 点です。要求の欄ごとの契約（鍵・範囲・既定・エラーの符号。キャンバスが 32 の倍数であること、元動画を `inpaint.source_video_id` で渡すことを含む）は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec` の「系統ごとの扱い」、エンジンの中の仕組みは H3 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 が正本です。H3 の Inpainting はバックエンドまで実装済みで、操作パネルの Inpainting サブタブを H3 の形で開くのは次の弾です（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124）。
+
+- **マスクの枚数は「24fps に換算して `num_frames` 枚以上」**: LTX のように、ちょうど `num_frames` 枚である必要はありません。H3 は 24fps 固定で、マスクはプロジェクトの fps のまま送れます。足りなければ受付で断ります（`INPAINT_MASK_FRAME_MISMATCH`）。
+- **切り出しはアプリが行う**: アプリがマスクを 0 秒から、元動画を `window_start_sec` から、どちらも 24fps・ちょうど `num_frames` 枚に切り出します（`_inpaint_mask.mp4`・`_inpaint_window.mp4`）。マスクは窓に合わせて描かれているので、マスクの開始は常に 0 です。緑塗りのキャンバス（§7.2）は作りません。
+- **トークンへの落とし方**: 二値化は LTX と同じ赤 128 以上です。そのうえでエンジンが、32×32 画素のブロックに 1 画素でも白があればその升目を描き直し、時間方向は 17 枚の塊ごとの和集合で潜在へ対応させます（規則の正本は H3 設計正本 §3.7 の「マスクからトークンへ」）。マスクの外へは、マスクの縁からの距離で元の画素へなじませます（なじませ段数 1 本。LTX の「のりしろ」2 欄〔§3.8〕は使いません）。
 
 ## 7. バックエンドの仕組み
 

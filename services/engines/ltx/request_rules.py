@@ -168,6 +168,12 @@ class RequestRules:
     neither (LTX: its audio is ``freeze_source_audio``, its blend the 5 / 2
     pair the schema holds), and then the key is left out entirely; its
     presence is the operation panel's signal for the H3 form.
+    ``inpaint_audio_strength`` / ``inpaint_blend_dilation`` are the same pair
+    for a single ``POST /generate``'s ``inpaint.audio_strength`` and
+    ``inpaint.blend_dilation_stage1`` (MiniMax H3's Inpainting, 台帳 §1-124),
+    published together as ``constraints["inpaint"]`` by the same rule (LTX:
+    ``None``, its Inpainting has no audio Strength and keeps the 5 / 2 pair;
+    the key's presence is the operation panel's signal for the H3 form).
     """
 
     frames_step: int
@@ -192,6 +198,8 @@ class RequestRules:
     chain_source_audio_strength: SamplingRange | None = None
     outpaint_audio_strength: SamplingRange | None = None
     outpaint_blend_dilation: SamplingRange | None = None
+    inpaint_audio_strength: SamplingRange | None = None
+    inpaint_blend_dilation: SamplingRange | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -240,6 +248,13 @@ class RequestRules:
             published["outpaint"] = {
                 "audio_strength": self.outpaint_audio_strength.as_dict(),
                 "blend_dilation_stage1": self.outpaint_blend_dilation.as_dict(),
+            }
+        # Inpainting, by the same rule (MiniMax H3 only; LTX publishes the
+        # same block as before).
+        if self.inpaint_audio_strength is not None and self.inpaint_blend_dilation is not None:
+            published["inpaint"] = {
+                "audio_strength": self.inpaint_audio_strength.as_dict(),
+                "blend_dilation_stage1": self.inpaint_blend_dilation.as_dict(),
             }
         return published
 
@@ -424,10 +439,30 @@ def _ltx_outpaint_fields(request: "GenerateRequest") -> str | None:
     return None
 
 
+def _ltx_inpaint_fields(request: "GenerateRequest") -> str | None:
+    """MiniMax H3's two Inpainting fields are not LTX's (台帳 §1-124), refused
+    here for the reason :func:`_ltx_outpaint_fields` gives (the Inpainting
+    feature itself runs on LTX)."""
+    ipx = request.inpaint
+    if ipx is None:
+        return None
+    if ipx.source_video_id is not None:
+        return (
+            "inpaint.source_video_id is only accepted by MiniMax H3; "
+            "on this family send the source video as reference_video_id"
+        )
+    if ipx.audio_strength is not None:
+        return (
+            "inpaint.audio_strength is only accepted by MiniMax H3; "
+            "on this family Inpainting takes no audio Strength"
+        )
+    return None
+
+
 def _ltx_extra(request: "GenerateRequest") -> str | None:
     """LTX's family checks that do not fit the table: the Outpainting fields
-    first, then the distilled pipeline."""
-    return _ltx_outpaint_fields(request) or _ltx_distilled(request)
+    first, then the Inpainting fields, then the distilled pipeline."""
+    return _ltx_outpaint_fields(request) or _ltx_inpaint_fields(request) or _ltx_distilled(request)
 
 
 #: LTX's rules. 64 is the two-stage distilled pipeline's spatial multiple

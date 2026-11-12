@@ -5,6 +5,7 @@ import { bridge as appBridge, TIMELINE_MENU_INVOKED_EVENT } from "../bridge";
 import type { ResultOf } from "../bridge";
 import { resetCreateLiveCommands } from "../timeline/createLiveCommands";
 import { resetExtractObjectAudioChain } from "../timeline/extractObjectAudio";
+import { resetInpaintSlots } from "../timeline/inpaintSlots";
 import { resetProvisionalReservation } from "../timeline/provisionalReservation";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
@@ -21,7 +22,8 @@ import { PREFILL_SIZE_POLICY_STORAGE_KEY } from "./PrefillPolicyContext";
 // anywhere on screen (only `GET /models`' `constraints` and
 // `unsupported_features`):
 //  - replace the CFG placeholder with the three sampling sliders,
-//  - keep the Edit tab live with only its Retake sub-tab open (§1-123),
+//  - keep the Edit tab live with its Retake (§1-123), Outpainting (§1-125)
+//    and Inpainting (§1-124 弾 2) sub-tabs open and Alpha Gen grey,
 //  - hide Create's reference video and the keyframe strength, grey its A2V
 //    card and the Negative Prompt accordion's NAG radio, moving the method to
 //    VSF (台帳 §1-97: keyframes at any frame, so the second keyframe stays
@@ -202,31 +204,37 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
   );
 
   it(
-    "MiniMax H3 (§1-123／§1-125): the Edit tab stays live with the Retake and Outpainting sub-tabs open",
+    "MiniMax H3 (§1-123／§1-125／台帳 §1-124 弾 2): the Edit tab stays live with the Retake, Outpainting and Inpainting sub-tabs open",
     async () => {
-      // The H3 adapter no longer publishes `retake` (§1-123) nor `outpaint`
-      // (§1-125); Inpainting / Alpha Gen stay closed, so `CONTAINER_TARGETS`
-      // keeps the tab open.
+      // The H3 adapter no longer publishes `retake` (§1-123), `outpaint`
+      // (§1-125) nor `inpaint` (§1-124 弾 2); only Alpha Gen stays closed, so
+      // `CONTAINER_TARGETS` keeps the tab open.
       await renderApp();
       await switchTo("MiniMaxH3");
       await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
       expect(screen.getByRole("tab", { name: "Edit" })).not.toBeDisabled();
       const strip = document.querySelector(".edit-subtabs") as HTMLElement;
-      expect(within(strip).getByRole("tab", { name: /^Retake/, hidden: true })).not.toBeDisabled();
-      expect(within(strip).getByRole("tab", { name: /^Outpainting/, hidden: true })).not.toBeDisabled();
-      for (const name of ["Inpainting", "Alpha Gen"]) {
-        expect(within(strip).getByRole("tab", { name: new RegExp(`^${name}`), hidden: true })).toBeDisabled();
+      for (const name of ["Retake", "Outpainting", "Inpainting"]) {
+        expect(within(strip).getByRole("tab", { name: new RegExp(`^${name}`), hidden: true })).not.toBeDisabled();
       }
+      expect(within(strip).getByRole("tab", { name: /^Alpha Gen/, hidden: true })).toBeDisabled();
     },
     15_000,
   );
 
   // §1-123: with the Edit tab live, the right-click into a closed sub-tab is
   // refused by the sub-tab gate (`EDIT_INTENT_SUB_TABS`) — a note and nothing
-  // else — while the Retake right-click goes through to the H3-shaped panel.
+  // else — while the Retake, Outpainting (§1-125) and Inpainting (§1-124 弾 2)
+  // right-clicks go through to their H3-shaped panels.
   describe("§1-123 Edit right-clicks on MiniMax H3", () => {
     beforeEach(() => {
       resetProvisionalReservation();
+      // 台帳 §1-124 弾 2: the Inpainting right-click fills the module-level
+      // store, which outlives a render.
+      resetInpaintSlots();
+    });
+    afterEach(() => {
+      resetInpaintSlots();
     });
 
     function videoSelection(): ResultOf<"timeline.getSelection"> {
@@ -256,22 +264,33 @@ describe("AppShell — MiniMax H3 (第 2 弾, 2c-G1)", () => {
       };
     }
 
-    // §1-125: `outpaintVideo` left this table (H3 runs an Outpainting now; see
-    // the test below the Retake one).
-    it.each([["inpaintVideo", /Inpainting is not available on the selected base model/i]] as const)(
-      "H3: %s is refused with the sub-tab's note — no tab switch, no upload, no reservation",
-      async (action, note) => {
+    // §1-125: `outpaintVideo` left the refused table (H3 runs an Outpainting
+    // now; see the test below the Retake one). 台帳 §1-124 弾 2: `inpaintVideo`
+    // left it too, which emptied it — the right-click now goes through.
+    it(
+      "H3 (台帳 §1-124 弾 2): the inpaintVideo right-click opens Edit on the Inpainting sub-tab — the target uploads, no reservation yet",
+      async () => {
         const bridge = createMockBridge({ delayMs: 0 });
         await renderApp(bridge);
         await switchTo("MiniMaxH3");
         await waitFor(() => expect(within(singlePanel()).getByText("Steps")).toBeInTheDocument());
         const spy = vi.spyOn(bridge, "request");
         act(() => {
-          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action, selection: videoSelection() });
+          bridge.emit(TIMELINE_MENU_INVOKED_EVENT, { action: "inpaintVideo", selection: videoSelection() });
         });
-        await screen.findByText(note, undefined, { timeout: 5_000 });
-        expect(screen.getByRole("tab", { name: "Single" })).toHaveAttribute("aria-selected", "true");
-        expect(spy.mock.calls.find(([m]) => m === "backend.uploadFile")).toBeUndefined();
+        await waitFor(() => expect(screen.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true"), {
+          timeout: 5_000,
+        });
+        const strip = document.querySelector(".edit-subtabs") as HTMLElement;
+        await waitFor(() =>
+          expect(within(strip).getByRole("tab", { name: /^Inpainting/ })).toHaveAttribute("aria-selected", "true"),
+        );
+        expect(screen.queryByText(/Inpainting is not available on the selected base model/i)).not.toBeInTheDocument();
+        // The target card fills and its video goes up at once (§3-55); the seat
+        // waits for Generate (owner decision D8).
+        const inpaint = singlePanel().querySelector(".inpaint-panel") as HTMLElement;
+        await waitFor(() => expect(inpaint.textContent).toContain("a.mp4"), { timeout: 5_000 });
+        await waitFor(() => expect(spy.mock.calls.some(([m]) => m === "backend.uploadFile")).toBe(true));
         expect(spy.mock.calls.find(([m]) => m === "timeline.insertProvisional")).toBeUndefined();
       },
       20_000,

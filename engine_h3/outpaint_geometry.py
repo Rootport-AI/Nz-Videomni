@@ -110,6 +110,7 @@ def _int(value, what: str) -> int:
 
 def compute_outpaint_geometry(
     source_w, source_h, canvas_w, canvas_h, pad_left, pad_right, pad_top, pad_bottom,
+    *, require_pad: bool = True,
 ) -> OutpaintGeometry:
     """The geometry of placing a ``source_w x source_h`` video on the canvas with the four pads.
 
@@ -125,7 +126,7 @@ def compute_outpaint_geometry(
         raise ValueError(f"Outpainting: 元の映像の寸法が正ではありません（{sw}x{sh}）")
     if min(pl, pr, pt, pb) < 0:
         raise ValueError(f"Outpainting: pad は 0 以上にしてください（左 {pl}・右 {pr}・上 {pt}・下 {pb}）")
-    if pl + pr + pt + pb <= 0:
+    if require_pad and pl + pr + pt + pb <= 0:
         raise ValueError("Outpainting: pad の合計が 0 です（広げる辺がありません）")
     if cw <= 0 or ch <= 0 or cw % TOKEN_PX or ch % TOKEN_PX:
         raise ValueError(f"Outpainting: キャンバスの寸法は {TOKEN_PX} の倍数にしてください（{cw}x{ch}）")

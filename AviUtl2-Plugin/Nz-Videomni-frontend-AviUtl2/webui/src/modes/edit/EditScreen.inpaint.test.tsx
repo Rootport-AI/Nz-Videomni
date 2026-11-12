@@ -5,6 +5,7 @@ import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import { ToastProvider } from "../../shell/ToastContext";
 import { Toasts } from "../../shell/Toasts";
+import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import { en } from "../../i18n/strings";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
 import {
@@ -524,3 +525,144 @@ describe("EditScreen — Inpainting の Generate", () => {
   });
 });
 
+
+/**
+ * 台帳 §1-124 弾 2: MiniMax H3 の Inpainting の通し。配信の `constraints.inpaint`
+ * があるとき、同じ 1 押下（マスク描画 → アップロード → 席 → 送信）が H3 の形で動く:
+ * 席とジョブの紐づけは **24fps の枚数** `{numFrames: F, genFps: 24}`、窓（マスクの
+ * 長さ）はそれをプロジェクト fps へ切り上げで換算した長さ、送る body は
+ * `inpaint.source_video_id` あり・`reference_video_id` と固定 LoRA なし・fps 24・
+ * キャンバスは 32 の倍数への切り上げ。フックの規則そのものは
+ * `useInpaintForm.h3.test.tsx`、換算の境界は `inpaintWindow.test.ts` が持つ。
+ */
+describe("EditScreen — Inpainting（MiniMax H3・台帳 §1-124 弾 2）", () => {
+  // `bridge/mockBridge.ts` の H3 の配信（`constraints`）と同じ値。
+  const H3 = resolveGenerationConstraints({
+    num_frames: { step: 17, offset: 5, min: 22, max: 481 },
+    dimension_multiple: 32,
+    frame_rate: { min: 24, max: 24 },
+    sampling: {
+      num_inference_steps: { min: 1, max: 50, step: 1, default: 20 },
+      shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
+      shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
+    },
+    chain: {
+      overlap_frames: 22,
+      source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    },
+    retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    outpaint: {
+      audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
+      blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
+    },
+    inpaint: {
+      audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
+      blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
+    },
+  });
+
+  function renderH3(options: BridgeOptions = {}) {
+    const nativeBridge = createBridge(options);
+    const onJobSubmitted = vi.fn();
+    render(
+      <LanguageProvider>
+        <ToastProvider>
+          <EditScreen
+            initialIntent={intentFor("inpaint-mask")}
+            prompt="a quiet street"
+            nativeBridge={nativeBridge}
+            onJobSubmitted={onJobSubmitted}
+            engineLabel="MiniMax H3"
+            constraints={H3}
+            loraAudioHidden
+          />
+          <Toasts />
+        </ToastProvider>
+      </LanguageProvider>,
+    );
+    return { request: nativeBridge.request as ReturnType<typeof vi.fn>, onJobSubmitted };
+  }
+
+  it("マスク描画 → アップロード → 席（24fps の枚数）→ 送信 の順に動き、H3 の形の body が飛ぶ", async () => {
+    seedBothSlots();
+    const { request, onJobSubmitted } = renderH3();
+    await waitFor(() => expect(screen.getByRole("button", { name: en.edit.inpainting.generateButton })).not.toBeDisabled());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: en.edit.inpainting.generateButton }));
+    await waitFor(() => expect(onJobSubmitted).toHaveBeenCalledWith("job-1"));
+
+    const order = request.mock.calls
+      .map(([method, params]) => {
+        if (method === "backend.uploadFile") {
+          return (params as { filePath?: string }).filePath === MASK_FILE ? "uploadMask" : "uploadTarget";
+        }
+        if (method === "backend.request") {
+          const path = (params as { path: string }).path;
+          return path.endsWith("/generate") ? "generate" : null;
+        }
+        if (method === "timeline.renderMaskVideo") return "renderMask";
+        if (method === "timeline.insertProvisional") return "reserve";
+        return null;
+      })
+      .filter((name) => name !== null);
+    expect(order).toEqual(["uploadTarget", "renderMask", "uploadMask", "reserve", "generate"]);
+
+    // 部分フィルタ 100..340（241 枚 @30fps）→ 24fps で ceil(192.8) = 193 →
+    // 17n+5 へ切り上げて F = 209。窓はプロジェクト fps へ切り上げで
+    // ceil(209 × 30 / 24) = 262 枚 → 100..361。
+    const mask = request.mock.calls.find(([m]) => m === "timeline.renderMaskVideo");
+    expect(mask?.[1]).toMatchObject({ windowStart: 100, windowEnd: 361 });
+    // 席は対象動画のレイヤー×窓に置き、長さは **24fps の F**（プロジェクトの
+    // 262 枚で予約すると席が伸びる）。
+    const reserve = request.mock.calls.find(([m]) => m === "timeline.insertProvisional");
+    expect(reserve?.[1]).toMatchObject({
+      materialLayer: 3,
+      materialFrameStart: 100,
+      materialFrameEnd: 361,
+      numFrames: 209,
+      genFps: 24,
+    });
+
+    const body = generateBody(request);
+    expect(body).toMatchObject({
+      prompt: "a quiet street",
+      // 1920×1080 を 32 の倍数へ切り上げ（LTX の 128 なら 1152）。
+      width: 1920,
+      height: 1088,
+      num_frames: 209,
+      frame_rate: 24,
+      inpaint: {
+        mask_video_id: "mask-1",
+        source_video_id: "vid-1",
+        window_start_sec: 3.333,
+        audio_strength: 0.5,
+        blend_dilation_stage1: 1,
+      },
+    });
+    expect(body).not.toHaveProperty("reference_video_id");
+    expect(body?.inpaint).not.toHaveProperty("blend_dilation_stage2");
+    // 固定の `in-outpainting` LoRA は載らない（タグが無ければ LoRA は空）。
+    expect((body?.loras ?? []) as unknown[]).toEqual([]);
+    expect(body).not.toHaveProperty("outpaint");
+  });
+
+  it("422 INPAINT_VIDEO_NO_AUDIO では赤いカードの代わりに黄色の注意を出す", async () => {
+    seedBothSlots();
+    renderH3({
+      generateResponse: {
+        status: 422,
+        body: { error: { code: "INPAINT_VIDEO_NO_AUDIO", message: "no audio", detail: "…" } },
+      },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: en.edit.inpainting.generateButton })).not.toBeDisabled());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: en.edit.inpainting.generateButton }));
+
+    const note = await screen.findByText(en.edit.inpainting.noAudioStrengthWarning);
+    expect(note).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(document.querySelector(".error-code")).toBeNull();
+    expect(screen.queryByText("INPAINT_VIDEO_NO_AUDIO")).toBeNull();
+  });
+});

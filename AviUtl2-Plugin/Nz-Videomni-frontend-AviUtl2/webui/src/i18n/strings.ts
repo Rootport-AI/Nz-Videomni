@@ -450,6 +450,20 @@ export const en = {
         noteUnknown:
           "Strength of the blend margin that eases the mask into the surrounding video. Its width is derived from the target video's longer side in pixels.",
       },
+      /** §1-124 (MiniMax H3): the ONE blend-steps slider that replaces the two
+       * Stage-1/Stage-2 boxes. Label, zero label and the audio slider's copy are
+       * Outpainting's (`edit.outpainting.blurLabel` / `blurZero` /
+       * `audioStrengthLabel` / `audioStrengthHint`); only these lines are
+       * Inpainting's own. The pixel figure is `steps × canvas long side ÷ 64`,
+       * rounded — no fixed "+18" term on this engine. */
+      h3BlendNote: (px: number): string => `About ${px}px outward from the edge of the mask is blended into the original video.`,
+      h3BlendNoteUnknown:
+        "Blends the edge of the mask into the original video. The width is derived from the target video's longer side in pixels.",
+      /** §1-124: the selected base model always generates at a fixed fps; the
+       * frames field counts frames at that fps and the result is placed on the
+       * timeline converted to the project's frame rate. */
+      h3FixedFpsNote: (fps: number): string =>
+        `The selected base model always generates at ${fps} fps (the result is placed on the timeline converted to the project's frame rate).`,
 
       /** のりしろ (glue) — a DISABLED mock in this increment (owner decision
        * D4). The controls are placed now so the shape of the finished feature is
@@ -475,6 +489,12 @@ export const en = {
       maskBusy: "Object tracking or a mask render is already running.",
       /** Every other mask failure, native's own `MASK_FAILED` included. */
       maskFailed: "The mask could not be created. Please try again.",
+      /** 台帳 §1-124 弾 2: the yellow note shown instead of the red error card
+       * only when the server answers 422 `INPAINT_VIDEO_NO_AUDIO` (the source
+       * video has no audio track and Audio Strength is above 0). Outpainting's
+       * `noAudioStrengthWarning` twin. */
+      noAudioStrengthWarning:
+        "The source video has no audio track. Set “Audio Strength” to 0, or use a video with sound.",
 
       noticesHeading: "Before you press Generate",
       /** The three lines the 段0 spike turned up, in the order they matter while
@@ -2810,6 +2830,10 @@ export const ja: Strings = {
         note: (px: number): string => `※マスク周囲の約${px}pxが「のりしろ」になります。`,
         noteUnknown: "※マスクを周囲の動画と馴染ませる「のりしろ」の強度。のりしろの幅は、対象動画の長辺のピクセル数に基づいて算出される。",
       },
+      h3BlendNote: (px: number): string => `※マスクの縁から外側へ約${px}pxを、元の動画となじませます。`,
+      h3BlendNoteUnknown: "※マスクの縁を元の動画となじませる強さ。なじませる幅は、対象動画の長辺のピクセル数に基づいて算出される。",
+      h3FixedFpsNote: (fps: number): string =>
+        `選択中のベースモデルは${fps}fps固定で生成します（タイムラインにはプロジェクトのフレームレートに換算して配置します）。`,
 
       glueHeading: "時間軸の「のりしろ」の有無",
       glueYes: "あり",
@@ -2826,6 +2850,7 @@ export const ja: Strings = {
       seedGone: "部分フィルタが見つかりません。",
       maskBusy: "追尾かマスクの描画が実行中です。",
       maskFailed: "マスクを作れませんでした。もう一度お試しください。",
+      noAudioStrengthWarning: "元動画に音声トラックがありません。音声の Strength を 0 にするか、音声つきの動画を使ってください。",
 
       noticesHeading: "生成する前に",
       promptNotes: {

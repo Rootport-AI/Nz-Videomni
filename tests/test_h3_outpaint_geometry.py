@@ -275,3 +275,10 @@ def test_composite_refuses_mismatches():
         G.composite(dec[:2], src, w[:10], g)  # weights shape
     with pytest.raises(ValueError):
         G.composite(dec[:2], src, w * 2, g)  # weights out of [0, 1]
+
+
+def test_require_pad_default_still_refuses_zero_pads():
+    with pytest.raises(ValueError):
+        G.compute_outpaint_geometry(256, 256, 256, 256, 0, 0, 0, 0)
+    g = G.compute_outpaint_geometry(256, 256, 256, 256, 0, 0, 0, 0, require_pad=False)
+    assert g.fixed.all()

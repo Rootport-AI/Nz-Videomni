@@ -551,11 +551,40 @@ def inpaint_preprocess_conflict(kinds: list[str]) -> APIError:
     )
 
 
+def inpaint_source_not_found(video_id: str) -> APIError:
+    """Inpainting（MiniMax H3）: ``inpaint.source_video_id`` が保存済みの
+    アップロードを指していない。:func:`outpaint_source_not_found` と同じ形（404）。
+    LTX の経路の元動画（``reference_video_id``）の 404 とは欄が違うので、
+    クライアントが欄の名前で見分けられるよう専用のコードにする。"""
+    return APIError(
+        "INPAINT_SOURCE_NOT_FOUND", f"inpaint.source_video_id not found: {video_id}", 404
+    )
+
+
+def inpaint_video_no_audio(video_id: str, detail: str | None = None) -> APIError:
+    """Inpainting（MiniMax H3）: 要求が元動画の音声を使う
+    （``inpaint.audio_strength`` > 0。省略時は系統の既定 0.5 が適用される）
+    のに、元動画に音声の流れが無い。GPU の作業の前に 422 で断る。
+    :func:`outpaint_video_no_audio` と同じ形。利用者の直し方は Strength を 0 に
+    するか、音声のある素材に替えること。"""
+    return APIError(
+        "INPAINT_VIDEO_NO_AUDIO",
+        "audio_strength > 0 requires an audio track, but "
+        f"inpaint.source_video_id has no audio stream: {video_id}",
+        422,
+        detail=detail,
+    )
+
+
 def inpaint_source_mismatch(
-    expected: tuple[int, int], actual: tuple[int, int] | None, *, reason: str | None = None
+    expected: tuple[int, int],
+    actual: tuple[int, int] | None,
+    *,
+    reason: str | None = None,
+    multiple: int = 128,
 ) -> APIError:
-    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を
-    ``round_up_128`` で切り上げた値）でなければならない。素材の実寸から導いた値と違えば、
+    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を系統の格子で
+    切り上げた値。LTX は ``round_up_128``、MiniMax H3 は ``round_up_32``。``multiple`` で渡す）でなければならない。素材の実寸から導いた値と違えば、
     余白の位置が実際とずれたまま生成され、最後の切り落としが別の場所を切る。
     素材の辺が ``INPAINT_MIN_SOURCE_SIDE`` 未満のときも同じ符号で断る
     ——理由は違うが、どちらも「この素材ではキャンバスを作れない」という同じ
@@ -564,7 +593,10 @@ def inpaint_source_mismatch(
     ``actual`` が ``None``（素材の寸法を読めなかった）ときは、**比較そのものが
     成立していない**。この場合 ``expected`` には**要求された**キャンバス寸を
     渡すこと——「素材から導いたキャンバスは○○です」と書くと、読めなかった値
-    から導いた数字が実在するかのように読めてしまう。"""
+    から導いた数字が実在するかのように読めてしまう。
+
+    ``multiple`` はキャンバスの格子。LTX の形は 128（既定）、MiniMax H3 の形
+    （``inpaint.source_video_id``）は 32（``round_up_32``）。"""
     if actual is None:
         detail = (
             f"the source video's resolution could not be probed "
@@ -581,7 +613,7 @@ def inpaint_source_mismatch(
     return APIError(
         "INPAINT_SOURCE_MISMATCH",
         "width/height must equal the source video's resolution rounded up to a "
-        "multiple of 128",
+        f"multiple of {multiple}",
         422,
         detail=detail,
     )
@@ -619,16 +651,30 @@ def inpaint_mask_resolution_mismatch(
     )
 
 
-def inpaint_mask_frame_mismatch(available: int, required: int) -> APIError:
+def inpaint_mask_frame_mismatch(
+    available: int, required: int, *, rule: str = "exact"
+) -> APIError:
     """Inpainting: マスクの枚数は ``num_frames`` と一致していなければならない。
     足りない場合、ffmpegの既定の同期規則では**最終フレームが繰り返されて**
     枚数だけ揃ってしまい、窓の後半が「何も描き替えない」まま静かに通る
     （このffmpegの ``maskedmerge`` は ``shortest`` を受け付けない——実測。
     ``services/video_io.py`` の :func:`fill_mask_green_mp4` 参照）。多い場合も
-    余りの意味が決まらないので断る。"""
+    余りの意味が決まらないので断る。
+
+    ``rule="at_least"`` は MiniMax H3 の形（``inpaint.source_video_id``）。
+    アプリがマスクを 24fps・ちょうど ``num_frames`` 枚に切り出して先頭を使う
+    ので、24fps 換算の枚数が ``num_frames`` 以上あればよい。``available`` には
+    換算後の枚数を渡す。"""
+    if rule == "at_least":
+        message = (
+            "the mask video must have at least num_frames frames "
+            "(counted at 24 fps)"
+        )
+    else:
+        message = "the mask video must have exactly num_frames frames"
     return APIError(
         "INPAINT_MASK_FRAME_MISMATCH",
-        "the mask video must have exactly num_frames frames",
+        message,
         422,
         detail=f"mask has {available} frames, request needs {required}",
     )

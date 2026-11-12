@@ -116,6 +116,21 @@ def round_up_128(value: int) -> int:
         raise ValueError(f"round_up_128 needs a positive size, got {value}")
     return -(-int(value) // INPAINT_CANVAS_MULTIPLE) * INPAINT_CANVAS_MULTIPLE
 
+
+def round_up_32(value: int) -> int:
+    """Smallest multiple of 32 that is >= ``value``: MiniMax H3's inpaint canvas
+    (台帳 §1-124). H3 has no green canvas and no half-resolution stage 1, so its
+    grid is the video VAE's own 32px spatial stride, not
+    :data:`INPAINT_CANVAS_MULTIPLE`. The pad (0-31px on the right/bottom) is
+    mirrored by the engine and cut off again after decode.
+
+    >>> round_up_32(1280), round_up_32(1920), round_up_32(1080)
+    (1280, 1920, 1088)
+    """
+    if value <= 0:
+        raise ValueError(f"round_up_32 needs a positive size, got {value}")
+    return -(-int(value) // 32) * 32
+
 # block_swap_prefetch's own default (the real-device gate and the default-on
 # decision are recorded in Docs/VERIFICATION_LOG.md §44). Named (unlike most
 # Field defaults in this file) because it is the SINGLE SOURCE this module's
@@ -314,7 +329,7 @@ class InpaintSpec(BaseModel):
     same In-Outpainting IC-LoRA and the same two-stage green-canvas machinery
     outpainting uses — the geometry is what differs.
 
-    GEOMETRY CONTRACT. ``GenerateRequest.width`` / ``height`` are the CANVAS:
+    GEOMETRY CONTRACT (LTX). ``GenerateRequest.width`` / ``height`` are the CANVAS:
     the source video's own resolution rounded UP to a multiple of 128. The
     source sits at the canvas' top-left (0, 0) and the right/bottom bands are
     sentinel green, cut off again losslessly at the end of the job.
@@ -332,6 +347,20 @@ class InpaintSpec(BaseModel):
     the MATERIAL's timeline (an AviUtl2 ribbon trimmed off the front has already
     had its offset subtracted by the caller), and the server cuts the window out
     of the upload before anything else happens.
+
+    PER-FAMILY SHAPE (台帳 §1-124). The source video arrives by exactly one of
+    two routes, and which one is the family's rule, not this schema's — the
+    same split ``OutpaintSpec`` uses:
+
+    * LTX 2.3 / 2.5: ``GenerateRequest.reference_video_id``, a canvas that is
+      the source rounded up to a multiple of 128 (the green canvas above), and
+      exactly one control LoRA (the In-Outpainting IC-LoRA) to read it.
+      ``source_video_id`` and ``audio_strength`` are refused.
+    * MiniMax H3: ``inpaint.source_video_id``, a canvas that is the source
+      rounded up to a multiple of 32 (``round_up_32``; no green canvas, no
+      IC-LoRA), with ``blend_dilation_stage1`` as the paste-back's feather and
+      ``audio_strength`` as the source audio's Strength.
+      ``blend_dilation_stage2`` is ignored (H3 has one stage).
     """
 
     # The mask video from POST /upload/video. White (>= 128) marks the pixels to
@@ -351,6 +380,18 @@ class InpaintSpec(BaseModel):
     # so a sweep on real hardware can vary them without a code change.
     blend_dilation_stage1: int = Field(5, ge=0, le=15)
     blend_dilation_stage2: int = Field(2, ge=0, le=15)
+
+    # MiniMax H3's source video: a ``POST /upload/video`` id. Its LTX
+    # counterpart is ``GenerateRequest.reference_video_id``; exactly one of the
+    # two carries the source (GenerateRequest's validator), and each family
+    # refuses the other's. Same field, same meaning as ``OutpaintSpec``'s.
+    # min_length=1: an empty string would pass the validator as the LTX shape
+    # (falsy) yet take the H3 branch at the endpoint (``is not None``).
+    source_video_id: str | None = Field(None, min_length=1)
+    # MiniMax H3's source-audio Strength (0 = free audio, 1.0 = the original
+    # waveform). ``None`` = the family's default, written back by the family's
+    # rules; LTX refuses the field. Same as ``OutpaintSpec.audio_strength``.
+    audio_strength: float | None = Field(None, ge=0, le=1)
 
 
 class AlphaGenSpec(BaseModel):
@@ -872,10 +913,12 @@ class GenerateRequest(BaseModel):
         # the mask's resolution and frame count, the window fitting) lives at
         # the endpoint instead — see api/generate.py.
         if self.inpaint is not None:
-            if not self.reference_video_id:
+            ip = self.inpaint
+            if bool(self.reference_video_id) == bool(ip.source_video_id):
                 raise ValueError(
-                    "inpaint requires reference_video_id (the video whose masked "
-                    "region is being repainted)"
+                    "inpaint requires exactly one of reference_video_id or "
+                    "inpaint.source_video_id (the video whose masked region is "
+                    "being repainted; which one is the base model's rule)"
                 )
             if self.outpaint is not None:
                 raise ValueError(
@@ -892,12 +935,15 @@ class GenerateRequest(BaseModel):
                     "inpaint and crop_output are mutually exclusive (the result "
                     "is already cropped back to the source's own resolution)"
                 )
-            if self.width % INPAINT_CANVAS_MULTIPLE != 0:
+            # The 128 grid is the LTX shape's (green canvas, half-resolution
+            # stage 1). The H3 shape's 32 grid is checked at the endpoint
+            # against the probed source (round_up_32), not here.
+            if self.reference_video_id and self.width % INPAINT_CANVAS_MULTIPLE != 0:
                 raise ValueError(
                     f"inpaint width must be a multiple of {INPAINT_CANVAS_MULTIPLE} "
                     "(it is the canvas: the source's width rounded up)"
                 )
-            if self.height % INPAINT_CANVAS_MULTIPLE != 0:
+            if self.reference_video_id and self.height % INPAINT_CANVAS_MULTIPLE != 0:
                 raise ValueError(
                     f"inpaint height must be a multiple of {INPAINT_CANVAS_MULTIPLE} "
                     "(it is the canvas: the source's height rounded up)"

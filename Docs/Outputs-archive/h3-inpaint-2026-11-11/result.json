@@ -1,0 +1,818 @@
+{
+  "script": "outputs\\h3-inpaint-spike-2026-11-11\\h3_inpaint_spike.py",
+  "started_at": "2026-11-11T19:50:22+09:00",
+  "conditions": {
+    "prompt": "Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair and wears a red dress, red outfit. Steady camera.",
+    "negative_prompt": "",
+    "seed": 1234,
+    "steps": 20,
+    "lora": null,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "attention": "sage",
+    "vram16_mode": true,
+    "blocks_on_gpu": 8,
+    "block_swap_prefetch": true,
+    "deterministic": false,
+    "keep_resident": true,
+    "num_frames": 73,
+    "canvas": [
+      1280,
+      800
+    ],
+    "pads": {
+      "pad_left": 0,
+      "pad_right": 0,
+      "pad_top": 0,
+      "pad_bottom": 32
+    },
+    "feather_px": 0,
+    "audio_strength": 0.5,
+    "inject_clean": 1.0,
+    "paste_back": "しない（engine_h3.outpaint_geometry.composite を素通しに差し替え）",
+    "token_values": "max(幾何の値, Inpainting マスク) -> [22, 25, 40]",
+    "transformer": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+  },
+  "geometry": {
+    "canvas": [
+      1280,
+      800
+    ],
+    "source": [
+      1280,
+      768
+    ],
+    "aligned": [
+      0,
+      0,
+      1280,
+      768
+    ],
+    "aligned_size": [
+      1280,
+      768
+    ],
+    "grid": [
+      40,
+      25
+    ],
+    "fixed_tokens": 960,
+    "generated_tokens": 40,
+    "latent_offset_yx": [
+      0,
+      0
+    ],
+    "source_offset_in_aligned_yx": [
+      0,
+      0
+    ],
+    "latent_frames": 22
+  },
+  "status": "done",
+  "spike_valid": true,
+  "material": {
+    "source": "uploads\\h3-inpaint-development\\inpaint-base.mp4",
+    "source_probe": {
+      "path": "uploads\\h3-inpaint-development\\inpaint-base.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.166667",
+        "nb_read_frames": 124
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "5.167000"
+      }
+    },
+    "cut": "outputs\\h3-inpaint-spike-2026-11-11\\_material\\src_1280x768_73f.mp4",
+    "ffmpeg_cmd": [
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+      "-y",
+      "-v",
+      "error",
+      "-i",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-inpaint-development\\inpaint-base.mp4",
+      "-filter_complex",
+      "[0:v]select='between(n\\,0\\,72)',setpts=PTS-STARTPTS[v];[0:a]atrim=start=0.0:end=3.0416666666666665,asetpts=PTS-STARTPTS[a]",
+      "-map",
+      "[v]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "pcm_s16le",
+      "-c:v",
+      "libx264",
+      "-crf",
+      "12",
+      "-pix_fmt",
+      "yuv420p",
+      "-fps_mode",
+      "cfr",
+      "-r",
+      "24",
+      "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\_material\\src_1280x768_73f.mp4"
+    ],
+    "audio_codec": "pcm_s16le",
+    "pcm_error": null,
+    "start_frame": 0,
+    "end_frame": 72,
+    "probe": {
+      "path": "outputs\\h3-inpaint-spike-2026-11-11\\_material\\src_1280x768_73f.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "3.041667",
+        "nb_read_frames": 73
+      },
+      "audio": {
+        "codec_name": "pcm_s16le",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "3.041656"
+      }
+    },
+    "read_outpaint_source_s05": {
+      "source_size": [
+        1280,
+        768
+      ],
+      "frames_read": 73,
+      "source_had_audio": true,
+      "required_samples": 97333,
+      "read_samples": 97333
+    },
+    "frames_shape": [
+      73,
+      768,
+      1280,
+      3
+    ],
+    "wave_shape_s05": [
+      2,
+      97333
+    ],
+    "made_at": "2026-11-11T11:09:25+09:00"
+  },
+  "mask": {
+    "source": "uploads\\h3-inpaint-development\\mask-768p.mp4",
+    "probe": {
+      "path": "uploads\\h3-inpaint-development\\mask-768p.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "5.041667",
+        "nb_read_frames": 121
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "44100",
+        "channels": 2,
+        "duration": "5.038730"
+      }
+    },
+    "frames_read": 73,
+    "rule": "赤 >= 128 を白・32x32 のブロックに 1 画素でも白なら 1・時間は 17 枚の塊ごとの和集合・潜在は塊ごとに 5 個で末尾 3 個を捨てる",
+    "chunks": [
+      [
+        0,
+        17
+      ],
+      [
+        17,
+        34
+      ],
+      [
+        34,
+        51
+      ],
+      [
+        51,
+        68
+      ],
+      [
+        68,
+        73
+      ]
+    ],
+    "token_mask_shape": [
+      22,
+      24,
+      40
+    ],
+    "padded_shape": [
+      22,
+      25,
+      40
+    ],
+    "chunk_token_counts": [
+      82,
+      93,
+      114,
+      121,
+      118
+    ],
+    "per_latent_mask_tokens": [
+      82,
+      82,
+      82,
+      82,
+      82,
+      93,
+      93,
+      93,
+      93,
+      93,
+      114,
+      114,
+      114,
+      114,
+      114,
+      121,
+      121,
+      121,
+      121,
+      121,
+      118,
+      118
+    ],
+    "pixel_white_ratio_f": {
+      "0": 0.05399,
+      "36": 0.07023,
+      "72": 0.09272
+    },
+    "saved": "outputs\\h3-inpaint-spike-2026-11-11\\token_mask_73.npy"
+  },
+  "request": {
+    "prompt": "Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair and wears a red dress, red outfit. Steady camera.",
+    "seed": 1234,
+    "width": 1280,
+    "height": 800,
+    "num_frames": 73,
+    "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\output.mp4",
+    "frame_rate": 24,
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images": [],
+    "keep_resident": true,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "vram16_mode": true,
+    "loras": [],
+    "source_audio": null,
+    "references": [],
+    "negative_prompt": "",
+    "vsf_scale": 1.5,
+    "outpaint": {
+      "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\_material\\src_1280x768_73f.mp4",
+      "pad_left": 0,
+      "pad_right": 0,
+      "pad_top": 0,
+      "pad_bottom": 32,
+      "audio_strength": 0.5,
+      "feather_px": 0
+    }
+  },
+  "load": {
+    "build_report": {
+      "dit": {
+        "prefix": "",
+        "num_layers": 50,
+        "hidden_size": 5376,
+        "heads": 56,
+        "adaln_grid": 1025,
+        "adaln_rank": 8,
+        "int8_layers": 200,
+        "quant_specs": [
+          "int8_tensorwise/convrot=True/g256"
+        ],
+        "unknown": []
+      },
+      "text_encoder": {
+        "num_layers": 50,
+        "int8_layers": 350,
+        "has_visual": true,
+        "metadata": {
+          "minimax_h3_te": {
+            "num_hidden_layers": 50,
+            "output": "unnormalized_hidden_after_layer_50"
+          }
+        }
+      },
+      "video_vae_tensors": 562,
+      "audio_vae_tensors": 917,
+      "options": {
+        "blocks_on_gpu": 8,
+        "attention_backend": "sage",
+        "block_swap_prefetch": true,
+        "deterministic": false
+      },
+      "quant_backends": {
+        "triton": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "ascend": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        },
+        "eager": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "cuda": {
+          "available": true,
+          "disabled": false,
+          "int8_linear": true
+        },
+        "hip": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        }
+      },
+      "device": "cuda"
+    },
+    "seconds": 2.16
+  },
+  "self_check": "passed",
+  "spike_counts": {
+    "outpaint_fix_calls": 1,
+    "composite_calls": 1
+  },
+  "tokens_actual": {
+    "values_shape": [
+      22,
+      25,
+      40
+    ],
+    "geometry_generated_tokens_total": 880,
+    "fixed_tokens_total": 18834,
+    "generated_tokens_total": 3166,
+    "other_values": 0,
+    "generated_per_latent_frame": [
+      122,
+      122,
+      122,
+      122,
+      122,
+      133,
+      133,
+      133,
+      133,
+      133,
+      154,
+      154,
+      154,
+      154,
+      154,
+      161,
+      161,
+      161,
+      161,
+      161,
+      158,
+      158
+    ],
+    "fixed_per_latent_frame": [
+      878,
+      878,
+      878,
+      878,
+      878,
+      867,
+      867,
+      867,
+      867,
+      867,
+      846,
+      846,
+      846,
+      846,
+      846,
+      839,
+      839,
+      839,
+      839,
+      839,
+      842,
+      842
+    ],
+    "clean_v_shape": [
+      1,
+      24,
+      22,
+      50,
+      80
+    ],
+    "audio_fix": {
+      "clean_shape": [
+        2,
+        32,
+        122
+      ],
+      "values_unique": [
+        0.5,
+        1.0
+      ],
+      "values_count_lt1": 121
+    }
+  },
+  "wall_seconds": 312.73,
+  "engine": {
+    "seed_used": 1234,
+    "sampler": "euler",
+    "num_inference_steps": 20,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "peak_vram_mb": 6371,
+    "peak_vram_reserved_mb": 7568,
+    "rss_peak_gib": 28.48,
+    "commit_gib": 36.06,
+    "commit_peak_gib": 43.11,
+    "seconds": 312.73,
+    "num_frames": 73,
+    "frame_rate": 24,
+    "width": 1280,
+    "height": 800,
+    "size_bytes": 2028285,
+    "attention_used": "sage",
+    "block_swap_prefetch_used": "on",
+    "keep_resident_used": "on",
+    "vram16_mode_used": "on",
+    "images_used": 0,
+    "h3": {
+      "phases": {
+        "encode": {
+          "te": {
+            "num_layers_file": 50,
+            "num_layers_built": 50,
+            "int8_linears": 350,
+            "tensors_planned": 901,
+            "vision_tensors_in_file": 351,
+            "rope": {
+              "rope_type": "default",
+              "rope_theta": 5000000.0,
+              "mrope_section": [
+                24,
+                20,
+                20
+              ],
+              "mrope_interleaved": true,
+              "head_dim": 128,
+              "num_attention_heads": 64,
+              "num_key_value_heads": 8,
+              "num_hidden_layers": 50,
+              "attn_implementation": "nz_h3_blocked_math"
+            },
+            "extra_special_tokens": {
+              "ids": {
+                "<d>": 151669,
+                "</d>": 151670,
+                "<|cutoff|>": 151671,
+                "<|lyrics_start|>": 151672,
+                "<|lyrics_end|>": 151673,
+                "<|caption_start|>": 151674,
+                "<|caption_end|>": 151675
+              },
+              "added_here": false
+            },
+            "seconds": 0.35
+          },
+          "rss_after_load_gib": 1.21,
+          "commit_after_load_gib": 2.57,
+          "te_read": {
+            "read_gib": 24.17,
+            "read_seconds": 20.87,
+            "layers_read": 50,
+            "encode_seconds": 21.29,
+            "tokens": 34,
+            "vision_tokens": 0,
+            "vision_tokens_per_image": []
+          },
+          "rss_after_release_gib": 1.73,
+          "commit_after_release_gib": 3.43,
+          "text_tokens": 34,
+          "seconds": 33.77,
+          "rss_end_gib": 1.73,
+          "rss_process_peak_gib": 2.65,
+          "commit_end_gib": 3.43,
+          "commit_process_peak_gib": 5.48,
+          "peak_vram_mb": 1492,
+          "peak_vram_reserved_mb": 1510
+        },
+        "source_encode": {
+          "source_size": [
+            1280,
+            768
+          ],
+          "aligned": [
+            0,
+            0,
+            1280,
+            768
+          ],
+          "latent_shape": [
+            1,
+            24,
+            22,
+            48,
+            80
+          ],
+          "frames_read": 73,
+          "canvas": [
+            1280,
+            768
+          ],
+          "source_had_audio": true,
+          "freeze_ka": 121,
+          "encoded_samples": 97333,
+          "seconds": 50.08,
+          "rss_end_gib": 2.15,
+          "rss_process_peak_gib": 2.65,
+          "commit_end_gib": 3.99,
+          "commit_process_peak_gib": 9.01,
+          "peak_vram_mb": 4331,
+          "peak_vram_reserved_mb": 5672
+        },
+        "denoise": {
+          "dit": {
+            "int8_linears": 200,
+            "loaded_tensors": 732,
+            "loaded_gib": 19.53,
+            "read_seconds": 11.38
+          },
+          "dit_source": "file",
+          "rss_after_load_gib": 21.51,
+          "commit_after_load_gib": 27.19,
+          "rss_after_place_gib": 21.87,
+          "commit_after_place_gib": 31.16,
+          "sequence": {
+            "text": 34,
+            "cond": 0,
+            "audio": 244,
+            "video": 22000,
+            "total": 22278,
+            "latent_frames": 22,
+            "audio_latents": 122,
+            "grid": [
+              25,
+              40
+            ]
+          },
+          "m_per_step": [
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "block_swap_prefetch_used": "on",
+          "mask": {
+            "audio": {
+              "rows": 244,
+              "min": 0.5,
+              "max": 1.0
+            },
+            "video": {
+              "rows": 22000,
+              "min": 0.0,
+              "max": 1.0,
+              "inject_clean": 1.0
+            }
+          },
+          "vram16": {
+            "cap_fraction": 0.8563,
+            "cap_mib": 14023,
+            "blocks_on_gpu": 4,
+            "head_group": 8,
+            "row_chunk": 4096,
+            "qkv_quant_shared": true,
+            "text_modules": "cpu",
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "inactive_split_peak_mib": 499
+          },
+          "dit_parked_tensors": 13,
+          "rss_after_release_gib": 22.65,
+          "commit_after_release_gib": 28.69,
+          "seconds": 202.61,
+          "rss_end_gib": 22.65,
+          "rss_process_peak_gib": 22.66,
+          "commit_end_gib": 28.69,
+          "commit_process_peak_gib": 32.95,
+          "peak_vram_mb": 3777,
+          "peak_vram_reserved_mb": 4768
+        },
+        "decode": {
+          "vae_source": "file",
+          "audio_samples": 97333,
+          "audio_samples_decoded": 97600,
+          "frames": 73,
+          "seconds": 24.19,
+          "rss_end_gib": 27.73,
+          "rss_process_peak_gib": 28.48,
+          "commit_end_gib": 36.32,
+          "commit_process_peak_gib": 43.11,
+          "peak_vram_mb": 6371,
+          "peak_vram_reserved_mb": 7568
+        }
+      },
+      "quant_backends": {
+        "triton": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "ascend": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        },
+        "eager": {
+          "available": true,
+          "disabled": true,
+          "int8_linear": true
+        },
+        "cuda": {
+          "available": true,
+          "disabled": false,
+          "int8_linear": true
+        },
+        "hip": {
+          "available": false,
+          "disabled": false,
+          "int8_linear": false
+        }
+      },
+      "outpaint": {
+        "canvas": [
+          1280,
+          800
+        ],
+        "pads": {
+          "left": 0,
+          "right": 0,
+          "top": 0,
+          "bottom": 32
+        },
+        "source": [
+          1280,
+          768
+        ],
+        "aligned": [
+          0,
+          0,
+          1280,
+          768
+        ],
+        "fixed_tokens": 960,
+        "generated_tokens": 40,
+        "feather_px": 0,
+        "audio_strength": 0.5,
+        "source_had_audio": true,
+        "audio_latents_encoded": 121,
+        "audio_output": "decoded",
+        "inject_clean": 1.0
+      }
+    }
+  },
+  "tokens_engine_record": {
+    "fixed_tokens": 960,
+    "generated_tokens": 40,
+    "inject_clean": 1.0
+  },
+  "seconds": 312.73,
+  "peak_vram_mb": 6371,
+  "peak_vram_reserved_mb": 7568,
+  "finished_at": "2026-11-11T19:55:38+09:00",
+  "post": {
+    "made_at": "2026-11-11T19:55:42+09:00",
+    "crop": {
+      "path": "outputs\\h3-inpaint-spike-2026-11-11\\output_crop768.mp4",
+      "ffmpeg_cmd": [
+        "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\tools\\ffmpeg\\bin\\ffmpeg.exe",
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\output.mp4",
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        "-vf",
+        "crop=1280:768:0:0",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "12",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "copy",
+        "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-inpaint-spike-2026-11-11\\output_crop768.mp4"
+      ],
+      "probe": {
+        "path": "outputs\\h3-inpaint-spike-2026-11-11\\output_crop768.mp4",
+        "video": {
+          "codec_name": "h264",
+          "width": 1280,
+          "height": 768,
+          "pix_fmt": "yuv420p",
+          "r_frame_rate": "24/1",
+          "avg_frame_rate": "24/1",
+          "duration": "3.041667",
+          "nb_read_frames": 73
+        },
+        "audio": {
+          "codec_name": "aac",
+          "sample_rate": "32000",
+          "channels": 2,
+          "duration": "3.042000"
+        }
+      }
+    },
+    "output_probe": {
+      "path": "outputs\\h3-inpaint-spike-2026-11-11\\output.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 800,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "avg_frame_rate": "24/1",
+        "duration": "3.041667",
+        "nb_read_frames": 73
+      },
+      "audio": {
+        "codec_name": "aac",
+        "sample_rate": "32000",
+        "channels": 2,
+        "duration": "3.042000"
+      }
+    },
+    "metrics": {
+      "note": "上 768 行・元動画（_material の切り出し）との平均絶対差。内＝その塊のトークンマスクの画素、外＝マスクを 1 トークン（8 近傍）膨らませた範囲の外",
+      "frames": {
+        "0": {
+          "inside_mad": 35.584,
+          "outside_mad": 3.26,
+          "inside_px": 83968,
+          "outside_px": 849920
+        },
+        "36": {
+          "inside_mad": 37.143,
+          "outside_mad": 3.491,
+          "inside_px": 116736,
+          "outside_px": 817152
+        },
+        "72": {
+          "inside_mad": 38.446,
+          "outside_mad": 3.773,
+          "inside_px": 120832,
+          "outside_px": 808960
+        },
+        "all": {
+          "inside_mad": 34.895,
+          "outside_mad": 3.41
+        }
+      }
+    },
+    "sheet": "outputs\\h3-inpaint-spike-2026-11-11\\sheet.png",
+    "token_overlay": "outputs\\h3-inpaint-spike-2026-11-11\\token_overlay_f036.png"
+  }
+}

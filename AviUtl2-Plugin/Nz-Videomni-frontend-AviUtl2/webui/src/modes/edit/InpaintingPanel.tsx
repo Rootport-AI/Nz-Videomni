@@ -2,7 +2,8 @@ import { useStrings } from "../../i18n/LanguageContext";
 import { useJobsContext } from "../../jobs/JobsContext";
 import { latestJobSeed } from "../../jobs/seedUtils";
 import { VIDEO_PLACEHOLDER_DATA_URL } from "../../shell/thumbnailPlaceholders";
-import { DurationField } from "../single/CommonGenerationFields";
+import { DurationField, SamplingFields } from "../single/CommonGenerationFields";
+import { FloatSliderField } from "../single/FloatSliderField";
 import { formatDurationHint } from "../single/paramUtils";
 import { BLEND_DILATION_MAX, BLEND_DILATION_MIN, featherWidthPx } from "./outpaintGeometry";
 import type { UseInpaintFormResult } from "./useInpaintForm";
@@ -44,6 +45,9 @@ export interface InpaintingPanelProps {
 export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
   const strings = useStrings();
   const t = strings.edit.inpainting;
+  /** 台帳 §1-124: H3 の欄（なじませ段数・音声の Strength）は Outpainting の H3 と同じ
+   * 部品・同じ文言を使う。 */
+  const tOut = strings.edit.outpainting;
   const slots = form.slots;
   const busy = disabled || form.maskPhase !== "idle";
 
@@ -57,8 +61,14 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
    * `OutpaintingPanel` と同じく「いまのキャンバス」から毎回導く（保存しない）。
    * 定数項 18px と「Stage-2 で決まる」は実測の正本 `VERIFICATION_LOG.md`
    * §105.3 のとおり。 */
-  const featherPx =
-    featherWidthPx(form.blendStage2, Math.max(form.canvasWidth, form.canvasHeight)) + 18;
+  //
+  // 台帳 §1-124: H3 は Stage-1（なじませ段数）1 本で、`段数 × 長辺 ÷ 64` を四捨五入した
+  // 値そのもの（アダプタの `_feather_px` と同じ式。定数項 18px は付かない）。
+  const canvasLongSide = Math.max(form.canvasWidth, form.canvasHeight);
+  const featherPx = form.h3
+    ? featherWidthPx(form.blendStage1, canvasLongSide)
+    : featherWidthPx(form.blendStage2, canvasLongSide) + 18;
+  const strengthRange = form.audioStrengthRange;
 
   return (
     <section className="edit-panel inpaint-panel">
@@ -151,7 +161,11 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
         hint={formatDurationHint(form.numFrames, form.frameRate)}
         {...(form.comfortFrames !== null ? { spillThresholdFrames: form.comfortFrames } : {})}
         tickId={INPAINT_TICK_ID}
+        step={form.frameGrid.step}
       />
+      {/* 台帳 §1-124: 固定 fps のエンジン（H3 の 24）では、フレーム数欄がその fps での
+          枚数であることと、タイムラインへは換算して置くことを常設で言う。 */}
+      {form.fixedFrameRate !== null && <p className="field-hint">{t.h3FixedFpsNote(form.fixedFrameRate)}</p>}
       {form.isOverComfortBudget && (
         <p className="warning-banner warning-banner-mild">{t.comfortWarning(form.comfortTokens)}</p>
       )}
@@ -168,40 +182,89 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
 
       <SeedField seed={form.seed} disabled={busy} onChange={form.setSeed} />
 
-      {/* マスク周囲ののりしろ（ブレンドの膨張段数）。見た目は下のモックと同じ
-          `outpaint-align-group` だが、こちらは**有効**で、値はそのまま
-          `inpaint.blend_dilation_stage1/2` として送られる。注記の px は
-          Stage-2 から導く —— Inpainting の帯幅を決めているのは仕上げ段の膨張で
-          （`VERIFICATION_LOG.md` §105.3）、画角拡張（stage 1 が決める）とは
-          事情が違う。18px は同節の実測にある定数項。 */}
-      <fieldset className="outpaint-align-group">
-        <legend className="field-label">{t.blend.heading}</legend>
-        <label className="field field-inline">
-          <span className="field-label">{t.blend.stage1Label}</span>
-          <input
-            type="number"
-            min={BLEND_DILATION_MIN}
-            max={BLEND_DILATION_MAX}
-            step={1}
-            value={form.blendStage1}
-            disabled={busy}
-            onChange={(e) => form.setBlendStage1(Number(e.target.value))}
-          />
-        </label>
-        <label className="field field-inline">
-          <span className="field-label">{t.blend.stage2Label}</span>
-          <input
-            type="number"
-            min={BLEND_DILATION_MIN}
-            max={BLEND_DILATION_MAX}
-            step={1}
-            value={form.blendStage2}
-            disabled={busy}
-            onChange={(e) => form.setBlendStage2(Number(e.target.value))}
-          />
-        </label>
-        <p className="field-hint">{form.canvasKnown ? t.blend.note(featherPx) : t.blend.noteUnknown}</p>
-      </fieldset>
+      {/* 台帳 §1-124: サンプリングの 3 項目（配信があるときだけ＝H3。Outpainting の H3 と
+          同じ部品）。 */}
+      {form.sampling && form.samplingConstraints && (
+        <SamplingFields
+          constraints={form.samplingConstraints}
+          values={form.sampling}
+          disabled={busy}
+          onChange={form.setSamplingValue}
+        />
+      )}
+
+      {form.h3 ? (
+        <>
+          {/* 台帳 §1-124: H3 は Stage-1／2 の 2 欄を持たず、Outpainting の H3 と同じ
+              「マスクブラー」（なじませ段数）のスライダー 1 本。範囲は配信値。 */}
+          <label className="field">
+            <span className="field-label">{tOut.blurLabel}</span>
+            <input
+              type="range"
+              aria-label={tOut.blurLabel}
+              min={form.blendRange.min}
+              max={form.blendRange.max}
+              step={form.blendRange.step}
+              value={form.blendStage1}
+              disabled={busy}
+              onChange={(e) => form.setBlendStage1(Number(e.target.value))}
+            />
+            <span className="field-hint">{form.blendStage1 === 0 ? tOut.blurZero : featherPx}</span>
+            <p className="field-hint">{form.canvasKnown ? t.h3BlendNote(featherPx) : t.h3BlendNoteUnknown}</p>
+          </label>
+          {/* 元動画の音声の Strength（Outpainting の H3 と同じ部品・同じ並び）。 */}
+          {strengthRange !== null && (
+            <div className="field">
+              <FloatSliderField
+                inline
+                label={tOut.audioStrengthLabel}
+                value={form.audioStrength ?? strengthRange.default}
+                min={strengthRange.min}
+                max={strengthRange.max}
+                step={strengthRange.step}
+                disabled={busy}
+                onChange={form.setAudioStrength}
+              />
+              <p className="field-hint">{tOut.audioStrengthHint}</p>
+            </div>
+          )}
+        </>
+      ) : (
+        /* マスク周囲ののりしろ（ブレンドの膨張段数）。見た目は下のモックと同じ
+           `outpaint-align-group` だが、こちらは**有効**で、値はそのまま
+           `inpaint.blend_dilation_stage1/2` として送られる。注記の px は
+           Stage-2 から導く —— Inpainting の帯幅を決めているのは仕上げ段の膨張で
+           （`VERIFICATION_LOG.md` §105.3）、画角拡張（stage 1 が決める）とは
+           事情が違う。18px は同節の実測にある定数項。 */
+        <fieldset className="outpaint-align-group">
+          <legend className="field-label">{t.blend.heading}</legend>
+          <label className="field field-inline">
+            <span className="field-label">{t.blend.stage1Label}</span>
+            <input
+              type="number"
+              min={BLEND_DILATION_MIN}
+              max={BLEND_DILATION_MAX}
+              step={1}
+              value={form.blendStage1}
+              disabled={busy}
+              onChange={(e) => form.setBlendStage1(Number(e.target.value))}
+            />
+          </label>
+          <label className="field field-inline">
+            <span className="field-label">{t.blend.stage2Label}</span>
+            <input
+              type="number"
+              min={BLEND_DILATION_MIN}
+              max={BLEND_DILATION_MAX}
+              step={1}
+              value={form.blendStage2}
+              disabled={busy}
+              onChange={(e) => form.setBlendStage2(Number(e.target.value))}
+            />
+          </label>
+          <p className="field-hint">{form.canvasKnown ? t.blend.note(featherPx) : t.blend.noteUnknown}</p>
+        </fieldset>
+      )}
 
       {/* のりしろ（モック・D4）。`<fieldset disabled>` なので中の入力は**全部**
           押せない —— 個々の `disabled` を並べるより、「この塊はまだ動かない」が

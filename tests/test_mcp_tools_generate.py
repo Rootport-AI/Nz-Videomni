@@ -2093,6 +2093,213 @@ def test_submit_generate_input_schema_exposes_outpaint_arguments():
     assert "outpaint_blend_dilation_stage2" not in props
 
 
+# -------------- inpaint (MiniMax H3 only; Docs/PENDING_TASKS.md §1-124)
+#
+# Like outpaint, the shape is picked by whether the ACTIVE base model publishes
+# ``constraints.inpaint`` (H3 does, LTX does not). Without the key the tool
+# refuses before the POST (LTX inpainting is not offered over MCP).
+
+_H3_INPAINT_MODELS_LISTING = {
+    "active_base_model": "MiniMaxH3",
+    "base_models": [
+        {"id": "LTX23", "active": False, "constraints": {"dimension_multiple": 64}},
+        {
+            "id": "MiniMaxH3",
+            "active": True,
+            "constraints": {
+                "dimension_multiple": 32,
+                "outpaint": {
+                    "audio_strength": {"min": 0, "max": 1, "step": 0.05, "default": 0.5},
+                    "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
+                },
+                "inpaint": {
+                    "audio_strength": {"min": 0, "max": 1, "step": 0.05, "default": 0.5},
+                    "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
+                },
+            },
+        },
+    ],
+}
+
+
+def test_submit_generate_inpaint_h3_moves_the_source_into_inpaint_and_defaults_window_start():
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, _H3_INPAINT_MODELS_LISTING)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=736,
+            num_frames=73,
+            frame_rate=24.0,
+            reference_video_id="v-src",
+            inpaint_mask_video_id="v-mask",
+        )
+    )
+
+    body = captured["body"]
+    assert captured["models_calls"] == 1
+    assert "reference_video_id" not in body
+    assert "outpaint" not in body
+    assert "loras" not in body
+    assert body["width"] == 1280 and body["height"] == 736 and body["num_frames"] == 73
+    # Helper keys absent (the server writes back the family defaults);
+    # window_start_sec is always sent, 0.0 when omitted.
+    assert body["inpaint"] == {
+        "mask_video_id": "v-mask",
+        "source_video_id": "v-src",
+        "window_start_sec": 0.0,
+    }
+
+
+def test_submit_generate_inpaint_h3_sends_given_helper_keys():
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, _H3_INPAINT_MODELS_LISTING)))
+
+    anyio.run(
+        functools.partial(
+            generate.submit_generate,
+            "a prompt",
+            width=1280,
+            height=736,
+            num_frames=73,
+            loras=[LoraArg(name="turbo", strength=1.0)],
+            reference_video_id="v-src",
+            inpaint_mask_video_id="v-mask",
+            inpaint_audio_strength=0.0,
+            inpaint_blend_dilation_stage1=0,
+            inpaint_window_start_sec=1.5,
+        )
+    )
+
+    body = captured["body"]
+    assert "reference_video_id" not in body
+    assert body["loras"] == [{"name": "turbo", "strength": 1.0}]
+    assert body["inpaint"] == {
+        "mask_video_id": "v-mask",
+        "source_video_id": "v-src",
+        "window_start_sec": 1.5,
+        "audio_strength": 0.0,
+        "blend_dilation_stage1": 0,
+    }
+    assert "blend_dilation_stage2" not in body["inpaint"]
+
+
+@pytest.mark.parametrize(
+    "models",
+    [
+        _LTX_MODELS_LISTING,  # LTX active (no constraints.inpaint)
+        _H3_MODELS_LISTING,  # an H3 listing without constraints.inpaint
+        None,  # GET /models answers an error envelope
+    ],
+)
+def test_submit_generate_inpaint_without_constraints_inpaint_raises_before_post(models):
+    captured: dict = {}
+    set_client(_client_for_handler(_outpaint_handler(captured, models)))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_generate,
+                "a prompt",
+                width=1280,
+                height=768,
+                reference_video_id="v-src",
+                inpaint_mask_video_id="v-mask",
+            )
+        )
+
+    assert "INPAINT_UNSUPPORTED" in str(exc_info.value)
+    assert "LTX の Inpainting は MCP では未対応" in str(exc_info.value)
+    assert captured["models_calls"] == 1
+    assert "body" not in captured
+
+
+def _no_http_handler(request: httpx.Request) -> httpx.Response:
+    raise AssertionError(f"no HTTP call expected, got {request.method} {request.url.path}")
+
+
+def test_submit_generate_inpaint_with_outpaint_raises_before_any_http_call():
+    set_client(_client_for_handler(_no_http_handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_generate,
+                "a prompt",
+                width=1280,
+                height=736,
+                reference_video_id="v-src",
+                inpaint_mask_video_id="v-mask",
+                outpaint_pad_left=128,
+            )
+        )
+
+    assert "INPAINT_OUTPAINT_CONFLICT" in str(exc_info.value)
+
+
+def test_submit_generate_inpaint_without_source_raises_before_any_http_call():
+    set_client(_client_for_handler(_no_http_handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_generate,
+                "a prompt",
+                width=1280,
+                height=736,
+                inpaint_mask_video_id="v-mask",
+            )
+        )
+
+    assert "INPAINT_SOURCE_REQUIRED" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"inpaint_audio_strength": 0.5},
+        {"inpaint_blend_dilation_stage1": 2},
+        {"inpaint_window_start_sec": 0.0},
+    ],
+)
+def test_submit_generate_inpaint_helper_args_without_mask_raise_before_any_http_call(kwargs):
+    set_client(_client_for_handler(_no_http_handler))
+
+    with pytest.raises(ToolError) as exc_info:
+        anyio.run(
+            functools.partial(
+                generate.submit_generate, "a prompt", reference_video_id="v-src", **kwargs
+            )
+        )
+
+    assert "INPAINT_MASK_REQUIRED" in str(exc_info.value)
+
+
+def test_submit_generate_input_schema_exposes_inpaint_arguments():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_generate")
+    props = tool.inputSchema["properties"]
+    for name in (
+        "inpaint_mask_video_id",
+        "inpaint_audio_strength",
+        "inpaint_blend_dilation_stage1",
+        "inpaint_window_start_sec",
+    ):
+        assert name in props, f"{name} missing from submit_generate schema"
+        assert props[name].get("default") is None, name
+        assert name not in tool.inputSchema.get("required", []), name
+    # No stage 2 on H3, and the source video stays on reference_video_id.
+    assert "inpaint_blend_dilation_stage2" not in props
+    assert "inpaint_source_video_id" not in props
+
+
 # ---- upload_video max_frames (Docs/PENDING_TASKS_CLOSED.md §3-122 companion)
 
 

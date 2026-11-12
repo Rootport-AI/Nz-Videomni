@@ -95,6 +95,12 @@ export interface GenerationConstraints {
    * the frames on {@link frameGrid}, sampling sliders (no featureScope entry,
    * like {@link retake}). */
   outpaint: { audioStrength: SamplingParamConstraint; blendDilationStage1: SamplingParamConstraint } | null;
+  /** §1-124: the Inpainting source-audio Strength slider and the feather
+   * (stage 1) slider (range, step, default), flattened from
+   * `constraints.inpaint`, or `null` when the server publishes no `inpaint`
+   * block (LTX, fallback). Its presence alone switches the Inpainting form
+   * into that engine's shape (no featureScope entry, like {@link outpaint}). */
+  inpaint: { audioStrength: SamplingParamConstraint; blendDilationStage1: SamplingParamConstraint } | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -113,6 +119,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   chain: null,
   retake: null,
   outpaint: null,
+  inpaint: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -158,6 +165,12 @@ export function resolveGenerationConstraints(
       ? {
           audioStrength: raw.outpaint.audio_strength,
           blendDilationStage1: raw.outpaint.blend_dilation_stage1,
+        }
+      : null,
+    inpaint: raw.inpaint
+      ? {
+          audioStrength: raw.inpaint.audio_strength,
+          blendDilationStage1: raw.inpaint.blend_dilation_stage1,
         }
       : null,
   };

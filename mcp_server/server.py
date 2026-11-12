@@ -102,8 +102,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   nag_enabled は submit_chain でも使えます）。keep_resident_embeddings は
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
   撮り直し（Retake）は submit_chain の引数（retake_* の 6 引数）、画角拡張
-  （Outpainting）は submit_generate の引数（outpaint_* の 6 引数）で、
-  どちらも LTX 2.3 / LTX 2.5 で使えます（撮り直しは H3 でも使えます）。
+  （Outpainting）は submit_generate の引数（outpaint_* の 7 引数）で、
+  どちらも LTX 2.3 / LTX 2.5 / MiniMax H3 で使えます。
   下の専用の節を読んでください。
   ほかに知っておくとよい引数とツール（詳細は各ツールの説明）:
   submit_chain の stage2_window は Stage-2 の窓の名前です
@@ -115,8 +115,11 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   plan_a2v_batch はフォルダの wav を走査して1行ずつの計画を返すだけで、
   アップロードとジョブ投入は行いません（返ってきた手順に沿って
   upload_audio と submit_chain を呼んでください）。
-  Inpainting は API（GenerateRequest.inpaint）にはありますが、MCP の
-  ツールにはありません。
+  Inpainting（部分の描き直し）は MCP では MiniMax H3 のみ対応です
+  （submit_generate の inpaint_* の 4 引数。元動画の ID は reference_video_id、
+  マスクの ID は inpaint_mask_video_id。width/height は元動画の実寸を 32 の
+  倍数に切り上げた値、num_frames は 17n+5）。LTX の Inpainting は API
+  （GenerateRequest.inpaint）と操作パネルにはありますが、MCP では未対応です。
   Alpha Gen（動画から白黒のマット動画を作る）は submit_alpha_gen です
   （LTX 2.5 専用。下の専用の節を読んでください）。
 

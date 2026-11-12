@@ -6420,3 +6420,72 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **モック（`bridge/mockBridge.ts`）**: H3 の `constraints` に `outpaint` を足し、`unsupported_features` から `outpaint` を外しました。
 - 門の結果はバックエンドの記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §205 にあります（GPU の門 G5・G6 と実機の門 G7 は未実施。§205.18）。
 - （2026-11-10 追記）GPU の門 G5・G6 は合格し（バックエンド記録簿 §205.19・§205.20）、オーナーの実機の門 G7 も 6 項目すべて合格しました（同 §205.25）。バックエンド台帳の 1-125 は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) へクローズしました。
+
+## 169. MiniMax H3 の Inpainting を開く（台帳 `PENDING_TASKS_CLOSED.md` 1-124 弾 2） — Edit タブの Inpainting が H3 でも開く・分岐は `constraints.inpaint` の有無 1 か所・元動画は `inpaint.source_video_id`・キャンバスは 32 の倍数への切り上げ・窓は 24fps の枚数を切り上げでプロジェクトのフレーム数へ・席は `{F, 24}`・なじませ 1 本と音声の Strength（2026-11-12）
+
+### 169.1 結論
+
+- **MiniMax H3 でも、Edit タブの Inpainting のサブタブが使えるようになりました。** サーバーの `unsupported_features` から `inpaint` が消えたので、サブタブと右クリックの「この動画を Inpainting する」の門は、表 `FEATURE_UI` と `EDIT_INTENT_SUB_TABS`（§163.5）を変えずに開きます。H3 で閉じているサブタブは Alpha Gen だけになりました。
+- **画面と送信本文を H3 の形に切り替える分岐は、`constraints.inpaint` の有無の 1 か所だけです**（Outpainting の `constraints.outpaint` と同じ規約。エンジン名では分けない）。
+- **実機の門は 2026-11-12 に全項目合格しました**（169.8）。
+- **LTX の Inpainting の見た目と送信本文は変わりません**。BRIDGE_CONTRACT と native のコードは変えていません（マスクを描かせる経路 §4.24 はそのまま使います）。
+- 欄ごとの契約（鍵・範囲・既定・系統ごとの扱い）の正本はバックエンド仕様書 [`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`（「系統ごとの扱い」の表）、エンジンの内部の仕組みはバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §3.7 と裁定 100、マスクの受け渡しに固有の差分はバックエンド [`INPAINTING_DESIGN.md`](../../../Docs/INPAINTING_DESIGN.md) §6.4 です。操作パネルが実際に送る形は [`API_REFERENCE.md`](API_REFERENCE.md) §5.1 の `InpaintSpec` にあります。ここには操作パネル側の判断だけを書きます。
+
+### 169.2 経緯
+
+- バックエンドの弾 1 で、H3 が `POST /generate` の `inpaint` を受けるようになりました。元動画は `inpaint.source_video_id` で受け、キャンバスは元の実寸を 32 の倍数へ切り上げた値、フレーム数は 17n+5、fps は 24 固定です。マスクの外は、復号の後に元の画素へ戻します（元動画への合成＝マスクの外へ元の画素を戻す処理）。スパイクの記録はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §207 です。
+- 同時に、`GET /models` の H3 の `constraints` に `inpaint {audio_strength, blend_dilation_stage1}`（どちらも範囲・刻み・既定）が加わり、`unsupported_features` から `inpaint` が外れました。弾 2 は、この配信を読んで操作パネルの Inpainting を H3 の形で開く作業です。
+
+### 169.3 設計の判断
+
+- **分岐は `constraints.inpaint` の有無の 1 か所**: `useInpaintForm.ts` の `const h3 = inpaintRules !== null` だけで分け、パネル（`InpaintingPanel.tsx`）はフックが返す `form.h3` と解決済みの値を読むだけです（手本は `useOutpaintForm.ts`）。そのため、`EditScreen.tsx` から Retake・Outpainting と同じ 2 つ（`constraints` と `loraAudioHidden`）をフックへ渡すようにしました。
+- **窓の長さは、プロジェクトのフレーム数へ切り上げ（`ceil`）で換算する**: フレーム数欄の値 F は 24fps での枚数です。タイムライン上の窓（マスクを描かせる範囲）の長さは `projectFramesFor(F, projectFps) = ceil(F × projectFps ÷ 24)` で、30fps で F＝73 なら 92 フレームです。Retake の `toProjectRange` は `round` ですが、写しませんでした。`round` だと 91 フレームになり、24fps に直すと 72.8 枚で F を割るので、アプリがマスクを 24fps・ちょうど F 枚に切り出すときに足りなくなるためです（サーバーの条件は「24fps に換算して F 枚以上」）。projectFps はスナップ前の rate/scale を使います。窓の判定（`mapping.frameCount` との比較）の相手も、この換算した長さにしました。F のままだと、24fps 以外のプロジェクトで常に「窓がリボンに収まらない」理由が出てしまうためです（計画のレビューの重大 1 件。バックエンド記録簿 §208.4）。
+- **席の予約とジョブの紐づけは `{numFrames: F, genFps: 24}`**: 仮オブジェクトの長さは native が `numFrames` と `genFps` からプロジェクトのフレーム数へ四捨五入で直します（30fps で F＝73 なら 91 フレーム。出来上がる動画の尺と同じ）。プロジェクトのフレーム数（換算した窓の長さ）を `numFrames` に入れると、もう一度換算されて席が伸びます。Retake の `placement` と同じ形です。LTX は窓の長さ＝フレーム数欄の値なので、従来と同じ値になります。
+- **フレーム数欄の初期値**: 部分フィルタの長さを 24fps に換算（切り上げ）→ 17n+5 へ切り上げ → 22〜345 に収めます（`defaultInpaintFramesOnGrid`）。手打ちの確定も `snapNumFrames(…, frameGrid)` で 17n+5 に乗せます。
+- **キャンバスは 32 の倍数への切り上げ**（`roundUpTo32`。1920×1080 → 1920×1088）。寸法がまだ分からない 0 は 0 のまま返し、既存の「寸法が不明」の理由（`mediaInfoUnknown`）で Generate を止めます。`roundUpTo128` と同じ扱いで、門を新しく作りません。
+- **欄はなじませ段数 1 本・音声の Strength・サンプリングの 3 項目**: Outpainting の H3 と同じ部品（「マスクブラー」のスライダー・`FloatSliderField`・`SamplingFields`）で、範囲・刻み・既定は配信値です（なじませ 1・音声 0.5）。LTX の Stage-1／Stage-2 の 2 欄は H3 では出しません。サンプリング欄を外す案はありましたが、Outpainting の H3 とそろえて例外を増やさないため残しました。ベースモデルが切り替わったときや配信が後から届いたときは、Outpainting と同じ形（`appliedRulesRef`。初回は飛ばす）で既定へ戻し、フレーム数を引き直します。
+- **なじませ幅の注意文は `round(段数 × キャンバスの長辺 ÷ 64)` で、+18 を付けない**: LTX の注意文の「+18px」は、LTX の 2 段のブレンドで実測した定数項です（[`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §105.3）。H3 の合成はその仕組みを通らず、マスクの縁からの距離で重みを作り、その幅はサーバー（アダプタの `_feather_px`）が `floor(段数 × 長辺 ÷ 64 + 0.5)` で決めます。注意文はこの式と同じ値なので、+18 を足すと送った値と違う数字を見せることになります。既定の 1 段なら、1920×1088 で約 30px、1280×768 で約 20px です。
+- **`window_start_sec` は LTX と同じく送る**: 元動画はリボンの範囲でトリムして上げるので、部分フィルタがクリップの頭に無い限り 0 になりません。アプリがこの秒から元動画を 24fps で切り出し、エンジンは切り出した窓の先頭から見ます（オーナー確認済み。バックエンド記録簿 §208.2）。
+- **送らないもの**: `reference_video_id`・ピン留めの `in-outpainting`・`blend_dilation_stage2` は送りません。LoRA はプロンプトの LoRA タグからだけ取り、無ければ `loras` の鍵ごと省き、`loraAudioHidden` なら LoRA の音声の強度を落とします（Outpainting の H3 と同じ）。`audio_strength` と `blend_dilation_stage1` は既定のままでも常に送ります（画面の数字と送った値をそろえるため）。
+- **Outpainting の `featherNote` を流用しなかった理由**: あの文言は「元動画の縁から**内側**約 N px を混ぜ合わせる」で、Outpainting の向き（元動画の外側を描き足す）の説明です。Inpainting はマスクの縁から**外側**へ元の画素となじませるので向きが逆になり、そのまま使うと誤った説明になります。そこで Inpainting 専用の `h3BlendNote`（「※マスクの縁から外側へ約 N px を、元の動画となじませます。」）と、長辺が分からないあいだの `h3BlendNoteUnknown` を足しました。スライダーの見出し「マスクブラー」と音声の Strength の文言は Outpainting のものを使います。
+- **無音の素材は黄色の注意**: 送信が 422 `INPAINT_VIDEO_NO_AUDIO`（音声トラックの無い素材で、音声の Strength が 0 より大きい）で返ったときだけ、赤いエラーカードの代わりに「元動画に音声トラックがありません。音声の Strength を 0 にするか、音声つきの動画を使ってください。」を黄色で出します（`edit.inpainting.noAudioStrengthWarning`。Outpainting の `OUTPAINT_VIDEO_NO_AUDIO` と同じ型。§168.4）。既定の Strength が 0.5 なので、無音の素材では最初の送信が必ずこの注意になります。先回りの判定は足していません。ほかの 422 は従来どおり赤いカードでコードを見せます。
+- **24fps 固定の注記**: フレーム数欄の下に「選択中のベースモデルは24fps固定で生成します（タイムラインにはプロジェクトのフレームレートに換算して配置します）。」を常に出します（`h3FixedFpsNote`）。
+
+### 169.4 変更したファイル
+
+| ファイル | 要旨 |
+|---|---|
+| `webui/src/api/types.ts` | `InpaintSpec` に `source_video_id?`・`audio_strength?`、`window_start_sec`・`blend_dilation_stage2` を任意に。`BaseModelConstraints.inpaint?` |
+| `webui/src/shell/generationConstraints.ts` | `inpaint: {audioStrength, blendDilationStage1} \| null` を `constraints.inpaint` から解く（LTX・古いバックエンドは `null`） |
+| `webui/src/bridge/mockBridge.ts` | H3 の `constraints` に `inpaint` を足し、`unsupported_features` から `inpaint` を外す |
+| `webui/src/modes/edit/inpaintWindow.ts` | H3 の定数（22・345・24fps）と `roundUpTo32`・`roundUpTo17n5`・`projectFramesFor`・`defaultInpaintFramesOnGrid`（LTX の関数は変えない） |
+| `webui/src/modes/edit/useInpaintForm.ts` | `constraints.inpaint` で分岐。キャンバス 32・fps 24・17n+5・窓の換算と判定・席 `{F, 24}`・なじませ／音声／サンプリングの状態と配信への追従・快適上限は総行数の線（Outpainting の H3 と同じ部品）・H3 の形の `buildRequest` |
+| `webui/src/modes/edit/InpaintingPanel.tsx` | H3 では 2 欄の代わりにマスクブラー 1 本・音声の Strength・サンプリング・24fps の注記。なじませ幅の数字は +18 なし。フレーム数のスライダーの刻みを格子に |
+| `webui/src/modes/edit/EditScreen.tsx` | `useInpaintForm` に `constraints`・`loraAudioHidden` を渡す。422 `INPAINT_VIDEO_NO_AUDIO` だけ黄色の注意で出す |
+| `webui/src/i18n/strings.ts` | `edit.inpainting.h3BlendNote`・`h3BlendNoteUnknown`・`h3FixedFpsNote`・`noAudioStrengthWarning`（英日） |
+
+### 169.5 テスト
+
+- 新設: `modes/edit/useInpaintForm.h3.test.tsx`（17 件。形の切り替え・32 のキャンバス・寸法不明・フレーム数の初期値と確定・30fps での窓の換算と判定・マスクの範囲・席 `{F, 24}`・`buildRequest` の H3 の形・既定と配信への追従・快適上限）、`modes/edit/InpaintingPanel.h3.test.tsx`（3 件。H3 の欄が出て 2 欄と「+18px」が出ない・スライダーが 17 刻みで 22〜345・LTX では従来の欄）。
+- 追加: `modes/edit/inpaintWindow.test.ts`（10 件。H3 の定数・`roundUpTo32`・`roundUpTo17n5`・`projectFramesFor`・`defaultInpaintFramesOnGrid` の境界）、`modes/edit/EditScreen.inpaint.test.tsx`（2 件。H3 の通し: マスク描画 → アップロード → 席〔24fps の枚数〕→ 送信／422 `INPAINT_VIDEO_NO_AUDIO` で赤いカードの代わりに黄色の注意）、`shell/generationConstraints.test.ts`（1 件。`inpaint` の解き方）。
+- 反転: `shell/generationConstraints.test.ts` の H3 の機能名のテスト（Inpainting のサブタブが灰色 → 開く。固定の一覧から `inpaint` を外した）、`shell/AppShell.minimaxH3.test.tsx` の 2 件（Edit タブのサブタブの開閉、右クリック `inpaintVideo` が断られる → Inpainting のサブタブへ入って対象動画が上がる）。
+- `npm run typecheck`: 合格（型エラーなし。2026-11-12）
+- `npx vitest run --exclude "**/backend.integration.test.ts"`: 188 ファイル・3,779 件すべて合格（57 秒。2026-11-12。GPU の門の後、機械が空いている状態で全件を 1 回）
+
+### 169.6 実機の門
+
+- 実機の確認の手順と結果は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.28 です（2026-11-12 に全項目合格。169.8）。`.aux2` は `scripts/build.ps1` で作り直し、`scripts/deploy.ps1` で実機と backend リポジトリの配布コピーの 2 箇所へ置きます。
+
+### 169.7 残件
+
+- **時間軸の「のりしろ」**: 押せないモックの欄（オーナー裁定 D4）のまま、弾 2 では触っていません。H3 でも同じく押せない形で出ます。
+- **無音の素材の先回り**: 音声トラックの有無を送信の前に調べて止める判定は足していません。サーバーの 422 を受けてから黄色の注意で案内します（169.3）。
+- **H3 の Gradio**: Inpainting の画面はもともと Gradio に無く、H3 の Gradio の整理はバックエンド台帳 §3-243 の範囲です。
+- **1920×1080 のマスク動画を AviUtl2 側で作れなかった件**: 原因は未調査です（バックエンド台帳 §3-281）。
+
+### 169.8 実機の門の結果（2026-11-12）
+
+オーナーの実機確認で 7 項目すべて合格しました。手順と各項目の結果は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.28 です。
+
+- **1920×1080 の素材**: AviUtl2 側の不具合で 1920×1080 のマスク動画を作れなかったため、1080p の素材では確認していません。バックエンドのテストと GPU の門 I2（バックエンド記録簿 §208.6・§208.7）を根拠に合格扱いとしました（169.7）。生成された動画の品質はいずれも合格です。
+- **裁定**: 無音の素材で音声の Strength を 0.5 のまま Generate すると黄色の注意文が出る挙動（169.3）で、よいことになりました。

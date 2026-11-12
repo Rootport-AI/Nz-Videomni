@@ -95,16 +95,18 @@ export interface EditScreenProps {
    * fetched once on mount, as before. */
   loraRefreshKey?: string | undefined;
   /** §1-123: the LOADED base model's numeric rules
-   * (`useBaseModels().activeConstraints`), threaded to `useRetakeForm` only —
-   * the Retake form reads its window grid, size multiple, fixed fps, sampling
-   * sliders and (via `constraints.retake`) the H3 shape off it, the way
-   * `ChainedScreen` hands it to `useChainForm`. The other sub-tabs keep their
-   * LTX constants (an engine whose rules differ closes them through
+   * (`useBaseModels().activeConstraints`), threaded to `useRetakeForm`,
+   * `useOutpaintForm` (§1-125) and `useInpaintForm` (§1-124 弾 2) — each form
+   * reads its window grid, size multiple, fixed fps, sampling sliders and (via
+   * `constraints.retake`／`.outpaint`／`.inpaint`) the H3 shape off it, the way
+   * `ChainedScreen` hands it to `useChainForm`. Alpha Gen keeps its LTX
+   * constants (an engine whose rules differ closes it through
    * `unsupported_features`). Omitted ⇒ the LTX rules. */
   constraints?: GenerationConstraints | undefined;
   /** §1-123: whether the loaded engine's LoRAs take one strength only
-   * (`featureScope.loraAudioStrengthHiddenFor`); Retake then drops
-   * `loras[].audio_strength`, as Chained does. Omitted ⇒ `false`. */
+   * (`featureScope.loraAudioStrengthHiddenFor`); Retake, Outpainting and
+   * Inpainting then drop `loras[].audio_strength`, as Chained does. Omitted ⇒
+   * `false`. */
   loraAudioHidden?: boolean | undefined;
 }
 
@@ -427,6 +429,10 @@ export function EditScreen({
     acceleration,
     submitting: inpaintSubmitting,
     onMaskError: onInpaintMaskError,
+    // §1-124 弾 2: Outpainting と同じ 2 つ。`constraints.inpaint` の有無で H3 の形に
+    // 切り替わる（席の `placement` も hook が H3 では `{numFrames: F, genFps: 24}` で返す）。
+    constraints,
+    loraAudioHidden,
   });
   inpaintBindRef.current = {
     numFrames: inpaintForm.placement?.numFrames ?? 0,
@@ -674,12 +680,19 @@ export function EditScreen({
                 disabled={inpaintSubmitting || serverBusy || !inpaintForm.isValid}
                 onGenerate={() => void handleInpaintGenerate()}
               />
-              {inpaintSubmitState.phase === "error" && (
-                <div className="card card-error">
-                  <p className="error-code">{inpaintSubmitState.code}</p>
-                  <p>{inpaintSubmitState.message}</p>
-                </div>
-              )}
+              {/* 台帳 §1-124 弾 2: 素材に音声トラックが無い 422 だけは、赤いカードの代わりに
+                  直し方の黄色の注意を出す（Outpainting の `OUTPAINT_VIDEO_NO_AUDIO` と同じ型）。 */}
+              {inpaintSubmitState.phase === "error" &&
+                (inpaintSubmitState.code === "INPAINT_VIDEO_NO_AUDIO" ? (
+                  <p className="warning-banner warning-banner-mild" role="status">
+                    {ti.noAudioStrengthWarning}
+                  </p>
+                ) : (
+                  <div className="card card-error">
+                    <p className="error-code">{inpaintSubmitState.code}</p>
+                    <p>{inpaintSubmitState.message}</p>
+                  </div>
+                ))}
               <GenerateReasonsNote reasons={inpaintForm.validityReasons} messages={inpaintReasonMessages} />
             </>
           )}

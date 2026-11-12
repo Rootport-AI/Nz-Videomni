@@ -10,3 +10,23 @@
 - `実行方式の比較と推奨.md` — R_A〜R_E をもとに、fp8 と w4a8 の実行方式の候補を比べ、監督役の推奨をまとめた資料。オーナーが読んで方式を選ぶための文書。
 
 英語の原文は調査時のセッション限りの作業ファイルで、保管していない。ここにある日本語版を保管用の正本とする。
+
+## スパイク（2026-11-12）の計画と結果の写し
+
+製品コードを変えずに台本の中だけで fp8 と w4a8 の試作の層を差し込んだ GPU 実験の記録。結論と数値の正本は記録簿 `Docs/VERIFICATION_LOG.md` §210、決めたことは設計正本 `Docs/MINIMAX_H3_DESIGN.md` の裁定 101。元のフォルダは git の追跡外の `outputs/h3-fp8-w4a8-spike-2026-11-12/`（動画とログはそちらにだけある）。
+
+- `スパイク計画.md` — 承認されたスパイクの計画（仮説 H1〜H6・方法・合否の基準）。冒頭の状態の行は承認前の書きぶりのまま。
+- `DESIGN_spike.md` — 台本の実装担当向けの設計（英語）。S1 の参照の作り方を直した CORRECTION の注記を含む。
+- `h3_quant_spike.py` — スパイクの台本（`.venv-engine-h3` でプロセスの中から動かす）。
+- `dry_run.json` — 乾き試し（GPU なし）の記録。4 本の重みの検査・鍵の突き合わせ・dtype の監査。
+- `s4_result.json` — S4（LTX 側の判定器 `sft_quant_format.layer_schemes` を 3 本に当てた結果）。
+- `s1_result.attempt1.json` — S1（層単位の一致）の 1 回目。fp8 の fc2 で参照と食い違った版。
+- `s1_result.json` — S1 の再実行（参照を直した版。全件合格）と S1'（使われた計算部品）。
+- `s2_result.json` — S2（ブロック 10 の層ごとの速度と一時メモリ、1 ステップの見積り）。
+- `s3_all.json` — S3（通しの生成）の 5 条件の終了状態の一覧。
+- `s3_int8_result.json`・`s3_fp8_result.json`・`s3_w4a8_kijai_result.json`・`s3_w4a8_eros_result.json`・`s3_fp8_dequant_result.json` — S3 の条件ごとの記録（条件・検査の要約・段ごとの時間と VRAM・呼び出し回数と自己検査）。
+- `s3_summary.md` — S3 の 5 条件の表（英語の見出し）。
+- `hf-round16_README.md` — Hugging Face の `round16-h3-quant/` に上げた README（オーナーの視聴の判定の行を含む）。
+- `sheet_all.png` — 5 条件の並び画像（行が条件、列がフレーム 0・36・72）。
+
+結果の JSON の写しでは、GPU の使用状況の確認で取った起動中のアプリの一覧（`gpu_check.nvidia_smi_compute_apps`）を個人情報の保護のため取り除き、利用者名を含むパスは `<user>` に置き換えた。生の値は `outputs/h3-fp8-w4a8-spike-2026-11-12/`（git 無視）にある。

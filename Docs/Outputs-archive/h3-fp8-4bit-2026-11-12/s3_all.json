@@ -1,0 +1,31 @@
+{
+  "started_at": "2026-11-12T16:31:24+09:00",
+  "runs": {
+    "int8": {
+      "returncode": 0,
+      "status": "done",
+      "passed": true
+    },
+    "fp8": {
+      "returncode": 0,
+      "status": "done",
+      "passed": true
+    },
+    "w4a8_kijai": {
+      "returncode": 0,
+      "status": "done",
+      "passed": true
+    },
+    "w4a8_eros": {
+      "returncode": 0,
+      "status": "done",
+      "passed": true
+    },
+    "fp8_dequant": {
+      "returncode": 0,
+      "status": "done",
+      "passed": true
+    }
+  },
+  "finished_at": "2026-11-12T16:52:41+09:00"
+}

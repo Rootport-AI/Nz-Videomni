@@ -33,9 +33,15 @@
 - **概要**: CivitAI などで配布される MiniMax H3 の fp8（ComfyUI の `float8_e4m3fn`。テンソルごとの倍率つき）と w4a8（重み 4bit・活性化 8bit の `asym_w4a8_int8`）の safetensors を、現行の int8 ConvRot と同じく `models\MiniMaxH3\Weights\` に置くだけで選んで生成できるようにする。あわせて、量子化の印（`comfy_quant`）を層ごとのテンソルでなくファイル先頭のメタデータ `_quantization_metadata` に持つ書き方のファイルも読めるようにする（現状は `h3_format.py` が意図的に拒否している。h3ErosMax beta5 の 2 本と Kijai の w4a8 が該当）。
 - **範囲（オーナー裁定 2026-11-12）**: DiT（映像と音声を作る本体）のみで、テキストエンコーダは触らない。RTX 30 系（Ampere）でも動くこと。4bit 系は w4a8 を本命とし、nvfp4 と w4a4 は対象外。GGUF と BF16／FP16 のフルモデルは対象外。快適上限の線と較正は別の機会に見送る（線は据え置き）。非枝刈り版（`adaln_t_table` を持たず、時刻の埋め込みの枝をそのまま持つ版）は対象外。
 - **あわせて直すもの**: Settings のモデル読み込み欄が、サーバーの返す具体的な理由（422 の `detail`）を捨てて種類ごとの定型文だけを表示する件（`useModels.ts`・`ModelsPanel.tsx`。ヘッダーのベースモデル欄は `detail` を表示している）。
-- **前提**: 実行方式（comfy-kitchen のカーネル／毎回 bf16 に戻す／読み込み時に int8 へ変換する）は比較のうえオーナーが選ぶ。前例は LTX 側の量子化 safetensors の判定器 `sft_quant_format.py`（fp8・int8・w4a8 とメタデータ式の印を扱う）と、その実行方式（毎回 bf16 に戻す。規則は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.3）。H3 の block swap と VRAM 16GB mode は `H3Int8Linear` の形（`forward_rows` など）に依存する（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5・§6.5）。fp8 の行列積のカーネルは RTX 40 系以降、w4a8 のカーネルは RTX 30 系以降で使える。
+- **決まった設計**（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 101）: 目的は、利用者が ComfyUI で使っている重みをできるだけ忠実に再現することで、速度より ComfyUI との数値の整合性を優先する（fp8 を int8 ConvRot へ変換し直す方式は採らない）。fp8 の層は読み込みのときに GPU の世代で経路を選ぶ（計算能力 8.9 以上＝RTX 40 系以降は fp8 の行列積、それ未満は毎回 bf16 に戻して計算）。`full_precision_matrix_mult` の層（fc2）は常に bf16 に戻す。w4a8 は ComfyUI と同じ comfy-kitchen の `w4a8_int8_linear` を同じ引数で呼び、RTX 20 系では理由の文つきで断る。旧式の印も読む。LoRA は今の出力の側に足す方式のまま。スパイクで、この組み方の層が ComfyUI の経路とビット一致すること、既存のローダー・block swap・VRAM 16GB mode が手直しなしで全形式を運べることを確かめた（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210）。
+- **残る設計の論点**（製品実装の計画で決める）:
+  - VRAM 16GB mode の w4a8 は、1 ステップが int8 より約 1 割遅い。主な原因は、qkv の片ごとにカーネルが入力を量子化し直すことと見ている（推測。記録簿 §210.6・§210.7）。受け入れるか、手を打つか。
+  - w4a8 の一時メモリは int8 より大きい（fc2 で 1,144MiB。記録簿 §210.6）。VRAM 16GB mode の見積りに収まるか。
+  - `input_scale` の無い fp8 の層を fp8 の行列積で計算するとき、ComfyUI の規則（倍率 1.0）に従うか。
+  - 検出を `sft_quant_format.layer_schemes` を土台に広げ、組の大きさ 16 以外と符号表の無い w4a8 を受ける。
+  - 快適上限は据え置き（範囲のとおり）。
 - **検証用の実物**（`models\MiniMaxH3\Weights\` に置く）: Comfy-Org `minimax_h3_fl2va_pruned_fp8_scaled`、Kijai `minimax_h3_fl2va_pruned_w4a8_mixed`（印はメタデータ式のみ）、h3ErosMax beta5 `10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized`（w4a8 と int8 の層が混在。group size も混在。`adaln_t_table` が BF16）。
-- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 6・8・§5・§7。調査報告（読み込み経路の棚卸し・配布形式・枝刈り版の流通と検証用ファイル）は保管庫 [`Outputs-archive/h3-fp8-4bit-2026-11-12/`](Outputs-archive/h3-fp8-4bit-2026-11-12/)。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 6・8・101・§5・§7。スパイクの記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210。調査報告・比較資料・スパイクの計画と結果の写しは保管庫 [`Outputs-archive/h3-fp8-4bit-2026-11-12/`](Outputs-archive/h3-fp8-4bit-2026-11-12/)。
 
 ## 3. 将来の研究課題
 

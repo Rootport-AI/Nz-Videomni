@@ -1,0 +1,57 @@
+{
+  "started_at": "2026-11-12T16:11:34+09:00",
+  "files": {
+    "fp8": {
+      "whole_file": {
+        "verdict": "accepted",
+        "per_scheme": {
+          "fp8_scaled": 200
+        }
+      },
+      "per_layer": {
+        "accepted_per_scheme": {
+          "fp8_scaled": 200
+        },
+        "refused_per_reason": {},
+        "refused_example_layer": {}
+      }
+    },
+    "w4a8_kijai": {
+      "whole_file": {
+        "verdict": "accepted",
+        "per_scheme": {
+          "w4a8": 200
+        }
+      },
+      "per_layer": {
+        "accepted_per_scheme": {
+          "w4a8": 200
+        },
+        "refused_per_reason": {},
+        "refused_example_layer": {}
+      }
+    },
+    "w4a8_eros": {
+      "whole_file": {
+        "verdict": "refused",
+        "message": "量子化 safetensors の検査に不合格: group_size=4 は未対応です（受理: 16 のみ・__metadata__._quantization_metadata.layers['blocks.10.attn.out_proj']）"
+      },
+      "per_layer": {
+        "accepted_per_scheme": {
+          "int8_convrot": 20,
+          "w4a8": 82
+        },
+        "refused_per_reason": {
+          "量子化 safetensors の検査に不合格: group_size=4 は未対応です（受理: 16 のみ・__metadata__._quantization_metadata.layers['<layer>']）": 45,
+          "量子化 safetensors の検査に不合格: group_size=8 は未対応です（受理: 16 のみ・__metadata__._quantization_metadata.layers['<layer>']）": 53
+        },
+        "refused_example_layer": {
+          "量子化 safetensors の検査に不合格: group_size=4 は未対応です（受理: 16 のみ・__metadata__._quantization_metadata.layers['<layer>']）": "blocks.10.attn.out_proj",
+          "量子化 safetensors の検査に不合格: group_size=8 は未対応です（受理: 16 のみ・__metadata__._quantization_metadata.layers['<layer>']）": "blocks.10.mlp.fc2"
+        }
+      }
+    }
+  },
+  "status": "done",
+  "finished_at": "2026-11-12T16:11:34+09:00"
+}

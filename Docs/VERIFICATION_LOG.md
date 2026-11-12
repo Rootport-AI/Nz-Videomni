@@ -23906,3 +23906,132 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 
 - 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-283 は閉じず、製品実装へ進みます。項目は、決まった設計と、製品実装の計画で決める論点に書き直しました。
 - 実行方式の決定は、設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 101 にまとめました。仕組みは、製品実装が入るときに同書 §5・§7 へ書きます。
+
+## 211. ★台帳 §1-283 MiniMax H3 の fp8 と w4a8: 製品実装（弾 1・弾 2）と GPU の門（2026-11-12）
+
+### 211.1 結論
+
+**§210 のスパイクで確かめた試作の層を、製品のコードに載せました。** MiniMax H3 の fp8（8 ビットの浮動小数点の重み。ComfyUI の `float8_e4m3fn`）と w4a8（重みを 4 ビット・入力を 8 ビットにして計算する形式。`asym_w4a8_int8`）の safetensors を、`models\MiniMaxH3\Weights\` に置くだけで選んで生成できます。量子化の印をファイル先頭のメタデータに書く旧式のファイルも読めるようになりました。あわせて、操作パネルの Settings のモデル読み込み欄が、サーバーの返す具体的な理由を表示するように直しました（弾 2）。
+
+機械の門は全件合格し、MCP〔Model Context Protocol。外部の道具からアプリを操作する仕組み〕経由で製品を通した GPU の門は、7 条件すべてが完走して自己検査に合格しました（211.6）。1 ステップの時間と VRAM の山は、スパイクの値とそろいました。オーナーの視聴の判定は「7 本とも明白な崩れはない」です（211.7）。残るのは、オーナーの実機確認（Settings の理由文と、サブ検証機〔RTX 3080 mobile〕での fp8 と w4a8）で、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-283 に置きました（211.11）。
+
+仕組みの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5（量子化層の実行方式）・§7（ヘッダの判定）・裁定 101、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.121 です。**GPU の門の数値の正本は本節**で、生の値は保管庫の JSON です（211.10）。
+
+### 211.2 経緯と裁定
+
+- 前の段はスパイク（§210。dev `5516958`）です。決めたことは設計正本の裁定 101 にあり、本節には写しません。
+- 製品実装の計画は、監督が書いた `製品実装の計画.md`（保管庫に写し。211.10）です。計画の独立の事実確認（19 件。重大 0・要修正 9・注記 10）を、「過剰設計やスパゲッティ化の危険は無いか」「裏付けを得られるか」の 2 点で選別し、14 件を反映、1 件を棄却、残りを確認済みの注記として扱いました。棄却したのは「サーバー側に WARNING のログを足す」指摘です。H3 だけの例外になり、裁定 101 の ⑥ が求めているのは Settings の表示だけだからです。
+- 計画が裁定 101 の ⑩（`input_scale` の無い fp8 の層の扱い）を決めました。**ComfyUI と同じく、倍率 1.0 で入力を fp8 にする**（忠実さの原則）。読み込みのときに、該当する層の数をワーカーのログに 1 回だけ警告として出します。
+- **計画の訂正（1 点）**: 計画 §5.2 は「RTX 20 系（Turing）の w4a8 の拒否を、サブ検証機（RTX 3080 mobile）でのオーナーの実機確認に入れる」と書きました。しかし RTX 3080 は Ampere（計算能力〔compute capability。GPU の世代を表す番号〕8.6）なので、Turing の拒否は確かめられません。この拒否は、計算能力を差し替える単体テストだけで押さえます。サブ検証機で確かめるのは、fp8 が bf16 に戻す経路（`dequant`）で動くことと、w4a8 が動くことです（211.11）。
+- **G5 の回し直し（オーナー了承 2026-11-12）**: G5（旧式の印の int8）は、最初は G4 と同じ 8 ステップ・shift 10／3 で回しました。絵が暗かったので、同じファイルを公式と同じ 20 ステップ・shift 12／3 で回し直しました（G5b。211.6・211.7）。
+
+### 211.3 実装の要点
+
+弾 1 は dev `7d1c6f3`、弾 2 は dev `0164f9e` です。仕組みの説明は設計正本 §5・§7 が正本で、ここには要点だけを残します。
+
+**検出（`h3_format.py`。torch に依存しないので、アプリ側の事前検査とエンジンの両方が使う）**:
+
+- 量子化層の種類は、重みの dtype（データの型）ではなく量子化の印で決めます。w4a8 の重みも、int8 と同じ I8 で保存されているためです。
+- 印の置き場所は 2 つあります。メタデータ式（`__metadata__._quantization_metadata` の `layers`）を優先し、そこに無い層だけ層ごとの `<層>.comfy_quant` を読みます。ComfyUI の `convert_old_quants` と同じ順です。メタデータの読み出しは、LTX 側の `sft_quant_format._metadata_layers` を公開名 `metadata_layers` にして共用しました（振る舞いは変えていません）。
+- 受ける形式は呼び出し側が指定します。DiT（`inspect_h3_dit`）は int8・fp8・w4a8 の 3 形式、テキストエンコーダ（`inspect_h3_te`）は int8 だけです。
+- 断るもの: 印の無い I8／F8 の重み、`*_correction` を持つ層（非対称の補正つきの w4a8）、w4a8 の `convrot_groupsize` が 256 以外、fp8 の `convrot: true`、w4a8 の `full_precision_matrix_mult`、w4a8 の組の大きさ（倍率を共有する重みの個数。G）と入力幅の組み合わせが comfy-kitchen の条件に合わないもの。組の大きさの条件は comfy-kitchen の `AsymW4A8Int8Layout.Params` を写しました。w4a8 の `convrot` の鍵は、ComfyUI と同じく読みません。
+- `QuantSpec` に `group_size`・`full_precision`・`has_input_scale`・`has_codebook` を、既定値つきで足しました（既存の 3 欄は位置も名前も同じ）。
+
+**層（`engine_h3/`）**:
+
+- 共通の土台 `H3QuantLinear`（`quant_linear.py`）の上に、`H3Int8Linear`・`H3Fp8Linear`（新規 `fp8_linear.py`）・`H3W4A8Linear`（新規 `w4a8_linear.py`）を置きました。土台が持つのは、何もしない `dequant_cache()` の文脈だけです。`dit.normalize_dtypes` と `lora.attach` は `H3QuantLinear` で判定します。
+- fp8 と w4a8 は、ComfyUI が呼ぶ comfy-kitchen（ComfyUI が量子化した重みの計算に使う部品集）の関数を、同じ引数で呼びます。再量子化（読み込みのときに別の形式へ変換し直すこと）はしません。
+- 量子化層にバイアスがあるファイルは、差し替えのときに理由を出して断ります（H3 の fp8・w4a8 の層はバイアスを持たない）。
+- 差し替えの関数 `swap_in_int8_linears` の名前は据え置きました。`text_encoder.py` が import のときに束縛しているためです。
+- VRAM 16GB mode の MLP の行の塊のループを `dequant_cache()` の文脈で包みました。fp8 の bf16 の経路では、戻した重みをこのループの間だけ使い回します。block swap が番地を使い回すので、文脈の外には持ち越しません。
+
+**読み込みのときの判定（`pipeline_h3.py`・`quant_linear.py`）**:
+
+- `require_cuda_quant(formats, *, fp8_mode)`: 層の形式に要る comfy-kitchen の関数が CUDA の経路にあるかを確かめます。int8 の関数は常に要ります（テキストエンコーダが int8 のため）。
+- `fp8_mode_for`: 計算能力 8.9 以上（RTX 40 系以降）は `scaled`、未満は `dequant` です。ComfyUI の `supports_fp8_compute` と同じ分け方です。
+- `require_w4a8_capability`: 計算能力 8.0 未満（RTX 20 系）で w4a8 の層があれば、理由の文つきで断ります。
+- 読み込みの記録 `build_report["dit"]` の `int8_layers` を `quant_layers` に改名し、`quant_layers_by_format`（形式ごとの層の数）と `fp8_mode`（fp8 の層が無ければ None）を足しました。ワーカーのログの `LOAD_OK` の行に出ます。
+- `done` の `h3.quant_backends` の能力の表に、旗 `w4a8_int8_linear`・`quantize_per_tensor_fp8` を足しました（加算だけ）。
+
+**Settings（操作パネル。弾 2）**:
+
+- `webui/src/shell/useModels.ts` の失敗の状態に `detail`（サーバーが書いた具体的な理由）と `httpStatus` を持たせ、`webui/src/shell/ModelsPanel.tsx` は 422 のときだけ `detail` を表示します（無ければ従来の定型文）。ヘッダーのベースモデル欄（`useBaseModels.ts`）と同じ条件です。判断の記録はフロントエンド `Docs/DEVLOG.md` §171 です。
+
+### 211.4 事実確認レビューの採否
+
+計画への独立の事実確認の採否は 211.2 のとおりです（指摘の一覧と反映先は、保管庫の `製品実装の計画.md` の冒頭の状態の行と本文）。
+
+弾 1 の実装の差分にも、独立の事実確認を 1 回かけました（重大なし。comfy-kitchen の呼び方は全件 ComfyUI と一致、int8 の経路は土台の導入以外に変更なし、`dequant_cache` の有効期間は正しい、と確認）。指摘 14 件を計画のときと同じ 2 つの物差しで選別し、大半を採用しました（引き算 1 件を含む: 「w4a8 の `convrot: false` を拒否する検査」を削除して ComfyUI と同じく鍵を無視する。ほかは CUDA の無い環境での親切な失敗、`_as_2d`・LoRA の足し算の一本化、`full_precision_matrix_mult` は最上位の鍵だけ読む、`int8_linears` → `quant_linears`、`quant_specs` に組の大きさを出す、テストの追加など）。見送りは 3 件（`accepted` 引数の必須化、`has_scaled_mm_v2` の条件の細分化、int8 の内側の cast の置き換え。いずれも既存の形を崩すか利益が小さい）。
+
+### 211.5 機械の門
+
+- **弾 1**:
+  - アプリの仮想環境: pytest 全件で 4,109 件合格・80 件スキップ。
+  - エンジンの仮想環境（`scripts/run_h3_pytest.py`）: 964 件合格・32 件スキップ。スキップは GPU 専用のテストで、`H3_GPU_TESTS=1` のときだけ走ります。
+  - 実在の重み 10 本のヘッダの検査は、スパイク（§210.4）と同じ結果でした。
+- **弾 2**:
+  - `npm run typecheck`・lint・`npx vitest run --exclude "**/backend.integration.test.ts"` は合格（3,784 件）。
+  - aux2 を `build.ps1` で再ビルド（ネイティブのテスト 402 件合格）し、`deploy.ps1` で実機と配布コピーへ置きました（2026-11-12 18:31）。
+
+### 211.6 GPU の門
+
+**条件**: 台本は保管庫の `h3_quant_gate_api.py`（説明は同所の `門の台本README.md`）です。一時サーバー（ポート 18699）を立て、MCP の道具から製品を通して回しました（2026-11-12 夜）。共通の条件はスパイクの S3 と同じで、T2V（文章から動画）・1280×768・73 枚・種 1234・同じプロンプト・注意の計算 sage・VRAM 16GB mode on・先読み on です。条件ごとに重みを読み込み直しました。
+
+| 門 | 条件 | 重み（`models\MiniMaxH3\Weights\`） | ステップ | shift（映像／音声） | LoRA |
+|---|---|---|---|---|---|
+| G1 | `int8` | `minimax_h3_fl2va_pruned_int8_convrot.safetensors`（公式 int8。回帰の基準） | 20 | 12／3 | なし |
+| G2 | `fp8` | `minimax_h3_fl2va_pruned_fp8_scaled.safetensors`（公式 fp8） | 20 | 12／3 | なし |
+| G3 | `w4a8_kijai` | `minimax_h3_fl2va_pruned_w4a8_mixed.safetensors`（Kijai。印はメタデータ式だけ） | 20 | 12／3 | なし |
+| G4 | `w4a8_eros` | `10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors`（h3ErosMax。w4a8 と int8 の混在・組の大きさ 16／8／4・BF16 の `adaln_t_table`） | 8 | 10／3 | なし |
+| G5 | `int8_oldmarker` | `h3ErosMax_beta5_3185154.safetensors`（旧式の印の int8） | 8 | 10／3 | なし |
+| G5b | `int8_oldmarker_s20` | G5 と同じ | 20 | 12／3 | なし |
+| G6 | `fp8_turbo` | G2 と同じ | 4 | 12／3 | Turbo（`minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16`・強さ 1.0） |
+
+**結果**（保管庫の `gate_summary.md` の写し）:
+
+| 門 | 状態 | 読み込み秒 | ジョブ秒（壁） | 生成秒 | 秒／ステップ（括弧は 2 ステップ目以降の中央値） | スパイク S3 の秒／ステップ | VRAM の山 割り当て／予約（MiB） | fp8_mode | 形式ごとの層の数 | 自己検査 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| G1 | completed | 16.1 | 235.1 | 234.4 | 8.760（8.700） | 8.785 | 3780／4536 | — | int8 200 | すべて合格 |
+| G2 | completed | 3.2 | 290.1 | 288.1 | 11.725（11.700） | 11.753 | 3773／4684 | scaled | fp8 200 | すべて合格 |
+| G3 | completed | 2.9 | 245.0 | 241.0 | 9.625（9.600） | 9.652 | 2810／3638 | — | w4a8 200 | すべて合格 |
+| G4 | completed | 2.9 | 125.0 | 120.5 | 9.575（9.500） | 9.608 | 3780／4536 | — | w4a8 180・int8 20 | すべて合格 |
+| G5 | completed | 2.9 | 125.0 | 120.6 | 8.762（8.700） | — | 3780／4536 | — | int8 200 | すべて合格 |
+| G5b | completed | 3.0 | 235.1 | 231.7 | 8.815（8.800） | — | 3780／4536 | — | int8 200 | すべて合格 |
+| G6 | completed | 3.0 | 120.0 | 116.0 | 15.125（15.100） | — | 4072／5096 | scaled | fp8 200 | すべて合格 |
+
+- 秒／ステップは、サーバーのログの `denoise k/N steps (..., Ts elapsed)` の、N ステップ目の経過秒を N で割った値です（スパイクと同じ定義）。括弧の値は、隣り合うステップの経過秒の差のうち、最初の 1 つを除いた中央値です（台本の `median_after_first`）。VRAM の山はノイズ除去の段の値（`h3.phases.denoise`）です。
+- `fp8_mode` と形式ごとの層の数は、ワーカーのログの `LOAD_OK` の行（`build_report`）から読みました。層の数は、どの条件もファイルのヘッダから数えた数と一致しました。
+- **自己検査**（条件ごとの `result.json` の `post.checks`）: ジョブの完了・出力が 1280×768・73 枚・音声あり・使った重みのファイル名・ステップと shift・`h3.quant_backends.cuda` に新しい旗があり、その形式に要るものが真・`LOAD_OK` の行・`fp8_mode`（G2・G6 は `scaled`、ほかは null）・形式ごとの層の数・G6 の LoRA の適用（208 組・飛ばした組 0）・G2〜G6 で `MODEL_INCOMPATIBLE` が出ていないこと。
+- **速度**: 秒／ステップは、スパイク S3 の値と 0.03 秒以内で一致しました。fp8 は int8 の 1.34 倍です。G6（fp8 に Turbo LoRA）は 1 ステップ 15.1 秒で、G2 より長くなりました。監督の所見（`hf-round17_README.md`）は「4 ステップしかないので最初のステップの立ち上がりが平均を押し上げた」と見ましたが、2 ステップ目以降の中央値も 15.1 秒なので、立ち上がりでは説明できません。Turbo LoRA の費用は §176.5 で実測済みで（640×384・124 枚・sdpa で 1 ステップ +4.2 秒。rank の大きさによる。高速化は台帳 §3-253）、G6 の増分 +3.4 秒（15.1 − 11.7）は同じ階級です。fp8 の層に固有の増分かどうかは、この門では切り分けていません（int8 に同じ LoRA を掛けた同条件の実測が無い）。
+- **VRAM**: ノイズ除去の山はスパイクと同じでした。G6 は LoRA の分だけ高くなりました。
+- **fp8 の経路**: G2・G6 は `scaled`（開発機の RTX 4070 Ti SUPER は計算能力 8.9）。fp8 の 200 層のうち、`full_precision_matrix_mult` の印がある 50 層（各ブロックの `mlp.fc2`）は、印のとおり bf16 に戻して計算しました（ワーカーのログの `fp8: 200 layer(s), path 'scaled' (compute capability 8.9); 50 marked full_precision_matrix_mult run dequantized` の行）。公式の fp8 には `input_scale` の無い層が無いので、倍率 1.0 の警告は出ていません。
+- **G7**（事前検査で断った理由が Settings に出ること。GPU は要らない）: 門の台本では回していません。オーナーの実機確認に置きました（211.11）。
+
+### 211.7 視聴の判定
+
+- 動画は、非公開の Hugging Face データセット `Rootport/Nz-LTX23-eval-clips` の `round17-h3-quant-product/` にあります（https://huggingface.co/datasets/Rootport/Nz-LTX23-eval-clips/tree/main/round17-h3-quant-product 。README の写しは保管庫の `hf-round17_README.md`）。
+- **監督の所見**（並び画像の目視）: G1〜G4・G6 は破綻なし。G1 と G2 は同じ基の重みの別の量子化なので、同じ種で構図がほぼ同じでした。G5 は夜の街で、車のライト・バス・建物の構造は保たれていますが、プロンプトの「夕暮れ」より暗く、人物はほとんど黒い影でした。このファイルは名前に TURBO の印がなく（対の 3178732 は `TURBO_Hybrid`）、Turbo でない版と見られる（推測）のに、8 ステップで回していました。G5b は G5 よりはっきり明るく、破綻もありませんが、色味は青い薄暮から宵の口のままで、G1 の金色の夕焼けにはなりませんでした。
+- **オーナーの判定（2026-11-12）**: 7 本とも明白な崩れはない。G5 の暗さ（20 ステップでも青い薄暮のまま）は、ファインチューンした重みでプロンプトでの制御が難しくなるのは珍しくないので、モデルの性質と結論づける。
+
+### 211.8 先読みの待ちと読み捨てたテンソルの観測
+
+- **先読みの待ち**: block swap（DiT のブロックを主メモリと GPU の間で出し入れする仕組み）の先読みの記録（ワーカーのログ）に、1 パスあたりの「pinned の空き待ち」（主メモリ側の受け皿が空くのを待った時間）が、int8 系で約 1.7 秒、fp8 で約 5.0 秒、w4a8 で約 0.1 秒、G6 で 0.01 秒と出ました。秒／ステップはスパイクと一致しているので、計算と重なって隠れている待ちと見ています（推測）。新しい症状ではなく、製品の既存の先読みの振る舞いで、記録だけにします。
+- **読み捨てたテンソル**: h3ErosMax の 2 本（G4 と、G5・G5b のファイル）は、`adaln_basis`・`adaln_mean` を知らないテンソルとして捨てます。スパイク（§210.4）と同じで、研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §13 に既知です（ComfyUI も使わない）。
+
+### 211.9 教訓
+
+1. **確かめる機械の世代は、計算能力の番号で照らしてから割り当てる。** 計画は RTX 3080 mobile で Turing の拒否を確かめる段取りを書きましたが、この GPU は Ampere でした（211.2）。
+2. **門の条件のステップ数は、その重みの種類（Turbo を焼き込んだ版かどうか）に合わせる。** G5 は Turbo でない版と見られるファイルを 8 ステップで回し、暗い絵の原因の切り分けに回し直しが 1 本増えました（211.2・211.7）。
+
+### 211.10 成果物の所在
+
+- **コミット**: 弾 1 は dev `7d1c6f3`、弾 2 は dev `0164f9e`。
+- **門のフォルダ**（git の追跡外）: `outputs/h3-fp8-w4a8-gate-2026-11-12/`。台本・条件ごとの `runs/<条件>/`（mp4・`metadata.json`・`result.json`・`request.json`・ログの切り出し・並び画像）・`summary.md`・`summary.json`・`hf-round17/`。
+- **保管庫**: [`Outputs-archive/h3-fp8-4bit-2026-11-12/`](Outputs-archive/h3-fp8-4bit-2026-11-12/)。門の台本と説明・`gate_summary.md`・`gate_summary.json`・条件ごとの `gate_runs/<条件>/result.json`・`hf-round17_README.md`・`gate_sheet_all.png`（7 条件の並び画像）・計画の写し `製品実装の計画.md` を足しました（一覧は同所の `README.md`）。JSON の写しでは、起動中のアプリの一覧とプロセスの起動行を個人情報の保護のため取り除きました。動画とログはリポジトリに入れません（慣行）。
+- **Hugging Face**: `round17-h3-quant-product/`（211.7）。
+
+### 211.11 台帳の扱い
+
+- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の 1-283 は、§1 から §2（実装済み・オーナーのテスト待ち）へ移しました。確かめるのは、Settings の理由文（開発機）、サブ検証機での fp8 の `dequant` の経路と w4a8 の完走、旧式の印の h3ErosMax beta5 の 2 本の読み込みです。項目の正本は台帳 §2 で、フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30 からはそこを参照します。
+- RTX 20 系での w4a8 の拒否は、実機では確かめません（開発機もサブ検証機も Turing ではない）。根拠はエンジンの単体テスト（計算能力の差し替え）です。
+- VRAM 16GB mode の w4a8 が int8 より約 1 割遅い件（qkv の片ごとにカーネルが入力を量子化し直す）は、台帳 §3-284 に起票しました。

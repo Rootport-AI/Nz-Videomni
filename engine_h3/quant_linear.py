@@ -67,7 +67,7 @@ import torch.nn as nn
 from h3_format import FP8, INT8, W4A8, QuantSpec
 
 #: fp8: ``F.scaled_mm`` from Ada (8.9) on, as ComfyUI's ``supports_fp8_compute``;
-#: below it the weight is dequantized to bf16 (裁定 101 ⑧).
+#: below it the weight is dequantized to bf16 (裁定 101 ⑦).
 FP8_SCALED_MIN_CAPABILITY = (8, 9)
 #: w4a8: ``AsymW4A8Int8Layout.MIN_SM_VERSION`` (the CUDA kernels need Ampere).
 W4A8_MIN_CAPABILITY = (8, 0)

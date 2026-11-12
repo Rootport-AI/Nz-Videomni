@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査（DiT の量子化は int8 ConvRot・fp8・w4a8。§5・§7。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211）・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -27,7 +27,7 @@
 ## 1. 結論（何をするのか）
 
 1. MiniMax H3 を第 3 のエンジン系統（`h3`）として載せている。**専用の仮想環境 `.venv-engine-h3`・専用のワーカー `engine_h3/worker.py`・専用のアダプタ**を持つ（MULTI_ENGINE_DESIGN §3.3 の「同居できない系統」パターン）。
-2. 重みは公式系 FL2VA の**枝刈り（AdaLN の枝を表に畳んだ版）int8 ConvRot** の DiT と、**int8 ConvRot のテキストエンコーダ**、Comfy-Org 配布の映像 VAE と音声 VAE である。int8 の行列積は comfy-kitchen の CUDA 拡張に任せ、CPU オフロードは本製品の block swap と先読みに載せる。VRAM 16GB で動かす。
+2. 重みは公式系 FL2VA の**枝刈り（AdaLN の枝を表に畳んだ版）** の DiT と、**int8 ConvRot のテキストエンコーダ**、Comfy-Org 配布の映像 VAE と音声 VAE である。DiT の量子化の形式は **int8 ConvRot・fp8（`float8_e4m3fn`）・w4a8（`asym_w4a8_int8`）の 3 つ**を受け、1 つのファイルに混在してもよい（裁定 101。§5・§7）。量子化層の計算は、ComfyUI が呼ぶのと同じ comfy-kitchen の CUDA 拡張の関数に同じ引数で任せ、CPU オフロードは本製品の block swap と先読みに載せる。VRAM 16GB で動かす。
 3. 推論は CFG なし・1 ステップ 1 回の前向き計算で、映像と音声を同じ系列の中で同時にノイズ除去する。ステップ数と shift は要求の項目として API と操作パネルから渡し、ワーカーの引数で受け取る（§9）。
 4. ノイズ除去の段には「VRAM 16GB mode」（既定 on）がある。活性化をヘッド群と行の塊に分けて VRAM の山を下げ、共有メモリへの退避を防ぐ（§6.5）。
 5. 単発の A2V（音声から映像）は、音声の行を元の音声の潜在に寄せる「行ごとの連続値マスク」で行う（§3.1）。同じ仕組みで、連結のクリップごとの A2V（§3.3）も動く。ネガティブプロンプトは VSF 方式だけを持つ（§3.5）。
@@ -44,8 +44,10 @@
 - **裁定 3 【オーナー裁定】**: 最初のタスク範囲は、FL2VA 重み 1 本での T2V（文章から動画）と I2V（画像から動画）の両対応とする。Ref2VA（参照素材からの生成）は後回しである。α版の I2V は先頭フレームだけを受け付ける。
   > **更新（2026-10-19）**: 「α版の I2V は先頭フレームだけ」は台帳 §1-97 で広げた。いまの I2V は、最大 10 枚のキーフレームを 0〜F−1 の任意のフレームに置ける（裁定 56・59、§3）。
 - **裁定 6 【オーナー裁定】**: 重みの形式は int8 ConvRot とする。利用者が CivitAI などから落としたファイルをフォルダに置くだけで動かせることを理想とする。理由は、ファインチューンが大量に出回っており、コミュニティの主流が int8 ConvRot だからである。
+  > **更新（2026-11-12）**: → 2026-11-12 裁定 101 で更新。DiT は int8 ConvRot に加えて fp8 と w4a8 も受ける（§5・§7）。
 - **裁定 7 【オーナー裁定】**: 配布は公開リポジトリからの直接ダウンロードとし、再ホストはしない（ライセンスに地域条項があるため）。
 - **裁定 8 【オーナー裁定】**: テキストエンコーダは int8 ConvRot を使う。nvfp4 や bf16 は将来の拡張とする。
+  > **更新（2026-11-12）**: → 2026-11-12 裁定 101 で更新。テキストエンコーダは int8 ConvRot のまま据え置き、事前検査も int8 だけを受ける（裁定 101 ①。§7）。fp8 と w4a8 を受けるのは DiT だけである。
 - **裁定 9 【オーナー裁定】**: 動画の尺は「快適上限を測って決める」方針に揃える。外部ガイドの 1344×768・345 フレームは正式目標にしない。
 - **裁定 10 【オーナー裁定】**: LoRA は後回しとする。Turbo LoRA（少ないステップで生成するための蒸留 LoRA）への対応は Style LoRA への対応とほぼ同じ仕組みになるので、Style LoRA に対応するときに一緒に進める。（実装した。§6.6・研究ノート §10 の裁定 62〜73）
 - **裁定 11 【オーナー裁定】**: H3 の仮想環境は、torch の版を LTX に揃えなくてよい。comfy-kitchen の CUDA 拡張が効く版を選ぶ。利用者側の条件（ドライバ R580 以上・ディスクの増加）は README に書く。
@@ -343,7 +345,8 @@
   - **⑧ w4a8 の経路（監督裁定。オーナーの明示の反対なし）**: comfy-kitchen の `w4a8_int8_linear` を ComfyUI と同じ引数で呼ぶ（入力の 8 ビット化はカーネルの中）。RTX 20 系（Turing。計算能力 7.5）では、理由の文つきで断る（カーネルは 8.0 以上が要る）。
   - **⑨ LoRA（監督裁定。オーナーの明示の反対なし）**: 今の出力の側に足す方式（§6.6）のまま。ComfyUI は LoRA を重みに合成してから量子化し直すので、ここは既知の差として受け入れる。
   - **⑩ `input_scale` の無い fp8 の層（監督裁定。オーナーの明示の反対なし）**: fp8 の行列積の経路でこの層をどう扱うか（ComfyUI は倍率 1.0 を使う）は、製品実装の計画で決める。スパイクでは理由を出して止めた（検証用のファイルには該当する層が無い）。
-  - **状態**: 製品実装の前。仕組みは、製品実装が入るときに §5・§7 へ書く（記録簿 §210）。
+    > **決定（製品実装の計画。2026-11-12）**: ComfyUI と同じく倍率 1.0 で入力を fp8 にする（②の忠実さの原則）。読み込みのときに該当する層の数をワーカーのログへ 1 回だけ警告として出す（§5）。
+  - **状態**: 製品実装済み（2026-11-12。弾 1＝バックエンド dev `7d1c6f3`、弾 2＝操作パネル dev `0164f9e`）。機械の門と GPU の門は合格し、オーナーの視聴の判定も合格（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211）。オーナーの実機確認は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-283。仕組みの正本は §5・§7。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -1189,11 +1192,22 @@ MCP の `submit_generate` は `inpaint_*` の 4 引数（マスクの ID・音�
 
 ---
 
-## 5. int8 ConvRot の実行方式
+## 5. 量子化層の実行方式
+
+**結論**: DiT の量子化層は、形式ごとに 3 つの自前のモジュール（`H3Int8Linear`・`H3Fp8Linear`・`H3W4A8Linear`）にする。どれも ComfyUI が呼ぶのと同じ comfy-kitchen の関数を、ComfyUI と同じ引数で呼ぶ。目的は利用者が ComfyUI で使っているチェックポイントの忠実な再現で、速度より数値の整合性を優先し、再量子化（読み込みのときに別の形式へ変換し直すこと）はしない（裁定 101 ②③）。重みとスケールは素のテンソルとして持ち、ローダー・block swap・VRAM 16GB mode・LoRA は 3 形式で共通である。テキストエンコーダの量子化層は int8 だけである（裁定 101 ①）。
+
+### 共通の土台
+
+- **`H3QuantLinear`**（`engine_h3/quant_linear.py`）: 3 つのモジュールの共通の土台。中身は何もしない `dequant_cache()` の文脈だけにとどめ、抽象の約束事の method は置かない。土台を置く理由は、`dit.normalize_dtypes`（量子化の重み・F8 の倍率・F32 のスケールを bf16 に潰さない）と `lora.attach`（§6.6）の `isinstance` を 1 つの名前で書くためである。
+- **3 つが同じ名前で持つもの**: `in_features`・`out_features`・`spec`・`bias`（fp8・w4a8 では常に None）・`forward(x)`・`forward_rows(x, n0, n1, lora_xa=None)`・`shares_input(x)`・`quantize_input(x)`・`forward_rows_q(xq, xs, n0, n1, lora_xa=None)`・`extra_repr`。VRAM 16GB mode（§6.5）と LoRA はこれらを名前で呼ぶ（duck typing）。そろっていることはテストで固定する。
+- **差し替え**: `swap_in_int8_linears`（名前は据え置き。`text_encoder.py` が import のときに束縛するため）が、層の印の形式（`spec.format`）で 3 つのモジュールを選び、meta の上で組む。fp8 と w4a8 の層が差し替え先の `nn.Linear` にバイアスを持つときは、理由を出して読み込みを断る。
+- comfy-kitchen は `quant_linear._ck()` のモジュール属性を経由して呼ぶ（テストの偽のカーネルがそこを差し替える）。
+
+### int8 ConvRot
 
 - **素の int8 `Parameter` ＋ f32 `[N,1]` のスケール**: 量子化された Linear は `H3Int8Linear` という自前のモジュールにする。重みは素の int8 の `nn.Parameter`（`requires_grad=False`）、スケールはファイルどおりの f32 `[出力次元, 1]` のバッファ、bias は任意である。`forward` は `comfy_kitchen.int8_linear` を呼ぶ。ConvRot（活性化を回転してから量子化する方式）の有無と groupsize は層ごとの記述（`comfy_quant`）から取る。
 - **量子化テンソル型を使わない理由**: comfy-kitchen には重みをラッパー型のテンソルとして持つ量子化テンソル型もある。しかし、ラッパー型のテンソルは本製品の block swap と先読み（素のテンソルを前提に重みを出し入れする）に乗らない。関数 API の `int8_linear` は同じ CUDA カーネルに届くので、素のテンソルで足りる。
-- **CUDA 経路に固定する**: 起動時に `comfy_kitchen.list_backends()["cuda"]` が使用可能で、能力に `int8_linear` を含むことを確かめ、満たさなければロードを拒否する（理由の文を返す）。そのうえで **triton と eager の両経路を切る**。
+- **CUDA 経路に固定する**: 読み込みのときに `require_cuda_quant(formats, *, fp8_mode)` が、`comfy_kitchen.list_backends()["cuda"]` が使用可能で、能力に `int8_linear` を含むことを確かめる（`int8_linear` は DiT の形式によらず常に要る。テキストエンコーダが int8 のため）。DiT に fp8 の層があれば `quantize_per_tensor_fp8`・`dequantize_per_tensor_fp8`（`scaled` の経路ではさらに torch の `F.scaled_mm`。`comfy_kitchen.scaled_mm_v2.has_scaled_mm_v2()`）を、w4a8 の層があれば `w4a8_int8_linear` を確かめる。満たさなければロードを拒否する（理由の文を返す）。そのうえで **triton と eager の両経路を切る**。能力の一覧は GPU の世代に関係なく登録された名前を返すので、世代の判定は下の fp8 と w4a8 の項で別に行う。
   - triton を切る理由: comfy-kitchen の triton 経路の int8 行列積は、トークン数×出力幅が 2³¹ 以上で出力の位置が int32 であふれ、プロセスごと落ちる既知の不具合がある（上流 issue #136）。CUDA 経路は出力の位置を int64 で計算しているので、この限界を持たない。
   - eager を切る理由: eager は制約から外れた呼び出しを黙って受けて遅くなるだけで、速度の低下から区別できない。切っておけば、CUDA 経路に乗らない呼び出しは `NoCapableBackendError` で止まる（**fail loud**）。
 - **CUDA 経路に乗る条件**: 重みとスケールが GPU 上にあること。block swap が重みを GPU に載せた状態で呼ぶ限り満たされる。
@@ -1203,6 +1217,32 @@ MCP の `submit_generate` は `inpaint_*` の 4 引数（マスクの ID・音�
   - **fail loud の保ち方**: この経路は comfy-kitchen の登録の制約を通らない。そのため、重みとスケールが入力と同じデバイスに無い呼び出しは共有せず、従来の `int8_linear` に回して `NoCapableBackendError` で止める。
   - 数値が変わらないことと短縮の実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §177。
 
+### fp8（`float8_e4m3fn`。`engine_h3/fp8_linear.py` の `H3Fp8Linear`）
+
+- **持つもの**: 重みは F8_E4M3 `[N,K]` の `Parameter`、`weight_scale` は F32 の 0 次元の buffer、`input_scale` は F32 の 0 次元の buffer（ファイルに無ければ None）。バイアスは持たない。ComfyUI の `TensorCoreFP8Layout` の経路を、ラッパー型のテンソルを使わずに素のテンソルで呼ぶ。
+- **経路は読み込みのときに 1 回だけ決める（`fp8_mode`。裁定 101 ⑦）**: `quant_linear.fp8_mode_for` が、GPU の計算能力（compute capability。世代を表す番号）が 8.9 以上（RTX 40 系以降）なら `scaled`、未満（RTX 30 系・RTX 20 系）なら `dequant` を返す。ComfyUI の `supports_fp8_compute` と同じ分け方である。決めた値は `_build_dit` が差し替えに渡す。
+  - **`scaled`**: `quantize_per_tensor_fp8(x, input_scale)` で入力を fp8 にし、`comfy_kitchen.scaled_mm_v2.scaled_mm_v2(xq, weight.t(), scale_a=input_scale, scale_b=weight_scale, bias=None, out_dtype=bf16)` で fp8 の行列積を行う（comfy-kitchen の `tensor/fp8.py` の `_fp8_scaled_mm` と同じ呼び方。累算は fp32）。
+  - **`dequant`**: `dequantize_per_tensor_fp8(weight, weight_scale, bf16)` で重みを bf16 に戻し、`F.linear` で計算する（ComfyUI の `weight.dequantize()` ＋ `F.linear` と同じ）。`input_scale` は使わない。
+- **`full_precision_matrix_mult` の層は常に `dequant`**: 印がある層は GPU の世代によらず bf16 に戻す（公式の fp8 では 50 層の `mlp.fc2` すべて）。
+- **`input_scale` の無い層の `scaled`**: ComfyUI と同じく倍率 1.0 で入力を fp8 にする（裁定 101 ⑩の決定）。倍率は ComfyUI と同じく呼び出しのたびに `torch.ones((), dtype=float32, device=x.device)` で作る（buffer にはしない）。入力が fp8 の上限 448 を超えると飽和するので、読み込みのときに該当する層の数をワーカーのログへ 1 回だけ警告として出す。
+- **読み込みのログ**: fp8 の層があれば、ワーカーのログ（`[h3_worker]`）に `fp8: <層の数> layer(s), path '<scaled か dequant>' (compute capability <番号>); <数> marked full_precision_matrix_mult run dequantized` の行が出る。
+- **VRAM 16GB mode**: `forward_rows` は呼び出しのたびに重みの行 `[n0, n1)` を切る（block swap が `.data` を差し替えるので、切った片を持ち越さない）。`n0` と `n1 − n0` は 16 の倍数でなければならない（`F.scaled_mm` の制約。ヘッド群の 1,024 行は満たす。将来 `VRAM16_HEAD_GROUP` を変えるときの罠で、外れれば `forward_rows` が止める）。`scaled` の経路では qkv の入力を 1 ブロック 1 回だけ量子化して共有する（`shares_input` が真。倍率が固定のテンソルごとの量子化なので、片で掛けても全体と同じバイトになる）。`dequant` の経路では共有しない。
+- **bf16 に戻した重みの使い回し（`dequant_cache()`）**: VRAM 16GB mode の MLP は fc1 と fc2 を行の塊ごとに呼ぶので、`lowvram.block_forward` が MLP の塊のループを `fc1.dequant_cache()`・`fc2.dequant_cache()` の文脈で包み、`dequant` の層は戻した重みをそのループの間だけ使い回す。**文脈の外では持たない**（block swap が同じ番地を別のブロックに使い回すため。`data_ptr` で持ち越す設計は採らない）。int8 と w4a8 の文脈は何もしない。VRAM 16GB mode が off の経路は fc2 が 1 ブロック 1 回なので使い回さない。
+- **速度**: fp8 は int8 ConvRot より遅い（裁定 101 ④。実測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210.7・§211.6）。
+
+### w4a8（`asym_w4a8_int8`。`engine_h3/w4a8_linear.py` の `H3W4A8Linear`）
+
+- **持つもの**: 4 ビットを 2 つずつ詰めた重み I8 `[N,K/2]` の `Parameter`、組ごとの相対の倍率 `weight_s_rel` F8_E4M3 `[N,K/G]`、行ごとの倍率 `weight_s_channel` F32 `[N]`、任意の符号表 `weight_codebook` F32 `[16]`（いずれも buffer）と、組の大きさ G（倍率を共有する重みの個数。4・8・16 など）。バイアスは持たない。ComfyUI の `AsymW4A8Int8Layout` の経路を素のテンソルで呼ぶ。
+- **計算**: `w4a8_int8_linear(x, weight, s_rel, s_channel, codebook, None, None, G, 256, bf16)` を、ComfyUI（comfy-kitchen の `tensor/w4a8_int8.py` の `_w4a8_int8_forward`）と同じ引数で呼ぶ（裁定 101 ⑧）。ConvRot の組は 256 で固定。**入力の回転と 8 ビット化はカーネルの中で行う**ので、本製品は入力を量子化しない。
+- **世代**: CUDA のカーネルは計算能力 8.0 以上（RTX 30 系以降）が要る。読み込みのときに `quant_linear.require_w4a8_capability` が、w4a8 の層があり計算能力が 8.0 未満なら理由の文つきで断る（RTX 20 系。裁定 101 ⑧）。RTX 20 系の拒否は実機では確かめておらず、計算能力を差し替える単体テストで押さえている。
+- **VRAM 16GB mode**: `shares_input` は偽で、qkv はヘッド群の片ごとに `forward_rows` を呼ぶ（片ごとにカーネルが入力を量子化し直す）。`quantize_input`・`forward_rows_q` は呼ばれれば例外で止める。このぶん VRAM 16GB mode の 1 ステップは int8 より約 1 割遅い（実測は記録簿 §210.6・§211.6）。入力の量子化を共有するには comfy-kitchen の公開の関数に無い「量子化済みの入力を受けるカーネル」が要り、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-284 で扱う。
+- **速度の危険（注記）**: comfy-kitchen の w4a8 の CUDA カーネルは、内部で遅い汎用の経路（eager の実装）へ黙って落ちることがある（ComfyUI も同じ）。ComfyUI と同じ関数を同じ引数で呼んでいる以上は忠実さの範囲内なので、検出の仕組みは作らない。スパイクの通しの生成では eager の呼び出しは 0 回だった（記録簿 §210.5）。
+
+### 記録
+
+- **読み込みの記録**（`build_report["dit"]`。ワーカーのログの `LOAD_OK` の行）: `quant_layers`（量子化層の数）・`quant_layers_by_format`（形式ごとの層の数）・`fp8_mode`（fp8 の層が無ければ None）・`quant_specs`（形式・ConvRot・組の要約）。
+- **`done` の `h3.quant_backends`**: backend ごとの能力の表。CUDA の行に、能力の旗 `int8_linear` に加えて `w4a8_int8_linear`・`quantize_per_tensor_fp8` が入る（`chain_h3.py` も同じ関数を使うので連結のジョブもそろう）。欄の契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6。
+
 ---
 
 ## 6. 既存部品との接続
@@ -1210,8 +1250,8 @@ MCP の `submit_generate` は `inpaint_*` の 4 引数（マスクの ID・音�
 - **block swap と先読み**: 既存の `engine/transformer/block_swap_service.py` と `block_swap_prefetch.py` をそのまま使う。`BlockSwapService` はパイプラインに常駐し、ジョブごとには作らない。H3 の本体ブロック列の名前が `blocks` で、block swap が探す候補名に当たる。素の `nn.Module` の列なので、既存の形でそのまま乗る。共有部品は変更しない。
 - **テキストエンコーダの読み方**: 層ごとにファイルから GPU へ直接読む（§4）。`GemmaLayerOffloadService` は使わない。
 - **推論の囲み【設計】**: `engine_h3` は**全経路 `torch.no_grad()`** で書く（`inference_mode` は 1 箇所も書かない）。規約と理由は MULTI_ENGINE_DESIGN §5.8。CPU テストで `engine_h3` 配下に `inference_mode` が現れないことを固定する。
-- **精度の島の dtype**: 読み込みの直後に `H3DiT.normalize_dtypes()` で、精度の島の内外の dtype を揃える（公式ファイルでは AdaLN 射影の F16→F32 だけが変わる）。
-- **meta で組んで `assign=True`【設計】**: DiT もテキストエンコーダも `torch.device("meta")` の中で組み、量子化層を `H3Int8Linear`（meta）に差し替え、テンソルを 1 本ずつ読んで `load_state_dict(assign=True)` で入れる。読み込みの後に meta のまま残ったテンソルが無いことを、読んだ部分ごとに検査する（テキストエンコーダは、画像読み取り部を読むジョブ〔先頭か末尾の画像がある I2V〕では画像読み取り部も含め、それ以外〔T2V と中間だけのジョブ〕では文章側だけを調べる。読まない画像読み取り部は meta のまま残すため）。普通に組むと DiT が f32 で約 77GB、テキストエンコーダが bf16 で約 49GB を先に確保して主メモリ（64GB）を超えるので、この作りは必須である。
+- **精度の島の dtype**: 読み込みの直後に `H3DiT.normalize_dtypes()` で、精度の島の内外の dtype を揃える（公式ファイルでは AdaLN 射影の F16→F32 だけが変わる）。量子化層（`H3QuantLinear`。§5）は飛ばすので、fp8 の重み・F8 の `weight_s_rel`・F32 の倍率は変わらない。BF16 の `adaln_t_table`（h3ErosMax の w4a8 など）は F32 に揃う。
+- **meta で組んで `assign=True`【設計】**: DiT もテキストエンコーダも `torch.device("meta")` の中で組み、量子化層を形式ごとのモジュール（`H3Int8Linear`・`H3Fp8Linear`・`H3W4A8Linear`。§5。テキストエンコーダは int8 だけ）の meta に差し替え、テンソルを 1 本ずつ読んで `load_state_dict(assign=True)` で入れる。読み込みの後に meta のまま残ったテンソルが無いことを、読んだ部分ごとに検査する（テキストエンコーダは、画像読み取り部を読むジョブ〔先頭か末尾の画像がある I2V〕では画像読み取り部も含め、それ以外〔T2V と中間だけのジョブ〕では文章側だけを調べる。読まない画像読み取り部は meta のまま残すため）。普通に組むと DiT が f32 で約 77GB、テキストエンコーダが bf16 で約 49GB を先に確保して主メモリ（64GB）を超えるので、この作りは必須である。
 
 ---
 
@@ -1308,12 +1348,13 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 - **off の経路の限界**: SDPA の mem-efficient 経路は、系列が約 10 万行を超えて v が view（行の刻みが詰まっていない）のとき、不正なメモリアクセスになる。実測は 98,304 行で正常・100,352 行で不正（v を連続にすれば正常。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §168.3 の T6）。on は群ごとに連続な q・k・v を渡すので、この境界に近づかない。off の経路には防御を足していない。
 - 上限のせいで先読みの受け皿が確保できないとき、同期の経路に黙って切り替わる（記録だけ。on の条件では起きていない）。
 - Turing と、comfy-kitchen の内部が検査に合わないときは、qkv の量子化は従来どおり 1 ブロック 21 回になる（§5 の例外）。共有の経路は Ampere では確かめていない（オーナー裁定 2026-10-25 で門に入れなかった）。
+- **fp8 と w4a8 の層**: qkv の入力の共有は、fp8 の `scaled` の経路では行い、fp8 の `dequant` の経路と w4a8 では行わない（§5）。w4a8 の層の一時メモリ（カーネルの中で入力を量子化する作業領域）は int8 より大きいが（層ごとの値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210.6）、定数と上限の決め方は変えていない。製品の条件でのノイズ除去の山は int8 以下に収まった（記録簿 §211.6）。大きな画角・長い尺の w4a8 の山は較正していない（快適上限の線は据え置き。裁定 101 ①）。
 
 ---
 
 ## 6.6 LoRA（実行時の低ランク経路）
 
-**結論**: LoRA（追加学習した低ランクの差分重み。Style・Motion・Turbo など）は、int8 の重みには触れず、各対象層の出力に FP32 で差分を足す経路として動く。利用者が `models/MiniMaxH3/LoRA/` に置いた `.safetensors` を、操作パネル・Gradio・MCP から使える。同時に使う本数に制限はなく、ステップ数と shift は自動では変えない（Turbo を使うときは利用者が下げる。オーナー裁定は研究ノート §10 の裁定 62〜73）。LoRA を使わないジョブには hook も buffer も無く、今日と同じ経路を通る（基準の指紋 `0da6111c…` が変わらないことで確かめた。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176）。
+**結論**: LoRA（追加学習した低ランクの差分重み。Style・Motion・Turbo など）は、量子化された重み（int8・fp8・w4a8）には触れず、各対象層の出力に FP32 で差分を足す経路として動く。ComfyUI は LoRA を重みに合成してから量子化し直すので、ここは既知の差として受け入れている（裁定 101 ⑨）。利用者が `models/MiniMaxH3/LoRA/` に置いた `.safetensors` を、操作パネル・Gradio・MCP から使える。同時に使う本数に制限はなく、ステップ数と shift は自動では変えない（Turbo を使うときは利用者が下げる。オーナー裁定は研究ノート §10 の裁定 62〜73）。LoRA を使わないジョブには hook も buffer も無く、今日と同じ経路を通る（基準の指紋 `0da6111c…` が変わらないことで確かめた。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §176）。
 
 ### 式
 
@@ -1328,8 +1369,8 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 
 ### 接続（hook と `forward_rows`）
 
-- **forward hook**: `forward()` を通る呼び出し（off の経路の 4 層・token_refiner・VRAM 16GB mode の out_proj と `block.mlp`）はすべて `Module.__call__` を通るので、層ごとに hook を 1 本掛けて差分を足す。`dit.py` と `H3Int8Linear.forward` は変えない。
-- **`H3Int8Linear.forward_rows(x, n0, n1, lora_xa=None)`**: VRAM 16GB mode の qkv は `__call__` を通らないので、`forward_rows` と、共有の経路の `forward_rows_q`（`x=None`・`lora_xa` で呼ぶ）が自分で差分を足す。B は出力の行 `[n0, n1)` で切る。`lowvram.block_forward` はヘッド群のループの前に `f32(h) @ Aᵀ` を 1 回だけ計算して `lora_xa` で渡す（群ごとの 21 回の計算を避ける）。LoRA が無いジョブでは `None` で、算術は増えない。
+- **forward hook**: `forward()` を通る呼び出し（off の経路の 4 層・token_refiner・VRAM 16GB mode の out_proj と `block.mlp`）はすべて `Module.__call__` を通るので、層ごとに hook を 1 本掛けて差分を足す。`dit.py` と量子化層の `forward` は変えない。
+- **`forward_rows(x, n0, n1, lora_xa=None)`**（`H3Int8Linear`・`H3Fp8Linear`・`H3W4A8Linear` の 3 つとも。§5）: VRAM 16GB mode の qkv は `__call__` を通らないので、`forward_rows` と、共有の経路の `forward_rows_q`（`x=None`・`lora_xa` で呼ぶ）が自分で差分を足す（共通の関数 `quant_linear.add_lora` が `lora.apply` を呼ぶ）。B は出力の行 `[n0, n1)` で切る。`lowvram.block_forward` はヘッド群のループの前に `f32(h) @ Aᵀ` を 1 回だけ計算して `lora_xa` で渡す（群ごとの 21 回の計算を避ける）。LoRA が無いジョブでは `None` で、算術は増えない。
 - **buffer**: A と B は層の**永続しない buffer**（`_lora_A_{k}`・`_lora_B_{k}`）として置く。block swap・先読みの受け皿・`_park_dit`・`drop_to_meta` がブロックと一緒に運び、state dict は変わらない。
 
 ### 塊の切り方（off と VRAM 16GB mode が一致する理由）
@@ -1349,7 +1390,7 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 
 - **全ブロック常駐の例外**: `blocks_on_gpu` が 0 以下か全ブロック以上のときは、LoRA の buffer も全部 GPU に載る（Turbo で約 +1.9GB。見積もり）。ベースの重みも全部 GPU にある条件なので整合するが、「50 ブロック分を常駐させない」要件の例外としてここに明記する。
 - **固定メモリの中継は育つ**: 先読みの固定メモリの中継は大きくなる方向にだけ変わる（縮まない）。Turbo の後は常駐サービスが約 2×39MB を持ち続ける。数値には関係しない。
-- **形の合わない組**: `attach` は A が `[rank, in_features]`・B が `[out_features, rank]` であることを確かめ、合わない組・モデルに無い名前・dtype が BF16／F16／F32 以外の組は**飛ばして記録する**（実行は続く）。対象は `H3Int8Linear` と素の `nn.Linear` だけ。
+- **形の合わない組**: `attach` は A が `[rank, in_features]`・B が `[out_features, rank]` であることを確かめ、合わない組・モデルに無い名前・dtype が BF16／F16／F32 以外の組は**飛ばして記録する**（実行は続く）。対象は量子化層（`H3QuantLinear` の 3 つ。§5）と素の `nn.Linear` だけ。
 
 ### FP32 の保証
 
@@ -1384,10 +1425,26 @@ diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・
 - **吸収する揺れ**:
   - 接頭辞 4 通り（無し／`model.diffusion_model.`／`model.model.`／`net.`）を剥がす。
   - 構成（層数・幅・ヘッド数・ffn・AdaLN 表の格子数 G とランク・枝刈りか否か）は、メタデータでなく**テンソルの形状**から導く。
-  - `comfy_quant` は `format`・`convrot`・`convrot_groupsize` の 3 キーだけを読み、他のキーは無視する。
-  - groupsize は 256 以外も通す。量子化されていない層は、読んだ後に島の外側を bf16、内側を f32 に揃える。
-  - 知らないテンソルは警告ログを出して捨てる。
-- **拒否するもの**: 非枝刈り版（`adaln_t_table` が無い）と、旧式の量子化記述（`_quantization_metadata`）、`int8_tensorwise` 以外の形式、VSA の追加テンソル、PDD ヘッドは、理由の文つきで拒否する（または警告して捨てる）。主に試すのは公式のファイルで、コミュニティ版への対応は後回しである。例外として、オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。対応の保証は §12 のとおり後回し（§13）。
+  - 量子化されていない層は、読んだ後に島の外側を bf16、内側を f32 に揃える。
+  - 知らないテンソルは警告ログを出して捨てる（例: h3ErosMax の `adaln_basis`・`adaln_mean`。研究ノート §13）。量子化層の補助テンソル（`weight_scale`・`input_scale`・`weight_s_rel`・`weight_s_channel`・`weight_codebook`・`comfy_quant`）は知っている名前として扱う。
+- **量子化層の決め方（裁定 101）**: 層が量子化されているかと、その形式は、**重みの dtype ではなく量子化の印**で決める（w4a8 の重みも int8 と同じ I8 で保存されるため）。
+  - **印の置き場所は 2 つ**: ファイル先頭のメタデータ式（`__metadata__._quantization_metadata` の `layers`。鍵はテンソル名そのまま）と、層ごとのテンソル `<層>.comfy_quant`。**メタデータ式に載っている層はそちらを採り、載っていない層だけ層ごとの印を読む**（ComfyUI の `convert_old_quants` がメタデータで層ごとの印を上書きするのと同じ優先順位。LTX 側の判定器 `sft_quant_format` も同じ）。両者の一致は確かめない（ComfyUI にも無い）。メタデータの読み出しは `sft_quant_format.metadata_layers` を共用する。
+  - **印から読む鍵**: `format`・`convrot`・`convrot_groupsize`・`group_size`（w4a8）を最上位か `params` の中から（最上位が勝つ）、`full_precision_matrix_mult`（fp8。w4a8 では断るために読む）を最上位から読む。w4a8 の `convrot` は読まない（常に回転する。ComfyUI と同じ）。ほかの鍵（`per_row`・`orig_dtype` など）は無視する。int8 の groupsize は 256 以外も通し、そのまま `int8_linear` に渡す。
+  - **受ける形式は呼び出し側が指定する**: DiT（`inspect_h3_dit`）は `int8_tensorwise`・`float8_e4m3fn`・`asym_w4a8_int8` の 3 つ（`h3_format.DIT_FORMATS`）、テキストエンコーダ（`inspect_h3_te`）は `int8_tensorwise` だけ（`TE_FORMATS`。裁定 101 ①）。1 つのファイルに形式が混在してよい。
+  - **順序**: 印を先に読み、w4a8 の重み（4 ビットを 2 つずつ詰めた `[N,K/2]`）を論理の形 `[N,K]` に直してから、構成を導く形の表を通す。
+- **形式ごとのテンソルの検査**（dtype と形を厳密に）:
+  - int8: 重み I8 `[N,K]`、`weight_scale` F32 `[N,1]`。
+  - fp8: 重み F8_E4M3 `[N,K]`、`weight_scale` F32 の 0 次元、任意の `input_scale` F32 の 0 次元。
+  - w4a8: 重み I8 `[N,K/2]`、`weight_s_rel` F8_E4M3 `[N,K/G]`、`weight_s_channel` F32 `[N]`、任意の `weight_codebook` F32 `[16]`。組の大きさ G と入力幅 K の条件は comfy-kitchen の `AsymW4A8Int8Layout.Params` をそのまま写した（G は 4 以上で 16 の約数か倍数、K は 16・G・256 の倍数）。
+- **拒否するもの**（理由の文つき。文は「MiniMax H3 のファイルとして使えません: 」で始まり、アプリ側では 422 `MODEL_INCOMPATIBLE` の `detail` になる）:
+  - 非枝刈り版（`adaln_t_table` が無い）。
+  - 受ける形式以外の印（nvfp4・w4a4・w6a8 など。テキストエンコーダでは fp8 と w4a8 も）。
+  - 印の無い I8・F8 の重みと、印の無い層の量子化の補助テンソル（bf16 の Linear に生の符号が入ってしまうため）。
+  - fp8 の `convrot: true`、w4a8 の `convrot_groupsize` が 256 以外・`full_precision_matrix_mult`・`*_correction` を持つ層（非対称の補正つき）・組の大きさの条件に合わない層。
+  - 形式ごとのテンソルの dtype か形が上の表と合わないもの。
+  - VSA の追加テンソル、PDD ヘッド（拒否するか警告して捨てる）。
+  - 量子化層の差し替え先にバイアスがある fp8・w4a8 の層は、事前検査ではなく読み込みの差し替えで断る（§5）。w4a8 の層を RTX 20 系で読み込むときの拒否も、読み込みのとき（§5）である。
+- **コミュニティ版**: 主に試したのは公式のファイルと、検証用の第三者の fp8・w4a8（Kijai の w4a8・h3ErosMax の w4a8 と旧式の印の int8。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211）である。オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。それ以外の派生版の対応の保証は §12 のとおり後回し（§13）。
 - **置き場**: 判定は torch に依存しない `h3_format.py`（リポジトリ直下。`sft_quant_format.py`・`chain_math.py` と同じ置き場）に書く。アプリ側（torch の無い仮想環境）の事前検査からも呼ぶためである。
 - **アプリ側の事前検査**: `services/model_registry.py` の `precheck_model_file` が記述子の系統を見て、`h3` なら DiT を `inspect_h3_dit`、テキストエンコーダを `inspect_h3_te` にかける。VAE 2 本は汎用の safetensors 検査（長さと JSON）である。`h3_format.py` の `H3FormatError` は `MODEL_INCOMPATIBLE` に変換して返す。
 - **FL2VA と Ref2VA はヘッダで区別できない**（テンソル名・形状が同じ）。記述子（`scripts/manifests/40-minimaxh3.json`）で配布ファイル名を固定して縛る。
@@ -1404,10 +1461,12 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 | ファイル | 役割 |
 |---|---|
-| `h3_format.py`（リポジトリ直下・torch 非依存） | ヘッダの判定・接頭辞の剥がし・構成の導出・`comfy_quant` の読み・量子化層の一覧（§7） |
+| `h3_format.py`（リポジトリ直下・torch 非依存） | ヘッダの判定・接頭辞の剥がし・構成の導出・量子化の印の読み（メタデータ式と層ごとの `comfy_quant`）・形式ごとのテンソルの検査・量子化層の一覧（`QuantSpec`。§7） |
 | `engine_h3/constants.py` | 定数と既定値（§9）。フレーム規約の算術 |
 | `engine_h3/sft_load.py` | テンソルを 1 本ずつ読んで meta のモデルへ入れる（`assign=True`）。読み残しの検査 |
-| `engine_h3/quant_linear.py` | `H3Int8Linear`（出力の行の範囲だけを計算する `forward_rows` を含む）・CUDA 経路の検査と固定・量子化層の差し替え（§5）・VRAM 16GB mode の qkv の量子化の共有（`shares_input`・`quantize_input`・`forward_rows_q`・起動時の検査。§5 の例外） |
+| `engine_h3/quant_linear.py` | 量子化層の土台 `H3QuantLinear`・`H3Int8Linear`（出力の行の範囲だけを計算する `forward_rows` を含む）・CUDA 経路の検査と固定（`require_cuda_quant`）・fp8 の経路の選択（`fp8_mode_for`）・w4a8 の世代の検査（`require_w4a8_capability`）・形式ごとの量子化層の差し替え（`swap_in_int8_linears`。§5）・VRAM 16GB mode の qkv の量子化の共有（`shares_input`・`quantize_input`・`forward_rows_q`・起動時の検査。§5 の例外） |
+| `engine_h3/fp8_linear.py` | fp8 の量子化層 `H3Fp8Linear`（`scaled`／`dequant` の 2 経路・`input_scale` の無い層の倍率 1.0・bf16 に戻した重みの使い回し `dequant_cache`。§5） |
+| `engine_h3/w4a8_linear.py` | w4a8 の量子化層 `H3W4A8Linear`（`w4a8_int8_linear` を ComfyUI と同じ引数で呼ぶ。入力の共有はしない。§5） |
 | `engine_h3/dit.py` | DiT 本体・枝刈り版の AdaLN・attention（SDPA／SageAttention）・行の並べ替え。VRAM 16GB mode の分岐（`vram16`）と `tokens_box` を持つ（§6.5） |
 | `h3_chain_math.py`（リポジトリ直下・torch 非依存。サーバー側が `engine_h3` を import しない境界のため直下に置く） | 連結の幾何（クリップ長の列から、潜在の長さ・重なり・音声の固定行の数・音声の余りと継ぎ目ごとの旗・合計の上限と最小長の検査を求める）。アプリ側の事前検査・mock・エンジンが同じ関数を import する（§3.3） |
 | `h3_lora_format.py`（リポジトリ直下・torch 非依存） | LoRA の鍵の写像と「対応・非対応」の判定。アプリとワーカーが同じ関数を import する（§6.6） |
@@ -1497,7 +1556,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 
 - **名前**: `.venv-engine-h3`。MULTI_ENGINE_DESIGN §5.3 の一覧に並ぶ、3 つ目のエンジン用仮想環境である。
 - **torch を LTX に揃えない理由【オーナー裁定：裁定 11・16】**: comfy-kitchen の CUDA 拡張は CUDA 13 系の torch で効く。拡張自体は torch の DLL にリンクしていないので、CUDA 13 系でさえあれば torch の版は問わない。そのうえで、SageAttention・triton-windows などの周辺の実績がある版を選ぶ。既存の 2 系統の torch（CUDA 12.8 系）のままでは CUDA 拡張が使えない。
-- **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。動作を確かめたのは Ada（RTX 4070 Ti SUPER）と Ampere（RTX 3080 Laptop 16GB）で、Blackwell（RTX 50 系）は未確認、Turing は int8 が遅い経路になり SageAttention も使えず、動作も未確認である（裁定 38・43）。主メモリの推奨は 64GB で、32GB 機はページファイル（「システム管理」）を前提に短い生成を確認している。コミット量の山が 32GB を超えるのでページファイルに頼り、遅くなる場合がある（裁定 26・43。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。利用者向けの書き方（確かめた世代と未確認の世代の区別、主メモリと容量）は README の「ハードウェア要件の詳細」「対応する GPU 世代」と §7.6 にある。
+- **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。動作を確かめたのは Ada（RTX 4070 Ti SUPER）と Ampere（RTX 3080 Laptop 16GB）で、Blackwell（RTX 50 系）は未確認、Turing は int8 が遅い経路になり SageAttention も使えず、動作も未確認である（裁定 38・43）。DiT の量子化の形式による世代の違い（fp8 は RTX 40 系以降が fp8 の行列積、それ未満が bf16 に戻す経路。w4a8 は RTX 30 系以降で、RTX 20 系では読み込みを断る）は §5。主メモリの推奨は 64GB で、32GB 機はページファイル（「システム管理」）を前提に短い生成を確認している。コミット量の山が 32GB を超えるのでページファイルに頼り、遅くなる場合がある（裁定 26・43。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。利用者向けの書き方（確かめた世代と未確認の世代の区別、主メモリと容量）は README の「ハードウェア要件の詳細」「対応する GPU 世代」と §7.6 にある。
 - **作るのは導入バッチ**: `setup.bat` はこの仮想環境を作らない。`install-MiniMaxH3.bat` が `install_ltx.ps1` の `Ensure-EngineVenv`（H3 用の呼び出し）で作り（`-SkipVenv` を越える。物体追尾の `.venv-utils` と同じ形）、そのあと重みを取る。導入バッチの位置づけは MULTI_ENGINE_DESIGN §6.2。`setup.bat` の再実行では当て直されないので、freeze が変わったときは `install-MiniMaxH3.bat` を再実行する。
 - **ライセンスの注意【オーナー裁定：裁定 36・41】**: `install_model.ps1` は、記述子の `id` が `MiniMaxH3` のときだけ、取得の前にライセンスの注意文（名称・利用できる地域・取得者の自己責任）と本文の URL を表示する。表示するだけで、同意の入力は求めない。記述子は `MiniMaxAI/MiniMax-H3` の `LICENSE` も取得して `models/MiniMaxH3/LICENSE` に置く（検査の行の鍵は `h3_license`。サーバーは読まないが、写しを手元に置くための行なので消さない）。NOTICE は作らない。利用者向けの文面は README の「ライセンス」節である。
 - **容量が増える**: torch の版が既存の仮想環境と違うため、uv のハードリンク共有（MULTI_ENGINE_DESIGN §5.3「容量は心配しなくてよい」）が効かず、この仮想環境ぶんの数 GB がそのまま増える。実測値は freeze と記録簿を見る。必要空き容量の正本は README のハードウェア要件表である。
@@ -1527,6 +1586,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | クリップごとの A2V とバッチ A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120・1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
 | Outpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205、操作パネルはフロントエンド `Docs/DEVLOG.md` §168） | 弾 1＝調査・幾何・エンジン・ワーカー・CPU の門・GPU の門 G0〜G4・遠隔目視（go。記録簿 §205.16）、弾 2＝API・アプリ層・アダプタ・配信・操作パネル・MCP・文書。GPU の門 G5（快適上限の 2 点）・G6（20 ステップの完走）は合格し（記録簿 §205.19・§205.20）、操作パネルは配布済み（§205.22）。オーナーの実機の門 G7 も合格した（§205.25。裁定 99・§3.6） |
 | Inpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208、操作パネルはフロントエンド `Docs/DEVLOG.md` §169） | 第 0 段＝スパイク、弾 1＝エンジン・ワーカー・アダプタ・API・mock・MCP・テスト・文書、弾 2＝操作パネル。GPU の門とオーナーの目視・実機確認は合格した（記録簿 §208.7・§208.10。裁定 100・§3.7） |
+| fp8 と w4a8 の重み（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) 1-283。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211、操作パネルはフロントエンド `Docs/DEVLOG.md` §171） | 第 0 段＝スパイク（記録簿 §210）、弾 1＝検出・層・読み込みのときの判定・テスト、弾 2＝操作パネルの Settings の理由文、弾 3＝文書。機械の門・GPU の門・オーナーの視聴は合格（記録簿 §211。裁定 101・§5・§7） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。
@@ -1547,7 +1607,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 - 連結の限界は §3.3 の「既知の限界・範囲外」、Retake の限界は §3.4 の「既知の限界」を参照
 - A2V のうち次のもの（§3.1）: V2A（映像から音声）の API と UI・映像のマスクの公開・音声の切り出しの引数・行ごとに違う値や区間のマスク・A2V での映像のマスクのトークン単位の利用（トークン単位の値の列そのものはエンジンが受け、Outpainting が内部で使う。§3.1 の「粒度」・§3.6）・MCP の `plan_a2v_batch` の H3 対応（操作パネルのバッチ A2V は 2026-11-09 に H3 に対応した。裁定 98）。Gradio の H3 の A2V は触っていない（Gradio の H3 の整理は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-243。Gradio は知らない機能名と知らない `constraints` のキーを捨てるので、影響は無い）
 
-量子化の旧式の記述（`_quantization_metadata`）・VSA の追加テンソル・PDD ヘッドは、警告して捨てるか拒否する（§7）。
+VSA の追加テンソル・PDD ヘッドは、警告して捨てるか拒否する（§7）。
 
 ---
 

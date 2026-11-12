@@ -6541,3 +6541,41 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 手順と結果は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.29 です。`.aux2` は `scripts/build.ps1` で作り直し、`scripts/deploy.ps1` で実機と backend リポジトリの配布コピーの 2 箇所へ置きます。
 - 結果: ①〜③ とも合格（2026-11-12、オーナー実機確認。MiniMax H3 と LTX の両方）。
 
+
+## 171. Settings のモデル読み込み欄で、422 の拒否はサーバーが書いた理由（`detail`）を表示する（台帳 1-283 の弾 2・設計正本 裁定 101 ⑥） — `useModels.ts` の失敗の状態に `detail` と `httpStatus`・`ModelsPanel.tsx` は 422 のときだけ `detail` を表示・aux2 の配布（2026-11-12）
+
+### 171.1 結論
+
+- **Settings の「選択したモデルを読込」が 422 で断られたとき、欄にサーバーが書いた具体的な理由が出るようになりました。** たとえば LTX のファイルを MiniMax H3 の動画モデル (checkpoint) に選んで読み込むと、「モデルの読込に失敗しました: MiniMax H3 のファイルとして使えません: LTX の DiT です（MiniMax H3 の DiT ではありません）」と出ます。これまでは、種類ごとの定型文（「選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。」）しか出ていませんでした。
+- 422 以外の失敗（503 `PIPELINE_LOAD_FAILED` など）は、技術的な英文を含みうるので、これまでどおり定型文です。ヘッダーのベースモデル欄（`shell/useBaseModels.ts`）と同じ条件です。
+- バックエンドの同じ台帳の項目（MiniMax H3 の fp8・w4a8 の重み）は、バックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §211 です。fp8・w4a8 を受けるのはバックエンドの事前検査で、操作パネルの側は変えていません（モデルの一覧は `GET /models` から取るため）。
+
+### 171.2 経緯
+
+- バックエンドの事前検査は、断る理由を `detail` に日本語で書いていました（例はバックエンド [`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.8 の `MODEL_INCOMPATIBLE`）。`api/client.ts` の `BackendApiError` も `detail` を持っていましたが、`shell/useModels.ts` が失敗の状態に `code` と `message` だけを残して `detail` を捨てていました。
+- オーナー裁定（2026-11-12。設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 101 ⑥）で、旧式の印への対応とは別の不具合として直すことになりました。
+
+### 171.3 設計の判断
+
+- **422 のときだけ**: 422（`MODEL_INCOMPATIBLE`・`MODEL_FILE_MISSING`）の `detail` は、サーバーが利用者向けに書いた文です。503 などの `detail` は例外の文がそのまま入りうるので、表示しません。
+- **文言の資源は変えない**: `i18n/strings.ts` の `models.loadFailed`（「モデルの読込に失敗しました: 」に続けて理由を出す）と `errorHints` はそのまま使います。`detail` が無い 422 は従来の定型文です。
+- サーバー側のログは足していません（H3 だけの例外になるため。バックエンド記録簿 §211.2）。
+
+### 171.4 変更したファイル
+
+| ファイル | 要旨 |
+|---|---|
+| `webui/src/shell/useModels.ts` | 失敗の状態 `{ status: "error" }` に `detail` と `httpStatus` を足す（`BackendApiError` から写す。それ以外の例外では `undefined`） |
+| `webui/src/shell/ModelsPanel.tsx` | `httpStatus === 422` のときは `detail`（無ければ定型文）を `loadFailed(...)` に渡す |
+| `webui/src/shell/useModels.test.ts` | 171.5 の 1 件 |
+| `webui/src/shell/SettingsPanel.test.tsx` | 171.5 の 2 件 |
+| `webui/src/api/client.ts` | 注釈だけ。`detail` を表示するのは `useBaseModels.ts` だけ、という説明を、`ModelsPanel.tsx` も 422 のとき表示する現状に直した（弾 3。コードは変えていない） |
+
+### 171.5 テスト
+
+- 追加: `useModels.test.ts` の「`loadPipeline()` が 422 の `detail` と状態の番号を保つ」、`SettingsPanel.test.tsx` の「422 の読み込みの拒否はサーバーの `detail` を理由として出す」と「422 以外の読み込みの失敗は `detail` ではなく定型文のまま」。
+- `npm run typecheck`・lint・`npx vitest run --exclude "**/backend.integration.test.ts"` 合格（3,784 件。2026-11-12）。aux2 は `build.ps1` で再ビルド（ネイティブのテスト 402 件合格）し、`deploy.ps1` で実機と backend リポジトリの配布コピーへ配布（18:31）。
+
+### 171.6 実機の門
+
+- 項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-283 です（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.30 からも参照）。

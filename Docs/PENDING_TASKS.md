@@ -28,20 +28,31 @@
 - **留意**: 応急処置はしない（裁定 82）。操作パネルは併用を許したまま送る。仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2。
 - **出典**: 設計正本 裁定 82（オーナー裁定 2026-10-28）。GPU 検証 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4。
 
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
+
 ### 1-283. MiniMax H3 の fp8 と 4bit 系（w4a8）の重みを、置くだけで動かす（起票：2026-11-12）
 
-- **概要**: CivitAI などで配布される MiniMax H3 の fp8（ComfyUI の `float8_e4m3fn`。テンソルごとの倍率つき）と w4a8（重み 4bit・活性化 8bit の `asym_w4a8_int8`）の safetensors を、現行の int8 ConvRot と同じく `models\MiniMaxH3\Weights\` に置くだけで選んで生成できるようにする。あわせて、量子化の印（`comfy_quant`）を層ごとのテンソルでなくファイル先頭のメタデータ `_quantization_metadata` に持つ書き方のファイルも読めるようにする（現状は `h3_format.py` が意図的に拒否している。h3ErosMax beta5 の 2 本と Kijai の w4a8 が該当）。
-- **範囲（オーナー裁定 2026-11-12）**: DiT（映像と音声を作る本体）のみで、テキストエンコーダは触らない。RTX 30 系（Ampere）でも動くこと。4bit 系は w4a8 を本命とし、nvfp4 と w4a4 は対象外。GGUF と BF16／FP16 のフルモデルは対象外。快適上限の線と較正は別の機会に見送る（線は据え置き）。非枝刈り版（`adaln_t_table` を持たず、時刻の埋め込みの枝をそのまま持つ版）は対象外。
-- **あわせて直すもの**: Settings のモデル読み込み欄が、サーバーの返す具体的な理由（422 の `detail`）を捨てて種類ごとの定型文だけを表示する件（`useModels.ts`・`ModelsPanel.tsx`。ヘッダーのベースモデル欄は `detail` を表示している）。
-- **決まった設計**（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 101）: 目的は、利用者が ComfyUI で使っている重みをできるだけ忠実に再現することで、速度より ComfyUI との数値の整合性を優先する（fp8 を int8 ConvRot へ変換し直す方式は採らない）。fp8 の層は読み込みのときに GPU の世代で経路を選ぶ（計算能力 8.9 以上＝RTX 40 系以降は fp8 の行列積、それ未満は毎回 bf16 に戻して計算）。`full_precision_matrix_mult` の層（fc2）は常に bf16 に戻す。w4a8 は ComfyUI と同じ comfy-kitchen の `w4a8_int8_linear` を同じ引数で呼び、RTX 20 系では理由の文つきで断る。旧式の印も読む。LoRA は今の出力の側に足す方式のまま。スパイクで、この組み方の層が ComfyUI の経路とビット一致すること、既存のローダー・block swap・VRAM 16GB mode が手直しなしで全形式を運べることを確かめた（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210）。
-- **残る設計の論点**（製品実装の計画で決める）:
-  - VRAM 16GB mode の w4a8 は、1 ステップが int8 より約 1 割遅い。主な原因は、qkv の片ごとにカーネルが入力を量子化し直すことと見ている（推測。記録簿 §210.6・§210.7）。受け入れるか、手を打つか。
-  - w4a8 の一時メモリは int8 より大きい（fc2 で 1,144MiB。記録簿 §210.6）。VRAM 16GB mode の見積りに収まるか。
-  - `input_scale` の無い fp8 の層を fp8 の行列積で計算するとき、ComfyUI の規則（倍率 1.0）に従うか。
-  - 検出を `sft_quant_format.layer_schemes` を土台に広げ、組の大きさ 16 以外と符号表の無い w4a8 を受ける。
-  - 快適上限は据え置き（範囲のとおり）。
-- **検証用の実物**（`models\MiniMaxH3\Weights\` に置く）: Comfy-Org `minimax_h3_fl2va_pruned_fp8_scaled`、Kijai `minimax_h3_fl2va_pruned_w4a8_mixed`（印はメタデータ式のみ）、h3ErosMax beta5 `10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized`（w4a8 と int8 の層が混在。group size も混在。`adaln_t_table` が BF16）。
-- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 6・8・101・§5・§7。スパイクの記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210。調査報告・比較資料・スパイクの計画と結果の写しは保管庫 [`Outputs-archive/h3-fp8-4bit-2026-11-12/`](Outputs-archive/h3-fp8-4bit-2026-11-12/)。
+- **概要**: MiniMax H3 の DiT が、int8 ConvRot に加えて fp8（`float8_e4m3fn`）と w4a8（`asym_w4a8_int8`）の safetensors を受け、量子化の印をファイル先頭のメタデータに書く旧式のファイルも読む。Settings のモデル読み込み欄は、422 の拒否でサーバーの理由（`detail`）を表示する。バックエンド（弾 1）と操作パネル（弾 2）は dev に入り、機械の門・GPU の門（開発機で 7 条件）・オーナーの視聴は合格（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211）。RTX 20 系での w4a8 の拒否は実機では確かめず、エンジンの単体テストで押さえる（手元に Turing の機械が無い）。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5・§7・裁定 101、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211、フロントエンド `Docs/DEVLOG.md` §171。本節が実機確認の項目の正本（フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30 はここを参照する）。
+
+#### Settings の理由文（開発機。`.aux2` は配備済み）
+
+- [ ] LTX 2.3 の量子化 safetensors（`models\LTX23\Weights\` の fp8 か int8 の `.safetensors`）を 1 本 `models\MiniMaxH3\Weights\` に写す。ベースモデルを MiniMax H3 にして、Settings の「モデル一覧を更新」を押し、「動画モデル (checkpoint)」でそのファイルを選んで「選択したモデルを読込」を押す → 欄に「モデルの読込に失敗しました: MiniMax H3 のファイルとして使えません: LTX の DiT です（MiniMax H3 の DiT ではありません）」と出る（「選択したファイルはこの用途のモデルとして不正です。」の文ではない）。確かめたら、写したファイルを消す。
+
+#### 旧式の印の int8（開発機）
+
+- [ ] Settings の「動画モデル (checkpoint)」で `h3ErosMax_beta5_3185154` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る（このファイルは GPU の門 G5 で完走済み）。
+- [ ] 同じく `h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。続けて Single で 1280×768・73 フレーム・Steps 8・Shift（映像）10・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる。
+
+#### サブ検証機（RTX 3080 mobile。計算能力 8.6＝fp8 は bf16 に戻す経路）
+
+前準備: サブ検証機を dev の最新に更新し、開発機の `models\MiniMaxH3\Weights\` から `minimax_h3_fl2va_pruned_fp8_scaled.safetensors` と `minimax_h3_fl2va_pruned_w4a8_mixed.safetensors` を同じフォルダへ写す。
+
+- [ ] Settings の「動画モデル (checkpoint)」で `minimax_h3_fl2va_pruned_fp8_scaled` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。アプリのフォルダの `logs\h3_worker.log` を開いて末尾を見る → `[h3_worker] fp8: 200 layer(s), path 'dequant' (compute capability 8.6); 50 marked full_precision_matrix_mult run dequantized` の行がある。
+- [ ] 上の fp8 のまま、Single で 1280×768・73 フレーム・Steps 20・Shift（映像）12・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる（int8 より時間がかかる）。
+- [ ] `minimax_h3_fl2va_pruned_w4a8_mixed` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。続けて上と同じ条件で Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる。
 
 ## 3. 将来の研究課題
 
@@ -175,6 +186,12 @@
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。
 - **留意**: 調べるときは仮説を立てて順番に潰す（先行の設計変更へ跳ばない）。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。
+
+#### 3-284. MiniMax H3 の w4a8 で、VRAM 16GB mode の qkv の入力の量子化を共有する（起票：2026-11-12）
+
+- **概要**: VRAM 16GB mode の w4a8 は、qkv をヘッド群の片ごとに計算するたびに、カーネルが入力を 8 ビットに量子化し直す（1 ブロック 21 回）。int8 と fp8 の `scaled` の経路のように 1 ブロック 1 回にすれば、1 ステップの約 1 割の差（int8 比。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210.6・§211.6）が縮む見込み（推測）。
+- **前提**: comfy-kitchen の公開の関数には「量子化済みの入力を受ける w4a8 のカーネル」が無く、公開 API の外の内部を使うことになる。int8 の共有（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5 の例外）と同じく、版と記号の検査・外れたときの戻り道・ComfyUI の経路とのビット一致の確認が要る（裁定 101 ②の忠実さの原則）。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5（w4a8）、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210.6・§211。
 
 ### 研究課題（上の改修項目より優先度が下）
 

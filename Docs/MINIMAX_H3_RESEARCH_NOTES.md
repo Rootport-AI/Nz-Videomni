@@ -605,7 +605,7 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 α版では後回しにするもの:
 
 - LoRA と Turbo（裁定 10。Style LoRA に対応するときに一緒に進める）。
-- Ref2VA・Hybrid・他の形式（fp8・w6a8・GGUF・int4・nvfp4・部分 int8 などの混在精度）・1088p と 2K・sparse attention。
+- Ref2VA・Hybrid・他の形式（fp8・w6a8・GGUF・int4・nvfp4・部分 int8 などの混在精度）・1088p と 2K・sparse attention。→ 2026-11-12 裁定 101 で fp8・w4a8 も受ける（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5・§7）。
 
 監督が賛同した点（オーナーの裁定ではない）:
 

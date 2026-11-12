@@ -30,3 +30,18 @@
 - `sheet_all.png` — 5 条件の並び画像（行が条件、列がフレーム 0・36・72）。
 
 結果の JSON の写しでは、GPU の使用状況の確認で取った起動中のアプリの一覧（`gpu_check.nvidia_smi_compute_apps`）を個人情報の保護のため取り除き、利用者名を含むパスは `<user>` に置き換えた。生の値は `outputs/h3-fp8-w4a8-spike-2026-11-12/`（git 無視）にある。
+
+## 製品実装（2026-11-12）の計画と GPU の門の写し
+
+スパイクの後に製品のコードへ載せた段（弾 1・弾 2）の計画と、MCP 経由で製品を通した GPU の門（G1〜G6 と G5b の 7 条件）の記録。結論と数値の正本は記録簿 `Docs/VERIFICATION_LOG.md` §211、仕組みの正本は設計正本 `Docs/MINIMAX_H3_DESIGN.md` §5・§7。元のフォルダは git の追跡外の `outputs/h3-fp8-w4a8-gate-2026-11-12/`（動画とログ・条件ごとの `metadata.json` はそちらにだけある）。
+
+- `製品実装の計画.md` — 監督の製品実装の計画（検出・層・読み込みのときの判定・Settings・検証・文書）。冒頭の状態の行は承認前の書きぶりのまま。RTX 20 系の w4a8 の拒否をサブ検証機で確かめるとした §5.2 の一文は誤りで、訂正は記録簿 §211.2。
+- `h3_quant_gate_api.py` — GPU の門の台本（アプリの仮想環境の python で、一時サーバーを立てて MCP から回す）。
+- `門の台本README.md` — 台本の回し方・条件・記録するもの・自己検査の説明（元の `README.md`）。
+- `gate_summary.md` — 7 条件の数値の表と、条件ごとの自己検査の結果（元の `summary.md`）。
+- `gate_summary.json` — 同じ内容の JSON（元の `summary.json`。実行の記録を含む）。
+- `gate_runs/<条件>/result.json` — 条件ごとの記録（`int8`・`fp8`・`w4a8_kijai`・`w4a8_eros`・`int8_oldmarker`・`int8_oldmarker_s20`・`fp8_turbo`）。
+- `hf-round17_README.md` — Hugging Face の `round17-h3-quant-product/` に上げた README（監督の所見を含む）。
+- `gate_sheet_all.png` — 7 条件の並び画像（行が条件、列がフレーム 0・36・72）。
+
+`gate_summary.json` の写しでは、GPU の使用状況の確認で取った起動中のアプリの一覧（`nvidia_smi_compute_apps`）とプロセスの起動行（`cmdline`）を個人情報の保護のため `(removed for privacy)` に差し替え、利用者名を含むパスは `<user>` に置き換えた。生の値は元のフォルダにある。

@@ -1,0 +1,4122 @@
+{
+  "script": "h3_quant_gate_api.py",
+  "plan": "imperative-crafting-lightning.md §5.2（G1〜G6）",
+  "conds": {
+    "int8": {
+      "conditions": {
+        "cond": "int8",
+        "gate": "G1",
+        "purpose": "公式 int8（回帰の基準）",
+        "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        }
+      },
+      "run": {
+        "cond": "int8",
+        "gate": "G1",
+        "purpose": "公式 int8（回帰の基準）",
+        "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "started_at": "2026-11-12T21:21:04+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8",
+        "model_name": "default",
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "default"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "default",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 0,
+              "failed": 0
+            }
+          },
+          "seconds": 16.06,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        },
+        "job_id": "5816797e-c930-4713-9ffb-e9b2685ddd16",
+        "wait": {
+          "calls": 4,
+          "seconds": 235.0,
+          "samples": [
+            {
+              "t": 45.0,
+              "status": "running",
+              "progress": 0.06,
+              "stage": "stage1_denoise",
+              "current_step": 0
+            },
+            {
+              "t": 75.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 125.0,
+              "status": "running",
+              "progress": 0.48,
+              "stage": "stage1_denoise",
+              "current_step": 10
+            },
+            {
+              "t": 175.0,
+              "status": "running",
+              "progress": 0.69,
+              "stage": "stage1_denoise",
+              "current_step": 15
+            },
+            {
+              "t": 225.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 235.0,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "5816797e-c930-4713-9ffb-e9b2685ddd16",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T12:21:21Z",
+          "started_at": "2026-11-12T12:21:21Z",
+          "completed_at": "2026-11-12T12:25:15Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/5816797e-c930-4713-9ffb-e9b2685ddd16/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 1315695,
+            "generation_time_seconds": 234.45,
+            "seed_used": 1234,
+            "output_path": "outputs/5816797e-c930-4713-9ffb-e9b2685ddd16/output.mp4",
+            "metadata_path": "outputs/5816797e-c930-4713-9ffb-e9b2685ddd16/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 5.0
+        },
+        "seconds_wall": 235.1,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "int8_tensorwise": 200
+              },
+              "fp8_mode": null,
+              "quant_specs": [
+                "int8_tensorwise/convrot=True/g256"
+              ],
+              "unknown": []
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              }
+            },
+            "device": "cuda"
+          }
+        },
+        "sec_per_step": {
+          "mean": 8.76,
+          "median_after_first": 8.7,
+          "points": 20
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\5816797e-c930-4713-9ffb-e9b2685ddd16",
+        "metadata": {
+          "transformer_selection": {
+            "name": "default",
+            "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+          },
+          "generation_time_seconds": 234.45,
+          "num_inference_steps": 20,
+          "shift": [
+            12.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 3780,
+          "peak_vram_reserved_mb": 4536,
+          "top_peak_vram_reserved_mb": 7484,
+          "denoise_seconds": 187.44,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 732,
+            "loaded_gib": 19.53,
+            "read_seconds": 11.34
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            }
+          },
+          "loras": null,
+          "request_loras": []
+        },
+        "finished_at": "2026-11-12T21:25:16+09:00"
+      },
+      "post": {
+        "cond": "int8",
+        "at": "2026-11-12T21:40:43+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "expect": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": null,
+              "expect": null,
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "int8_tensorwise": 200
+              },
+              "expect": {
+                "int8_tensorwise": 200
+              },
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "int8_tensorwise": 200
+            },
+            "quant_specs": [
+              "int8_tensorwise/convrot=True/g256"
+            ],
+            "unknown": 0
+          }
+        },
+        "spike_reference": {
+          "name": "int8",
+          "sec_per_step": {
+            "mean": 8.785,
+            "median_after_first": 8.737
+          },
+          "status": "done"
+        },
+        "hf_clip": "h3_int8_1280x768_20steps_seed1234.mp4",
+        "status": "checked"
+      }
+    },
+    "fp8": {
+      "conditions": {
+        "cond": "fp8",
+        "gate": "G2",
+        "purpose": "公式 fp8（fp8_mode=scaled）",
+        "file": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": "scaled",
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        }
+      },
+      "run": {
+        "cond": "fp8",
+        "gate": "G2",
+        "purpose": "公式 fp8（fp8_mode=scaled）",
+        "file": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": "scaled",
+        "started_at": "2026-11-12T21:25:16+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\fp8",
+        "model_name": "minimax_h3_fl2va_pruned_fp8_scaled",
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "minimax_h3_fl2va_pruned_fp8_scaled"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 1,
+              "failed": 0
+            }
+          },
+          "seconds": 3.16,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        },
+        "job_id": "2c53886a-2e5b-432e-a189-fb9262a7a959",
+        "wait": {
+          "calls": 4,
+          "seconds": 290.1,
+          "samples": [
+            {
+              "t": 45.0,
+              "status": "running",
+              "progress": 0.102,
+              "stage": "stage1_denoise",
+              "current_step": 1
+            },
+            {
+              "t": 80.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+            },
+            {
+              "t": 130.1,
+              "status": "running",
+              "progress": 0.396,
+              "stage": "stage1_denoise",
+              "current_step": 8
+            },
+            {
+              "t": 140.1,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 195.0,
+              "status": "running",
+              "progress": 0.648,
+              "stage": "stage1_denoise",
+              "current_step": 14
+            },
+            {
+              "t": 240.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 290.1,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "2c53886a-2e5b-432e-a189-fb9262a7a959",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T12:25:20Z",
+          "started_at": "2026-11-12T12:25:20Z",
+          "completed_at": "2026-11-12T12:30:08Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/2c53886a-2e5b-432e-a189-fb9262a7a959/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 1374739,
+            "generation_time_seconds": 288.15,
+            "seed_used": 1234,
+            "output_path": "outputs/2c53886a-2e5b-432e-a189-fb9262a7a959/output.mp4",
+            "metadata_path": "outputs/2c53886a-2e5b-432e-a189-fb9262a7a959/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 45.0
+        },
+        "seconds_wall": 290.1,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "float8_e4m3fn": 200
+              },
+              "fp8_mode": "scaled",
+              "quant_specs": [
+                "float8_e4m3fn/convrot=False/g256"
+              ],
+              "unknown": []
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              }
+            },
+            "device": "cuda"
+          },
+          "fp8_log_line": {
+            "layers": 200,
+            "path": "scaled"
+          }
+        },
+        "sec_per_step": {
+          "mean": 11.725,
+          "median_after_first": 11.7,
+          "points": 20
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\fp8\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\2c53886a-2e5b-432e-a189-fb9262a7a959",
+        "metadata": {
+          "transformer_selection": {
+            "name": "minimax_h3_fl2va_pruned_fp8_scaled",
+            "file": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"
+          },
+          "generation_time_seconds": 288.15,
+          "num_inference_steps": 20,
+          "shift": [
+            12.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 3773,
+          "peak_vram_reserved_mb": 4684,
+          "top_peak_vram_reserved_mb": 7484,
+          "denoise_seconds": 247.28,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 882,
+            "loaded_gib": 19.52,
+            "read_seconds": 11.88
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            }
+          },
+          "loras": null,
+          "request_loras": []
+        },
+        "finished_at": "2026-11-12T21:30:10+09:00"
+      },
+      "post": {
+        "cond": "fp8",
+        "at": "2026-11-12T21:40:43+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\fp8\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+              "expect": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": "scaled",
+              "expect": "scaled",
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "float8_e4m3fn": 200
+              },
+              "expect": {
+                "float8_e4m3fn": 200
+              },
+              "ok": true
+            },
+            "no_model_incompatible": {
+              "value": false,
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "float8_e4m3fn": 200
+            },
+            "quant_specs": [
+              "float8_e4m3fn/convrot=False/g256"
+            ],
+            "unknown": 0
+          }
+        },
+        "spike_reference": {
+          "name": "fp8",
+          "sec_per_step": {
+            "mean": 11.753,
+            "median_after_first": 11.733
+          },
+          "status": "done"
+        },
+        "hf_clip": "h3_fp8_1280x768_20steps_seed1234.mp4",
+        "status": "checked"
+      }
+    },
+    "w4a8_kijai": {
+      "conditions": {
+        "cond": "w4a8_kijai",
+        "gate": "G3",
+        "purpose": "Kijai の w4a8（メタデータ式の印だけ）",
+        "file": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        }
+      },
+      "run": {
+        "cond": "w4a8_kijai",
+        "gate": "G3",
+        "purpose": "Kijai の w4a8（メタデータ式の印だけ）",
+        "file": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "started_at": "2026-11-12T21:30:10+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\w4a8_kijai",
+        "model_name": "minimax_h3_fl2va_pruned_w4a8_mixed",
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "minimax_h3_fl2va_pruned_w4a8_mixed"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 2,
+              "failed": 0
+            }
+          },
+          "seconds": 2.92,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        },
+        "job_id": "51b20c3c-8abf-4d83-b823-b50a658c46f7",
+        "wait": {
+          "calls": 4,
+          "seconds": 245.0,
+          "samples": [
+            {
+              "t": 45.0,
+              "status": "running",
+              "progress": 0.144,
+              "stage": "stage1_denoise",
+              "current_step": 2
+            },
+            {
+              "t": 65.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 115.0,
+              "status": "running",
+              "progress": 0.438,
+              "stage": "stage1_denoise",
+              "current_step": 9
+            },
+            {
+              "t": 140.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 190.0,
+              "status": "running",
+              "progress": 0.774,
+              "stage": "stage1_denoise",
+              "current_step": 17
+            },
+            {
+              "t": 195.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 245.0,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "51b20c3c-8abf-4d83-b823-b50a658c46f7",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T12:30:13Z",
+          "started_at": "2026-11-12T12:30:13Z",
+          "completed_at": "2026-11-12T12:34:15Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/51b20c3c-8abf-4d83-b823-b50a658c46f7/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 1311639,
+            "generation_time_seconds": 240.98,
+            "seed_used": 1234,
+            "output_path": "outputs/51b20c3c-8abf-4d83-b823-b50a658c46f7/output.mp4",
+            "metadata_path": "outputs/51b20c3c-8abf-4d83-b823-b50a658c46f7/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 45.01600000000326
+        },
+        "seconds_wall": 245.0,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "asym_w4a8_int8": 200
+              },
+              "fp8_mode": null,
+              "quant_specs": [
+                "asym_w4a8_int8/convrot=True/g256/G16"
+              ],
+              "unknown": []
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              }
+            },
+            "device": "cuda"
+          }
+        },
+        "sec_per_step": {
+          "mean": 9.625,
+          "median_after_first": 9.6,
+          "points": 20
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\w4a8_kijai\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\51b20c3c-8abf-4d83-b823-b50a658c46f7",
+        "metadata": {
+          "transformer_selection": {
+            "name": "minimax_h3_fl2va_pruned_w4a8_mixed",
+            "file": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors"
+          },
+          "generation_time_seconds": 240.98,
+          "num_inference_steps": 20,
+          "shift": [
+            12.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 2810,
+          "peak_vram_reserved_mb": 3638,
+          "top_peak_vram_reserved_mb": 7484,
+          "denoise_seconds": 199.76,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 1132,
+            "loaded_gib": 11.68,
+            "read_seconds": 6.48
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            }
+          },
+          "loras": null,
+          "request_loras": []
+        },
+        "finished_at": "2026-11-12T21:34:19+09:00"
+      },
+      "post": {
+        "cond": "w4a8_kijai",
+        "at": "2026-11-12T21:40:44+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\w4a8_kijai\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+              "expect": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": null,
+              "expect": null,
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "asym_w4a8_int8": 200
+              },
+              "expect": {
+                "asym_w4a8_int8": 200
+              },
+              "ok": true
+            },
+            "no_model_incompatible": {
+              "value": false,
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "asym_w4a8_int8": 200
+            },
+            "quant_specs": [
+              "asym_w4a8_int8/convrot=True/g256/G16"
+            ],
+            "unknown": 0
+          }
+        },
+        "spike_reference": {
+          "name": "w4a8_kijai",
+          "sec_per_step": {
+            "mean": 9.652,
+            "median_after_first": 9.627
+          },
+          "status": "done"
+        },
+        "hf_clip": "h3_w4a8_kijai_1280x768_20steps_seed1234.mp4",
+        "status": "checked"
+      }
+    },
+    "w4a8_eros": {
+      "conditions": {
+        "cond": "w4a8_eros",
+        "gate": "G4",
+        "purpose": "h3ErosMax の w4a8（混在・G 16/8/4・BF16 の表）",
+        "file": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+        "steps": 8,
+        "shift": [
+          10.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 8,
+          "shift_video": 10.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        }
+      },
+      "run": {
+        "cond": "w4a8_eros",
+        "gate": "G4",
+        "purpose": "h3ErosMax の w4a8（混在・G 16/8/4・BF16 の表）",
+        "file": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+        "steps": 8,
+        "shift": [
+          10.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "started_at": "2026-11-12T21:34:19+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\w4a8_eros",
+        "model_name": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 3,
+              "failed": 0
+            }
+          },
+          "seconds": 2.91,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 8,
+          "shift_video": 10.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        },
+        "job_id": "72323990-3766-4c4a-9eb6-61895de031f1",
+        "wait": {
+          "calls": 3,
+          "seconds": 125.0,
+          "samples": [
+            {
+              "t": 45.0,
+              "status": "running",
+              "progress": 0.27,
+              "stage": "stage1_denoise",
+              "current_step": 2
+            },
+            {
+              "t": 90.0,
+              "status": "running",
+              "progress": 0.795,
+              "stage": "stage1_denoise",
+              "current_step": 7
+            },
+            {
+              "t": 125.0,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "72323990-3766-4c4a-9eb6-61895de031f1",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T12:34:22Z",
+          "started_at": "2026-11-12T12:34:22Z",
+          "completed_at": "2026-11-12T12:36:23Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 8,
+            "shift_video": 10.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/72323990-3766-4c4a-9eb6-61895de031f1/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 1716755,
+            "generation_time_seconds": 120.45,
+            "seed_used": 1234,
+            "output_path": "outputs/72323990-3766-4c4a-9eb6-61895de031f1/output.mp4",
+            "metadata_path": "outputs/72323990-3766-4c4a-9eb6-61895de031f1/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 35.0
+        },
+        "seconds_wall": 125.0,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "asym_w4a8_int8": 180,
+                "int8_tensorwise": 20
+              },
+              "fp8_mode": null,
+              "quant_specs": [
+                "asym_w4a8_int8/convrot=True/g256/G16",
+                "asym_w4a8_int8/convrot=True/g256/G4",
+                "asym_w4a8_int8/convrot=True/g256/G8",
+                "int8_tensorwise/convrot=True/g256"
+              ],
+              "unknown": [
+                "adaln_basis",
+                "adaln_mean"
+              ]
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              }
+            },
+            "device": "cuda"
+          }
+        },
+        "sec_per_step": {
+          "mean": 9.575,
+          "median_after_first": 9.5,
+          "points": 8
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\w4a8_eros\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\72323990-3766-4c4a-9eb6-61895de031f1",
+        "metadata": {
+          "transformer_selection": {
+            "name": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+            "file": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors"
+          },
+          "generation_time_seconds": 120.45,
+          "num_inference_steps": 8,
+          "shift": [
+            10.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 3780,
+          "peak_vram_reserved_mb": 4536,
+          "top_peak_vram_reserved_mb": 7484,
+          "denoise_seconds": 84.35,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 1092,
+            "loaded_gib": 13.04,
+            "read_seconds": 6.83
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            }
+          },
+          "loras": null,
+          "request_loras": []
+        },
+        "finished_at": "2026-11-12T21:36:27+09:00"
+      },
+      "post": {
+        "cond": "w4a8_eros",
+        "at": "2026-11-12T21:40:44+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\w4a8_eros\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+              "expect": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                8,
+                [
+                  10.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                8,
+                [
+                  10.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": null,
+              "expect": null,
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "asym_w4a8_int8": 180,
+                "int8_tensorwise": 20
+              },
+              "expect": {
+                "asym_w4a8_int8": 180,
+                "int8_tensorwise": 20
+              },
+              "ok": true
+            },
+            "no_model_incompatible": {
+              "value": false,
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "asym_w4a8_int8": 180,
+              "int8_tensorwise": 20
+            },
+            "quant_specs": [
+              "asym_w4a8_int8/convrot=True/g256/G16",
+              "asym_w4a8_int8/convrot=True/g256/G4",
+              "asym_w4a8_int8/convrot=True/g256/G8",
+              "int8_tensorwise/convrot=True/g256"
+            ],
+            "unknown": 2
+          }
+        },
+        "spike_reference": {
+          "name": "w4a8_eros",
+          "sec_per_step": {
+            "mean": 9.608,
+            "median_after_first": 9.561
+          },
+          "status": "done"
+        },
+        "hf_clip": "h3_w4a8_eros_1280x768_8steps_seed1234.mp4",
+        "status": "checked"
+      }
+    },
+    "int8_oldmarker": {
+      "conditions": {
+        "cond": "int8_oldmarker",
+        "gate": "G5",
+        "purpose": "旧式の印の int8（h3ErosMax beta5。読み込めて完走すること）",
+        "file": "h3ErosMax_beta5_3185154.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\h3ErosMax_beta5_3185154.safetensors",
+        "steps": 8,
+        "shift": [
+          10.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 8,
+          "shift_video": 10.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        }
+      },
+      "run": {
+        "cond": "int8_oldmarker",
+        "gate": "G5",
+        "purpose": "旧式の印の int8（h3ErosMax beta5。読み込めて完走すること）",
+        "file": "h3ErosMax_beta5_3185154.safetensors",
+        "steps": 8,
+        "shift": [
+          10.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "started_at": "2026-11-12T21:36:27+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8_oldmarker",
+        "model_name": "h3ErosMax_beta5_3185154",
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "h3ErosMax_beta5_3185154"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "h3ErosMax_beta5_3185154",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 4,
+              "failed": 0
+            }
+          },
+          "seconds": 2.89,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 8,
+          "shift_video": 10.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        },
+        "job_id": "ff97690e-6e22-462e-96e3-1d73570b73d9",
+        "wait": {
+          "calls": 3,
+          "seconds": 125.0,
+          "samples": [
+            {
+              "t": 45.0,
+              "status": "running",
+              "progress": 0.27,
+              "stage": "stage1_denoise",
+              "current_step": 2
+            },
+            {
+              "t": 90.0,
+              "status": "running",
+              "progress": 0.795,
+              "stage": "stage1_denoise",
+              "current_step": 7
+            },
+            {
+              "t": 125.0,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "ff97690e-6e22-462e-96e3-1d73570b73d9",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T12:36:31Z",
+          "started_at": "2026-11-12T12:36:31Z",
+          "completed_at": "2026-11-12T12:38:32Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 8,
+            "shift_video": 10.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/ff97690e-6e22-462e-96e3-1d73570b73d9/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 1139846,
+            "generation_time_seconds": 120.6,
+            "seed_used": 1234,
+            "output_path": "outputs/ff97690e-6e22-462e-96e3-1d73570b73d9/output.mp4",
+            "metadata_path": "outputs/ff97690e-6e22-462e-96e3-1d73570b73d9/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 35.0
+        },
+        "seconds_wall": 125.0,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "int8_tensorwise": 200
+              },
+              "fp8_mode": null,
+              "quant_specs": [
+                "int8_tensorwise/convrot=True/g256"
+              ],
+              "unknown": [
+                "adaln_basis",
+                "adaln_mean"
+              ]
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              }
+            },
+            "device": "cuda"
+          }
+        },
+        "sec_per_step": {
+          "mean": 8.762,
+          "median_after_first": 8.7,
+          "points": 8
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8_oldmarker\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\ff97690e-6e22-462e-96e3-1d73570b73d9",
+        "metadata": {
+          "transformer_selection": {
+            "name": "h3ErosMax_beta5_3185154",
+            "file": "h3ErosMax_beta5_3185154.safetensors"
+          },
+          "generation_time_seconds": 120.6,
+          "num_inference_steps": 8,
+          "shift": [
+            10.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 3780,
+          "peak_vram_reserved_mb": 4536,
+          "top_peak_vram_reserved_mb": 7484,
+          "denoise_seconds": 82.15,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 732,
+            "loaded_gib": 19.53,
+            "read_seconds": 11.32
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            }
+          },
+          "loras": null,
+          "request_loras": []
+        },
+        "finished_at": "2026-11-12T21:38:36+09:00"
+      },
+      "post": {
+        "cond": "int8_oldmarker",
+        "at": "2026-11-12T21:40:44+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8_oldmarker\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "h3ErosMax_beta5_3185154.safetensors",
+              "expect": "h3ErosMax_beta5_3185154.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                8,
+                [
+                  10.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                8,
+                [
+                  10.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": null,
+              "expect": null,
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "int8_tensorwise": 200
+              },
+              "expect": {
+                "int8_tensorwise": 200
+              },
+              "ok": true
+            },
+            "no_model_incompatible": {
+              "value": false,
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "int8_tensorwise": 200
+            },
+            "quant_specs": [
+              "int8_tensorwise/convrot=True/g256"
+            ],
+            "unknown": 2
+          }
+        },
+        "spike_reference": null,
+        "hf_clip": "h3_int8_oldmarker_1280x768_8steps_seed1234.mp4",
+        "status": "checked"
+      }
+    },
+    "fp8_turbo": {
+      "conditions": {
+        "cond": "fp8_turbo",
+        "gate": "G6",
+        "purpose": "fp8 に Turbo LoRA（強さ 1.0・4 ステップ）",
+        "file": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+        "steps": 4,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": {
+          "file": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 1.0
+        },
+        "expect_fp8_mode": "scaled",
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 1.0
+            }
+          ]
+        }
+      },
+      "run": {
+        "cond": "fp8_turbo",
+        "gate": "G6",
+        "purpose": "fp8 に Turbo LoRA（強さ 1.0・4 ステップ）",
+        "file": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+        "steps": 4,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": {
+          "file": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "strength": 1.0
+        },
+        "expect_fp8_mode": "scaled",
+        "started_at": "2026-11-12T21:38:36+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\fp8_turbo",
+        "model_name": "minimax_h3_fl2va_pruned_fp8_scaled",
+        "lora_entry": {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "kind": "style",
+          "has_thumbnail": false,
+          "exists": true,
+          "source": "scan",
+          "preprocess": "none",
+          "reference_downscale_factor": null,
+          "supported": true,
+          "unsupported_reason": null
+        },
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "minimax_h3_fl2va_pruned_fp8_scaled"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 5,
+              "failed": 0
+            }
+          },
+          "seconds": 2.97,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 4,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false,
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 1.0
+            }
+          ]
+        },
+        "job_id": "1c7f133d-8a5e-4ffe-bf0f-f316221d949f",
+        "wait": {
+          "calls": 2,
+          "seconds": 120.0,
+          "samples": [
+            {
+              "t": 20.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 70.0,
+              "status": "running",
+              "progress": 0.48,
+              "stage": "stage1_denoise",
+              "current_step": 2
+            },
+            {
+              "t": 120.0,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "1c7f133d-8a5e-4ffe-bf0f-f316221d949f",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T12:38:40Z",
+          "started_at": "2026-11-12T12:38:40Z",
+          "completed_at": "2026-11-12T12:40:36Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [
+              {
+                "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+                "strength": 1.0,
+                "audio_strength": null
+              }
+            ],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/1c7f133d-8a5e-4ffe-bf0f-f316221d949f/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 2069524,
+            "generation_time_seconds": 116.05,
+            "seed_used": 1234,
+            "output_path": "outputs/1c7f133d-8a5e-4ffe-bf0f-f316221d949f/output.mp4",
+            "metadata_path": "outputs/1c7f133d-8a5e-4ffe-bf0f-f316221d949f/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 49.98499999998603
+        },
+        "seconds_wall": 120.0,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "float8_e4m3fn": 200
+              },
+              "fp8_mode": "scaled",
+              "quant_specs": [
+                "float8_e4m3fn/convrot=False/g256"
+              ],
+              "unknown": []
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              }
+            },
+            "device": "cuda"
+          },
+          "fp8_log_line": {
+            "layers": 200,
+            "path": "scaled"
+          }
+        },
+        "sec_per_step": {
+          "mean": 15.125,
+          "median_after_first": 15.1,
+          "points": 4
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\fp8_turbo\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\1c7f133d-8a5e-4ffe-bf0f-f316221d949f",
+        "metadata": {
+          "transformer_selection": {
+            "name": "minimax_h3_fl2va_pruned_fp8_scaled",
+            "file": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors"
+          },
+          "generation_time_seconds": 116.05,
+          "num_inference_steps": 4,
+          "shift": [
+            12.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 4072,
+          "peak_vram_reserved_mb": 5096,
+          "top_peak_vram_reserved_mb": 7496,
+          "denoise_seconds": 73.68,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 882,
+            "loaded_gib": 19.52,
+            "read_seconds": 11.61
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            }
+          },
+          "loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+              "strength": 1.0,
+              "layout": "ab",
+              "dtype": "BF16",
+              "pairs_applied": 208,
+              "skipped": []
+            }
+          ],
+          "request_loras": [
+            {
+              "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+              "strength": 1.0,
+              "audio_strength": null
+            }
+          ]
+        },
+        "finished_at": "2026-11-12T21:40:40+09:00"
+      },
+      "post": {
+        "cond": "fp8_turbo",
+        "at": "2026-11-12T21:40:45+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\fp8_turbo\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+              "expect": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                4,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                4,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": "scaled",
+              "expect": "scaled",
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "float8_e4m3fn": 200
+              },
+              "expect": {
+                "float8_e4m3fn": 200
+              },
+              "ok": true
+            },
+            "lora_applied": {
+              "value": [
+                {
+                  "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+                  "strength": 1.0,
+                  "layout": "ab",
+                  "dtype": "BF16",
+                  "pairs_applied": 208,
+                  "skipped": []
+                }
+              ],
+              "ok": true
+            },
+            "no_model_incompatible": {
+              "value": false,
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "float8_e4m3fn": 200
+            },
+            "quant_specs": [
+              "float8_e4m3fn/convrot=False/g256"
+            ],
+            "unknown": 0
+          }
+        },
+        "spike_reference": null,
+        "hf_clip": "h3_fp8_turbo_1280x768_4steps_seed1234.mp4",
+        "status": "checked"
+      }
+    },
+    "int8_oldmarker_s20": {
+      "conditions": {
+        "cond": "int8_oldmarker_s20",
+        "gate": "G5b",
+        "purpose": "G5 の回し直し（公式と同じ 20 ステップ・shift 12/3。暗さがステップ数の不足か傾向かの切り分け）",
+        "file": "h3ErosMax_beta5_3185154.safetensors",
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\h3ErosMax_beta5_3185154.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        }
+      },
+      "run": {
+        "cond": "int8_oldmarker_s20",
+        "gate": "G5b",
+        "purpose": "G5 の回し直し（公式と同じ 20 ステップ・shift 12/3。暗さがステップ数の不足か傾向かの切り分け）",
+        "file": "h3ErosMax_beta5_3185154.safetensors",
+        "steps": 20,
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "lora": null,
+        "expect_fp8_mode": null,
+        "started_at": "2026-11-12T23:19:36+09:00",
+        "status": "completed",
+        "error": null,
+        "dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8_oldmarker_s20",
+        "model_name": "h3ErosMax_beta5_3185154",
+        "load": {
+          "requested": {
+            "base_model": "MiniMaxH3",
+            "models": {
+              "transformer": "h3ErosMax_beta5_3185154"
+            },
+            "wait_sec": 45
+          },
+          "responses": [
+            {
+              "pipeline_loaded": true,
+              "pipeline_type": "distilled",
+              "state": "ready",
+              "base_model": "MiniMaxH3",
+              "models": {
+                "transformer": "h3ErosMax_beta5_3185154",
+                "text_encoder": "default",
+                "video_vae": "default",
+                "audio": "default"
+              },
+              "finished": true
+            }
+          ],
+          "unload_before": {
+            "pipeline_loaded": false,
+            "state": "unloaded"
+          },
+          "status_polls": 1,
+          "last_status": {
+            "server": "running",
+            "version": "0.4.0",
+            "host": "127.0.0.1",
+            "port": 18699,
+            "pipeline_loaded": true,
+            "pipeline_type": "distilled",
+            "state": "ready",
+            "base_model": "MiniMaxH3",
+            "gpu": {
+              "available": false,
+              "name": null,
+              "vram_total_mb": 0,
+              "vram_used_mb": 0,
+              "vram_free_mb": 0
+            },
+            "vram_optimization": {
+              "low_vram_mode": true,
+              "low_vram_profile": "16gb_safe",
+              "fp8_transformer": true,
+              "cpu_offload_text_encoder": true,
+              "vae_tiling": true,
+              "attention_tiling": false,
+              "block_swap": true,
+              "low_vram_disabled_required": false
+            },
+            "acceleration": {
+              "attention_backends": [
+                "sdpa",
+                "sage"
+              ],
+              "sage_available": true,
+              "block_swap_prefetch_available": true
+            },
+            "tracking": {
+              "available": true
+            },
+            "queue": {
+              "mode": "single_job_in_memory",
+              "pending": 0,
+              "running": 0,
+              "completed": 0,
+              "failed": 0
+            }
+          },
+          "seconds": 3.02,
+          "ok": true
+        },
+        "tool_args": {
+          "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+          "width": 1280,
+          "height": 768,
+          "num_frames": 73,
+          "frame_rate": 24.0,
+          "seed": 1234,
+          "attention_backend": "sage",
+          "num_inference_steps": 20,
+          "shift_video": 12.0,
+          "shift_audio": 3.0,
+          "vram16_mode": true,
+          "block_swap_prefetch": true,
+          "keep_resident": false
+        },
+        "job_id": "d79394b7-31e5-48f3-9b95-7cd1d5c6b360",
+        "wait": {
+          "calls": 3,
+          "seconds": 235.1,
+          "samples": [
+            {
+              "t": 45.0,
+              "status": "running",
+              "progress": 0.102,
+              "stage": "stage1_denoise",
+              "current_step": 1
+            },
+            {
+              "t": 80.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — "
+            },
+            {
+              "t": 130.0,
+              "status": "running",
+              "progress": 0.522,
+              "stage": "stage1_denoise",
+              "current_step": 11
+            },
+            {
+              "t": 150.1,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+            },
+            {
+              "t": 200.0,
+              "error": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18699) — Server disconnected without sending a response."
+            },
+            {
+              "t": 235.1,
+              "status": "completed",
+              "progress": 1.0,
+              "stage": null,
+              "current_step": null
+            }
+          ]
+        },
+        "job_final": {
+          "job_id": "d79394b7-31e5-48f3-9b95-7cd1d5c6b360",
+          "status": "completed",
+          "progress": 1.0,
+          "current_step": null,
+          "total_steps": null,
+          "stage": null,
+          "clip": null,
+          "clip_count": null,
+          "is_v2v": false,
+          "joined": false,
+          "matte": false,
+          "alpha": null,
+          "created_at": "2026-11-12T14:19:39Z",
+          "started_at": "2026-11-12T14:19:39Z",
+          "completed_at": "2026-11-12T14:23:31Z",
+          "error": null,
+          "request": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "negative_prompt": "",
+            "nag_enabled": false,
+            "nag_scale": 11.0,
+            "nag_tau": 2.5,
+            "nag_alpha": 0.25,
+            "neg_method": "nag",
+            "vsf_scale": 1.5,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "keep_resident_embeddings": false,
+            "fused_gguf_dequant_kernel": true,
+            "vae_mode": "default",
+            "embed_mp4_metadata": true,
+            "vram16_mode": true,
+            "width": 1280,
+            "height": 768,
+            "crop_output": null,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "guidance_scale": 1.0,
+            "seed": 1234,
+            "pipeline": "distilled",
+            "conditioning_images": [],
+            "loras": [],
+            "reference_video_id": null,
+            "conditioning_attention_strength": null,
+            "reference_video_strength": null,
+            "outpaint": null,
+            "inpaint": null,
+            "alpha_gen": null,
+            "source_audio": null,
+            "references": []
+          },
+          "result": {
+            "video_url": "/api/v1/jobs/d79394b7-31e5-48f3-9b95-7cd1d5c6b360/video",
+            "duration_seconds": 3.042,
+            "resolution": "1280x768",
+            "file_size_bytes": 1325270,
+            "generation_time_seconds": 231.7,
+            "seed_used": 1234,
+            "output_path": "outputs/d79394b7-31e5-48f3-9b95-7cd1d5c6b360/output.mp4",
+            "metadata_path": "outputs/d79394b7-31e5-48f3-9b95-7cd1d5c6b360/metadata.json"
+          },
+          "timed_out": false,
+          "waited_sec": 30.014999999984866
+        },
+        "seconds_wall": 235.1,
+        "load_report": {
+          "found": true,
+          "load_ok_lines": 1,
+          "build_report": {
+            "dit": {
+              "prefix": "",
+              "num_layers": 50,
+              "hidden_size": 5376,
+              "heads": 56,
+              "adaln_grid": 1025,
+              "adaln_rank": 8,
+              "quant_layers": 200,
+              "quant_layers_by_format": {
+                "int8_tensorwise": 200
+              },
+              "fp8_mode": null,
+              "quant_specs": [
+                "int8_tensorwise/convrot=True/g256"
+              ],
+              "unknown": [
+                "adaln_basis",
+                "adaln_mean"
+              ]
+            },
+            "text_encoder": {
+              "num_layers": 50,
+              "int8_layers": 350,
+              "has_visual": true,
+              "metadata": {
+                "minimax_h3_te": {
+                  "num_hidden_layers": 50,
+                  "output": "unnormalized_hidden_after_layer_50"
+                }
+              }
+            },
+            "video_vae_tensors": 562,
+            "audio_vae_tensors": 917,
+            "options": {
+              "blocks_on_gpu": 8,
+              "attention_backend": "sdpa",
+              "block_swap_prefetch": true,
+              "deterministic": true
+            },
+            "quant_backends": {
+              "triton": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ascend": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              },
+              "cuda": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "eager": {
+                "available": true,
+                "disabled": true,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "hip": {
+                "available": false,
+                "disabled": false,
+                "int8_linear": false,
+                "w4a8_int8_linear": false,
+                "quantize_per_tensor_fp8": false
+              }
+            },
+            "device": "cuda"
+          }
+        },
+        "sec_per_step": {
+          "mean": 8.815,
+          "median_after_first": 8.8,
+          "points": 20
+        },
+        "saved_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8_oldmarker_s20\\output.mp4",
+        "job_dir": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs\\d79394b7-31e5-48f3-9b95-7cd1d5c6b360",
+        "metadata": {
+          "transformer_selection": {
+            "name": "h3ErosMax_beta5_3185154",
+            "file": "h3ErosMax_beta5_3185154.safetensors"
+          },
+          "generation_time_seconds": 231.7,
+          "num_inference_steps": 20,
+          "shift": [
+            12.0,
+            3.0
+          ],
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "block_swap_prefetch_used": "on",
+          "peak_vram_mb": 3780,
+          "peak_vram_reserved_mb": 4536,
+          "top_peak_vram_reserved_mb": 7484,
+          "denoise_seconds": 189.24,
+          "dit_read": {
+            "quant_linears": 200,
+            "loaded_tensors": 732,
+            "loaded_gib": 19.53,
+            "read_seconds": 12.02
+          },
+          "vram16": {
+            "cap_mib": 14025,
+            "num_alloc_retries": 0,
+            "num_ooms": 0,
+            "blocks_on_gpu": 4,
+            "qkv_quant_shared": true
+          },
+          "quant_backends": {
+            "triton": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "ascend": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            },
+            "cuda": {
+              "available": true,
+              "disabled": false,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "eager": {
+              "available": true,
+              "disabled": true,
+              "int8_linear": true,
+              "w4a8_int8_linear": true,
+              "quantize_per_tensor_fp8": true
+            },
+            "hip": {
+              "available": false,
+              "disabled": false,
+              "int8_linear": false,
+              "w4a8_int8_linear": false,
+              "quantize_per_tensor_fp8": false
+            }
+          },
+          "loras": null,
+          "request_loras": []
+        },
+        "finished_at": "2026-11-12T23:23:34+09:00"
+      },
+      "post": {
+        "cond": "int8_oldmarker_s20",
+        "at": "2026-11-12T23:23:36+09:00",
+        "output_probe": {
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\runs\\int8_oldmarker_s20\\output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73,
+            "fps": 24.0
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "checks": {
+          "items": {
+            "status_completed": {
+              "value": "completed",
+              "ok": true
+            },
+            "mp4_frames_73_audio": {
+              "value": [
+                1280,
+                768,
+                73,
+                "aac"
+              ],
+              "ok": true
+            },
+            "transformer_file": {
+              "value": "h3ErosMax_beta5_3185154.safetensors",
+              "expect": "h3ErosMax_beta5_3185154.safetensors",
+              "ok": true
+            },
+            "steps_shift": {
+              "value": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "expect": [
+                20,
+                [
+                  12.0,
+                  3.0
+                ]
+              ],
+              "ok": true
+            },
+            "quant_backends_flags": {
+              "value": {
+                "available": true,
+                "disabled": false,
+                "int8_linear": true,
+                "w4a8_int8_linear": true,
+                "quantize_per_tensor_fp8": true
+              },
+              "ok": true
+            },
+            "load_report_found": {
+              "value": true,
+              "ok": true
+            },
+            "fp8_mode": {
+              "value": null,
+              "expect": null,
+              "ok": true
+            },
+            "layers_by_format": {
+              "value": {
+                "int8_tensorwise": 200
+              },
+              "expect": {
+                "int8_tensorwise": 200
+              },
+              "ok": true
+            },
+            "no_model_incompatible": {
+              "value": false,
+              "ok": true
+            }
+          },
+          "ok": true,
+          "expected_from_header": {
+            "ok": true,
+            "quant_layers": 200,
+            "quant_layers_by_format": {
+              "int8_tensorwise": 200
+            },
+            "quant_specs": [
+              "int8_tensorwise/convrot=True/g256"
+            ],
+            "unknown": 2
+          }
+        },
+        "spike_reference": null,
+        "hf_clip": "h3_int8_oldmarker_s20_1280x768_20steps_seed1234.mp4",
+        "status": "checked"
+      }
+    }
+  },
+  "invocations": [
+    {
+      "started_at": "2026-11-12T21:20:56+09:00",
+      "argv": [],
+      "mode": "live",
+      "conds": [
+        "int8",
+        "fp8",
+        "w4a8_kijai",
+        "w4a8_eros",
+        "int8_oldmarker",
+        "fp8_turbo"
+      ],
+      "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\logs\\live_20261112_212056.log",
+      "preflight": {
+        "at": "2026-11-12T21:20:56+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "893",
+            "16376"
+          ],
+          "memory_used_mib": 893,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "server": {
+        "port": 18699,
+        "pid": 47504,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\config.h3quantgate.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\config.h3quantgate.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\state.h3quantgate.json",
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\server.console.log",
+        "started_at": "2026-11-12T21:21:00+09:00",
+        "stop": {
+          "at": "2026-11-12T21:40:41+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 50224,
+              "cmdline": "(removed for privacy)"
+            },
+            {
+              "pid": 54916,
+              "cmdline": "(removed for privacy)"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "mcp_calls": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\logs\\mcp_calls_20261112_212104.json",
+      "mcp_env": {
+        "PYTHONUTF8": "1",
+        "LTX_MCP_BASE_URL": "http://127.0.0.1:18699",
+        "LTX_MCP_OUTPUT_DIR": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs",
+        "LTX_MCP_CONFIG": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\config.h3quantgate.yaml"
+      },
+      "server_info": {
+        "name": "nz-videomni",
+        "version": "1.28.1",
+        "protocol": "2025-11-25"
+      },
+      "tool_schema_check": {
+        "tool_count": 25,
+        "problems": [],
+        "ok": true
+      },
+      "status_before": {
+        "reachable": true,
+        "base_url": "http://127.0.0.1:18699",
+        "api_key_configured": false,
+        "pipeline_load_in_flight": false,
+        "status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": false,
+          "pipeline_type": null,
+          "state": "unloaded",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+          }
+        }
+      },
+      "active_base_model": "MiniMaxH3",
+      "transformer_entries": [
+        {
+          "name": "default",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "exists": true
+        },
+        {
+          "name": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+          "path": "models/MiniMaxH3/Weights/10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+          "exists": true
+        },
+        {
+          "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+          "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+          "exists": true
+        },
+        {
+          "name": "h3ErosMax_beta4_int8",
+          "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+          "exists": true
+        },
+        {
+          "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+          "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+          "exists": true
+        },
+        {
+          "name": "h3ErosMax_beta5_3185154",
+          "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+          "exists": true
+        },
+        {
+          "name": "minimax_h3_fl2va_pruned_fp8_scaled",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+          "exists": true
+        },
+        {
+          "name": "minimax_h3_fl2va_pruned_w4a8_mixed",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+          "exists": true
+        },
+        {
+          "name": "minimax_h3_ref2va_pruned_int8_convrot",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+          "exists": true
+        },
+        {
+          "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+          "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+          "exists": true
+        }
+      ],
+      "lora_names": [
+        "3dsrx_minimax_h3",
+        "camera_motion_h3_lora_v1_3000_pruned",
+        "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16"
+      ],
+      "unload": {
+        "pipeline_loaded": false,
+        "state": "unloaded"
+      },
+      "workers_after_stop": [],
+      "finished_at": "2026-11-12T21:40:47+09:00",
+      "exit_code": 0
+    },
+    {
+      "started_at": "2026-11-12T23:19:26+09:00",
+      "argv": [
+        "--only",
+        "int8_oldmarker_s20"
+      ],
+      "mode": "live",
+      "conds": [
+        "int8_oldmarker_s20"
+      ],
+      "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\logs\\live_20261112_231926.log",
+      "preflight": {
+        "at": "2026-11-12T23:19:26+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "897",
+            "16376"
+          ],
+          "memory_used_mib": 897,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "server": {
+        "port": 18699,
+        "pid": 66744,
+        "cmd": [
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv\\Scripts\\python.exe",
+          "-u",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\main.py",
+          "--config",
+          "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\config.h3quantgate.yaml"
+        ],
+        "config": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\config.h3quantgate.yaml",
+        "state": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\state.h3quantgate.json",
+        "log": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\server.console.log",
+        "started_at": "2026-11-12T23:19:31+09:00",
+        "stop": {
+          "at": "2026-11-12T23:23:35+09:00",
+          "unload_http": 200,
+          "descendants_before": [
+            {
+              "pid": 65596,
+              "cmdline": "(removed for privacy)"
+            },
+            {
+              "pid": 57556,
+              "cmdline": "(removed for privacy)"
+            }
+          ],
+          "terminate": "ok",
+          "descendants_killed_after": []
+        }
+      },
+      "mcp_calls": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\logs\\mcp_calls_20261112_231935.json",
+      "mcp_env": {
+        "PYTHONUTF8": "1",
+        "LTX_MCP_BASE_URL": "http://127.0.0.1:18699",
+        "LTX_MCP_OUTPUT_DIR": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\outputs",
+        "LTX_MCP_CONFIG": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-fp8-w4a8-gate-2026-11-12\\_rt\\config.h3quantgate.yaml"
+      },
+      "server_info": {
+        "name": "nz-videomni",
+        "version": "1.28.1",
+        "protocol": "2025-11-25"
+      },
+      "tool_schema_check": {
+        "tool_count": 25,
+        "problems": [],
+        "ok": true
+      },
+      "status_before": {
+        "reachable": true,
+        "base_url": "http://127.0.0.1:18699",
+        "api_key_configured": false,
+        "pipeline_load_in_flight": false,
+        "status": {
+          "server": "running",
+          "version": "0.4.0",
+          "host": "127.0.0.1",
+          "port": 18699,
+          "pipeline_loaded": false,
+          "pipeline_type": null,
+          "state": "unloaded",
+          "base_model": "MiniMaxH3",
+          "gpu": {
+            "available": false,
+            "name": null,
+            "vram_total_mb": 0,
+            "vram_used_mb": 0,
+            "vram_free_mb": 0
+          },
+          "vram_optimization": {
+            "low_vram_mode": true,
+            "low_vram_profile": "16gb_safe",
+            "fp8_transformer": true,
+            "cpu_offload_text_encoder": true,
+            "vae_tiling": true,
+            "attention_tiling": false,
+            "block_swap": true,
+            "low_vram_disabled_required": false
+          },
+          "acceleration": {
+            "attention_backends": [
+              "sdpa",
+              "sage"
+            ],
+            "sage_available": true,
+            "block_swap_prefetch_available": true
+          },
+          "tracking": {
+            "available": true
+          },
+          "queue": {
+            "mode": "single_job_in_memory",
+            "pending": 0,
+            "running": 0,
+            "completed": 0,
+            "failed": 0
+          }
+        }
+      },
+      "active_base_model": "MiniMaxH3",
+      "transformer_entries": [
+        {
+          "name": "default",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "exists": true
+        },
+        {
+          "name": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+          "path": "models/MiniMaxH3/Weights/10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+          "exists": true
+        },
+        {
+          "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+          "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+          "exists": true
+        },
+        {
+          "name": "h3ErosMax_beta4_int8",
+          "path": "models/MiniMaxH3/Weights/h3ErosMax_beta4_int8.safetensors",
+          "exists": true
+        },
+        {
+          "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+          "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+          "exists": true
+        },
+        {
+          "name": "h3ErosMax_beta5_3185154",
+          "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3185154.safetensors",
+          "exists": true
+        },
+        {
+          "name": "minimax_h3_fl2va_pruned_fp8_scaled",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+          "exists": true
+        },
+        {
+          "name": "minimax_h3_fl2va_pruned_w4a8_mixed",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+          "exists": true
+        },
+        {
+          "name": "minimax_h3_ref2va_pruned_int8_convrot",
+          "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+          "exists": true
+        },
+        {
+          "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+          "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+          "exists": true
+        }
+      ],
+      "lora_names": [
+        "3dsrx_minimax_h3",
+        "camera_motion_h3_lora_v1_3000_pruned",
+        "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16"
+      ],
+      "unload": {
+        "pipeline_loaded": false,
+        "state": "unloaded"
+      },
+      "workers_after_stop": [],
+      "finished_at": "2026-11-12T23:23:38+09:00",
+      "exit_code": 0
+    }
+  ]
+}

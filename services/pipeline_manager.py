@@ -2479,7 +2479,7 @@ class PipelineManager:
         # audio record and ``mask_proof``) merged with the APP's provenance
         # (which upload, which mask, which frames, was the source resampled) —
         # the same two-source shape ``_write_chain_metadata`` uses for retake.
-        # The mock backend reports no engine block, so a mock job's ``inpaint``
+        # The LTX mock backend reports no engine block, so a mock job's ``inpaint``
         # is the provenance alone, which is exactly the honest answer.
         # MiniMax H3's engine block arrives as ``done.h3.inpaint`` (lifted out
         # above; the H3 mock reports one with ``mock: true``); its key set and

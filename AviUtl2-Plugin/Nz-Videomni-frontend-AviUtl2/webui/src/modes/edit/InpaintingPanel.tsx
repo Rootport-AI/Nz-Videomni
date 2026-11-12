@@ -193,12 +193,6 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
         />
       )}
 
-      {/* マスク周囲ののりしろ（ブレンドの膨張段数）。見た目は下のモックと同じ
-          `outpaint-align-group` だが、こちらは**有効**で、値はそのまま
-          `inpaint.blend_dilation_stage1/2` として送られる。注記の px は
-          Stage-2 から導く —— Inpainting の帯幅を決めているのは仕上げ段の膨張で
-          （`VERIFICATION_LOG.md` §105.3）、画角拡張（stage 1 が決める）とは
-          事情が違う。18px は同節の実測にある定数項。 */}
       {form.h3 ? (
         <>
           {/* 台帳 §1-124: H3 は Stage-1／2 の 2 欄を持たず、Outpainting の H3 と同じ
@@ -236,6 +230,12 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
           )}
         </>
       ) : (
+        /* マスク周囲ののりしろ（ブレンドの膨張段数）。見た目は下のモックと同じ
+           `outpaint-align-group` だが、こちらは**有効**で、値はそのまま
+           `inpaint.blend_dilation_stage1/2` として送られる。注記の px は
+           Stage-2 から導く —— Inpainting の帯幅を決めているのは仕上げ段の膨張で
+           （`VERIFICATION_LOG.md` §105.3）、画角拡張（stage 1 が決める）とは
+           事情が違う。18px は同節の実測にある定数項。 */
         <fieldset className="outpaint-align-group">
           <legend className="field-label">{t.blend.heading}</legend>
           <label className="field field-inline">

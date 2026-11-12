@@ -329,7 +329,7 @@ class InpaintSpec(BaseModel):
     same In-Outpainting IC-LoRA and the same two-stage green-canvas machinery
     outpainting uses — the geometry is what differs.
 
-    GEOMETRY CONTRACT. ``GenerateRequest.width`` / ``height`` are the CANVAS:
+    GEOMETRY CONTRACT (LTX). ``GenerateRequest.width`` / ``height`` are the CANVAS:
     the source video's own resolution rounded UP to a multiple of 128. The
     source sits at the canvas' top-left (0, 0) and the right/bottom bands are
     sentinel green, cut off again losslessly at the end of the job.

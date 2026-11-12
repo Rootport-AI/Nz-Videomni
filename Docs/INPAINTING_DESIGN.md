@@ -5,8 +5,8 @@
 **生きた文書（Inpainting機能の設計正本）。** AviUtl2のタイムラインに置いた**部分フィルタ**（AviUtl2のメディアオブジェクトの一種。枠の内側だけに、後から足した効果を掛ける）の枠を白黒のマスク動画へ焼き、その白い領域の内側だけを動画生成モデルに描き替えさせる機能を記述します。**Inpainting**（インペインティング）とは、絵の一部を塗り潰して、その部分だけを作り直すことです。
 
 - 作成: 2026-09-14
-- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾＝LTX 2.3 の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、同書 §3-150（LTX 2.5 への対応の完結の記録）、MiniMax H3 への対応は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-8(C)・§4-25 は本書を参照する）
-- 状態: **完結（LTX 2.3・LTX 2.5 の両方で提供しています）。** どちらも main へ merge 済みです。第1弾の完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105 です。LTX 2.5 への対応の完結の記録は同じく [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-150、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107 で、LTX 2.5 での姿は本書 §6.3 です。MiniMax H3 はバックエンドが受け付けるようになり（2026-11-12）、操作パネルの Inpainting サブタブを H3 で開くのは次の弾です（本書 §6.4）
+- 対象の台帳項目: [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾＝LTX 2.3 の完結の記録。起票時は台帳 §3-55、実装後は §2-10）と、同書 §3-150（LTX 2.5 への対応の完結の記録）、MiniMax H3 への対応は同じく [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124。**マスク受け渡し契約の正本は本書 §6** である（応用先の台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-8(C)・§4-25 は本書を参照する）
+- 状態: **完結（LTX 2.3・LTX 2.5・MiniMax H3 の 3 系統で提供しています）。** LTX の 2 つは main へ merge 済みです。第1弾の完結の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105 です。LTX 2.5 への対応の完結の記録は同じく [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-150、検証の記録と実測値は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §107 で、LTX 2.5 での姿は本書 §6.3 です。MiniMax H3 でも操作パネルまで開放済みです（2026-11-12。本書 §6.4）
 
 **本書には現在の設計だけを現在形で書きます。** 第1部「決まったこと」は、実装を担当する人が**第1部だけを読めば着手できる**ことを目標に書いてあります。第2部「なぜそう決めたか」は、一度否決した案を再提案しないための記録です。決定の時系列は残しません（それは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) の役割です）。
 
@@ -19,7 +19,7 @@
 | [`PENDING_TASKS.md`](PENDING_TASKS.md) | 作業の入口。本機能は完結済みで、記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) §3-55-02（第1弾）・§3-150（LTX 2.5 への対応）にある。**マスク受け渡し契約の正本は本書 §6** であり、台帳側の応用先（§4-8(C)・§4-25）は本書を参照するだけで契約を作り直さない |
 | [`OBJECT_TRACKING_DESIGN.md`](OBJECT_TRACKING_DESIGN.md) | 部分フィルタの枠を追跡AIに追わせる機能の設計正本。本機能はその結果を**入力元の1つとして受けるだけ**で、依存はしない（§11） |
 | [`STORAGE_POLICY.md`](STORAGE_POLICY.md) §0 | 保存領域の設計原則。追尾と違い、本機能は `uploads/` と `outputs/` の両方に書くので**適用対象**である（§8） |
-| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 | エンジンごとの機能スコープの正本。本機能は両エンジンで動くので、いまはどちらもここで断らない（§6.3） |
+| [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6 | エンジンごとの機能スコープの正本。本機能は 3 系統すべてで動くので、いまはどれもここで断らない（§6.3・§6.4） |
 | [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §105・§107 | **実測値の正本。** スパイクの数値・ffmpegの契約の実測・回帰の指紋・実機ゲートの結果はすべてここにあり、本書には書き写さない（§105＝第1弾、§107＝LTX 2.5 への対応） |
 | [`SDK_REFERENCE.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/SDK_REFERENCE.md) §16 | AviUtl2本体の実機確定知見。空きレイヤーの自動確保、エイリアスの `frame=` が両端を含むこと、中間点つきの実書式の正本 |
 | [`RIGHTCLICK_REDESIGN_SPEC.md`](../AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/RIGHTCLICK_REDESIGN_SPEC.md) | 右クリックメニューの項目一覧と種別ガードの正本。本機能は通し番号 **#22・#23** を使い、オブジェクト右クリックは16→18項目になる |
@@ -283,15 +283,15 @@ inpaint:
 
 **`metadata.json` の `inpaint` ブロックは、LTX 2.5 のほうが厚くなります。** §7.6 のキーに加えて、LTX 2.5 の画角拡張が持っている事実（音声の凍結の証明・音声の分岐・元の素材に音声があったかどうかなど）と、外側の復元の VRAM の峰 `restore_peak_vram_mb` が載ります。**`mask_proof` は両方のエンジンが同じ形で書きます。**
 
-**エンジンごとに機能を断る仕組みそのものは残してあります**（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6）。いまはどちらのエンジンも `inpaint` を断らないので、**Inpainting サブタブを灰色にするエンジンはありません。** MiniMax H3 もサーバーは 2026-11-12 から `inpaint` を断りません。H3 の形で送る操作パネルは次の弾で作ります（§6.4）。
+**エンジンごとに機能を断る仕組みそのものは残してあります**（[`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.6）。いまはどの系統も `inpaint` を断らないので、**Inpainting サブタブを灰色にするエンジンはありません。** MiniMax H3 には、操作パネルが H3 の形で送ります（§6.4）。
 
 ### 6.4 MiniMax H3 での扱い
 
-**MiniMax H3 でも、マスクは同じ白黒のマスク動画で受け取ります。** プラグイン側の作り方（§5。`timeline.renderMaskVideo`）は変えていません。違うのは受け取った後の扱いで、マスクの受け渡しに固有の違いは下の 3 点です。要求の欄ごとの契約（鍵・範囲・既定・エラーの符号。キャンバスが 32 の倍数であること、元動画を `inpaint.source_video_id` で渡すことを含む）は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec` の「系統ごとの扱い」、エンジンの中の仕組みは H3 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 が正本です。H3 の Inpainting はバックエンドまで実装済みで、操作パネルの Inpainting サブタブを H3 の形で開くのは次の弾です（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124）。
+**MiniMax H3 でも、マスクは同じ白黒のマスク動画で受け取ります。** プラグイン側の作り方（§5。`timeline.renderMaskVideo`）は変えていません。違うのは受け取った後の扱いで、マスクの受け渡しに固有の違いは下の 3 点です。要求の欄ごとの契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec` の「系統ごとの扱い」、エンジンの中の仕組みは H3 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 が正本です。
 
 - **マスクの枚数は「24fps に換算して `num_frames` 枚以上」**: LTX のように、ちょうど `num_frames` 枚である必要はありません。H3 は 24fps 固定で、マスクはプロジェクトの fps のまま送れます。足りなければ受付で断ります（`INPAINT_MASK_FRAME_MISMATCH`）。
 - **切り出しはアプリが行う**: アプリがマスクを 0 秒から、元動画を `window_start_sec` から、どちらも 24fps・ちょうど `num_frames` 枚に切り出します（`_inpaint_mask.mp4`・`_inpaint_window.mp4`）。マスクは窓に合わせて描かれているので、マスクの開始は常に 0 です。緑塗りのキャンバス（§7.2）は作りません。
-- **トークンへの落とし方**: 二値化は LTX と同じ赤 128 以上です。そのうえでエンジンが、32×32 画素のブロックに 1 画素でも白があればその升目を描き直し、時間方向は 17 枚の塊ごとの和集合で潜在へ対応させます（規則の正本は H3 設計正本 §3.7 の「マスクからトークンへ」）。マスクの外へは、マスクの縁からの距離で元の画素へなじませます（なじませ段数 1 本。LTX の「のりしろ」2 欄〔§3.8〕は使いません）。
+- **トークンへの落とし方となじませ**: H3 設計正本 §3.7 の「マスクからトークンへ」と「元動画への合成」が正本です。
 
 ## 7. バックエンドの仕組み
 
@@ -356,7 +356,7 @@ inpaint:
 - **`outputs/{ジョブ}/` に残るもの**: 完成動画、`metadata.json`、**窓で切り出した動画**、**緑で塗ったキャンバス**。後ろの2つは「何を入れたらこれが出たか」を後から確かめるための証拠です。
 - **AviUtl2側に残るもの**: マスク動画と黒いPNG（§5.5）。**誰も消しません。**
 - **追尾とは同時に走りません**（§5.6）。ただし依存はしていません——追尾していない部分フィルタでもマスクは作れます。
-- **MCPサーバー**（外部のAIエージェントから操作するための窓口）**の道具にはしません。** AviUtl2のタイムラインの上でしか意味を持たない操作だからです。
+- **MCPサーバー**（外部のAIエージェントから操作するための窓口）**の道具にはしません。** AviUtl2のタイムラインの上でしか意味を持たない操作だからです。これは LTX のみで、H3 は MCP から使えます（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36）。
 - **チェーン（クリップ連結）には載せません。** 入口は単発生成だけです。
 
 ## 9. 検証の関門
@@ -386,10 +386,10 @@ inpaint:
 
 - **時間軸ののりしろ**（§17）。画面には灰色の見本だけを置きます。
 - **マスク描画の停止ボタンと、停止用の呼び出し**（§18）。
-- **マスク動画そのものをファイルとして受け取る導線。** マスクは常にAviUtl2が作ります。
+- **マスク動画そのものをファイルとして受け取る導線。** マスクは常にAviUtl2が作ります（LTX のみ。H3 は MCP から使えます。[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36）。
 - **マスクの可視化**（§13）。タイムラインにも操作パネルにも出しません。
 - **チェーン（クリップ連結）への展開。**
-- **MCPサーバーの道具としての追加。**
+- **MCPサーバーの道具としての追加。**（LTX のみ。H3 は MCP から使えます。[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36）
 
 ---
 

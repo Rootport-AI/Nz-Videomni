@@ -244,7 +244,7 @@ class H3InpaintInput:
     app's cut of the mask video, exactly ``num_frames`` frames at the source's
     size (red >= 128 = white = redrawn). ``audio_strength`` / ``feather_px``:
     Outpainting's meaning (``feather_px`` is the blend band outward from the
-    mask's blocks). 計画 ``enumerated-questing-cupcake.md`` §4.6。
+    mask's blocks). 記録簿 ``VERIFICATION_LOG.md`` §208。
     """
 
     path: str
@@ -427,7 +427,7 @@ def validate_request(req: H3GenerateRequest) -> None:
     if ip is not None:
         # The canvas (the source rounded up to 32) is checked by
         # inpaint_geometry.compute_inpaint_geometry in generate(); here only the
-        # block's own values and the exclusions (計画 §4.6).
+        # block's own values and the exclusions.
         if op is not None:
             raise ValueError("Inpainting は Outpainting と併用できません")
         for label, p in (("元動画", ip.path), ("マスク動画", ip.mask_path)):
@@ -908,7 +908,7 @@ class H3Pipeline:
             # Inpainting (台帳 §1-124) shares the source read, its encode and the
             # fixed tokens (``path`` / ``audio_strength`` / ``feather_px`` are the
             # same names); its geometry, the mask's token values, the paste-back
-            # and the cut back to the source size are its own (計画 §4.6).
+            # and the cut back to the source size are its own.
             op = req.outpaint or req.inpaint
             ip = req.inpaint
             op_frames = op_wave = op_geom = None

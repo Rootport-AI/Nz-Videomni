@@ -103,7 +103,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
   撮り直し（Retake）は submit_chain の引数（retake_* の 6 引数）、画角拡張
   （Outpainting）は submit_generate の引数（outpaint_* の 7 引数）で、
-  どちらも LTX 2.3 / LTX 2.5 で使えます（撮り直しは H3 でも使えます）。
+  どちらも LTX 2.3 / LTX 2.5 / MiniMax H3 で使えます。
   下の専用の節を読んでください。
   ほかに知っておくとよい引数とツール（詳細は各ツールの説明）:
   submit_chain の stage2_window は Stage-2 の窓の名前です

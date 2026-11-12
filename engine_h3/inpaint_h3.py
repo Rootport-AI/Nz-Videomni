@@ -1,6 +1,6 @@
 """MiniMax H3 Inpainting: the mask read, the token values and the record (台帳 §1-124).
 
-計画 ``enumerated-questing-cupcake.md`` §4.6。The geometry, the token mask and
+The geometry, the token mask and
 the paste-back are the torch-free ``engine_h3.inpaint_geometry``; the source
 read, the fixed tokens and the self-check are Outpainting's
 (``engine_h3.outpaint_h3``). This module holds the torch side the single
@@ -42,7 +42,6 @@ def read_inpaint_mask(path: str, num_frames: int, source_size: tuple[int, int], 
     ``proof``: ``decoded_frames``, ``white_ratio`` (white pixels /
     ``F * H_s * W_s``) and ``token_ratio`` (the mean of
     ``inpaint_geometry.token_values_from_chunks``).
-    マスク由来のトークンの面積率。右・下の隙間は含まない。
     """
     from engine_h3.constants import latent_frames  # noqa: PLC0415
     from engine_h3.inpaint_geometry import (  # noqa: PLC0415
@@ -109,7 +108,7 @@ def inpaint_record(
     """``done.h3.inpaint``. ``values``: the token values after :func:`apply_inpaint_tokens`
     (``[T', gh, gw]``, 0 fixed / 1 generated); ``mask_proof``: :func:`read_inpaint_mask`'s
     proof, copied as is (its ``token_ratio`` is the mask's own: マスク由来のトークンの
-    面積率。右・下の隙間は含まない). Called once the self-check has passed, so
+    面積率。右・下のすき間は含まない). Called once the self-check has passed, so
     ``self_check`` is always true."""
     v = values.detach().to("cpu", torch.float32)
     t_lat = int(v.shape[0])

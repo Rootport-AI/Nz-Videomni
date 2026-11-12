@@ -23461,20 +23461,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
   - UETrack（物体追跡のプラグイン）は枠の座標を動かすだけで、白黒の動画は出しません。
   - LTX の段 0 のスパイクのマスクは、ffmpeg の `drawbox` で描いた手製でした。
   - 本スパイクのマスク `mask-768p.mp4` は、同じ素材で 2026-11-11 に回した LTX 2.5 の Inpainting のジョブのマスク（1920×1080・121 枚）を、オーナーが 1280×768 用に縮小・位置調整したものです。終盤の数フレームで裾がマスクからはみ出します。
-- 計画書はセッション限りなので、裁定を本節に残します（205.2 と同じ作法）。
-
-**オーナー裁定（2026-11-11。スパイクの判定の後、製品実装の前提として承認済み）**:
-
-| 論点 | 裁定 |
-|---|---|
-| 要求の形 | LTX の流儀に寄せない。H3 の Outpainting と同じ形（`source_video_id` で元動画を渡す） |
-| 元動画が 32 の倍数でないとき | Outpainting の幾何を流用して内部で 32 の倍数まで鏡写しで広げ、出力を元の寸法に切り戻す |
-| 時間方向 | 窓は先頭から。長さは利用者がスライダーで選ぶ 17n+5。画素→潜在の対応は本スパイクで確かめた「17 枚の塊の和集合」 |
-| マスクの落とし方 | 生成側に倒す（32×32 のトークンに 1 画素でも白なら生成） |
-| マスクの外の復元となじませ | Outpainting と同じ「なじませ段数」1 本。マスクの縁から外へ元の画素になじませ、その外は画素単位で元に戻す。LTX の Stage-1／2 の 2 欄は持たない |
-| 音声 | スライダーの既定 0.5。Outpainting と同じ部品（音声の潜在の固定の値を 1−s にする） |
-| 第 1 弾の範囲 | エンジン・API・MCP〔AI エージェント向けの道具の口〕・操作パネルの `inpaint` の開放まで。Gradio は触らない（台帳 §3-243）。エンジンは切り出した窓の先頭から見て、アプリは `window_start_sec` で元動画を切り出す（オーナー確認 2026-11-11） |
-| 追加の実験 | 回さない。操作パネルから試せる状態を先に作る |
+- **オーナー裁定（2026-11-11。スパイクの判定の後、製品実装の前提として承認済み）**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 100 にまとめました。
 
 ### 207.3 設計の要約
 
@@ -23569,11 +23556,11 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 
 ### 208.1 結論
 
-**§207 のスパイクで確かめた仕組みを、製品の経路（エンジン → ワーカー → アダプタ → API → MCP → 操作パネル）に載せました。** 弾 1（バックエンド）の機械の門は全件合格し、GPU の門 2 本（I1＝1280×768、I2＝1920×1080 を 1920×1088 のキャンバスで生成して切り戻す）は、合否 1〜6 がすべて合格でした。合否 7（Hugging Face でのオーナーの目視）と、弾 2（操作パネル）のオーナーの実機確認はまだです。確認の項目は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 にあります。**弾 1 と弾 2 は一緒に main へ入れます**（208.9）。仕組みの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7、欄ごとの契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`（v0.5.120）です。
+**§207 のスパイクで確かめた仕組みを、製品の経路（エンジン → ワーカー → アダプタ → API → MCP → 操作パネル）に載せました。** 弾 1（バックエンド）の機械の門は全件合格し、GPU の門 2 本（I1＝1280×768、I2＝1920×1080 を 1920×1088 のキャンバスで生成して切り戻す）は、合否 1〜6 がすべて合格でした。合否 7（Hugging Face でのオーナーの目視）と、弾 2（操作パネル）のオーナーの実機確認も合格です（208.10）。台帳では [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124 としてクローズしました。**弾 1 と弾 2 は一緒に main へ入れます**（208.9）。仕組みの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7、欄ごとの契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`（v0.5.120）です。
 
 ### 208.2 経緯と裁定
 
-- オーナー裁定（要求の形・幾何・時間方向・マスクの落とし方・なじませ・音声・範囲・追加の実験）は §207.2 の表のとおりです。設計正本では裁定 100 にまとめました。
+- オーナー裁定（要求の形・幾何・時間方向・マスクの落とし方・なじませ・音声・範囲・追加の実験）は、設計正本の裁定 100 にまとめました。
 - **窓の開始（オーナー確認 2026-11-11）**: 操作パネルの Inpainting では、窓の起点は部分フィルタの開始です。部分フィルタがクリップの頭に無いかぎり、`window_start_sec` は 0 になりません。そこで、H3 でも `window_start_sec` を受け付け、アプリが元動画を切り出す開始に使います（計画の案 (iii)）。マスクは窓に合わせて描かれているので、0 から切ります。エンジンは切り出した窓の先頭から見るので、裁定の「窓は先頭から」の意図（エンジン側を単純に保つ）は変わりません。
 - 計画書はセッション限りなので、要点を本節に残します（205.2 と同じ作法）。
 
@@ -23626,17 +23613,17 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 | MCP | `mcp_server/tools/generate.py`・`mcp_server/server.py` | `inpaint_*` の 4 引数・H3 の判定・送る前の拒否・説明文 |
 | テスト | `tests/test_h3_inpaint_geometry.py`・`tests/test_h3_inpaint.py`・`tests/test_h3_worker_inpaint.py`・`tests/test_h3_inpaint_api.py`（以上新設）と、既存の `tests/test_engine_h3_adapter.py`・`tests/test_h3_engine.py`・`tests/test_h3_outpaint_geometry.py`・`tests/test_h3_worker_chain.py`・`tests/test_mcp_tools_generate.py` | 208.6 |
 | 操作パネル（弾 2） | `webui/src/` の `api/types.ts`・`shell/generationConstraints.ts`・`bridge/mockBridge.ts`・`modes/edit/inpaintWindow.ts`・`modes/edit/useInpaintForm.ts`・`modes/edit/InpaintingPanel.tsx`・`modes/edit/EditScreen.tsx`・`i18n/strings.ts` とテスト | フロントエンド `Docs/DEVLOG.md` §169 |
-| 文書 | 設計正本 §3.7・裁定 100、仕様書 v0.5.120、[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36、台帳 §3-282・§3-280 (c)、保管庫 [`Outputs-archive/h3-inpaint-2026-11-11/`](Outputs-archive/h3-inpaint-2026-11-11/) の門の台本 `h3_inpaint_gate_api.py` | — |
+| 文書 | 設計正本 §3.7・裁定 100、仕様書 v0.5.120、[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36、台帳 §3-282・§3-280 (c)・§3-281 (b)、保管庫 [`Outputs-archive/h3-inpaint-2026-11-11/`](Outputs-archive/h3-inpaint-2026-11-11/) の門の台本 `h3_inpaint_gate_api.py` | — |
 
 ### 208.6 機械の門
 
 - **弾 1**:
   - エンジンの仮想環境（`scripts/run_h3_pytest.py`）: `tests/test_h3_*.py`（`_api` を除く）が 885 件合格・22 件スキップ。
   - アプリの仮想環境: 全件で 4,055 件合格・80 件スキップ・失敗 0（7 分 40 秒。結果は `--junitxml` で採取）。
-  - 新設したテストは `test_h3_inpaint_geometry.py`・`test_h3_inpaint.py`・`test_h3_worker_inpaint.py`・`test_h3_inpaint_api.py`（25 件）です。
+  - 新設したテストは `test_h3_inpaint_geometry.py`・`test_h3_inpaint.py`・`test_h3_worker_inpaint.py`・`test_h3_inpaint_api.py` です（`test_h3_inpaint_api.py` はアプリの仮想環境で 25 件。ほかの 3 本はエンジンの 885 件に含む）。
 - **弾 2**（操作パネル）:
-  - `npm run typecheck`: 合格（型エラーなし。2026-11-12）
-  - `npx vitest run --exclude "**/backend.integration.test.ts"`: 188 ファイル・3,779 件すべて合格（57 秒。GPU の門の後に機械が空いた状態で全件を 1 回）。aux2 は `build.ps1 -RunTests` で再ビルド（ネイティブの doctest 402 件合格）し、`deploy.ps1` で実機と配布コピーへ配布（2026-11-12 02:16）
+  - `npm run typecheck` と `npx vitest run --exclude "**/backend.integration.test.ts"` は合格。件数はフロントエンド `Docs/DEVLOG.md` §169.5 が正本です。
+  - aux2 は `build.ps1 -RunTests` で再ビルド（ネイティブの doctest 402 件合格）し、`deploy.ps1` で実機と配布コピーへ配布（2026-11-12 02:16）
 
 ### 208.7 GPU の門（弾 1）
 
@@ -23674,10 +23661,33 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 
 ### 208.8 遠隔目視と次の一手
 
-- **遠隔目視**: 非公開の Hugging Face データセット `Rootport/Nz-LTX23-eval-clips` の `round15-h3-inpaint/`（https://huggingface.co/datasets/Rootport/Nz-LTX23-eval-clips/tree/main/round15-h3-inpaint 。コミット `36256641`）。合否 7（オーナーが継ぎ目・色の段差・動きの連続を目視する）は未了です。
-- **次の一手**: 合否 7 の目視と、弾 2 の実機確認（台帳 §2。項目の正本はフロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.28）。
-- **既知の限界と残件**: 設計正本 §3.7 の「既知の限界」、台帳 §3-282（時間方向の精密な対応と塊の境目）・§3-280 (c)（`OutpaintSpec.source_video_id` の空文字）を参照してください（本書には写しません）。
+- **遠隔目視**: 非公開の Hugging Face データセット `Rootport/Nz-LTX23-eval-clips` の `round15-h3-inpaint/`（https://huggingface.co/datasets/Rootport/Nz-LTX23-eval-clips/tree/main/round15-h3-inpaint 。コミット `36256641`）。合否 7（オーナーが継ぎ目・色の段差・動きの連続を目視する）は合格です（208.10）。
+- **次の一手**: 敵対的レビューの後に main へ `--no-ff` で merge する（208.10）。
+- **既知の限界と残件**: 設計正本 §3.7 の「既知の限界」、台帳 §3-282（時間方向の精密な対応と塊の境目）・§3-280 (c)（`OutpaintSpec.source_video_id` の空文字）・§3-281 (b)（1080p のマスク動画を作れなかった件）を参照してください（本書には写しません）。
 
 ### 208.9 配布の注意
 
 **弾 1 と弾 2 は一緒に main へ入れます。** 弾 1 で H3 の `unsupported_features` から `inpaint` が外れました。そのため、弾 1 だけを配布すると、古い操作パネルでも H3 の Inpainting のサブタブが開きます。古い操作パネルは LTX の形（`reference_video_id`・128 の倍数・in-outpainting の LoRA）で送るので、サーバーが 422（`reference_video`）で断ります。
+
+### 208.10 オーナーの判定（2026-11-12）
+
+**目視（合否 7）と実機確認はすべて合格です。** 生成された動画の品質もいずれも合格でした。
+
+- **目視**: Hugging Face の `round15-h3-inpaint/` の `I1_1280x768_73f_seed1234.mp4`・`I2_1920x1080_73f_seed1234.mp4` は、どちらも違和感なし。元動画への合成をしないスパイク版では、マスクで覆いきれなかった少女の髪の先端が数フレーム映り込んでいたが、合成版ではのりしろのなじませで消えた。
+- **実機確認**（MiniMax H3・操作パネル。項目の正本はフロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.28）: 実機のジョブはどちらも元動画・キャンバス・出力の実寸が 1280×768（pad 0）です（`metadata.json` で確認）。
+
+| # | 確認したこと | 結果 |
+|---|---|---|
+| 1 | 部分フィルタと対象動画を右クリックで送る | Inpainting のサブタブが灰色でなく開き、2 枚のカードがそろう。合格 |
+| 2 | 1280×768 の対象動画で 1 本生成（ジョブ `18e8edbf`） | 完走。合格 |
+| 3 | H3 の Inpainting の画面 | Stage-1／Stage-2 の欄が無い・マスクブラーの既定 1 で「※マスクの縁から外側へ約30pxを、元の動画となじませます。」（長辺 1920 のとき。1280 では 20px。2 で約 60px）・音声の Strength の既定 0.5・Steps と shift の欄・「24fps固定で生成します」・フレーム数 22〜345 の 17 刻み。合格 |
+| 4 | フレーム数 73 で Generate（`18e8edbf`） | 合格 |
+| 5 | リボンの頭から 2 秒以上離れた部分フィルタで Generate（ジョブ `50fc152c`。`window_start_sec` 2.0＝48 フレーム目から・マスク 73 枚・自己検査 true・音声の Strength 0.5） | 「窓がリボンに収まらない」が出ずに完走。仮オブジェクトと出来た動画の開始が部分フィルタの開始と同じフレームで、マスクの外の動きが元動画とずれない。合格 |
+| 6 | 出来た動画 | 実寸は 1280×768（元動画と同じ）。1920×1080 のプロジェクト上に置かれ、下端の帯は無い。マスクの外は元動画と見分けがつかず、中はプロンプトに沿って描き替わり、音声が鳴る。合格 |
+| 7 | LTX 2.3／2.5 に切り替える | Stage-1／Stage-2 の 2 欄（既定 5／2）と「※マスク周囲の約Npxが「のりしろ」になります。」に戻り、H3 だけの欄と注記が消え、スライダーが 8 刻みに戻る。合格 |
+
+- **1080p の素材は実機では確かめていません**: AviUtl2 側で 1920×1080 のマスク動画を作れなかったためです（原因は未調査。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-281 (b)）。合格扱いの根拠は、バックエンドのテスト（§208.6）と GPU の門 I2（§208.7）です。
+- **裁定（オーナー）**:
+  - 無音の素材で音声の Strength 0.5 のまま Generate すると、黄色の注意文「元動画に音声トラックがありません。音声の Strength を 0 にするか、音声つきの動画を使ってください。」が出る。この挙動でよい。
+  - 全項目合格につき、文書を最新化し、敵対的レビューの後に main へ merge する。
+- **main への merge**: （監督が追記）

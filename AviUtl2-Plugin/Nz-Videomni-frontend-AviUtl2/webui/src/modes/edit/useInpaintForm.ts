@@ -651,7 +651,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     }
   }
   // `mapping.frameCount` はプロジェクトのフレーム数なので、比べる相手は窓の長さ
-  // （H3 では 24fps の F をプロジェクトの fps へ換算した値。台帳 §1-124 の R1）。
+  // （H3 では 24fps の F をプロジェクトの fps へ換算した値。F のままだと fps ≠ 24 で常に不一致）。
   if (partialFilter && target && (!placedWindow || !mapping?.ok || mapping.frameCount !== windowFrames)) {
     // 窓がリボンに収まらない／素材秒へ写せない／写した結果が短くなった
     // （＝静止フレームの尻尾に掛かっている）。どれも「その長さでは描き替え
@@ -668,7 +668,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
       layer: target.item.layer,
       frameStart: placedWindow.windowStart,
       frameEnd: placedWindow.windowEnd,
-      // 台帳 §1-124（M1）: 席の予約とジョブの紐づけは「生成の枚数 × 生成 fps」。H3 は
+      // 台帳 §1-124: 席の予約とジョブの紐づけは「生成の枚数 × 生成 fps」。H3 は
       // `{F, 24}`（Retake の placement と同じ）—— プロジェクトのフレーム数で予約すると
       // 席が伸びる。LTX は窓の長さ＝フレーム数欄の値なので従来と同じ値。
       numFrames: h3 ? numFrames : placedWindow.frames,

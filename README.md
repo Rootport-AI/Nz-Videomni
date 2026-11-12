@@ -988,12 +988,12 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 - **ネガティブプロンプト（VSF 方式だけ）**。ネガティブプロンプトのアコーディオンのチェックを入れると、VSF 方式で Single と Chained に効きます（Retake の画面は、LTX と同じくネガティブプロンプトを送りません。NAG のラジオは灰色です。LTX で NAG を選んだまま MiniMax H3 に切り替えると、自動で VSF に変わります）。VSF scale の既定と範囲は LTX と同じです（H3 でも較正済み）。API と MCP では `neg_method: "vsf"` を指定してください。仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §3.5、NAG と VSF の違いは [`Docs/VSF_README_NOTES.md`](Docs/VSF_README_NOTES.md) です。
 - **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
 
-**できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Edit タブは開きますが、使えるのは Retake と Outpainting だけで、Inpainting・Alpha Gen のサブタブは灰色になります。Chained タブも開きますが、下の表の連結の入口は灰色になるか、表示されません）。
+**できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Edit タブは開きますが、使えるのは Retake・Outpainting・Inpainting で、Alpha Gen のサブタブだけが灰色になります。Chained タブも開きますが、下の表の連結の入口は灰色になるか、表示されません）。
 
 | 断られる機能 | 対応するリクエスト項目 |
 |--------------|------------------------|
 | 連結（Chained）のうち、素材（末尾）・IC-LoRA の参照動画と、連結全体に音声を 1 本付ける LTX の形の長尺 A2V。テキストからの連結・V2V・冒頭の画像から始める連結・長い音声を各クリップへ割り当てる A2V と撮り直し（Retake）は使えます（単発の A2V とバッチ A2V も使えます。上の「できること」） | `POST /generate/chain` の `end_source`・`reference_video_id`・最上位の `source_audio`（各クリップの `source_audio` は使えます） |
-| Inpainting・Alpha Gen（画角拡張〔Outpainting〕は使えます。上の「できること」） | `inpaint`・`alpha_gen` |
+| Alpha Gen（画角拡張〔Outpainting〕と Inpainting は使えます） | `alpha_gen` |
 | IC-LoRA（参照動画による制御）。スタイル LoRA は使えます（`models/MiniMaxH3/LoRA/`）が、音声だけの強度（第3引数）は使われません | `reference_video_id`（`loras` は使えます） |
 | ネガティブプロンプトの NAG 方式（VSF 方式は使えます。上の「できること」） | `neg_method: "nag"`（`nag_enabled` が true のとき。省略も `"nag"` 扱い） |
 | キーフレームの強度（MiniMax H3 には強度がありません。省略すれば通ります） | `conditioning_images` の `strength`（値を入れると、0.8 でも断られます） |

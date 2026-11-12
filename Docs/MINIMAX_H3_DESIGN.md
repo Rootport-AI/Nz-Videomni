@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。バックエンドまで。操作パネルは弾 2 で開く）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -63,13 +63,13 @@
   > **更新（2026-10-19）**: 中間キーフレームは実装済み（裁定 56・59、§3）。
   > **更新（2026-11-02）**: Chained の素材（末尾）は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-47 へ送ったので、灰色ではなく非表示にした。IC-LoRA の参照動画は Chained でも非表示にする。Chained の V2V と冒頭画像は実装した（裁定 90・§3.3）。
   > **更新（2026-11-10）**: Outpainting は H3 でも動く形で開く（裁定 99・§3.6）。灰色で配置だけ決めた基本機能のうち、残るのは Inpainting（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124）である。
-  > **更新（2026-11-12）**: Inpainting はバックエンドが H3 の形で受けるようになった（裁定 100・§3.7）。操作パネルのサブタブを H3 で開くのは弾 2 である（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124）。
+  > **更新（2026-11-12）**: Inpainting はバックエンドが H3 の形で受けるようになった（裁定 100・§3.7）。操作パネルのサブタブも H3 で開いた（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124）。
 - **裁定 32 【オーナー裁定】**: 常駐の方式。テキストエンコーダは層ごとにファイルから GPU へ直接読む（§4）。理由は、DiT と VAE を常駐させたまま、テキストエンコーダを主メモリへ丸ごと読む方式を取ると、主メモリの山が 64GB 機でもページファイルに溢れ、常駐の目的（速くする）と逆になるからである。直接読みにすれば、テキストエンコーダは主メモリをほぼ使わない。
 - **裁定 33 【オーナー裁定】**: 映像 VAE は符号化器と復号器に分けて組み、T2V では符号化器を読まない（§8）。
 - **裁定 34 【オーナー裁定】**: 操作パネルの Edit タブは、H3 では 4 つのサブタブ（Retake・Outpainting・Inpainting・Alpha Gen）が全部閉じるため、既存の規則によりタブごと灰色になる。裁定 30 の「グレーアウトして配置だけ決めておく」はこの形で満たす。
   > **更新（2026-11-08）**: 裁定 96 で Retake を開いたので、H3 の Edit タブは開き、生きるのは Retake のサブタブだけになった（Outpainting・Inpainting・Alpha Gen は灰色のまま。右クリックからそれらへ送ると案内の一行で止まる。§3.4）。
   > **更新（2026-11-10）**: 裁定 99 で Outpainting を開くので、生きるサブタブは Retake と Outpainting になる（Inpainting・Alpha Gen は灰色のまま。右クリックからそれらへ送ると案内の一行で止まる）。配信から `outpaint` が消えるとサブタブと右クリックの門は自動で開く（§3.6 の「操作パネル」）。門 G5 は 2026-11-10 に合格し（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.19）、操作パネルは同日に配布した（同 §205.22）。オーナーの実機の門 G7（右クリックから Outpainting のサブタブが開き、Inpainting・Alpha Gen は灰色のまま）も同日に合格した（同 §205.25）。
-  > **更新（2026-11-12）**: 裁定 100 で Inpainting をバックエンドが受けるようになり、配信から `inpaint` が消えた（§3.7 の「操作パネル」）。操作パネルの H3 の形（なじませ段数 1 本・音声の Strength・32 の倍数のキャンバス）は弾 2 で作る。
+  > **更新（2026-11-12）**: 裁定 100 で Inpainting をバックエンドが受けるようになり、配信から `inpaint` が消えた（§3.7 の「操作パネル」）。操作パネルも H3 の形（なじませ段数 1 本・音声の Strength・32 の倍数のキャンバス）で開き、生きるサブタブは Retake・Outpainting・Inpainting になった（Alpha Gen は灰色のまま）。
 - **裁定 35 【オーナー裁定】**: NAG のアコーディオンは H3 では非表示でなく灰色にし、要求に NAG の項目を載せない（非表示にすると、有効にしたまま解除できず全ジョブが 422 になるため）。IC-LoRA の参照動画のアコーディオンは非表示にする。Single の A2V カードとバッチ A2V は H3 では `chain` の行で灰色にする（連結要求そのもののため）。
   > **訂正（2026-10-21）**: 2026-10-18 の目視の所感では、A2V カードとバッチ A2V を非表示にするよう求めていた（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-242 の ②）。オーナーは 2026-10-21 にこれを取り下げた。A2V（台帳 §1-103）とバッチ A2V を近日実装するので、いま隠してもすぐ戻すことになるためである。灰色のままとする。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §171。
   > **更新（2026-10-25）**: Single の A2V カードは、H3 では単発の `/generate` に送る形で開いた（裁定 74・§3.1）。バッチ A2V は `chain` の行で灰色のままである。
@@ -320,7 +320,7 @@
   - **受付の細目（監督の裁定）**: 元動画の縦横が奇数なら 422（切り出しが yuv420p で符号化できないため）。`freeze_source_audio` は `true` の明示も 422。元動画が無いときの 404 は専用のコード。フレーム数の照合は 24fps に換算した枚数で行う。A2V・Ref2VA の参照・キーフレームとの併用は 422。なじませ幅の丸めは半分切り上げ。アプリ層の分岐は系統名ではなく要求の形（`outpaint.source_video_id` の有無）で行う。理由は §3.6 の「API とフィーチャースコープ」。
   - **進め方（オーナー裁定）**: 裁定 90 と同じ（コーディング担当は設計を勝手に変えず、疑問があれば手を止めてエスカレーションする。計画は敵対的レビューを受け、指摘は「過剰設計・スパゲッティ化の危険」と「調査で裏付けが取れるか」の 2 点で採否を決める）。
   - **状態**: 完結（2026-11-10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125）。弾 1（エンジンと GPU の門 G0〜G4）は go（記録簿 §205.16）、弾 2 の GPU の門 G5（快適上限）・G6（20 ステップの完走）は記録簿 §205.19・§205.20、配布は §205.22、オーナーの実機の門 G7（6 項目すべて合格）は §205.25。
-- **裁定 100 【オーナー裁定・監督裁定】**: H3 の Inpainting（利用者が描いたマスクの白い所だけを描き直す機能。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124。2026-11-11）を製品に載せるときの裁定です。2026-11-11 のスパイク（製品コードを変えずにエンジンを直接呼んだ 1 本の GPU 実験）の判定「大成功」の後に決めました。仕組みの正本は §3.7、欄ごとの契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`、マスクの受け渡しに固有の差分は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36 にあります。スパイクの条件・結果・計画の敵対的レビューの採否は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207 にだけ書きます（本書には写しません）。
+- **裁定 100 【オーナー裁定・監督裁定】**: H3 の Inpainting（利用者が描いたマスクの白い所だけを描き直す機能。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124。2026-11-11）を製品に載せるときの裁定です。2026-11-11 のスパイク（製品コードを変えずにエンジンを直接呼んだ 1 本の GPU 実験）の判定「大成功」の後に決めました。仕組みの正本は §3.7、欄ごとの契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`、マスクの受け渡しに固有の差分は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36 にあります。スパイクの条件・結果・計画の敵対的レビューの採否は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207 にだけ書きます（本書には写しません）。
   - **① 要求の形（オーナー裁定）**: LTX の流儀に寄せず、H3 の Outpainting と同じ形にする（元動画は `inpaint.source_video_id` で渡す）。
   - **② 元動画が 32 の倍数でないとき（オーナー裁定）**: Outpainting の幾何を流用して内部で 32 の倍数まで鏡写しで広げ、出力を元の寸法に切り戻す。
   - **③ 時間方向（オーナー裁定）**: 窓は（切り出した窓の）先頭から。長さは利用者がスライダーで選ぶ 17n+5。画素から潜在への対応は、スパイクで確かめた「17 枚の塊の和集合」。
@@ -331,7 +331,7 @@
   - **⑧ 追加の実験（オーナー裁定）**: 回さない。操作パネルから試せる状態を先に作る。
   - **細目（監督の裁定）**: マスクの外への合成の重みは厳密なユークリッド距離で作る（scipy は使わない）。マスクの枚数は 24fps 換算で `num_frames` 以上あればよい（先頭を使う）。元の動画の辺の下限 256 と赤 128 の二値化は LTX と同じ。白が 1 画素も無いマスク・全面が白いマスクも、そのまま受け付けて記録する。製品には画素のビット一致の自己検査を入れない（GPU の門の台本で測る）。MCP で Outpainting と Inpainting を同時に指定したら、送る前に断る。理由は §3.7。
   - **進め方（オーナー裁定）**: 裁定 90 と同じ（コーディング担当は設計を勝手に変えず、疑問があれば手を止めてエスカレーションする。計画は敵対的レビューを受け、指摘は「過剰設計・スパゲッティ化の危険」と「調査で裏付けが取れるか」の 2 点で採否を決める）。製品実装はバックエンド（弾 1）→ 操作パネル（弾 2）の順。
-  - **状態**: 進行中（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124）。
+  - **状態**: 完結（2026-11-12。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124）。GPU の門は記録簿 §208.7、オーナーの目視と実機確認は §208.10。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -862,7 +862,7 @@ H3 の連結の帯は一段である（Stage 2 が無い。LTX の連結の 2 �
 
 ### 操作パネル
 
-Edit タブが開き、Retake のサブタブだけが生きる（裁定 34 の更新）。Retake 画面は `GET /models` の `constraints` に従う（窓の格子と上限・縦横の倍数・固定の fps・サンプリングの 3 本）。H3 では「撮り直す対象」のラジオの代わりに音声の Strength のスライダーを 1 本出し、Stage-2 のクリップ長の欄を隠す。閉じたサブタブ（Inpainting・Alpha Gen）への右クリックは、案内の一行だけで止める（Outpainting は裁定 99 で開く。§3.6。Inpainting は裁定 100 でバックエンドが受けるようになり、操作パネルで開くのは弾 2。§3.7 の「操作パネル」）。判断の詳細はフロントエンド `Docs/DEVLOG.md` §163。
+Edit タブが開き、Retake のサブタブだけが生きる（裁定 34 の更新）。Retake 画面は `GET /models` の `constraints` に従う（窓の格子と上限・縦横の倍数・固定の fps・サンプリングの 3 本）。H3 では「撮り直す対象」のラジオの代わりに音声の Strength のスライダーを 1 本出し、Stage-2 のクリップ長の欄を隠す。閉じたサブタブ（Alpha Gen）への右クリックは、案内の一行だけで止める。判断の詳細はフロントエンド `Docs/DEVLOG.md` §163。
 
 ### MCP と Gradio
 
@@ -1057,7 +1057,7 @@ MCP の `submit_generate` は、pad が指定されたら `GET /models` を引�
 
 ## 3.7 Inpainting（マスクによる部分の描き直し）
 
-**結論**: Outpainting（§3.6）の固定トークンの仕組みに、利用者が描いたマスク動画から作った値を重ねる。元の動画は拡縮せずにキャンバスの左上へ置き、キャンバスは元の実寸を 32 の倍数へ切り上げた寸法にする（右と下に 0〜31 画素のすき間ができ、Outpainting の幾何で鏡写しに埋める）。マスクの白い所にかかるトークンと、すき間にかかるトークンを生成し、残りを固定する。復号の後、マスクの縁からの距離で元の画素へなじませ、その外は元の画素をそのまま戻し（元動画への合成）、左上を基準に元の実寸へ切り戻す。ジョブは単発の `POST /generate` で、出力は元の実寸の mp4 1 本である（LTX の Inpainting と同じ使い方）。音声は Outpainting と同じ Strength（以下 s）で元の音声へ寄せる。LTX の Inpainting が頼る部品（In-Outpainting IC-LoRA・緑塗りのキャンバス・128 の格子・2 段生成・ラプラシアンピラミッドのブレンド）は使わない（裁定 100）。本節には内部の仕組みだけを書く。欄ごとの契約（鍵・範囲・既定・系統ごとの扱い・エラー）は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`、マスクの受け渡しに固有の差分は [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、スパイクの記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36 にある。幾何・マスクからトークンへの変換・合成は `engine_h3/inpaint_geometry.py`（numpy だけ）、マスクの読み込み・トークンの重ね合わせ・記録は `engine_h3/inpaint_h3.py`、流れは `engine_h3/pipeline_h3.py` の `generate()`。
+**結論**: Outpainting（§3.6）の固定トークンの仕組みに、利用者が描いたマスク動画から作った値を重ねる。元の動画は拡縮せずにキャンバスの左上へ置き、キャンバスは元の実寸を 32 の倍数へ切り上げた寸法にする（右と下に 0〜31 画素のすき間ができ、Outpainting の幾何で鏡写しに埋める）。マスクの白い所にかかるトークンと、すき間にかかるトークンを生成し、残りを固定する。復号の後、マスクの縁からの距離で元の画素へなじませ、その外は元の画素をそのまま戻し（元動画への合成）、左上を基準に元の実寸へ切り戻す。ジョブは単発の `POST /generate` で、出力は元の実寸の mp4 1 本である（LTX の Inpainting と同じ使い方）。音声は Outpainting と同じ Strength（以下 s）で元の音声へ寄せる。LTX の Inpainting が頼る部品（In-Outpainting IC-LoRA・緑塗りのキャンバス・128 の格子・2 段生成・ラプラシアンピラミッドのブレンド）は使わない（裁定 100）。本節は内部の仕組みだけを書き、欄ごとの契約は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`、マスクの受け渡しは [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208、MCP は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D36 が正本である。
 
 ### 幾何（`engine_h3/inpaint_geometry.py`）
 
@@ -1084,15 +1084,15 @@ Outpainting と同じ規則・同じ部品である（§3.6 の「音声の Stre
 
 - **重み**: 17 枚の塊ごとに、その塊のブロックのマスクから元の画素の重み `w = min(1, d / F)` を作る（`feather_weights_from_mask`）。d は画素からマスクのブロックまでの厳密なユークリッド距離（画素単位。マスクのブロックに接する画素で 1、ブロックの中で 0）。ブロックの行ごとに縦の距離と横の距離を求め、`d² = min_i(縦_i² + 横_i²)` をとる。F 画素より遠い行は計算を飛ばす（そこでは w＝1 で決まっている）。
 - **なじませ幅 F**: 段数から画素への式は Outpainting と同じ `floor(r × max(W_c, H_c) / 64 + 0.5)`（r は `blend_dilation_stage1`、W_c・H_c はキャンバス。サーバー側の式の置き場はアダプタの `_feather_px` の 1 か所）。F＝0 はマスクの中 0・外 1 の硬い合成になる。
-- **混ぜ方**: Outpainting の `composite` を、塊のフレームのスライスに 1 回ずつ呼ぶ（スライスはビューなので、復号したフレームへその場で書く）。帯の中は `w·元 + (1−w)·生成`、マスクの中は生成のまま。w＝1 の画素は演算なしで写すので、マスクから F 画素より外は、切り出した mp4 の画素とビット一致する（意味は §3.6 の既知の限界「貼り戻す元の画素は切り出した mp4 の画素」と同じ）。
+- **混ぜ方**: Outpainting の `composite` を、塊のフレームのスライスに 1 回ずつ呼ぶ（スライスはビューなので、復号したフレームへその場で書く）。帯の中は `w·元 + (1−w)·生成`、マスクの中は生成のまま。w＝1 の画素は演算なしで写すので、マスクから F 画素より外は、切り出した mp4 の画素とビット一致する（戻すのは切り出した mp4 の画素である。§3.6 の既知の限界と同じ）。
 
 ### 切り戻し（`_decode(crop_to=…)`）
 
-`_decode` のキーワード専用の引数 `crop_to=(H_s, W_s)` で行う。元動画への合成（`composite` の受け口）とフレームの形の検査の後、音声の処理と mp4 の書き出しの前に、左上を基準に元の実寸へ切り（`.contiguous()` を付ける）、`entry["cropped_to"]` に `[W_s, H_s]` を残す。音声の mux と `write_mp4` は寸法をフレームからしか読まないので、ほかに触る箇所は無い。ワーカーの完了イベントの `width`／`height` はキャンバスのままで、結果の解像度はアプリの `delivered_size`（元の実寸）が上書きする。
+`_decode` のキーワード専用の引数 `crop_to=(H_s, W_s)` で行う。元動画への合成（`composite` の受け口）とフレームの形の検査の後、音声の処理と mp4 の書き出しの前に、左上を基準に元の実寸へ切り（`.contiguous()` を付ける）、`entry["cropped_to"]` に `[W_s, H_s]` を残す。ワーカーの完了イベントの `width`／`height` はキャンバスのままで、結果の解像度はアプリの `delivered_size`（元の実寸）が上書きする。
 
 ### 実行の流れ
 
-1. **アプリ層**（`services/pipeline_manager.py`）: 要求に `inpaint.source_video_id` があれば（要求の形で分ける。系統名では分けない）、緑塗りも参照動画も作らず、元動画を `window_start_sec` から、マスクを 0 から、どちらも `video_io.cut_window_mp4` で 24fps・ちょうど `num_frames` 枚に切り出す（`_inpaint_window.mp4`・`_inpaint_mask.mp4`）。マスクは窓に合わせて描かれているので 0 から切る。2 本とも同じ fps のフィルタを通すので、プロジェクトの fps が 24 でなくても枚数がそろう。LTX の緑塗りの枝は `elif` にしただけで、本文は変えていない。H3 のアダプタがなじませ幅を画素に直し、ワーカーへ `inpaint: {source_path, mask_path, audio_strength, feather_px}` を送る（キャンバスは `width`／`height` と同じ値なので送らない）。
+1. **アプリ層**（`services/pipeline_manager.py`）: 要求に `inpaint.source_video_id` があれば（要求の形で分ける。系統名では分けない）、緑塗りも参照動画も作らず、元動画を `window_start_sec` から、マスクを 0 から、どちらも `video_io.cut_window_mp4` で 24fps・ちょうど `num_frames` 枚に切り出す（`_inpaint_window.mp4`・`_inpaint_mask.mp4`）。マスクは窓に合わせて描かれているので 0 から切る。2 本とも同じ fps のフィルタを通すので、プロジェクトの fps が 24 でなくても枚数がそろう。H3 のアダプタがなじませ幅を画素に直し、ワーカーへ `inpaint: {source_path, mask_path, audio_strength, feather_px}` を送る（キャンバスは `width`／`height` と同じ値なので送らない）。
 2. **エンジンの `validate_request`**: 2 本のパスが空でなくファイルがある、s が 0〜1 の有限の数、`feather_px` が 0 以上の整数。Outpainting・キーフレーム（`images`）・A2V（`source_audio`）・Ref2VA の参照（`references`）との併用は断る（アプリの 422 の後ろ盾）。ワーカーも `outpaint` と `inpaint` の同時指定を断り、連結（`generate_chain`）では `inpaint` を読まない。
 3. **読み込み**（文章の符号化器より前。CPU）: 元動画を `read_outpaint_source` で読み（Outpainting と同じ。音声も）、読んだ寸法から `compute_inpaint_geometry` で幾何を作る。続いて `read_inpaint_mask` でマスクを読んでブロックにし（枚数が `num_frames` でない・寸法が元と違うと止める）、塊の和集合とトークンの値を作る。
 4. **段 `source_encode`**: Outpainting と同じく符号化して `outpaint_fix` で組み、直後に `apply_inpaint_tokens` で値の列をマスクと `max` にする。
@@ -1116,12 +1116,12 @@ Outpainting と同じ規則・同じ部品である（§3.6 の「音声の Stre
 - **H3 は動作へ移した**: `REJECT_TABLE` から `inpaint` の行を外して `HONOURED_FIELDS` へ入れた。配信の `unsupported_features` から自動で `inpaint` が消える。配信の `constraints.inpaint`（音声の Strength となじませ段数の範囲と既定）の有無が、操作パネルと MCP の分岐を兼ねる（Outpainting と同じ規約）。
 - **なじませは 1 本**: `blend_dilation_stage1` を段数として使い、省略なら配信の既定を書き戻す。`blend_dilation_stage2` は H3 に段が無いので無視し、既定以外ならログに 1 行残す。
 - **マスクの枚数は 24fps 換算で `num_frames` 以上**: アプリが先頭から 24fps・ちょうど `num_frames` 枚に切るので、ちょうどである必要は無い。足りないと切り出しが失敗するので、受付で止める。LTX の「ちょうど `num_frames` 枚」は変えていない。
-- **受付の順**（`api/generate.py` の `_preflight_h3_inpaint`）: 利用者が直せる順に、前処理の制御アダプタとの衝突 → 元動画 → 元動画の寸法 → キャンバス → マスク → 窓 → 音声。制御 LoRA 1 本の検査は LTX の形だけに掛かる。
+- **受付の順**（`api/generate.py` の `_preflight_h3_inpaint`）: 仕様書 §6.2 の凍結制約 13 の補足が正本である。
 - **併用の排他**: A2V・Ref2VA の参照・キーフレーム・Outpainting との併用は 422。元動画が絵と音を決めるため（§3.6 と同じ）。スキーマが止めない分は、H3 のアダプタの `validate_request`（`_validate_inpaint`）で止める。
 
 ### 操作パネル
 
-この版（弾 1）では、H3 の形の Inpainting は操作パネルに開いていない。H3 の形（32 の倍数のキャンバス・17n+5・24fps 固定・なじませ段数 1 本・音声の Strength・`inpaint.source_video_id` で送る）は弾 2 で作り、分岐は `constraints.inpaint` の有無の 1 か所にする（Outpainting と同じ規約）。プラグイン側のマスク動画の作り方（`renderMaskVideo`）は変えない（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4）。
+H3 の形の Inpainting は操作パネルで開放済みである（操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §169）。H3 の形（32 の倍数のキャンバス・17n+5・24fps 固定・なじませ段数 1 本・音声の Strength・`inpaint.source_video_id` で送る）の分岐は、`constraints.inpaint` の有無の 1 か所である（Outpainting と同じ規約）。プラグイン側のマスク動画の作り方（`renderMaskVideo`）は変えない（[`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4）。
 
 ### MCP と Gradio
 
@@ -1130,7 +1130,7 @@ MCP の `submit_generate` は `inpaint_*` の 4 引数（マスクの ID・音�
 ### 既知の限界
 
 - **時間方向の対応は塊の和集合**: 塊の中で 1 度でも白になったブロックは、その塊の 17 枚のあいだずっと生成になる。動く物のマスクでは、描き直す範囲が実際の動きより最大 17 枚ぶん先回り・持ち越しになる。潜在 1 個が覆う画素フレームとの精密な対応は改良候補である（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-282）。
-- **復号器が塊の境目で混ぜる**: 映像の復号器は隣の潜在も見て画素を作るので、塊の境目（17 枚ごと）の前後のおよそ 5 枚には、隣の塊のマスクの差が出うる。境目の前後 2 枚を隣の塊との和集合にする案は改良候補である（同 §3-282）。GPU の門の項目で確かめる。
+- **復号器が塊の境目で混ぜる**: 映像の復号器は隣の潜在も見て画素を作るので、塊の境目（17 枚ごと）の前後のおよそ 5 枚には、隣の塊のマスクの差が出うる。境目の前後 2 枚を隣の塊との和集合にする案は改良候補である（同 §3-282）。門では基準内だった（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208.7 の合否 6）。
 - **共有関数の文言**: 元動画と音声の読み込み・固定行・自己検査は Outpainting の関数を共有するので、そこで止まったときのエラーの文言は「Outpainting:」で始まる（例: 自己検査の失敗、Strength＞0 なのに音声が読めない）。Inpainting のジョブでも同じ文言が出る。
 - **窓の開始はアプリの切り出しで対応**: エンジンは切り出した窓の先頭から見る。元動画は `round(S × 24)` 枚目から切るので（S は `window_start_sec`）、時間の起点のずれは最大 1/48 秒である。
 - **マスクも再符号化される**: `_inpaint_mask.mp4` は crf 12・yuv420p で書き直される。赤 128 の二値化なので実害は無い見込みである。`mask_proof` は切り出した後のファイルの値。
@@ -1514,7 +1514,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | ネガティブプロンプト（VSF。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-127。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §201〜§202、操作パネルはフロントエンド `Docs/DEVLOG.md` §165） | 第 1 弾＝単発の最小実装と目視の実験（記録簿 §201）、第 2 弾＝連結と Retake への配線・操作パネル・文書（同 §202。§3.5） |
 | クリップごとの A2V とバッチ A2V（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-120・1-126。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §204、操作パネルはフロントエンド `Docs/DEVLOG.md` §166・§167） | 弾 1＝バックエンド（スキーマ・アダプタ・事前検査・ワーカー・エンジン）、弾 2＝操作パネルの Chained、弾 3＝機械の門・GPU の門・オーナーの目視、弾 4＝バッチ A2V（操作パネルだけ）、弾 5＝文書（裁定 98・§3.3） |
 | Outpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205、操作パネルはフロントエンド `Docs/DEVLOG.md` §168） | 弾 1＝調査・幾何・エンジン・ワーカー・CPU の門・GPU の門 G0〜G4・遠隔目視（go。記録簿 §205.16）、弾 2＝API・アプリ層・アダプタ・配信・操作パネル・MCP・文書。GPU の門 G5（快適上限の 2 点）・G6（20 ステップの完走）は合格し（記録簿 §205.19・§205.20）、操作パネルは配布済み（§205.22）。オーナーの実機の門 G7 も合格した（§205.25。裁定 99・§3.6） |
-| Inpainting（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-124。スパイクの記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207） | 第 0 段＝スパイク、弾 1＝エンジン・ワーカー・アダプタ・API・mock・MCP・テスト・文書、弾 2＝操作パネル（§3.7） |
+| Inpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208、操作パネルはフロントエンド `Docs/DEVLOG.md` §169） | 第 0 段＝スパイク、弾 1＝エンジン・ワーカー・アダプタ・API・mock・MCP・テスト・文書、弾 2＝操作パネル。GPU の門とオーナーの目視・実機確認は合格した（記録簿 §208.7・§208.10。裁定 100・§3.7） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1 の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。

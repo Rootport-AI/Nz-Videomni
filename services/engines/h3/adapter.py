@@ -648,7 +648,8 @@ def validate_request(request: GenerateRequest) -> None:
     ``ValueError``. Called by ``services.engines.validate_for_family``
     after the numeric rules, so it never sees a chain clip (``_ClipView``).
 
-    Nothing to do without ``outpaint``. With it: the source must come as
+    The ``inpaint`` half runs first; after it, nothing to do without
+    ``outpaint``. With it: the source must come as
     ``outpaint.source_video_id`` (an LTX-shaped ``reference_video_id`` was
     already refused as ``reference_video`` by :func:`reject_unsupported`; this
     is the backstop); ``source_audio`` (A2V) and ``references`` (Ref2VA) are
@@ -1522,7 +1523,7 @@ def _mock_inpaint_record(
     request: GenerateRequest, source_path: Path | None, mask_path: Path | None
 ) -> dict:
     """The mock's ``done.h3.inpaint``: the real worker's keys
-    (engine_h3/pipeline_h3.py) plus ``mock: true``, by
+    (``engine_h3/inpaint_h3.py``'s ``inpaint_record``) plus ``mock: true``, by
     :func:`_mock_outpaint_record`'s rule. What the request and the app's cut
     decide (the canvas, the source size from an ffprobe of the cut, the
     right / bottom pads up to the 32 grid, the mask rule and the chunk length

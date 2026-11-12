@@ -160,7 +160,7 @@ export interface OutpaintSpec {
  * 128の倍数へ切り上げたもの）で、余白はサーバーが素材の実寸から導出する
  * ——請求に余白は載せない。出力解像度は素材の実寸に戻される。
  *
- * 系列ごとの形（台帳 §1-124。{@link OutpaintSpec} と同じ分け方）:
+ * 系統ごとの形（台帳 §1-124。{@link OutpaintSpec} と同じ分け方）:
  *  - LTX 形: 素材は `reference_video_id`、キャンバスは 128 の倍数、制御 LoRA 1 本、`blend_dilation_stage1`/`_stage2` を送り `source_video_id`・`audio_strength` は送らない。
  *  - H3 形: 素材は `inpaint.source_video_id`、キャンバスは 32 の倍数、LoRA なし、`blend_dilation_stage1`（なじませ）と `audio_strength` を送り `blend_dilation_stage2` は送らない。
  *

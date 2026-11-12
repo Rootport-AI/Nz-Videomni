@@ -583,8 +583,8 @@ def inpaint_source_mismatch(
     reason: str | None = None,
     multiple: int = 128,
 ) -> APIError:
-    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を
-    ``round_up_128`` で切り上げた値）でなければならない。素材の実寸から導いた値と違えば、
+    """Inpainting: 要求の ``width``/``height`` は**キャンバス**（素材の実寸を系統の格子で
+    切り上げた値。LTX は ``round_up_128``、MiniMax H3 は ``round_up_32``。``multiple`` で渡す）でなければならない。素材の実寸から導いた値と違えば、
     余白の位置が実際とずれたまま生成され、最後の切り落としが別の場所を切る。
     素材の辺が ``INPAINT_MIN_SOURCE_SIDE`` 未満のときも同じ符号で断る
     ——理由は違うが、どちらも「この素材ではキャンバスを作れない」という同じ

@@ -1,8 +1,8 @@
 # MiniMax H3 の Inpainting のスパイク（エンジン直接の台本）
 
-`h3_inpaint_spike.py` は、MiniMax H3 の Inpainting（マスクで指定した部分だけを描き直す機能。台帳 `Docs/PENDING_TASKS.md` §1-124）が成り立つかを 1 本の GPU 実験で確かめた使い捨ての台本です。経緯・条件・結果・判定は記録簿 `Docs/VERIFICATION_LOG.md` §207 にあります。
+`h3_inpaint_spike.py` は、MiniMax H3 の Inpainting（マスクで指定した部分だけを描き直す機能。台帳 `Docs/PENDING_TASKS_CLOSED.md` 1-124）が成り立つかを 1 本の GPU 実験で確かめた使い捨ての台本です。経緯・条件・結果・判定は記録簿 `Docs/VERIFICATION_LOG.md` §207 にあります。
 
-この台本はサーバーも MCP（AI エージェント向けの道具の口）も通さず、エンジンの仮想環境で `engine_h3.pipeline_h3.H3Pipeline` を直接呼びます（写し元は `Docs/Outputs-archive/h3-outpaint-2026-11-10/h3_outpaint_gate.py`）。製品コードは変えません。この保管庫には台本・この説明書・結果の JSON・画像 2 枚だけを置き、動画・素材・ログは置きません。数値はここに書きません。条件と数値は `result.json` と Hugging Face に上げた説明書（下の「遠隔目視」）を参照してください。
+この台本はサーバーも MCP（AI エージェント向けの道具の口）も通さず、エンジンの仮想環境で `engine_h3.pipeline_h3.H3Pipeline` を直接呼びます（写し元は `Docs/Outputs-archive/h3-outpaint-2026-11-10/h3_outpaint_gate.py`）。製品コードは変えません。この保管庫には台本・門の台本 `h3_inpaint_gate_api.py`・この説明書・結果の JSON・画像 2 枚だけを置き、動画・素材・ログは置きません。数値はここに書きません。条件と数値は `result.json` と Hugging Face に上げた説明書（下の「遠隔目視」）を参照してください。
 
 ## 目的
 
@@ -70,7 +70,7 @@ export PYTHONPATH="$PWD" PYTHONUTF8=1
 | `sheet.png`・`token_overlay_f036.png` | 一覧の画像 |
 | `hf-round14\` | Hugging Face に上げたフォルダ（動画 3 本・画像 2 枚・`README.md`） |
 
-監督は実行後に、上の「記録するもの」の表のファイルをこの保管庫へ写します。
+監督は実行後に、上の「記録するもの」の表のファイルをこの保管庫へ写しました。
 
 ## 遠隔目視
 

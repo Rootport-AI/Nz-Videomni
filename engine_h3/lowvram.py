@@ -8,11 +8,12 @@ calls (``_modulate``, ``_gate``, ``block.mlp``, ``_attention``, ``apply_rope``,
 ``_linear_f32``, the norms, and the negative prompt's ``vsf.flip_values``),
 only over a range of rows or a group of heads at a time, written into
 preallocated outputs. The one exception is how the qkv input reaches the
-int8 kernels: it is quantized once per block and the head groups' slices
-reuse it (``H3Int8Linear.quantize_input`` / ``forward_rows_q``,
+quantized kernels: the layer's ``shares_input`` decides. When it says yes
+(int8, and fp8 ``scaled``) the input is quantized once per block and the head
+groups' slices reuse it (the layer's ``quantize_input`` / ``forward_rows_q``,
 台帳 §1-105 ①; the same comfy-kitchen kernels with the same arguments, see
-``engine_h3.quant_linear``), or, when ``shares_input`` says no, once per slice
-by ``forward_rows`` as before. Every one of those operations is
+``engine_h3.quant_linear``); otherwise (w4a8, whose kernel quantizes inside)
+once per slice by ``forward_rows`` as before. Every one of those operations is
 per row or per head, so the target is the off path's result bit for bit
 (裁定 46; checked by the CPU tests and the GPU gates A-G2 / A-G3b). sdpa is
 bit-identical; with sage, 2 of the 50 blocks differ (the SageAttention kernel
@@ -20,7 +21,7 @@ depends on the heads per call), accepted by 裁定 53 (VERIFICATION_LOG §169.3)
 
 What is cut, and why it lowers the peak (VERIFICATION_LOG §168):
   * attention: q, k and v are projected per head group straight from the
-    rows of the stacked ``[q; k; v]`` weight (``H3Int8Linear.forward_rows``, or
+    rows of the stacked ``[q; k; v]`` weight (the quantized Linear's ``forward_rows``, or
     ``forward_rows_q`` on the input quantized once per block),
     so the fused ``[S, 3 * 7168]`` qkv never exists; the group's output is
     copied into one ``[S, 7168]`` buffer before ``out_proj``;
@@ -35,6 +36,7 @@ Called inside ``torch.no_grad()`` (the pipeline's), like the off path.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import math
 from dataclasses import dataclass
@@ -184,12 +186,21 @@ def block_forward(
     h2 = _rows_into(torch.empty_like(n2), chunks,
                     lambda r0, r1: _dit._modulate(n2[r0:r1], shift_mlp, scale_mlp, adaln_index[r0:r1]))
     del n2
-    m = _rows_into(torch.empty_like(x2), chunks, lambda r0, r1: block.mlp(h2[r0:r1]))
+    # fc1 / fc2 run once per chunk: an fp8 layer on the bf16 path keeps its dequantized
+    # weight for this loop only (H3QuantLinear.dequant_cache; a no-op for the others)
+    with _dequant_cache(block.mlp.fc1), _dequant_cache(block.mlp.fc2):
+        m = _rows_into(torch.empty_like(x2), chunks, lambda r0, r1: block.mlp(h2[r0:r1]))
     del h2
 
     # FFN residual, per row chunk
     return _rows_into(torch.empty_like(x2), chunks,
                       lambda r0, r1: _dit._gate(x2[r0:r1], gate_mlp, m[r0:r1], adaln_index[r0:r1]))
+
+
+def _dequant_cache(layer):
+    """``layer.dequant_cache()``; a plain bf16 ``nn.Linear`` has none (a partly
+    quantized file whose fc1 / fc2 were left in bf16)."""
+    return getattr(layer, "dequant_cache", contextlib.nullcontext)()
 
 
 def embed_rows_packed(dit, text_refined, audio_rows, video_rows, cond_rows, *, ref_video_rows, ref_audio_rows):

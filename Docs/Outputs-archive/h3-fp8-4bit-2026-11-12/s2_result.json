@@ -1,0 +1,731 @@
+{
+  "script": "outputs\\h3-fp8-w4a8-spike-2026-11-12\\h3_quant_spike.py",
+  "started_at": "2026-11-12T16:18:52+09:00",
+  "status": "done",
+  "variants": {
+    "int8": {
+      "file": "models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "layers": {
+        "qkv_proj": {
+          "layer": "blocks.10.attn.qkv_proj",
+          "shape": [
+            21504,
+            5376
+          ],
+          "a_normal": {
+            "ms": 31.2427,
+            "transient_mib": 204.0
+          },
+          "b_quantize_input": {
+            "ms": 1.5138,
+            "transient_mib": 0.5
+          },
+          "b_vram16_slice": {
+            "ms": 1.4505,
+            "transient_mib": 0.0
+          }
+        },
+        "out_proj": {
+          "layer": "blocks.10.attn.out_proj",
+          "shape": [
+            5376,
+            7168
+          ],
+          "a_normal": {
+            "ms": 11.6239,
+            "transient_mib": 272.0
+          },
+          "b_vram16": {
+            "ms": 11.6239,
+            "transient_mib": 272.0
+          }
+        },
+        "fc1": {
+          "layer": "blocks.10.mlp.fc1",
+          "shape": [
+            28672,
+            5376
+          ],
+          "a_normal": {
+            "ms": 42.0096,
+            "transient_mib": 204.0
+          },
+          "b_vram16": {
+            "ms": 4.2501,
+            "transient_mib": 20.4
+          }
+        },
+        "fc2": {
+          "layer": "blocks.10.mlp.fc2",
+          "shape": [
+            5376,
+            14336
+          ],
+          "a_normal": {
+            "ms": 24.7972,
+            "transient_mib": 543.8
+          },
+          "b_vram16": {
+            "ms": 2.6449,
+            "transient_mib": 54.4
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": 5551.72,
+        "dequant_ms": 0.0,
+        "quantize_input_ms": 75.69,
+        "total_ms": 5627.41,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    },
+    "fp8_scaled": {
+      "file": "models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+      "layers": {
+        "qkv_proj": {
+          "layer": "blocks.10.attn.qkv_proj",
+          "shape": [
+            21504,
+            5376
+          ],
+          "a_normal": {
+            "ms": 55.1515,
+            "transient_mib": 203.9
+          },
+          "b_quantize_input": {
+            "ms": 1.1131,
+            "transient_mib": 0.5
+          },
+          "b_vram16_slice": {
+            "ms": 2.6214,
+            "transient_mib": 0.0
+          }
+        },
+        "out_proj": {
+          "layer": "blocks.10.attn.out_proj",
+          "shape": [
+            5376,
+            7168
+          ],
+          "a_normal": {
+            "ms": 19.2116,
+            "transient_mib": 271.8
+          },
+          "b_vram16": {
+            "ms": 19.2116,
+            "transient_mib": 271.8
+          }
+        },
+        "fc1": {
+          "layer": "blocks.10.mlp.fc1",
+          "shape": [
+            28672,
+            5376
+          ],
+          "a_normal": {
+            "ms": 73.0694,
+            "transient_mib": 203.9
+          },
+          "b_vram16": {
+            "ms": 7.5282,
+            "transient_mib": 20.4
+          }
+        },
+        "fc2": {
+          "layer": "blocks.10.mlp.fc2",
+          "shape": [
+            5376,
+            14336
+          ],
+          "a_normal": {
+            "ms": 68.9591,
+            "transient_mib": 147.0
+          },
+          "b_vram16": {
+            "dequant": {
+              "ms": 0.4268,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 7.2918,
+              "transient_mib": 0.0
+            }
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": 11123.05,
+        "dequant_ms": 21.34,
+        "quantize_input_ms": 55.66,
+        "total_ms": 11200.05,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    },
+    "fp8_dequant": {
+      "file": "models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+      "layers": {
+        "qkv_proj": {
+          "layer": "blocks.10.attn.qkv_proj",
+          "shape": [
+            21504,
+            5376
+          ],
+          "a_normal": {
+            "dequant": {
+              "ms": 0.6133,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 103.3291,
+              "transient_mib": 0.0
+            }
+          },
+          "b_vram16_slice": {
+            "dequant": {
+              "ms": 0.0606,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 4.9729,
+              "transient_mib": 0.0
+            }
+          }
+        },
+        "out_proj": {
+          "layer": "blocks.10.attn.out_proj",
+          "shape": [
+            5376,
+            7168
+          ],
+          "a_normal": {
+            "dequant": {
+              "ms": 0.2344,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 34.8666,
+              "transient_mib": 0.0
+            }
+          },
+          "b_vram16": {
+            "dequant": {
+              "ms": 0.2344,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 34.8666,
+              "transient_mib": 0.0
+            }
+          }
+        },
+        "fc1": {
+          "layer": "blocks.10.mlp.fc1",
+          "shape": [
+            28672,
+            5376
+          ],
+          "a_normal": {
+            "dequant": {
+              "ms": 0.809,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 137.3164,
+              "transient_mib": 0.0
+            }
+          },
+          "b_vram16": {
+            "dequant": {
+              "ms": 0.8044,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 14.3002,
+              "transient_mib": 0.0
+            }
+          }
+        },
+        "fc2": {
+          "layer": "blocks.10.mlp.fc2",
+          "shape": [
+            5376,
+            14336
+          ],
+          "a_normal": {
+            "dequant": {
+              "ms": 0.4258,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 68.0032,
+              "transient_mib": 0.0
+            }
+          },
+          "b_vram16": {
+            "dequant": {
+              "ms": 0.4235,
+              "transient_mib": 0.0
+            },
+            "linear": {
+              "ms": 7.2712,
+              "transient_mib": 0.0
+            }
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": 17825.92,
+        "dequant_ms": 61.39,
+        "quantize_input_ms": 0.0,
+        "total_ms": 17887.32,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    },
+    "w4a8_kijai_G16": {
+      "file": "models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+      "layers": {
+        "qkv_proj": {
+          "layer": "blocks.10.attn.qkv_proj",
+          "shape": [
+            21504,
+            5376
+          ],
+          "a_normal": {
+            "ms": 31.3456,
+            "transient_mib": 429.0
+          },
+          "b_vram16_slice": {
+            "ms": 2.9449,
+            "transient_mib": 413.3
+          }
+        },
+        "out_proj": {
+          "layer": "blocks.10.attn.out_proj",
+          "shape": [
+            5376,
+            7168
+          ],
+          "a_normal": {
+            "ms": 11.6431,
+            "transient_mib": 572.0
+          },
+          "b_vram16": {
+            "ms": 11.6431,
+            "transient_mib": 572.0
+          }
+        },
+        "fc1": {
+          "layer": "blocks.10.mlp.fc1",
+          "shape": [
+            28672,
+            5376
+          ],
+          "a_normal": {
+            "ms": 41.1095,
+            "transient_mib": 429.0
+          },
+          "b_vram16": {
+            "ms": 4.7462,
+            "transient_mib": 61.8
+          }
+        },
+        "fc2": {
+          "layer": "blocks.10.mlp.fc2",
+          "shape": [
+            5376,
+            14336
+          ],
+          "a_normal": {
+            "ms": 24.3559,
+            "transient_mib": 1143.6
+          },
+          "b_vram16": {
+            "ms": 2.752,
+            "transient_mib": 164.8
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": 7423.4,
+        "dequant_ms": 0.0,
+        "quantize_input_ms": 0.0,
+        "total_ms": 7423.4,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    },
+    "w4a8_eros_G16": {
+      "file": "models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+      "layers": {
+        "qkv_proj": {
+          "layer": "blocks.2.attn.qkv_proj",
+          "shape": [
+            21504,
+            5376
+          ],
+          "a_normal": {
+            "ms": 31.3682,
+            "transient_mib": 429.0
+          },
+          "b_vram16_slice": {
+            "ms": 2.9804,
+            "transient_mib": 413.3
+          }
+        },
+        "fc1": {
+          "layer": "blocks.2.mlp.fc1",
+          "shape": [
+            28672,
+            5376
+          ],
+          "a_normal": {
+            "ms": 41.2078,
+            "transient_mib": 429.0
+          },
+          "b_vram16": {
+            "ms": 4.7118,
+            "transient_mib": 61.8
+          }
+        },
+        "fc2": {
+          "layer": "blocks.13.mlp.fc2",
+          "shape": [
+            5376,
+            14336
+          ],
+          "a_normal": {
+            "ms": 24.4735,
+            "transient_mib": 1143.6
+          },
+          "b_vram16": {
+            "ms": 2.7919,
+            "transient_mib": 164.8
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": NaN,
+        "dequant_ms": 0.0,
+        "quantize_input_ms": 0.0,
+        "total_ms": NaN,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    },
+    "w4a8_eros_G8": {
+      "file": "models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+      "layers": {
+        "fc2": {
+          "layer": "blocks.2.mlp.fc2",
+          "shape": [
+            5376,
+            14336
+          ],
+          "a_normal": {
+            "ms": 24.383,
+            "transient_mib": 1143.6
+          },
+          "b_vram16": {
+            "ms": 2.7976,
+            "transient_mib": 164.8
+          }
+        },
+        "qkv_proj": {
+          "layer": "blocks.9.attn.qkv_proj",
+          "shape": [
+            21504,
+            5376
+          ],
+          "a_normal": {
+            "ms": 31.3792,
+            "transient_mib": 429.0
+          },
+          "b_vram16_slice": {
+            "ms": 2.9681,
+            "transient_mib": 413.3
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": NaN,
+        "dequant_ms": 0.0,
+        "quantize_input_ms": 0.0,
+        "total_ms": NaN,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    },
+    "w4a8_eros_G4": {
+      "file": "models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+      "layers": {
+        "out_proj": {
+          "layer": "blocks.2.attn.out_proj",
+          "shape": [
+            5376,
+            7168
+          ],
+          "a_normal": {
+            "ms": 11.8164,
+            "transient_mib": 572.0
+          },
+          "b_vram16": {
+            "ms": 11.8164,
+            "transient_mib": 572.0
+          }
+        }
+      },
+      "estimate_per_step_vram16": {
+        "S": 39764,
+        "C": 10,
+        "slices": 21,
+        "linear_ms": NaN,
+        "dequant_ms": 0.0,
+        "quantize_input_ms": 0.0,
+        "total_ms": NaN,
+        "formula": "50*[21*(t_qkv_slice+t_qkv_slice_deq) + t_out + t_out_deq + C*(t_fc1+t_fc2)] + 50*(t_deq(fc1)+t_deq(fc2)) + 50*t_quantize_input"
+      }
+    }
+  },
+  "gpu_check": {
+    "nvidia_smi_compute_apps": "(removed for privacy: desktop process list)",
+    "returncode": 0,
+    "memory_used_mib": 803,
+    "python_like_others": []
+  },
+  "setup": {
+    "list_backends": {
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "unavailable_reason": "torch-npu is not installed: No module named 'torch_npu'",
+        "capabilities": []
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "unavailable_reason": null,
+        "capabilities": [
+          "adaln",
+          "apply_rope",
+          "apply_rope1",
+          "apply_rope1_",
+          "apply_rope_",
+          "apply_rope_split_half",
+          "apply_rope_split_half1",
+          "apply_rope_split_half1_",
+          "apply_rope_split_half_",
+          "convrot_w4a4_linear",
+          "dequantize_convrot_w4a4_weight",
+          "dequantize_int8_convrot_weight",
+          "dequantize_int8_convrot_weight_dtype",
+          "dequantize_int8_embedding",
+          "dequantize_int8_simple",
+          "dequantize_int8_simple_dtype",
+          "dequantize_mxfp8",
+          "dequantize_nvfp4",
+          "dequantize_per_tensor_fp8",
+          "dequantize_w4a8_int8_weight",
+          "fp16_conv3d",
+          "fp16_conv3d_out",
+          "fp16_linear",
+          "gemv_awq_w4a16",
+          "group_norm_silu_pad3d",
+          "group_norm_silu_pad3d_out",
+          "int8_linear",
+          "na3d",
+          "prepare_int4_weight_for_int8_linear",
+          "quantize_and_rotate_rowwise",
+          "quantize_convrot_w4a4_weight",
+          "quantize_int8_convrot_weight",
+          "quantize_int8_rowwise",
+          "quantize_int8_tensorwise",
+          "quantize_mxfp8",
+          "quantize_nvfp4",
+          "quantize_per_tensor_fp8",
+          "quantize_svdquant_w4a4",
+          "quantize_w4a8_int8_weight",
+          "rms_adaln",
+          "rms_rope",
+          "rms_rope1",
+          "rms_rope1_",
+          "rms_rope_",
+          "rms_rope_split_half",
+          "rms_rope_split_half1",
+          "rms_rope_split_half1_",
+          "rms_rope_split_half_",
+          "rotate_int8_convrot_weight",
+          "scaled_mm_mxfp8",
+          "scaled_mm_nvfp4",
+          "scaled_mm_svdquant_w4a4",
+          "sol_attn",
+          "stochastic_rounding_fp8",
+          "w4a8_int8_linear"
+        ]
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "unavailable_reason": "PyTorch ROCm/HIP runtime not available",
+        "capabilities": []
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "unavailable_reason": null,
+        "capabilities": [
+          "adaln",
+          "apply_rope",
+          "apply_rope1",
+          "apply_rope1_",
+          "apply_rope_",
+          "apply_rope_split_half",
+          "apply_rope_split_half1",
+          "apply_rope_split_half1_",
+          "apply_rope_split_half_",
+          "dequantize_nvfp4",
+          "dequantize_per_tensor_fp8",
+          "int8_linear",
+          "na3d",
+          "quantize_and_rotate_rowwise",
+          "quantize_int8_rowwise",
+          "quantize_mxfp8",
+          "quantize_nvfp4",
+          "quantize_per_tensor_fp8",
+          "rms_adaln",
+          "rms_rope",
+          "rms_rope1",
+          "rms_rope1_",
+          "rms_rope_",
+          "rms_rope_split_half",
+          "rms_rope_split_half1",
+          "rms_rope_split_half1_",
+          "rms_rope_split_half_",
+          "w4a8_int8_linear"
+        ]
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "unavailable_reason": null,
+        "capabilities": [
+          "adaln",
+          "apply_rope",
+          "apply_rope1",
+          "apply_rope1_",
+          "apply_rope_",
+          "apply_rope_split_half",
+          "apply_rope_split_half1",
+          "apply_rope_split_half1_",
+          "apply_rope_split_half_",
+          "convrot_w4a4_linear",
+          "dequantize_convrot_w4a4_weight",
+          "dequantize_int8_convrot_weight",
+          "dequantize_int8_convrot_weight_dtype",
+          "dequantize_int8_simple",
+          "dequantize_int8_simple_dtype",
+          "dequantize_nvfp4",
+          "dequantize_per_tensor_fp8",
+          "dequantize_w4a8_int8_weight",
+          "fp16_conv3d",
+          "fp16_conv3d_out",
+          "fp16_linear",
+          "gemv_awq_w4a16",
+          "group_norm_silu_pad3d",
+          "group_norm_silu_pad3d_out",
+          "int8_linear",
+          "na3d",
+          "prepare_int4_weight_for_int8_linear",
+          "quantize_and_rotate_rowwise",
+          "quantize_convrot_w4a4_weight",
+          "quantize_int8_convrot_weight",
+          "quantize_int8_rowwise",
+          "quantize_int8_tensorwise",
+          "quantize_mxfp8",
+          "quantize_nvfp4",
+          "quantize_per_tensor_fp8",
+          "quantize_svdquant_w4a4",
+          "quantize_w4a8_int8_weight",
+          "rms_adaln",
+          "rms_rope",
+          "rms_rope1",
+          "rms_rope1_",
+          "rms_rope_",
+          "rms_rope_split_half",
+          "rms_rope_split_half1",
+          "rms_rope_split_half1_",
+          "rms_rope_split_half_",
+          "rotate_int8_convrot_weight",
+          "scaled_mm_nvfp4",
+          "scaled_mm_svdquant_w4a4",
+          "sol_attn",
+          "stochastic_rounding_fp8",
+          "w4a8_int8_linear"
+        ]
+      }
+    },
+    "shared_quant": [
+      true,
+      null
+    ],
+    "has_scaled_mm_v2": true,
+    "w4a8_chunked": true,
+    "env_COMFY_KITCHEN_W4A8_CHUNKED": null,
+    "comfy_kitchen": "0.2.37",
+    "torch": "2.13.0+cu130",
+    "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "capability": [
+      8,
+      9
+    ]
+  },
+  "ratio_to_int8": {
+    "int8": 1.0,
+    "fp8_scaled": 1.99,
+    "fp8_dequant": 3.179,
+    "w4a8_kijai_G16": 1.319,
+    "w4a8_eros_G16": NaN,
+    "w4a8_eros_G8": NaN,
+    "w4a8_eros_G4": NaN
+  },
+  "flag_fp8_scaled_over_1_5x_int8": true,
+  "impl_modules": {
+    "quantize_per_tensor_fp8": "comfy_kitchen.backends.cuda",
+    "dequantize_per_tensor_fp8": "comfy_kitchen.backends.cuda",
+    "w4a8_int8_linear": "comfy_kitchen.backends.cuda"
+  },
+  "counts_total": {
+    "fp8_scaled_calls": 70,
+    "fp8_scaled_calls@qkv_proj": 28,
+    "fp8_quantize_input": 15,
+    "fp8_quantize_input@qkv_proj": 15,
+    "fp8_rows_q": 14,
+    "fp8_rows_q@qkv_proj": 14,
+    "fp8_scaled_calls@out_proj": 14,
+    "fp8_scaled_calls@fc1": 28,
+    "fp8_deq_uncached": 14,
+    "fp8_deq_uncached@fc2": 14,
+    "w4a8_calls": 210,
+    "w4a8_calls@qkv_proj": 42,
+    "w4a8_rows": 42,
+    "w4a8_rows@qkv_proj": 42,
+    "w4a8_calls@out_proj": 28,
+    "w4a8_calls@fc1": 56,
+    "w4a8_calls@fc2": 84
+  },
+  "finished_at": "2026-11-12T16:19:09+09:00"
+}

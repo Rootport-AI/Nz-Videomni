@@ -1,0 +1,3988 @@
+{
+  "script": "outputs\\h3-fp8-w4a8-spike-2026-11-12\\h3_quant_spike.py",
+  "started_at": "2026-11-12T16:17:54+09:00",
+  "status": "done",
+  "files": {
+    "fp8": {
+      "layers": {
+        "blocks.0.attn.qkv_proj": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "input_scale": 0.0353655144572258,
+          "weight_scale": 0.008126395754516125,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0022182536777108908
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026545295491814613
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0022183621767908335
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026644816622138023
+            },
+            "sigma": 3.9609376192092896,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 15.843750476837158,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0022183279506862164
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026545653119683266
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0022183735854923725
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026646150276064873
+            },
+            "sigma": 3.9609376192092896,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 15.843750476837158,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0022182536777108908
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026545295491814613
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0022183621767908335
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026644816622138023
+            },
+            "sigma": 3.9609376192092896,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 15.843750476837158,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.0.attn.out_proj": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "input_scale": 0.0535714291036129,
+          "weight_scale": 0.0041329520754516125,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023607746697962284
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02661839686334133
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023605795577168465
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02665911242365837
+            },
+            "sigma": 6.000000059604645,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 24.00000023841858,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002360742073506117
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026619357988238335
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023604806046932936
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026659086346626282
+            },
+            "sigma": 6.000000059604645,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 24.00000023841858,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023607746697962284
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02661839686334133
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023605795577168465
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02665911242365837
+            },
+            "sigma": 6.000000059604645,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 24.00000023841858,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.0.mlp.fc1": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "input_scale": 0.01349748857319355,
+          "weight_scale": 0.01869419775903225,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023930296301841736
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026596585288643837
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023945767898112535
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026645150035619736
+            },
+            "sigma": 1.5117187201976776,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 6.0468748807907104,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023930321913212538
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026595715433359146
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.002394589129835367
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026644689962267876
+            },
+            "sigma": 1.5117187201976776,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 6.0468748807907104,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023930296301841736
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026596585288643837
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023945767898112535
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026645150035619736
+            },
+            "sigma": 1.5117187201976776,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 6.0468748807907104,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.0.mlp.fc2": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": true,
+            "has_input_scale": false,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "input_scale": null,
+          "weight_scale": 0.010742188431322575,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": false,
+                "elements": 22020096,
+                "differing": 11018934,
+                "max_ulp": 31712,
+                "p99_9_ulp": 226
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023510383907705545
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023509678430855274
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": false,
+                "elements": 213771264,
+                "differing": 76220338,
+                "max_ulp": 31565,
+                "p99_9_ulp": 122
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.001661316491663456
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.attn.qkv_proj": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "input_scale": 0.0682198628783226,
+          "weight_scale": 0.0168108269572258,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002149063628166914
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02652949094772339
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002149606589227915
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026646237820386887
+            },
+            "sigma": 7.640624642372131,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 30.562498569488525,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0021491271909326315
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02653026022017002
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002149605192244053
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02664586715400219
+            },
+            "sigma": 7.640624642372131,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 30.562498569488525,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002149063628166914
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02652949094772339
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002149606589227915
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026646237820386887
+            },
+            "sigma": 7.640624642372131,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 30.562498569488525,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.attn.out_proj": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "input_scale": 0.3917410671710968,
+          "weight_scale": 0.004167829640209675,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002352071925997734
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026533564552664757
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023535676300525665
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026623686775565147
+            },
+            "sigma": 43.87499952316284,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 175.49999809265137,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023520751856267452
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0265335775911808
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002353580668568611
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02662205696105957
+            },
+            "sigma": 43.87499952316284,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 175.49999809265137,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002352071925997734
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026533564552664757
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023535676300525665
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026623686775565147
+            },
+            "sigma": 43.87499952316284,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 175.49999809265137,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.mlp.fc1": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "input_scale": 0.02228655107319355,
+          "weight_scale": 0.0101143978536129,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023860493674874306
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026512842625379562
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023866461124271154
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02664031833410263
+            },
+            "sigma": 2.4960937201976776,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 9.98437488079071,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.00238601490855217
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02651190012693405
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.002386623527854681
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026639925315976143
+            },
+            "sigma": 2.4960937201976776,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 9.98437488079071,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023860493674874306
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026512842625379562
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0023866461124271154
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02664031833410263
+            },
+            "sigma": 2.4960937201976776,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 9.98437488079071,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.mlp.fc2": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": true,
+            "has_input_scale": false,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "input_scale": null,
+          "weight_scale": 0.0071847103536129,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": false,
+                "elements": 22020096,
+                "differing": 11017503,
+                "max_ulp": 31835,
+                "p99_9_ulp": 224
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.002987912390381098
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.002987845800817013
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": false,
+                "elements": 213771264,
+                "differing": 76172485,
+                "max_ulp": 31635,
+                "p99_9_ulp": 122
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0024840792175382376
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.attn.qkv_proj": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "input_scale": 0.3984375,
+          "weight_scale": 0.0168108269572258,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002148637780919671
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026578212156891823
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0021492941305041313
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02663583494722843
+            },
+            "sigma": 44.625,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 178.5,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002148662693798542
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026578456163406372
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002149309730157256
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026631653308868408
+            },
+            "sigma": 44.625,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 178.5,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002148637780919671
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026578212156891823
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0021492941305041313
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02663583494722843
+            },
+            "sigma": 44.625,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 178.5,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.attn.out_proj": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "input_scale": 1.7946428060531616,
+          "weight_scale": 0.009347098879516125,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023933728225529194
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026586702093482018
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002391346963122487
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02662559598684311
+            },
+            "sigma": 200.9999942779541,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 803.9999771118164,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023933977354317904
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026586245745420456
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023912840988487005
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026627128943800926
+            },
+            "sigma": 200.9999942779541,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 803.9999771118164,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.0023933728225529194
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026586702093482018
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.002391346963122487
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02662559598684311
+            },
+            "sigma": 200.9999942779541,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              }
+            },
+            "sigma": 803.9999771118164,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.mlp.fc1": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": false,
+            "has_input_scale": true,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "input_scale": 0.3113839328289032,
+          "weight_scale": 0.02943638525903225,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0021733103785663843
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02647005394101143
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0021736917551606894
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026612399145960808
+            },
+            "sigma": 34.87500047683716,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=4096 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 139.50000190734863,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0021733103785663843
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02646557055413723
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0021736982744187117
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026605721563100815
+            },
+            "sigma": 34.87500047683716,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 139.50000190734863,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0021733103785663843
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.02647005394101143
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is/4": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0021736917551606894
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              },
+              "6_rel_l2_vs_f32": 0.026612399145960808
+            },
+            "sigma": 34.87500047683716,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=448*is": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              }
+            },
+            "scaled": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "3_slices_vs_full_info": {
+                "equal": true
+              },
+              "4_rows_q_vs_rows": {
+                "equal": true
+              }
+            },
+            "sigma": 139.50000190734863,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.mlp.fc2": {
+          "spec": {
+            "format": "float8_e4m3fn",
+            "convrot": false,
+            "convrot_groupsize": 0,
+            "group_size": null,
+            "full_precision": true,
+            "has_input_scale": false,
+            "has_codebook": false,
+            "marker_source": "tensor"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "input_scale": null,
+          "weight_scale": 0.0174386166036129,
+          "M=4096 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": false,
+                "elements": 22020096,
+                "differing": 11008335,
+                "max_ulp": 31613,
+                "p99_9_ulp": 226
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.0028103096410632133
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": true
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.002809738041833043
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "dequant": {
+              "1_full_vs_reference": {
+                "equal": true
+              },
+              "info_QuantizedTensor を直接渡す別経路": {
+                "equal": false,
+                "elements": 213771264,
+                "differing": 76147284,
+                "max_ulp": 31479,
+                "p99_9_ulp": 122
+              },
+              "5_cached_vs_uncached": {
+                "miss": {
+                  "equal": true
+                },
+                "hit": {
+                  "equal": true
+                },
+                "cache_entries": 1
+              },
+              "6_rel_l2_vs_f32": 0.002268514595925808
+            },
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        }
+      }
+    },
+    "w4a8_kijai": {
+      "layers": {
+        "blocks.0.attn.qkv_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009694788604974747,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009695506654679775,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009694788604974747,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.0.attn.out_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009854940697550774,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.00985476840287447,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009854940697550774,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.0.mlp.fc1": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009685872122645378,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009684978984296322,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009685872122645378,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.0.mlp.fc2": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010216685011982918,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.01021638885140419,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010200221091508865,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.attn.qkv_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009715575724840164,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009713679552078247,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009715575724840164,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.attn.out_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009828480891883373,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009830593131482601,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009828480891883373,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.mlp.fc1": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009683836251497269,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009686990641057491,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009683836251497269,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.25.mlp.fc2": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010211541317403316,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010212388820946217,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010203268378973007,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.attn.qkv_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009680533781647682,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009679492563009262,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009680533781647682,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.attn.out_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009873472154140472,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009872912429273129,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009873472154140472,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.mlp.fc1": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009700837545096874,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.00970057025551796,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009700837545096874,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.49.mlp.fc2": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "metadata"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.01020049024373293,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010199477896094322,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010212795808911324,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        }
+      }
+    },
+    "w4a8_eros": {
+      "layers": {
+        "blocks.2.attn.out_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 4,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "both"
+          },
+          "shape": [
+            5376,
+            7168
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009850641712546349,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009851446375250816,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009850641712546349,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.2.attn.qkv_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "both"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009679874405264854,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009681839495897293,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009679874405264854,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.2.mlp.fc1": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "both"
+          },
+          "shape": [
+            28672,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009685817174613476,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.00968711543828249,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009685817174613476,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.2.mlp.fc2": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 8,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "both"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010239480063319206,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010237728245556355,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010209271684288979,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.9.attn.qkv_proj": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 8,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "both"
+          },
+          "shape": [
+            21504,
+            5376
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009690462611615658,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009695501998066902,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "ours_counts_slices": {},
+            "2_slices_vs_full": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.009690462611615658,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        },
+        "blocks.13.mlp.fc2": {
+          "spec": {
+            "format": "asym_w4a8_int8",
+            "convrot": true,
+            "convrot_groupsize": 256,
+            "group_size": 16,
+            "full_precision": false,
+            "has_input_scale": false,
+            "has_codebook": true,
+            "marker_source": "both"
+          },
+          "shape": [
+            5376,
+            14336
+          ],
+          "M=4096 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010214940644800663,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=3977 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.01021524053066969,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          },
+          "M=39764 sigma=1.0": {
+            "ours_counts_full": {},
+            "reference_counts": {},
+            "1_full_vs_reference": {
+              "equal": true
+            },
+            "6_rel_l2_vs_f32": 0.010223310440778732,
+            "sigma": 1.0,
+            "reference_warnings": [],
+            "failures": []
+          }
+        }
+      }
+    }
+  },
+  "gpu_check": {
+    "nvidia_smi_compute_apps": "(removed for privacy: desktop process list)",
+    "returncode": 0,
+    "memory_used_mib": 810,
+    "python_like_others": []
+  },
+  "setup": {
+    "list_backends": {
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "unavailable_reason": null,
+        "capabilities": [
+          "adaln",
+          "apply_rope",
+          "apply_rope1",
+          "apply_rope1_",
+          "apply_rope_",
+          "apply_rope_split_half",
+          "apply_rope_split_half1",
+          "apply_rope_split_half1_",
+          "apply_rope_split_half_",
+          "dequantize_nvfp4",
+          "dequantize_per_tensor_fp8",
+          "int8_linear",
+          "na3d",
+          "quantize_and_rotate_rowwise",
+          "quantize_int8_rowwise",
+          "quantize_mxfp8",
+          "quantize_nvfp4",
+          "quantize_per_tensor_fp8",
+          "rms_adaln",
+          "rms_rope",
+          "rms_rope1",
+          "rms_rope1_",
+          "rms_rope_",
+          "rms_rope_split_half",
+          "rms_rope_split_half1",
+          "rms_rope_split_half1_",
+          "rms_rope_split_half_",
+          "w4a8_int8_linear"
+        ]
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "unavailable_reason": null,
+        "capabilities": [
+          "adaln",
+          "apply_rope",
+          "apply_rope1",
+          "apply_rope1_",
+          "apply_rope_",
+          "apply_rope_split_half",
+          "apply_rope_split_half1",
+          "apply_rope_split_half1_",
+          "apply_rope_split_half_",
+          "convrot_w4a4_linear",
+          "dequantize_convrot_w4a4_weight",
+          "dequantize_int8_convrot_weight",
+          "dequantize_int8_convrot_weight_dtype",
+          "dequantize_int8_simple",
+          "dequantize_int8_simple_dtype",
+          "dequantize_nvfp4",
+          "dequantize_per_tensor_fp8",
+          "dequantize_w4a8_int8_weight",
+          "fp16_conv3d",
+          "fp16_conv3d_out",
+          "fp16_linear",
+          "gemv_awq_w4a16",
+          "group_norm_silu_pad3d",
+          "group_norm_silu_pad3d_out",
+          "int8_linear",
+          "na3d",
+          "prepare_int4_weight_for_int8_linear",
+          "quantize_and_rotate_rowwise",
+          "quantize_convrot_w4a4_weight",
+          "quantize_int8_convrot_weight",
+          "quantize_int8_rowwise",
+          "quantize_int8_tensorwise",
+          "quantize_mxfp8",
+          "quantize_nvfp4",
+          "quantize_per_tensor_fp8",
+          "quantize_svdquant_w4a4",
+          "quantize_w4a8_int8_weight",
+          "rms_adaln",
+          "rms_rope",
+          "rms_rope1",
+          "rms_rope1_",
+          "rms_rope_",
+          "rms_rope_split_half",
+          "rms_rope_split_half1",
+          "rms_rope_split_half1_",
+          "rms_rope_split_half_",
+          "rotate_int8_convrot_weight",
+          "scaled_mm_nvfp4",
+          "scaled_mm_svdquant_w4a4",
+          "sol_attn",
+          "stochastic_rounding_fp8",
+          "w4a8_int8_linear"
+        ]
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "unavailable_reason": "torch-npu is not installed: No module named 'torch_npu'",
+        "capabilities": []
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "unavailable_reason": null,
+        "capabilities": [
+          "adaln",
+          "apply_rope",
+          "apply_rope1",
+          "apply_rope1_",
+          "apply_rope_",
+          "apply_rope_split_half",
+          "apply_rope_split_half1",
+          "apply_rope_split_half1_",
+          "apply_rope_split_half_",
+          "convrot_w4a4_linear",
+          "dequantize_convrot_w4a4_weight",
+          "dequantize_int8_convrot_weight",
+          "dequantize_int8_convrot_weight_dtype",
+          "dequantize_int8_embedding",
+          "dequantize_int8_simple",
+          "dequantize_int8_simple_dtype",
+          "dequantize_mxfp8",
+          "dequantize_nvfp4",
+          "dequantize_per_tensor_fp8",
+          "dequantize_w4a8_int8_weight",
+          "fp16_conv3d",
+          "fp16_conv3d_out",
+          "fp16_linear",
+          "gemv_awq_w4a16",
+          "group_norm_silu_pad3d",
+          "group_norm_silu_pad3d_out",
+          "int8_linear",
+          "na3d",
+          "prepare_int4_weight_for_int8_linear",
+          "quantize_and_rotate_rowwise",
+          "quantize_convrot_w4a4_weight",
+          "quantize_int8_convrot_weight",
+          "quantize_int8_rowwise",
+          "quantize_int8_tensorwise",
+          "quantize_mxfp8",
+          "quantize_nvfp4",
+          "quantize_per_tensor_fp8",
+          "quantize_svdquant_w4a4",
+          "quantize_w4a8_int8_weight",
+          "rms_adaln",
+          "rms_rope",
+          "rms_rope1",
+          "rms_rope1_",
+          "rms_rope_",
+          "rms_rope_split_half",
+          "rms_rope_split_half1",
+          "rms_rope_split_half1_",
+          "rms_rope_split_half_",
+          "rotate_int8_convrot_weight",
+          "scaled_mm_mxfp8",
+          "scaled_mm_nvfp4",
+          "scaled_mm_svdquant_w4a4",
+          "sol_attn",
+          "stochastic_rounding_fp8",
+          "w4a8_int8_linear"
+        ]
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "unavailable_reason": "PyTorch ROCm/HIP runtime not available",
+        "capabilities": []
+      }
+    },
+    "shared_quant": [
+      true,
+      null
+    ],
+    "has_scaled_mm_v2": true,
+    "w4a8_chunked": true,
+    "env_COMFY_KITCHEN_W4A8_CHUNKED": null,
+    "comfy_kitchen": "0.2.37",
+    "torch": "2.13.0+cu130",
+    "device": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "capability": [
+      8,
+      9
+    ]
+  },
+  "impl_modules": {
+    "dequantize_per_tensor_fp8": "comfy_kitchen.backends.cuda",
+    "quantize_per_tensor_fp8": "comfy_kitchen.backends.cuda",
+    "w4a8_int8_linear": "comfy_kitchen.backends.cuda",
+    "int8_linear": "comfy_kitchen.backends.cuda (synthetic kwargs)"
+  },
+  "counts_total": {
+    "fp8_deq_uncached": 1413,
+    "fp8_deq_uncached@qkv_proj": 594,
+    "fp8_rows": 2646,
+    "fp8_rows@qkv_proj": 1134,
+    "fp8_scaled_calls": 2727,
+    "fp8_scaled_calls@qkv_proj": 1161,
+    "fp8_quantize_input": 54,
+    "fp8_quantize_input@qkv_proj": 27,
+    "fp8_rows_q": 1323,
+    "fp8_rows_q@qkv_proj": 567,
+    "fp8_deq_uncached@out_proj": 27,
+    "fp8_scaled_calls@out_proj": 27,
+    "fp8_deq_uncached@fc1": 783,
+    "fp8_rows@fc1": 1512,
+    "fp8_deq_miss": 36,
+    "fp8_deq_miss@fc1": 27,
+    "fp8_deq_hit": 36,
+    "fp8_deq_hit@fc1": 27,
+    "fp8_scaled_calls@fc1": 1539,
+    "fp8_quantize_input@fc1": 27,
+    "fp8_rows_q@fc1": 756,
+    "fp8_deq_uncached@fc2": 9,
+    "fp8_deq_miss@fc2": 9,
+    "fp8_deq_hit@fc2": 9,
+    "w4a8_calls": 54,
+    "w4a8_calls@qkv_proj": 15,
+    "w4a8_rows": 651,
+    "w4a8_rows@qkv_proj": 315,
+    "w4a8_twopass": 54,
+    "w4a8_calls@out_proj": 12,
+    "w4a8_calls@fc1": 12,
+    "w4a8_rows@fc1": 336,
+    "w4a8_calls@fc2": 15
+  },
+  "eager_total": 0,
+  "failures": [],
+  "passed": true,
+  "finished_at": "2026-11-12T16:18:36+09:00"
+}

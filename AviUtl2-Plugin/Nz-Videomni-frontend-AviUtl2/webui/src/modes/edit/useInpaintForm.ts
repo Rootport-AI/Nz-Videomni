@@ -157,7 +157,8 @@ export interface UseInpaintFormResult {
   /** §1-6 のトリム失敗（保管庫といまのアップロードの OR）。 */
   trimFailed: boolean;
 
-  /** プロジェクトの解像度（＝部分フィルタの解像度）。`getEditInfo` 前は 0。 */
+  /** プロジェクトの解像度（＝部分フィルタの解像度）。部分フィルタ／対象動画の右クリックのたびに
+   * `getEditInfo` で読み直す。まだ読めていなければ 0。 */
   projectWidth: number;
   projectHeight: number;
   /** 生成 fps（プロジェクトの rate/scale を整数へスナップしたもの）。 */
@@ -297,7 +298,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   const partialFilter = slots.partialFilter;
   const target = slots.target;
 
-  // --- プロジェクトの解像度と fps（マウント時 1 回） -----------------------
+  // --- プロジェクトの解像度と fps（マウント時と右クリックのたび） -----------
   // `config.generation_defaults` は**使わない**: 比べる相手は「いま開いている
   // プロジェクトの解像度」であって、サーバーの生成既定ではない（D5）。
   const [editInfo, setEditInfo] = useState<{ width: number; height: number; rate: number; scale: number } | null>(
@@ -312,13 +313,15 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
         setEditInfo({ width: info.width, height: info.height, rate: info.rate, scale: info.scale });
       } catch {
         // 読めなければ `mediaInfoUnknown` で止まる。推測で埋めない。
+        // 読み直しに失敗したら古い値で門を通さない。
+        if (!alive) return;
+        setEditInfo(null);
       }
     })();
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount read
-  }, []);
+  }, [bridge, slots.subTabRequest]);
 
   const [seed, setSeed] = useState(config.generation_defaults.seed);
 

@@ -755,6 +755,9 @@ class H3Pipeline:
         self._resident: dict | None = None
         self.quant_backends: dict = {}
         self.build_report: dict = {}
+        #: The fp8 path chosen at load from the GPU generation ("scaled" / "dequant";
+        #: quant_linear.fp8_mode_for), handed to every DiT build.
+        self._fp8_mode = "scaled"
 
     # -- load: checks only, no weights ------------------------------------------
 
@@ -782,10 +785,23 @@ class H3Pipeline:
         vv = sft_quant_format.read_header(p.video_vae)
         av = sft_quant_format.read_header(p.audio_vae)
 
-        # Needs CUDA: fail the load here, not on the first int8 call of a job.
-        from engine_h3.quant_linear import require_cuda_int8, shared_quant_status  # noqa: PLC0415
+        # Needs CUDA: fail the load here, not on the first quantized call of a job.
+        from engine_h3.quant_linear import (  # noqa: PLC0415
+            fp8_mode_for,
+            require_cuda_quant,
+            require_w4a8_capability,
+            shared_quant_status,
+        )
 
-        backends = require_cuda_int8()
+        dit_formats = sorted({q.format for q in dit_cfg.quant.values()})
+        # (0, 0) without CUDA: require_cuda_quant then refuses with its own reason first.
+        capability = tuple(torch.cuda.get_device_capability(self.device)) if torch.cuda.is_available() else (0, 0)
+        fp8_mode = fp8_mode_for(capability)
+        backends = require_cuda_quant(dit_formats, fp8_mode=fp8_mode)
+        if h3_format.W4A8 in dit_formats:
+            require_w4a8_capability(capability)
+        if h3_format.FP8 in dit_formats:
+            self._log_fp8(dit_cfg, fp8_mode, capability)
         shared, why = shared_quant_status()
         if shared:
             self._log("int8: qkv quantization shared across head groups (comfy-kitchen internals found)")
@@ -800,6 +816,7 @@ class H3Pipeline:
             torch.backends.cudnn.benchmark = False
 
         self._dit_header, self._dit_cfg = dit_header, dit_cfg
+        self._fp8_mode = fp8_mode
         self.quant_backends = backends
         self.build_report = {
             "dit": {
@@ -809,8 +826,14 @@ class H3Pipeline:
                 "heads": dit_cfg.num_heads,
                 "adaln_grid": dit_cfg.adaln_grid,
                 "adaln_rank": dit_cfg.adaln_rank,
-                "int8_layers": len(dit_cfg.quant),
-                "quant_specs": sorted({f"{q.format}/convrot={q.convrot}/g{q.convrot_groupsize}" for q in dit_cfg.quant.values()}),
+                "quant_layers": len(dit_cfg.quant),
+                "quant_layers_by_format": {f: sum(q.format == f for q in dit_cfg.quant.values()) for f in dit_formats},
+                "fp8_mode": fp8_mode if h3_format.FP8 in dit_formats else None,
+                "quant_specs": sorted({
+                    f"{q.format}/convrot={q.convrot}/g{q.convrot_groupsize}"
+                    + ("" if q.group_size is None else f"/G{q.group_size}")
+                    for q in dit_cfg.quant.values()
+                }),
                 "unknown": list(dit_cfg.unknown),
             },
             "text_encoder": {
@@ -831,6 +854,17 @@ class H3Pipeline:
             "device": str(self.device),
         }
         return self.build_report
+
+    def _log_fp8(self, dit_cfg, fp8_mode: str, capability: tuple[int, int]) -> None:
+        """The fp8 path chosen at load, and how many scaled layers run with input scale 1.0."""
+        fp8 = [q for q in dit_cfg.quant.values() if q.format == h3_format.FP8]
+        full = sum(q.full_precision for q in fp8)
+        self._log(f"fp8: {len(fp8)} layer(s), path '{fp8_mode}' (compute capability {capability[0]}.{capability[1]}); "
+                  f"{full} marked full_precision_matrix_mult run dequantized")
+        no_scale = sum(not q.full_precision and not q.has_input_scale for q in fp8)
+        if fp8_mode == "scaled" and no_scale:
+            self._log(f"WARNING fp8: {no_scale} layer(s) have no input_scale; their input is quantized "
+                      "with scale 1.0, as ComfyUI does (values past 448 saturate)")
 
     # -- generate -----------------------------------------------------------------
 
@@ -1552,7 +1586,7 @@ class H3Pipeline:
 
         with torch.device("meta"):
             dit = H3DiT(cfg)
-            swapped = swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=bias_dtype_of)
+            swapped = swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=bias_dtype_of, fp8_mode=self._fp8_mode)
         report = load_streaming(dit, self.paths.transformer, header, key_map=dit_key_map_for(cfg))
         # assign=True kept the file's dtypes; bring the non-island tensors to
         # the dtypes the forward expects (a no-op on the official file).
@@ -1560,7 +1594,7 @@ class H3Pipeline:
         dit.requires_grad_(False)
         dit.eval()
         entry["dit"] = {
-            "int8_linears": swapped,
+            "quant_linears": swapped,
             "loaded_tensors": report.loaded,
             "loaded_gib": round(report.bytes / 2**30, 2),
             "read_seconds": report.seconds,
@@ -2184,6 +2218,8 @@ def _backend_summary(backends: dict) -> dict:
                 "available": bool(info.get("available")),
                 "disabled": bool(info.get("disabled")),
                 "int8_linear": "int8_linear" in (info.get("capabilities") or []),
+                "w4a8_int8_linear": "w4a8_int8_linear" in (info.get("capabilities") or []),
+                "quantize_per_tensor_fp8": "quantize_per_tensor_fp8" in (info.get("capabilities") or []),
             }
         else:
             out[name] = str(info)

@@ -540,7 +540,7 @@ export const en = {
           targetWidth: number,
           targetHeight: number,
         ): string =>
-          `The partial filter's resolution (= the project's resolution) and the video's resolution must match. (partial filter = ${filterWidth}*${filterHeight}px, video = ${targetWidth}*${targetHeight}px, which do not match)`,
+          `The partial filter's resolution (= the project's resolution) and the video's resolution must match. Match the project resolution to the video in AviUtl2's Scene Settings, then right-click the partial filter again. (partial filter = ${filterWidth}*${filterHeight}px, video = ${targetWidth}*${targetHeight}px, which do not match)`,
         /** NOT the same thing as `windowNotCoveredNote` above, which is a note:
          * this one fires when the window cannot be PLACED inside the video's
          * ribbon at all (owner decision D3: 収まらなければ生成不可). */
@@ -2880,7 +2880,7 @@ export const ja: Strings = {
           targetWidth: number,
           targetHeight: number,
         ): string =>
-          `部分フィルタの解像度（＝プロジェクトの解像度）と対象動画の解像度を一致させてください。（※部分フィルタ＝${filterWidth}*${filterHeight}px、対象動画＝${targetWidth}*${targetHeight}pxで不一致）`,
+          `部分フィルタの解像度（＝プロジェクトの解像度）と対象動画の解像度を一致させてください。AviUtl2の「シーンの設定」でプロジェクトの解像度を動画に合わせてから、部分フィルタを右クリックし直してください。（※部分フィルタ＝${filterWidth}*${filterHeight}px、対象動画＝${targetWidth}*${targetHeight}pxで不一致）`,
         windowNotCovered: "この長さの窓は対象の動画に収まりません。フレーム数を減らしてください。",
         maskRendering: "マスクの描画が終わるのを待っています。",
       },

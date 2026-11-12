@@ -163,6 +163,39 @@ describe("useModels", () => {
     expect(result.current.load.code).toBe("MODEL_FILE_MISSING");
   });
 
+  it("loadPipeline() keeps a 422's detail and status (the precheck's worded reason)", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const original = bridge.request.bind(bridge);
+    vi.spyOn(bridge, "request").mockImplementation(((method: string, params: unknown) => {
+      if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/pipeline/load") {
+        return Promise.resolve({
+          status: 422,
+          body: {
+            error: {
+              code: "MODEL_INCOMPATIBLE",
+              message: "selected model 'transformer/default' failed the compatibility precheck",
+              detail: "This transformer uses a quantization format this engine cannot load.",
+            },
+          },
+        });
+      }
+      return (original as (m: string, p: unknown) => Promise<unknown>)(method, params);
+    }) as typeof bridge.request);
+    const apiClient = createApiClient(bridge);
+    const { result } = renderHook(() => useModels({ apiClient }));
+    await waitFor(() => expect(result.current.list.status).toBe("ready"));
+
+    act(() => {
+      result.current.loadPipeline();
+    });
+
+    await waitFor(() => expect(result.current.load.status).toBe("error"));
+    if (result.current.load.status !== "error") throw new Error("unreachable");
+    expect(result.current.load.code).toBe("MODEL_INCOMPATIBLE");
+    expect(result.current.load.httpStatus).toBe(422);
+    expect(result.current.load.detail).toBe("This transformer uses a quantization format this engine cannot load.");
+  });
+
   it("loadPipeline() hands its request to trackLoad exactly once", async () => {
     const apiClient = createApiClient(createMockBridge({ delayMs: 0 }));
     const tracked = vi.fn();

@@ -73,7 +73,12 @@ export type ModelsLoadState =
    * distinct from the generic error branch so `ModelsPanel` can show the
    * dedicated "cannot switch while a job is running" copy. */
   | { status: "busy" }
-  | { status: "error"; code: string; message: string };
+  /** `detail` and `httpStatus` come from {@link BackendApiError}: a 422
+   * (`MODEL_INCOMPATIBLE`, `MODEL_FILE_MISSING`) carries the server's own
+   * worded reason in `detail`, which `ModelsPanel` shows in place of the
+   * generic hint (the same condition as `useBaseModels`'s
+   * `classifySwitchFailure`). Both are `undefined` for a non-API error. */
+  | { status: "error"; code: string; message: string; detail: string | undefined; httpStatus: number | undefined };
 
 export interface UseModelsDeps {
   apiClient?: ApiClient;
@@ -170,11 +175,16 @@ export function useModels(deps: UseModelsDeps = {}): UseModelsResult {
           setLoad({ status: "busy" });
           return;
         }
-        const { code, message } =
+        const failure =
           err instanceof BackendApiError
-            ? { code: err.code, message: err.message }
-            : { code: "UNKNOWN", message: err instanceof Error ? err.message : String(err) };
-        setLoad({ status: "error", code, message });
+            ? { code: err.code, message: err.message, detail: err.detail, httpStatus: err.httpStatus }
+            : {
+                code: "UNKNOWN",
+                message: err instanceof Error ? err.message : String(err),
+                detail: undefined,
+                httpStatus: undefined,
+              };
+        setLoad({ status: "error", ...failure });
       }
     })();
     void (track ? track(attempt) : attempt);

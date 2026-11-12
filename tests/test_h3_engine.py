@@ -834,10 +834,13 @@ def test_te_drop_after_forward_keeps_the_hidden_state(tmp_path):
 # a tiny DiT streamed from a synthetic file
 # --------------------------------------------------------------------------- #
 
-_ST_DTYPES = {torch.float32: "F32", torch.bfloat16: "BF16", torch.float16: "F16", torch.int8: "I8", torch.uint8: "U8"}
+_ST_DTYPES = {torch.float32: "F32", torch.bfloat16: "BF16", torch.float16: "F16", torch.int8: "I8", torch.uint8: "U8",
+              torch.float8_e4m3fn: "F8_E4M3"}
 
 
-def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int, heads: int = HEADS) -> dict:
+def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int, heads: int = HEADS,
+                      hid: int = HID, ffn: int = FFN) -> dict:
+    HID, FFN = hid, ffn  # noqa: N806 -- the module widths, overridable (w4a8 needs K % 256 == 0)
     g = torch.Generator().manual_seed(0)
     inner = heads * HD
 
@@ -889,7 +892,7 @@ def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int, heads: in
 def _write_sft(path: Path, tensors: dict, prefix: str = "") -> None:
     doc, blobs, off = {}, [], 0
     for name, ten in tensors.items():
-        data = ten.contiguous().view(torch.uint8).numpy().tobytes() if ten.numel() else b""
+        data = ten.contiguous().reshape(-1).view(torch.uint8).numpy().tobytes() if ten.numel() else b""
         doc[prefix + name] = {"dtype": _ST_DTYPES[ten.dtype], "shape": list(ten.shape), "data_offsets": [off, off + len(data)]}
         blobs.append(data)
         off += len(data)
@@ -4181,3 +4184,690 @@ def test_vsf_denoise_on_matches_off(monkeypatch, tmp_path):
     v0, a0, _e = run(steps=2, negative_hidden=neg, vsf_scale=3.0, vsf_report=r_off)
     v1, a1, _e = run(steps=2, vram16=True, negative_hidden=neg, vsf_scale=3.0, vsf_report=r_on)
     assert torch.equal(v0, v1) and torch.equal(a0, a1) and r_on == r_off
+
+
+# --------------------------------------------------------------------------- #
+# fp8 / w4a8 Linears (台帳 §1-283, 裁定 101): the routing on fake kernels, the
+# load-time checks and report; the numbers against comfy-kitchen's own
+# QuantizedTensor path on the GPU only (H3_GPU_TESTS=1)
+# --------------------------------------------------------------------------- #
+
+FP8 = "float8_e4m3fn"
+W4A8 = "asym_w4a8_int8"
+
+
+def _fp8_spec(*, input_scale=True, full=False):
+    return h3_format.QuantSpec(FP8, False, 256, full_precision=full, has_input_scale=input_scale)
+
+
+def _w4a8_spec(g=16, *, codebook=True):
+    return h3_format.QuantSpec(W4A8, True, 256, group_size=g, has_codebook=codebook)
+
+
+def _w4a8_codes(qdata, codebook):
+    """The fake decode of a packed [N, K/2] weight: two 4-bit codes per byte, low nibble first."""
+    b = qdata.to(torch.int16) & 0xFF
+    codes = torch.stack([b & 0x0F, b >> 4], dim=-1).reshape(qdata.shape[0], -1).long()
+    if codebook is not None:
+        return codebook.double()[codes]
+    return (codes - 8).double()
+
+
+class _FakeQuantKernels:
+    """comfy-kitchen's int8 / fp8 / w4a8 functions on the CPU in float64 (rounded once to
+    the output dtype, so a row or column split cannot change the result), every call
+    recorded with its arguments."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, dict]] = []
+
+    def int8_linear(self, *args, **kwargs):
+        self.calls.append(("int8_linear", kwargs))
+        return _int8_linear_as_float64(*args, **kwargs)
+
+    def quantize_per_tensor_fp8(self, x, scale, output_type=torch.float8_e4m3fn):
+        self.calls.append(("quantize_per_tensor_fp8", {"x": x, "scale": scale}))
+        return x.double() / scale.double()
+
+    def dequantize_per_tensor_fp8(self, x, scale, output_type=torch.bfloat16):
+        self.calls.append(("dequantize_per_tensor_fp8", {"x": x, "scale": scale, "output_type": output_type}))
+        return (x.double() * scale.double()).to(output_type)
+
+    def scaled_mm_v2(self, input, weight, scale_a, scale_b, bias=None, out_dtype=None):  # noqa: A002
+        self.calls.append(("scaled_mm_v2", {"input": input, "weight": weight, "scale_a": scale_a,
+                                            "scale_b": scale_b, "bias": bias, "out_dtype": out_dtype}))
+        out = (input.double() * scale_a.double()) @ (weight.double() * scale_b.double())
+        return out.to(out_dtype)
+
+    def w4a8_int8_linear(self, x, qdata, s_rel, s_channel, codebook=None, correction=None, bias=None,
+                         group_size=16, convrot_groupsize=256, out_dtype=torch.bfloat16):
+        self.calls.append(("w4a8_int8_linear", {
+            "x": x, "qdata": qdata, "s_rel": s_rel, "s_channel": s_channel, "codebook": codebook,
+            "correction": correction, "bias": bias, "group_size": group_size,
+            "convrot_groupsize": convrot_groupsize, "out_dtype": out_dtype}))
+        w = _w4a8_codes(qdata, codebook)
+        w = w * s_rel.double().repeat_interleave(group_size, dim=1) * s_channel.double()[:, None]
+        return (x.double() @ w.t()).to(out_dtype)
+
+    def named(self, name):
+        return [kw for n, kw in self.calls if n == name]
+
+
+def _fake_quant_kernels(monkeypatch) -> _FakeQuantKernels:
+    """Fake the kernels, not the modules: ``quant_linear._ck`` (every format's
+    comfy-kitchen calls go through it) and ``fp8_linear._scaled_mm_v2``."""
+    from engine_h3 import fp8_linear, quant_linear
+
+    fake = _FakeQuantKernels()
+    monkeypatch.setattr(quant_linear, "_ck", lambda: fake)
+    monkeypatch.setattr(fp8_linear, "_scaled_mm_v2", lambda: fake.scaled_mm_v2)
+    return fake
+
+
+def _fp8_lin(k, n, *, mode="scaled", input_scale=True, full=False, seed=3, device="cpu"):
+    from engine_h3.fp8_linear import H3Fp8Linear
+
+    g = torch.Generator().manual_seed(seed)
+    lin = H3Fp8Linear(k, n, spec=_fp8_spec(input_scale=input_scale, full=full), mode=mode)
+    lin.weight = torch.nn.Parameter(torch.randn(n, k, generator=g).to(device, torch.float8_e4m3fn),
+                                    requires_grad=False)
+    lin.weight_scale = torch.tensor(0.05, dtype=torch.float32, device=device)
+    if input_scale:
+        lin.input_scale = torch.tensor(0.02, dtype=torch.float32, device=device)
+    return lin
+
+
+def _w4a8_lin(k, n, *, g=16, codebook=True, seed=4, device="cpu"):
+    from engine_h3.w4a8_linear import H3W4A8Linear
+
+    gen = torch.Generator().manual_seed(seed)
+    lin = H3W4A8Linear(k, n, spec=_w4a8_spec(g, codebook=codebook))
+    lin.weight = torch.nn.Parameter(torch.randint(-128, 128, (n, k // 2), generator=gen, dtype=torch.int8).to(device),
+                                    requires_grad=False)
+    lin.weight_s_rel = (torch.rand(n, k // g, generator=gen) * 0.5 + 0.5).to(device, torch.float8_e4m3fn)
+    lin.weight_s_channel = (torch.rand(n, generator=gen) * 0.01 + 1e-3).to(device)
+    if codebook:
+        lin.weight_codebook = torch.linspace(-1.0, 1.0, 16).to(device)
+    return lin
+
+
+def test_swap_routes_each_format_and_passes_the_fp8_mode():
+    from engine_h3.dit import H3DiT
+    from engine_h3.fp8_linear import H3Fp8Linear
+    from engine_h3.quant_linear import H3Int8Linear, H3QuantLinear, swap_in_int8_linears
+    from engine_h3.w4a8_linear import H3W4A8Linear
+
+    quant = {
+        "blocks.0.attn.qkv_proj": h3_format.QuantSpec("int8_tensorwise", True, 256),
+        "blocks.0.attn.out_proj": _fp8_spec(),
+        "blocks.0.mlp.fc1": _fp8_spec(input_scale=False, full=True),
+        "blocks.0.mlp.fc2": _w4a8_spec(16, codebook=False),
+        "blocks.1.mlp.fc2": _w4a8_spec(8),
+    }
+    for mode in ("scaled", "dequant"):
+        cfg = _tiny_cfg(quant=quant)
+        with torch.device("meta"):
+            dit = H3DiT(cfg)
+            assert swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=lambda n: torch.bfloat16, fp8_mode=mode) == 5
+        b0 = dit.blocks[0]
+        assert type(b0.attn.qkv_proj) is H3Int8Linear
+        assert type(b0.attn.out_proj) is H3Fp8Linear and b0.attn.out_proj.mode == mode
+        assert type(b0.mlp.fc1) is H3Fp8Linear and b0.mlp.fc1.mode == "dequant"   # full_precision: always
+        assert type(b0.mlp.fc2) is H3W4A8Linear and type(dit.blocks[1].mlp.fc2) is H3W4A8Linear
+        assert all(isinstance(m, H3QuantLinear) for m in (b0.attn.qkv_proj, b0.attn.out_proj, b0.mlp.fc1, b0.mlp.fc2))
+    out_proj, fc1 = b0.attn.out_proj, b0.mlp.fc1
+    assert out_proj.weight.dtype == torch.float8_e4m3fn and tuple(out_proj.weight.shape) == (HID, INNER)
+    assert set(out_proj.state_dict()) == {"weight", "weight_scale", "input_scale"}
+    assert set(fc1.state_dict()) == {"weight", "weight_scale"} and fc1.input_scale is None and fc1.bias is None
+    assert out_proj.weight_scale.dtype == torch.float32 and out_proj.weight_scale.shape == ()
+    fc2 = b0.mlp.fc2
+    assert fc2.weight.dtype == torch.int8 and tuple(fc2.weight.shape) == (HID, FFN // 2)
+    assert fc2.weight_s_rel.dtype == torch.float8_e4m3fn and tuple(fc2.weight_s_rel.shape) == (HID, FFN // 16)
+    assert fc2.weight_s_channel.dtype == torch.float32 and tuple(fc2.weight_s_channel.shape) == (HID,)
+    assert set(fc2.state_dict()) == {"weight", "weight_s_rel", "weight_s_channel"} and fc2.bias is None
+    fc2b = dit.blocks[1].mlp.fc2
+    assert tuple(fc2b.weight_s_rel.shape) == (HID, FFN // 8) and tuple(fc2b.weight_codebook.shape) == (16,)
+    for mod in (out_proj, fc1, fc2):  # the names VRAM 16GB mode and the LoRA use
+        for name in ("in_features", "out_features", "spec", "bias", "forward", "forward_rows", "shares_input",
+                     "quantize_input", "forward_rows_q", "extra_repr", "dequant_cache"):
+            assert hasattr(mod, name), (type(mod).__name__, name)
+    assert "mode=dequant" in fc1.extra_repr() and "group_size=8" in fc2b.extra_repr()
+
+
+def test_swap_refuses_a_biased_linear_and_an_unknown_format():
+    from engine_h3.quant_linear import H3Int8Linear, swap_in_int8_linears
+
+    def root():
+        r = torch.nn.Module()
+        r.lin = torch.nn.Linear(32, 16, bias=True)
+        return r
+
+    for spec in (_fp8_spec(), _w4a8_spec(16)):
+        with pytest.raises(RuntimeError, match="バイアス"):
+            swap_in_int8_linears(root(), {"lin": spec}, bias_dtype_of=lambda n: torch.bfloat16)
+    with pytest.raises(RuntimeError, match="nvfp4"):
+        swap_in_int8_linears(root(), {"lin": h3_format.QuantSpec("nvfp4", False, 256)},
+                             bias_dtype_of=lambda n: torch.bfloat16)
+    r = root()  # int8 keeps its bias, as before
+    swap_in_int8_linears(r, {"lin": h3_format.QuantSpec("int8_tensorwise", False, 256)},
+                         bias_dtype_of=lambda n: torch.float16)
+    assert type(r.lin) is H3Int8Linear and r.lin.bias.dtype == torch.float16
+
+
+def test_normalize_dtypes_skips_every_quantized_linear():
+    from engine_h3.dit import H3DiT
+    from engine_h3.quant_linear import swap_in_int8_linears
+
+    cfg = _tiny_cfg(quant={"blocks.0.attn.out_proj": _fp8_spec(), "blocks.0.mlp.fc2": _w4a8_spec(16),
+                           "blocks.0.attn.qkv_proj": h3_format.QuantSpec("int8_tensorwise", False, 256)})
+    with torch.device("meta"):
+        dit = H3DiT(cfg)
+        swap_in_int8_linears(dit, cfg.quant, bias_dtype_of=lambda n: torch.bfloat16)
+    dit.blocks[0].norm1.weight = torch.nn.Parameter(torch.empty(HID, dtype=torch.float32, device="meta"),
+                                                    requires_grad=False)
+    assert dit.normalize_dtypes() >= 1
+    b = dit.blocks[0]
+    assert b.norm1.weight.dtype == torch.bfloat16   # a plain tensor is still normalized
+    assert (b.attn.out_proj.weight.dtype, b.attn.out_proj.weight_scale.dtype, b.attn.out_proj.input_scale.dtype) == (
+        torch.float8_e4m3fn, torch.float32, torch.float32)
+    assert (b.mlp.fc2.weight_s_rel.dtype, b.mlp.fc2.weight_s_channel.dtype, b.mlp.fc2.weight_codebook.dtype) == (
+        torch.float8_e4m3fn, torch.float32, torch.float32)
+    assert b.attn.qkv_proj.weight.dtype == torch.int8 and b.attn.qkv_proj.weight_scale.dtype == torch.float32
+
+
+def test_fp8_scaled_calls_comfy_kitchen_as_comfyui_does(monkeypatch):
+    """quantize_per_tensor_fp8(x, input_scale) -> scaled_mm_v2(xq, weight.t(), scale_a=input_scale,
+    scale_b=weight_scale, bias=None, out_dtype=bf16) (tensor/fp8.py)."""
+    fake = _fake_quant_kernels(monkeypatch)
+    lin = _fp8_lin(32, 48)
+    x = torch.randn(2, 5, 32, generator=torch.Generator().manual_seed(1))  # f32, 3-D: cast and flattened
+    with torch.no_grad():
+        out = lin(x)
+    assert out.shape == (2, 5, 48) and out.dtype == torch.bfloat16
+    (q,), (mm,) = fake.named("quantize_per_tensor_fp8"), fake.named("scaled_mm_v2")
+    assert q["scale"] is lin.input_scale and q["x"].dtype == torch.bfloat16 and q["x"].shape == (10, 32)
+    assert mm["scale_a"] is lin.input_scale and mm["scale_b"] is lin.weight_scale
+    assert mm["bias"] is None and mm["out_dtype"] == torch.bfloat16
+    assert mm["weight"].shape == (32, 48) and mm["weight"].data_ptr() == lin.weight.data_ptr()  # weight.t(), no copy
+    assert not fake.named("dequantize_per_tensor_fp8")
+    x2d = x.reshape(-1, 32).to(torch.bfloat16).double()
+    want = ((x2d / 0.02 * 0.02) @ (lin.weight.double().t() * 0.05)).to(torch.bfloat16)
+    assert torch.equal(out.reshape(10, 48), want)
+
+
+def test_fp8_without_input_scale_uses_scale_one_made_per_call(monkeypatch):
+    """裁定 101 ⑩: ComfyUI's 1.0, a float32 0-dim tensor on the input's device, never a buffer."""
+    fake = _fake_quant_kernels(monkeypatch)
+    lin = _fp8_lin(32, 16, input_scale=False)
+    x = torch.randn(4, 32).to(torch.bfloat16)
+    with torch.no_grad():
+        lin(x)
+        lin(x)
+    scales = [kw["scale"] for kw in fake.named("quantize_per_tensor_fp8")]
+    assert len(scales) == 2 and scales[0] is not scales[1]
+    for s in scales:
+        assert s.dtype == torch.float32 and s.shape == () and float(s) == 1.0 and s.device == x.device
+    assert [kw["scale_a"] for kw in fake.named("scaled_mm_v2")] == scales
+    assert "input_scale" not in lin.state_dict()
+    xq, xs = lin.quantize_input(x)
+    assert float(xs) == 1.0 and xs.dtype == torch.float32
+
+
+@pytest.mark.parametrize("mode,full", [("dequant", False), ("scaled", True)])
+def test_fp8_dequant_path(monkeypatch, mode, full):
+    """dequantize_per_tensor_fp8(weight, weight_scale, bf16) then F.linear; a
+    full_precision_matrix_mult layer takes it on every GPU."""
+    import torch.nn.functional as F
+
+    fake = _fake_quant_kernels(monkeypatch)
+    lin = _fp8_lin(32, 16, mode=mode, full=full)
+    assert lin.mode == "dequant" and not lin.shares_input(torch.zeros(1, 32))
+    x = torch.randn(4, 32).to(torch.bfloat16)
+    with torch.no_grad():
+        out = lin(x)
+    (d,) = fake.named("dequantize_per_tensor_fp8")
+    assert d["x"] is lin.weight and d["scale"] is lin.weight_scale and d["output_type"] == torch.bfloat16
+    assert not fake.named("quantize_per_tensor_fp8") and not fake.named("scaled_mm_v2")
+    assert torch.equal(out, F.linear(x, (lin.weight.double() * 0.05).to(torch.bfloat16)))
+
+
+def test_fp8_rows_must_be_multiples_of_16(monkeypatch):
+    _fake_quant_kernels(monkeypatch)
+    x = torch.randn(3, 32).to(torch.bfloat16)
+    for mode in ("scaled", "dequant"):
+        lin = _fp8_lin(32, 64, mode=mode)
+        with torch.no_grad():
+            for n0, n1 in ((8, 24), (16, 40)):
+                with pytest.raises(ValueError, match="16"):
+                    lin.forward_rows(x, n0, n1)
+            assert torch.equal(lin.forward_rows(x, 16, 48), lin(x)[:, 16:48])
+    lin = _fp8_lin(32, 64)
+    xq, xs = lin.quantize_input(x)
+    with pytest.raises(ValueError, match="16"):
+        lin.forward_rows_q(xq, xs, 0, 8)
+
+
+def test_fp8_shared_input_slices_equal_forward_rows(monkeypatch):
+    fake = _fake_quant_kernels(monkeypatch)
+    lin = _fp8_lin(32, 64)
+    x = torch.randn(5, 32).to(torch.bfloat16)
+    assert lin.shares_input(x)
+    with torch.no_grad():
+        xq, xs = lin.quantize_input(x)
+        assert xs is lin.input_scale
+        for n0 in (0, 16, 32, 48):
+            assert torch.equal(lin.forward_rows_q(xq, xs, n0, n0 + 16), lin.forward_rows(x, n0, n0 + 16))
+    assert fake.named("scaled_mm_v2")[0]["weight"].shape == (32, 16)
+
+
+def test_fp8_dequant_cache_lives_only_inside_its_context(monkeypatch):
+    from engine_h3.quant_linear import H3Int8Linear
+
+    fake = _fake_quant_kernels(monkeypatch)
+    lin = _fp8_lin(32, 16, mode="dequant")
+    x = torch.randn(4, 32).to(torch.bfloat16)
+
+    def dequants():
+        return len(fake.named("dequantize_per_tensor_fp8"))
+
+    with torch.no_grad():
+        want = lin(x)
+        lin(x)
+        assert dequants() == 2                       # no cache outside the context
+        with lin.dequant_cache():
+            assert torch.equal(lin(x), want)
+            assert torch.equal(lin(x), want)
+            assert dequants() == 3                   # once for the whole context
+            lin.forward_rows(x, 0, 16)
+            assert dequants() == 4                   # a row slice is never cached
+        assert lin._cached is None and not lin._caching
+        lin(x)
+        assert dequants() == 5
+        with pytest.raises(RuntimeError, match="moved"):
+            with lin.dequant_cache():
+                lin(x)
+                lin.weight.data = lin.weight.data.clone()   # as block swap would rebind it
+                lin(x)
+        assert lin._cached is None
+    scaled = _fp8_lin(32, 16)
+    with scaled.dequant_cache():
+        assert scaled._cached is None and not scaled._caching   # no-op on the scaled path
+    plain = H3Int8Linear(32, 16, bias=False, spec=h3_format.QuantSpec("int8_tensorwise", False, 256))
+    with plain.dequant_cache():                      # the base's no-op
+        pass
+
+
+def test_w4a8_calls_comfy_kitchen_as_comfyui_does(monkeypatch):
+    fake = _fake_quant_kernels(monkeypatch)
+    lin = _w4a8_lin(64, 48, g=8)
+    x = torch.randn(2, 3, 64)
+    with torch.no_grad():
+        out = lin(x)
+        rows = lin.forward_rows(x, 16, 32)
+    assert out.shape == (2, 3, 48) and out.dtype == torch.bfloat16
+    full, part = fake.named("w4a8_int8_linear")
+    assert full["qdata"] is lin.weight and full["s_rel"] is lin.weight_s_rel and full["s_channel"] is lin.weight_s_channel
+    assert full["codebook"] is lin.weight_codebook and full["correction"] is None and full["bias"] is None
+    assert (full["group_size"], full["convrot_groupsize"], full["out_dtype"]) == (8, 256, torch.bfloat16)
+    assert full["x"].dtype == torch.bfloat16 and full["x"].shape == (6, 64)
+    assert part["qdata"].shape == (16, 32) and part["s_rel"].shape == (16, 8) and part["s_channel"].shape == (16,)
+    assert torch.equal(rows, out[..., 16:32])
+    assert not lin.shares_input(x)
+    with pytest.raises(RuntimeError, match="never shared"):
+        lin.quantize_input(x)
+    with pytest.raises(RuntimeError, match="never shared"):
+        lin.forward_rows_q(None, None, 0, 16)
+    nocb = _w4a8_lin(64, 16, codebook=False)
+    with torch.no_grad():
+        nocb(x)
+    assert fake.named("w4a8_int8_linear")[-1]["codebook"] is None and nocb.weight_codebook is None
+
+
+@pytest.mark.parametrize("make", ["fp8", "w4a8"])
+def test_lora_attaches_to_fp8_and_w4a8_linears(monkeypatch, make):
+    """``lora.attach`` takes every H3QuantLinear; the hook covers ``forward``, ``forward_rows``
+    (and the fp8 ``forward_rows_q``) add the rows themselves, as on int8."""
+    from engine_h3 import lora as L
+
+    _fake_quant_kernels(monkeypatch)
+    root = torch.nn.Module()
+    root.lin = _fp8_lin(32, 48) if make == "fp8" else _w4a8_lin(32, 48)
+    g = torch.Generator().manual_seed(5)
+    a, b = torch.randn(4, 32, generator=g), torch.randn(48, 4, generator=g)
+    x = torch.randn(6, 32, generator=g).to(torch.bfloat16)
+    with torch.no_grad():
+        base = root.lin(x).clone()
+        (rep,) = L.attach(root, [(L.H3LoraFile("t", "ab", "F32", {"lin": (a, b, 1.0)}), 0.5)])
+        assert rep["pairs_applied"] == 1 and rep["skipped"] == []
+        full = root.lin(x)
+        assert not torch.equal(full, base)
+        want = base.clone()
+        L.apply(root.lin, x, want)
+        assert torch.equal(full, want)
+        xa = L.xa_for(root.lin, x)
+        assert torch.equal(root.lin.forward_rows(x, 16, 32, lora_xa=xa), full[:, 16:32])
+        if make == "fp8":
+            xq, xs = root.lin.quantize_input(x)
+            assert torch.equal(root.lin.forward_rows_q(xq, xs, 16, 32, lora_xa=xa), full[:, 16:32])
+    assert L.detach(root) == 1
+
+
+def _swap_block_linears(dit, make):
+    """Every block Linear of a loaded tiny DiT replaced by ``make(k, n, seed)`` (fp8 / w4a8, random)."""
+    seed = 100
+    for block in dit.blocks:
+        for parent, leaf in ((block.attn, "qkv_proj"), (block.attn, "out_proj"), (block.mlp, "fc1"), (block.mlp, "fc2")):
+            old = getattr(parent, leaf)
+            setattr(parent, leaf, make(old.in_features, old.out_features, seed))
+            seed += 1
+
+
+_BLOCK_FORMATS = {
+    "fp8_scaled": lambda k, n, s: _fp8_lin(k, n, seed=s),
+    "fp8_scaled_no_input_scale": lambda k, n, s: _fp8_lin(k, n, input_scale=False, seed=s),
+    "fp8_dequant": lambda k, n, s: _fp8_lin(k, n, mode="dequant", seed=s),
+    "fp8_official": lambda k, n, s: _fp8_lin(k, n, full=n == HID and k == FFN, seed=s),   # fc2 full precision
+    "w4a8": lambda k, n, s: _w4a8_lin(k, n, seed=s),
+    "w4a8_g4_no_codebook": lambda k, n, s: _w4a8_lin(k, n, g=4, codebook=False, seed=s),
+}
+
+
+@pytest.mark.parametrize("fmt", sorted(_BLOCK_FORMATS))
+@pytest.mark.parametrize("head_group, row_chunk", [(3, 16), (4, 4096)])
+def test_vram16_block_forward_matches_off_fp8_w4a8(monkeypatch, tmp_path, fmt, head_group, row_chunk):
+    """VRAM 16GB mode carries the fp8 / w4a8 Linears unchanged: the same bf16 block output as
+    the off path, bit for bit (kernels faked in float64). The fp8 scaled qkv shares its
+    quantized input; on the dequant path fc1 / fc2 are dequantized once per block, whatever
+    the number of row chunks, and nothing is kept afterwards."""
+    from engine_h3.fp8_linear import H3Fp8Linear
+    from engine_h3.lowvram import Vram16Plan
+
+    fake = _fake_quant_kernels(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path)
+    _swap_block_linears(dit, _BLOCK_FORMATS[fmt])
+    tokens, kw = _tiny_forward_inputs(dit)
+    t_emb = dit.adaln_embed(kw["t_unique"])
+    adaln_index = kw["time_index"] * 3 + kw["modality"]
+    block = dit.blocks[0]
+    with torch.no_grad():
+        want = block(tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+        fake.calls.clear()
+        block.vram16 = Vram16Plan(head_group=head_group, row_chunk=row_chunk)
+        got = block(tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+    assert torch.isfinite(want.float()).all() and got.dtype == want.dtype
+    assert torch.equal(got, want)
+    chunks = math.ceil(tokens.shape[0] / row_chunk)
+    if fmt.startswith("fp8"):
+        mlp = block.mlp
+        cached = [m for m in (mlp.fc1, mlp.fc2) if m.mode == "dequant"]
+        whole = [d for d in fake.named("dequantize_per_tensor_fp8")
+                 if any(d["x"] is m.weight for m in cached)]
+        assert len(whole) == len(cached)              # once per block, not once per chunk
+        assert all(m._cached is None for m in (mlp.fc1, mlp.fc2) if isinstance(m, H3Fp8Linear))
+        qkv = block.attn.qkv_proj
+        quantized = [q for q in fake.named("quantize_per_tensor_fp8") if q["x"].shape[1] == HID]
+        if qkv.mode == "scaled":
+            # qkv once, fc1 once per chunk (fc1 shares K = HID with qkv)
+            assert len(quantized) == 1 + (chunks if mlp.fc1.mode == "scaled" else 0)
+
+
+def test_require_cuda_quant_checks_each_format(monkeypatch):
+    import types
+
+    from engine_h3 import quant_linear as QL
+
+    caps = {"int8_linear", "quantize_per_tensor_fp8", "dequantize_per_tensor_fp8", "w4a8_int8_linear"}
+    disabled = []
+    fake = types.SimpleNamespace(
+        list_backends=lambda: {"cuda": {"available": True, "disabled": False, "capabilities": sorted(caps)}},
+        disable_backend=disabled.append,
+    )
+    monkeypatch.setattr(QL, "_ck", lambda: fake)
+    monkeypatch.setattr(QL, "_probe_shared_quant", lambda: None)
+    scaled_mm = [True]
+    monkeypatch.setattr(QL, "_has_scaled_mm_v2", lambda: scaled_mm[0])
+
+    assert "cuda" in QL.require_cuda_quant([FP8, W4A8, "int8_tensorwise"])
+    assert disabled == ["triton", "eager"]
+    for missing, formats in (("quantize_per_tensor_fp8", [FP8]), ("dequantize_per_tensor_fp8", [FP8]),
+                             ("w4a8_int8_linear", [W4A8]), ("int8_linear", [FP8]), ("int8_linear", [])):
+        caps.discard(missing)
+        with pytest.raises(RuntimeError, match=missing):
+            QL.require_cuda_quant(formats)
+        caps.add(missing)
+    caps.discard("w4a8_int8_linear")
+    QL.require_cuda_quant(["int8_tensorwise", FP8])   # w4a8 kernels needed only by a w4a8 model
+    QL.require_cuda_int8()                            # the int8-only alias
+    caps.add("w4a8_int8_linear")
+    scaled_mm[0] = False
+    with pytest.raises(RuntimeError, match="scaled_mm"):
+        QL.require_cuda_quant([FP8], fp8_mode="scaled")
+    QL.require_cuda_quant([FP8], fp8_mode="dequant")
+    QL.require_cuda_quant(["int8_tensorwise", W4A8], fp8_mode="scaled")   # no fp8 layer: not needed
+
+
+def test_fp8_mode_and_w4a8_capability_by_gpu_generation():
+    from engine_h3.quant_linear import fp8_mode_for, require_w4a8_capability
+
+    assert [fp8_mode_for(c) for c in ((7, 5), (8, 0), (8, 6), (8, 9), (9, 0), (12, 0))] == [
+        "dequant", "dequant", "dequant", "scaled", "scaled", "scaled"]
+    for ok in ((8, 0), (8, 6), (12, 0)):
+        require_w4a8_capability(ok)
+    with pytest.raises(RuntimeError, match="7.5"):
+        require_w4a8_capability((7, 5))
+
+
+def _tiny_fp8_dit_tensors(*, full_fc2=True):
+    """The tiny DiT with every block Linear in fp8 (the official layout: fc2 full precision)."""
+    t = _tiny_dit_tensors(layers=2, refiner=1, grid=1025, rank=8)
+    g = torch.Generator().manual_seed(8)
+    for name in [n for n in t if n.endswith(".comfy_quant")]:
+        layer = name[: -len(".comfy_quant")]
+        w = t[f"{layer}.weight"]
+        t[f"{layer}.weight"] = torch.randn(w.shape, generator=g).to(torch.float8_e4m3fn)
+        t[f"{layer}.weight_scale"] = torch.tensor(0.05)
+        mark = {"format": FP8}
+        if full_fc2 and layer.endswith("fc2"):
+            mark["full_precision_matrix_mult"] = True
+        else:
+            t[f"{layer}.input_scale"] = torch.tensor(0.02)
+        t[name] = torch.frombuffer(bytearray(json.dumps(mark).encode()), dtype=torch.uint8)
+    return t
+
+
+def test_build_dit_streams_fp8_on_the_load_time_mode(tmp_path):
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3.fp8_linear import H3Fp8Linear
+    from engine_h3.sft_load import meta_tensor_names
+
+    path = tmp_path / "fp8.safetensors"
+    tensors = _tiny_fp8_dit_tensors()
+    _write_sft(path, tensors)
+    for mode in ("scaled", "dequant"):
+        pipe = P.H3Pipeline(P.H3Paths(str(path), "te", "vv", "av", "tok"), P.H3LoadOptions(),
+                            device="cpu", progress=lambda *a: None, log=lambda m: None)
+        pipe._fp8_mode = mode
+        entry = {}
+        dit, cfg = pipe._build_dit(entry)
+        assert entry["dit"]["quant_linears"] == 8 and meta_tensor_names(dit) == []
+        qkv, fc2 = dit.blocks[1].attn.qkv_proj, dit.blocks[1].mlp.fc2
+        assert type(qkv) is H3Fp8Linear and qkv.mode == mode and fc2.mode == "dequant"
+        assert qkv.weight.dtype == torch.float8_e4m3fn and qkv.input_scale.dtype == torch.float32
+        assert torch.equal(qkv.weight.view(torch.uint8), tensors["blocks.1.attn.qkv_proj.weight"].view(torch.uint8))
+        assert fc2.input_scale is None and float(fc2.weight_scale) == pytest.approx(0.05)
+
+
+@pytest.mark.parametrize("codebook", [True, False])
+def test_build_dit_streams_w4a8_packed_weights(tmp_path, codebook):
+    """A tiny w4a8 DiT (K = 256 everywhere): the packed [N, K/2] weight, the F8 s_rel and the
+    F32 s_channel / codebook assign-load with their file dtypes, through normalize_dtypes."""
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3.sft_load import meta_tensor_names
+    from engine_h3.w4a8_linear import H3W4A8Linear
+
+    hid, ffn, g = 256, 256, 8
+    t = _tiny_dit_tensors(layers=2, refiner=1, grid=1025, rank=8, heads=2, hid=hid, ffn=ffn)
+    gen = torch.Generator().manual_seed(9)
+    for name in [n for n in t if n.endswith(".comfy_quant")]:
+        layer = name[: -len(".comfy_quant")]
+        n, k = t[f"{layer}.weight"].shape
+        del t[f"{layer}.weight_scale"]
+        t[f"{layer}.weight"] = torch.randint(-128, 128, (n, k // 2), generator=gen, dtype=torch.int8)
+        t[f"{layer}.weight_s_rel"] = (torch.rand(n, k // g, generator=gen) + 0.5).to(torch.float8_e4m3fn)
+        t[f"{layer}.weight_s_channel"] = torch.rand(n, generator=gen)
+        if codebook:
+            t[f"{layer}.weight_codebook"] = torch.linspace(-1.0, 1.0, 16)
+        mark = {"format": W4A8, "group_size": g, "convrot": True, "convrot_groupsize": 256}
+        t[name] = torch.frombuffer(bytearray(json.dumps(mark).encode()), dtype=torch.uint8)
+    path = tmp_path / "w4a8.safetensors"
+    _write_sft(path, t)
+    pipe = P.H3Pipeline(P.H3Paths(str(path), "te", "vv", "av", "tok"), P.H3LoadOptions(),
+                        device="cpu", progress=lambda *a: None, log=lambda m: None)
+    entry = {}
+    dit, cfg = pipe._build_dit(entry)
+    assert entry["dit"]["quant_linears"] == 8 and meta_tensor_names(dit) == []
+    fc1 = dit.blocks[1].mlp.fc1
+    assert type(fc1) is H3W4A8Linear and fc1.spec.group_size == g
+    assert fc1.weight.dtype == torch.int8 and tuple(fc1.weight.shape) == (2 * ffn, hid // 2)
+    assert torch.equal(fc1.weight, t["blocks.1.mlp.fc1.weight"])
+    assert fc1.weight_s_rel.dtype == torch.float8_e4m3fn and fc1.weight_s_channel.dtype == torch.float32
+    assert torch.equal(fc1.weight_s_rel.view(torch.uint8), t["blocks.1.mlp.fc1.weight_s_rel"].view(torch.uint8))
+    if codebook:
+        assert fc1.weight_codebook.dtype == torch.float32 and tuple(fc1.weight_codebook.shape) == (16,)
+    else:
+        assert fc1.weight_codebook is None and "weight_codebook" not in fc1.state_dict()
+
+
+def _load_report(monkeypatch, tmp_path, quant, capability, *, scaled_mm=True):
+    """``H3Pipeline.load`` with the inspections, the GPU queries and the backend checks faked."""
+    from engine_h3 import pipeline_h3 as P
+    from engine_h3 import quant_linear as QL
+
+    for name in ("t", "te", "vv", "av"):
+        (tmp_path / name).write_bytes(b"x")
+    (tmp_path / "tok").mkdir(exist_ok=True)
+    cfg = _tiny_cfg(quant=quant)
+    te = h3_format.H3TEConfig(num_layers=50, quant={}, has_visual=False, metadata={})
+    monkeypatch.setattr(h3_format, "inspect_h3_dit", lambda p: (None, cfg))
+    monkeypatch.setattr(h3_format, "inspect_h3_te", lambda p: (None, te))
+    monkeypatch.setattr(P.sft_quant_format, "read_header", lambda p: types_ns(tensors={}))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device=None: capability)
+    seen = {}
+
+    def require(formats, *, fp8_mode="scaled"):
+        seen.update(formats=list(formats), fp8_mode=fp8_mode)
+        return {"cuda": {"available": True, "disabled": False,
+                         "capabilities": ["int8_linear", "w4a8_int8_linear", "quantize_per_tensor_fp8"]}}
+
+    monkeypatch.setattr(QL, "require_cuda_quant", require)
+    monkeypatch.setattr(QL, "shared_quant_status", lambda: (False, "faked"))
+    monkeypatch.setattr(P, "require_fp32_matmul", lambda: None)
+    monkeypatch.setattr(P, "pin_cublas_workspace", lambda device: None)
+    logs = []
+    pipe = P.H3Pipeline(P.H3Paths(*(str(tmp_path / n) for n in ("t", "te", "vv", "av", "tok"))), P.H3LoadOptions(),
+                        device="cpu", progress=lambda *a: None, log=logs.append)
+    return pipe, pipe.load(), seen, logs
+
+
+def types_ns(**kw):
+    import types
+
+    return types.SimpleNamespace(**kw)
+
+
+def test_load_report_counts_each_format_and_records_the_fp8_mode(monkeypatch, tmp_path):
+    quant = {
+        "blocks.0.attn.qkv_proj": h3_format.QuantSpec("int8_tensorwise", True, 256),
+        "blocks.0.attn.out_proj": _fp8_spec(),
+        "blocks.0.mlp.fc1": _fp8_spec(input_scale=False),
+        "blocks.0.mlp.fc2": _fp8_spec(input_scale=False, full=True),
+        "blocks.1.mlp.fc2": _w4a8_spec(8),
+    }
+    pipe, report, seen, logs = _load_report(monkeypatch, tmp_path, quant, (8, 9))
+    dit = report["dit"]
+    assert "int8_layers" not in dit and dit["quant_layers"] == 5
+    assert dit["quant_layers_by_format"] == {W4A8: 1, FP8: 3, "int8_tensorwise": 1}
+    assert dit["fp8_mode"] == "scaled" and pipe._fp8_mode == "scaled"
+    assert seen == {"formats": [W4A8, FP8, "int8_tensorwise"], "fp8_mode": "scaled"}
+    assert report["quant_backends"]["cuda"] == {"available": True, "disabled": False, "int8_linear": True,
+                                                "w4a8_int8_linear": True, "quantize_per_tensor_fp8": True}
+    warn = [m for m in logs if "input_scale" in m]
+    assert len(warn) == 1 and "1 layer(s)" in warn[0]   # fc1 only: fc2 is full precision
+
+    pipe, report, seen, logs = _load_report(monkeypatch, tmp_path, quant, (8, 6))
+    assert report["dit"]["fp8_mode"] == "dequant" and seen["fp8_mode"] == "dequant"
+    assert not [m for m in logs if "WARNING" in m and "input_scale" in m]   # the dequant path needs no input scale
+
+    with pytest.raises(RuntimeError, match="w4a8"):
+        _load_report(monkeypatch, tmp_path, quant, (7, 5))   # RTX 20 series: w4a8 refused at load
+    no_w4a8 = {k: v for k, v in quant.items() if v.format != W4A8}
+    _pipe, report, _seen, _logs = _load_report(monkeypatch, tmp_path, no_w4a8, (7, 5))
+    assert report["dit"]["fp8_mode"] == "dequant"
+    int8_only = {"blocks.0.attn.qkv_proj": h3_format.QuantSpec("int8_tensorwise", True, 256)}
+    _pipe, report, _seen, _logs = _load_report(monkeypatch, tmp_path, int8_only, (8, 9))
+    assert report["dit"]["fp8_mode"] is None and report["dit"]["quant_layers_by_format"] == {"int8_tensorwise": 1}
+
+
+# GPU (opt-in): our Linears against comfy-kitchen's QuantizedTensor path, bit for bit
+# (the small version of the spike's S1 ① ② ④ ⑤; 記録簿 §210).
+
+def _gpu_quant_ready():
+    from engine_h3.quant_linear import require_cuda_quant
+
+    require_cuda_quant(["int8_tensorwise", FP8, W4A8], fp8_mode="scaled")
+    return torch.device("cuda")
+
+
+@_GPU
+@pytest.mark.parametrize("mode", ["scaled", "dequant"])
+@pytest.mark.parametrize("m", [4096, 3977])
+def test_gpu_fp8_matches_quantized_tensor(mode, m):
+    import torch.nn.functional as F
+    from comfy_kitchen.tensor import QuantizedTensor, TensorCoreFP8Layout
+
+    dev = _gpu_quant_ready()
+    if mode == "scaled" and torch.cuda.get_device_capability(dev) < (8, 9):
+        pytest.skip("the scaled fp8 path needs compute capability 8.9")
+    lin = _fp8_lin(5376, 7168, mode=mode, device=dev)
+    lin.input_scale = torch.tensor(0.05, dtype=torch.float32, device=dev)
+    lin.weight_scale = torch.tensor(0.002, dtype=torch.float32, device=dev)
+    x = torch.randn(m, 5376, generator=torch.Generator().manual_seed(2)).to(dev, torch.bfloat16)
+    wq = QuantizedTensor(lin.weight, "TensorCoreFP8Layout", TensorCoreFP8Layout.Params(
+        scale=lin.weight_scale, orig_dtype=torch.bfloat16, orig_shape=tuple(lin.weight.shape)))
+    with torch.no_grad():
+        got = lin(x)
+        if mode == "scaled":
+            ref = F.linear(QuantizedTensor.from_float(x, "TensorCoreFP8Layout", scale=lin.input_scale), wq)
+            xq, xs = lin.quantize_input(x)
+            for n0 in range(0, 7168, 1024):                       # ④ shared input == forward_rows
+                assert torch.equal(lin.forward_rows_q(xq, xs, n0, n0 + 1024), lin.forward_rows(x, n0, n0 + 1024))
+        else:
+            ref = F.linear(x, wq.dequantize())
+            with lin.dequant_cache():                              # ⑤ cached == uncached
+                assert torch.equal(lin(x), ref) and torch.equal(lin(x), ref)
+    assert torch.equal(got, ref)                                   # ①
+
+
+@_GPU
+@pytest.mark.parametrize("g", [16, 8, 4])
+@pytest.mark.parametrize("codebook", [True, False])
+def test_gpu_w4a8_matches_quantized_tensor(g, codebook):
+    import torch.nn.functional as F
+    from comfy_kitchen.tensor import AsymW4A8Int8Layout, QuantizedTensor
+
+    dev = _gpu_quant_ready()
+    if torch.cuda.get_device_capability(dev) < (8, 0):
+        pytest.skip("the w4a8 kernels need compute capability 8.0")
+    n, k = 3 * 7168, 5376
+    lin = _w4a8_lin(k, n, g=g, codebook=codebook, device=dev)
+    x = torch.randn(4096, k, generator=torch.Generator().manual_seed(3)).to(dev, torch.bfloat16)
+    params = AsymW4A8Int8Layout.Params(
+        scale=lin.weight_s_rel, s_channel=lin.weight_s_channel, codebook=lin.weight_codebook,
+        orig_dtype=torch.bfloat16, orig_shape=(n, k), group_size=g, convrot_groupsize=256)
+    with torch.no_grad():
+        got = lin(x)
+        ref = F.linear(x, QuantizedTensor(lin.weight, "AsymW4A8Int8Layout", params))
+        joined = torch.cat([lin.forward_rows(x, n0, n0 + 1024) for n0 in range(0, n, 1024)], dim=1)
+    assert torch.equal(got, ref)                                   # ①
+    assert torch.equal(joined, got)                                # ② 21 head-group slices

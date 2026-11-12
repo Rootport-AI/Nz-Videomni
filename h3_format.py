@@ -14,37 +14,67 @@ SPECIFICATION (R2 report, section H); no ComfyUI code is copied:
   ``{prefix}audio_patch_proj.weight``; the prefix is one of ``H3_PREFIXES``;
 * the configuration comes from tensor shapes (layer counts, widths, heads,
   the pruned AdaLN table's grid size G and rank R);
-* a layer's ``comfy_quant`` is read for ``format`` / ``convrot`` /
-  ``convrot_groupsize`` only (top level or under ``params``); every other key
-  is ignored. Only ``int8_tensorwise`` is accepted (:data:`ACCEPTED_FORMATS`).
+* a layer is quantized when it carries a quantization MARKER, whatever its
+  weight's dtype (a w4a8 weight is I8 like an int8 one). The marker comes from
+  ``__metadata__._quantization_metadata.layers`` (keys are the tensor names
+  as is) when the layer is listed there, else from ``<layer>.comfy_quant``:
+  ComfyUI's ``convert_old_quants`` writes the metadata over the per-layer
+  markers, and ``sft_quant_format`` resolves them in the same order. Both
+  carriers are not compared (ComfyUI does not either);
+* a marker is read for ``format`` / ``convrot`` / ``convrot_groupsize`` /
+  ``group_size`` / ``full_precision_matrix_mult`` (top level or under
+  ``params``); every other key is ignored. The caller names the formats it
+  accepts: the DiT takes :data:`DIT_FORMATS` (int8, fp8, w4a8), the text
+  encoder :data:`TE_FORMATS` (int8 only).
 
-What this module refuses, each with a Japanese reason the UI can show as is:
-not H3 / the non-pruned DiT (no ``adaln_t_table``; it needs the time embedder
+What this module refuses, with a Japanese message the UI can show as is (a
+file that is not an H3 DiT gets the bare refusal, everything else a reason):
+the non-pruned DiT (no ``adaln_t_table``; it needs the time embedder
 this engine does not build yet) / a required tensor missing / a shape that
-contradicts the others / an int8 layer without its scale or marker.
+contradicts the others / a quantized layer whose tensors do not match its
+format exactly / an I8 or F8 weight without a marker / a float layer with a
+stray ``weight_scale``.
 Names this module does not know are returned in ``unknown`` so the loader can
 log them and drop them, instead of refusing a file over an extra tensor.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
 import sft_quant_format
 from sft_quant_format import Header, QuantFormatError, TensorInfo, read_header  # noqa: F401 -- re-exported
 
-#: Accepted ``comfy_quant`` formats. int8 is the only one the engine's
-#: ``H3Int8Linear`` (comfy_kitchen.int8_linear) can run.
-ACCEPTED_FORMATS = ("int8_tensorwise",)
+#: The marker formats, as ComfyUI spells them.
+INT8 = "int8_tensorwise"        # engine_h3.quant_linear.H3Int8Linear (comfy_kitchen.int8_linear)
+FP8 = "float8_e4m3fn"           # engine_h3.fp8_linear.H3Fp8Linear (per-tensor scale)
+W4A8 = "asym_w4a8_int8"         # engine_h3.w4a8_linear.H3W4A8Linear (comfy_kitchen.w4a8_int8_linear)
+#: What each inspection accepts (台帳 §1-283; the text encoder stays int8).
+DIT_FORMATS = (INT8, FP8, W4A8)
+TE_FORMATS = (INT8,)
 DEFAULT_CONVROT_GROUPSIZE = 256
+#: w4a8: ComfyUI's default group size, and the only ConvRot group it runs.
+W4A8_DEFAULT_GROUP_SIZE = 16
+W4A8_CONVROT_GROUPSIZE = 256
+
+#: The tensors a quantized layer may carry besides ``weight``, per format.
+_AUX = {
+    INT8: ("weight_scale", "comfy_quant"),
+    FP8: ("weight_scale", "input_scale", "comfy_quant"),
+    W4A8: ("weight_s_rel", "weight_s_channel", "weight_codebook", "comfy_quant"),
+}
+#: Any of these on a layer without a marker is a stray quantization tensor.
+_STRAY_AUX = tuple(sorted({leaf for leaves in _AUX.values() for leaf in leaves} - {"comfy_quant"}))
 
 H3_PREFIXES = ("", "model.diffusion_model.", "model.model.", "net.")
 
-_NG = "MiniMax H3 のファイルとして使えません: "
+_NG_BARE = "MiniMax H3 の重みファイルとして使えません"
+_NG = _NG_BARE + ": "
 
 
 class H3FormatError(ValueError):
@@ -53,9 +83,13 @@ class H3FormatError(ValueError):
 
 @dataclass(frozen=True)
 class QuantSpec:
-    format: str                 # "int8_tensorwise" only
-    convrot: bool
-    convrot_groupsize: int      # 256 by default; other values pass through to int8_linear
+    format: str                 # INT8 / FP8 / W4A8
+    convrot: bool               # int8: from the marker; fp8: False; w4a8: True
+    convrot_groupsize: int      # 256 by default; int8 passes other values through to int8_linear
+    group_size: int | None = None   # w4a8: the weight group G (K // G scales per row); else None
+    full_precision: bool = False    # fp8: full_precision_matrix_mult (the bf16 path); else False
+    has_input_scale: bool = False   # fp8: the file has <layer>.input_scale
+    has_codebook: bool = False      # w4a8: the file has <layer>.weight_codebook
 
 
 def check_model_paths(files: dict[str, str], dirs: dict[str, str]) -> list[str]:
@@ -83,19 +117,33 @@ def check_model_paths(files: dict[str, str], dirs: dict[str, str]) -> list[str]:
     return lines
 
 
-def parse_comfy_quant(raw: bytes) -> QuantSpec:
-    """One layer's ``comfy_quant`` bytes -> :class:`QuantSpec`.
+def parse_comfy_quant(raw: bytes, *, accepted: tuple[str, ...] = TE_FORMATS) -> QuantSpec:
+    """One layer's ``comfy_quant`` bytes -> :class:`QuantSpec` (marker fields only).
 
-    Reads ``format`` / ``convrot`` / ``convrot_groupsize`` from the top level or
-    from a nested ``params`` (the top level wins, as in ComfyUI); everything
-    else (``per_row``, ``orig_dtype``, ``full_precision_matrix_mult`` ...) is
-    ignored. A group size other than 256 is accepted and handed to
-    ``int8_linear`` unchanged (it runs on the non-fused path there).
+    ``accepted``: the formats the caller can run (:data:`DIT_FORMATS` /
+    :data:`TE_FORMATS`); any other ``format`` is refused. See
+    :func:`parse_marker` for what is read.
     """
     try:
         doc = json.loads(bytes(raw).decode("utf-8"))
     except Exception as exc:  # noqa: BLE001 -- any decode failure is a format error
         raise H3FormatError(_NG + f"量子化の印（comfy_quant）が JSON として読めません（{exc}）") from exc
+    return parse_marker(doc, accepted=accepted)
+
+
+def parse_marker(doc, *, accepted: tuple[str, ...]) -> QuantSpec:
+    """One layer's quantization marker (a JSON object) -> :class:`QuantSpec`.
+
+    Reads ``format`` / ``convrot`` / ``convrot_groupsize`` / ``group_size``
+    (w4a8) from the top level or from a nested ``params`` (the top level wins,
+    as in ComfyUI), and ``full_precision_matrix_mult`` (fp8; w4a8, to refuse it)
+    from the top level only, as ComfyUI reads it. w4a8's ``convrot`` is not
+    read: it is always rotated. everything else
+    (``per_row``, ``orig_dtype`` ...) is ignored. An int8 group size other than
+    256 is accepted and handed to ``int8_linear`` unchanged (it runs on the
+    non-fused path there). The tensor flags (``has_input_scale`` /
+    ``has_codebook``) are filled by the inspection, which sees the tensors.
+    """
     if not isinstance(doc, dict):
         raise H3FormatError(_NG + "量子化の印（comfy_quant）が JSON オブジェクトではありません")
     params = doc.get("params", {})
@@ -103,17 +151,38 @@ def parse_comfy_quant(raw: bytes) -> QuantSpec:
         params = {}
     merged = {**params, **doc}
     fmt = merged.get("format")
-    if fmt not in ACCEPTED_FORMATS:
+    if fmt not in accepted:
         raise H3FormatError(
-            _NG + f"量子化の形式 format={fmt!r} には対応していません（対応: {'・'.join(ACCEPTED_FORMATS)}）"
+            _NG + f"量子化の形式 format={fmt!r} には対応していません（対応: {'・'.join(accepted)}）"
         )
-    convrot = merged.get("convrot", False)
+    # w4a8 is always rotated: ComfyUI never reads the key for it (comfy-kitchen's layout has no switch).
+    convrot = True if fmt == W4A8 else merged.get("convrot", False)
     if not isinstance(convrot, bool):
         raise H3FormatError(_NG + f"量子化の印の convrot={convrot!r} が真偽値ではありません")
     groupsize = merged.get("convrot_groupsize", DEFAULT_CONVROT_GROUPSIZE)
-    if isinstance(groupsize, bool) or not isinstance(groupsize, int) or groupsize <= 0:
+    if not _positive_int(groupsize):
         raise H3FormatError(_NG + f"量子化の印の convrot_groupsize={groupsize!r} が正の整数ではありません")
-    return QuantSpec(format=str(fmt), convrot=convrot, convrot_groupsize=int(groupsize))
+    group_size = None
+    if fmt == W4A8:
+        group_size = merged.get("group_size", W4A8_DEFAULT_GROUP_SIZE)
+        if not _positive_int(group_size):
+            raise H3FormatError(_NG + f"量子化の印の group_size={group_size!r} が正の整数ではありません")
+    full = False
+    if fmt in (FP8, W4A8):  # int8 ignores the key, as before
+        # the top-level key only, as ComfyUI reads it (not from ``params``)
+        full = doc.get("full_precision_matrix_mult", False)
+        if not isinstance(full, bool):
+            raise H3FormatError(
+                _NG + f"量子化の印の full_precision_matrix_mult={full!r} が真偽値ではありません"
+            )
+    return QuantSpec(
+        format=str(fmt), convrot=convrot, convrot_groupsize=int(groupsize),
+        group_size=None if group_size is None else int(group_size), full_precision=full,
+    )
+
+
+def _positive_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v > 0
 
 
 # --------------------------------------------------------------------------- #
@@ -157,7 +226,7 @@ class H3DiTConfig:
     adaln_grid: int | None      # adaln_t_table.shape[0] (1025)
     adaln_rank: int | None      # adaln_t_table.shape[1] (8)
     rope_inv_freq_len: int      # rope.inv_freq.shape[0] = 16
-    quant: dict[str, QuantSpec]  # prefix-stripped layer ("blocks.0.attn.qkv_proj") -> spec
+    quant: dict[str, QuantSpec]  # prefix-stripped layer ("blocks.0.attn.qkv_proj") -> spec (int8 / fp8 / w4a8)
     unknown: tuple[str, ...]    # names this module does not know (prefix-stripped; outside-prefix names as is)
 
 
@@ -234,60 +303,200 @@ def _expect(cond: bool, msg: str) -> None:
 
 
 def _quant_layers(
-    path, header: Header, t: dict[str, TensorInfo], full_name: Callable[[str], str]
+    path, header: Header, t: dict[str, TensorInfo], prefix: str, accepted: tuple[str, ...]
 ) -> dict[str, QuantSpec]:
-    """Every layer whose ``.weight`` is I8 -> its spec, with the scale and marker checked.
+    """Every layer that carries a quantization marker -> its spec, every tensor checked.
 
-    ``t`` is keyed by the (prefix-stripped) names; ``full_name`` maps such a
-    name back to the key in the file. Reads only the ``comfy_quant`` bytes,
-    through ONE file handle (seek + read; never a memory map).
+    ``t`` is keyed by the (prefix-stripped) names. A layer is quantized by its
+    MARKER, not by its weight's dtype (:func:`_read_markers`); each format's
+    tensors are then checked exactly (:data:`_CHECKS`). An I8 / F8 weight
+    without a marker, and a quantization tensor on a layer without one, are
+    refused: such a layer would load as a bf16 Linear holding raw codes.
     """
-    layers = sorted(
-        n[: -len(".weight")] for n, info in t.items() if n.endswith(".weight") and info.dtype == "I8"
+    markers = _read_markers(path, header, t, prefix, accepted)
+    _refuse_unmarked(t, markers)
+    return {layer: _CHECKS[markers[layer].format](layer, markers[layer], t) for layer in sorted(markers)}
+
+
+def _read_markers(
+    path, header: Header, t: dict[str, TensorInfo], prefix: str, accepted: tuple[str, ...]
+) -> dict[str, QuantSpec]:
+    """Layer (prefix-stripped) -> the marker's :class:`QuantSpec`, for every layer with a ``.weight``.
+
+    ``__metadata__._quantization_metadata.layers`` first (its keys are the
+    tensor names as is, prefix included), then ``<layer>.comfy_quant`` for the
+    layers it does not list (ComfyUI's ``convert_old_quants`` writes the
+    metadata over the per-layer markers). A marker of a layer this file has no
+    ``.weight`` for is ignored, as ComfyUI ignores it. The ``comfy_quant``
+    bytes are read through ONE file handle (seek + read; never a memory map).
+    """
+    found: dict[str, QuantSpec] = {}
+    table = sft_quant_format.metadata_layers(header.metadata.get("_quantization_metadata"))
+    for key, doc in table.items():
+        if not key.startswith(prefix):
+            continue
+        layer = key[len(prefix):]
+        if f"{layer}.weight" not in t:
+            continue
+        try:
+            found[layer] = parse_marker(doc, accepted=accepted)
+        except H3FormatError as exc:
+            raise H3FormatError(f"{exc}（__metadata__._quantization_metadata の層 '{layer}'）") from exc
+    tensor_layers = sorted(
+        layer for layer in (n[: -len(".comfy_quant")] for n in t if n.endswith(".comfy_quant"))
+        if layer not in found and f"{layer}.weight" in t
     )
-    quantized = set(layers)
-    stray = sorted(
-        n for n in t
-        if n.endswith((".weight_scale", ".comfy_quant"))
-        and n.rsplit(".", 1)[0] not in quantized
-        and f"{n.rsplit('.', 1)[0]}.weight" in t
-    )
-    if stray:
-        raise H3FormatError(
-            _NG + f"'{stray[0]}' がありますが、その層の重みは int8 ではありません"
-            "（int8_tensorwise 以外の量子化には対応していません）"
-        )
-    specs: dict[str, QuantSpec] = {}
-    if not layers:
-        return specs
+    if not tensor_layers:
+        return found
     with Path(path).open("rb") as fh:
-        for layer in layers:
-            w = _shape(t, f"{layer}.weight")
-            scale, marker = f"{layer}.weight_scale", f"{layer}.comfy_quant"
-            if scale not in t:
-                raise H3FormatError(_NG + f"int8 の層 '{layer}' に weight_scale がありません")
-            if marker not in t:
-                old = (
-                    "（旧式の __metadata__._quantization_metadata には対応していません）"
-                    if "_quantization_metadata" in header.metadata else ""
-                )
-                raise H3FormatError(_NG + f"int8 の層 '{layer}' に量子化の印（comfy_quant）がありません{old}")
-            sinfo = t[scale]
-            _expect(len(w) == 2, f"'{layer}.weight' は 2 次元であるべきです（{list(w)}）")
-            _expect(
-                sinfo.dtype == "F32" and tuple(sinfo.shape) == (w[0], 1),
-                f"'{scale}' は F32 [{w[0]}, 1] であるべきです（{sinfo.dtype} {list(sinfo.shape)}）",
-            )
-            begin, end = header.tensors[full_name(marker)].data_offsets
+        for layer in tensor_layers:
+            marker = f"{layer}.comfy_quant"
+            begin, end = header.tensors[prefix + marker].data_offsets
             fh.seek(header.data_base + begin)
             raw = fh.read(end - begin)
             if len(raw) != end - begin:
                 raise H3FormatError(_NG + f"'{marker}' の読み取りが途中で終わりました")
             try:
-                specs[layer] = parse_comfy_quant(raw)
+                found[layer] = parse_comfy_quant(raw, accepted=accepted)
             except H3FormatError as exc:
                 raise H3FormatError(f"{exc}（層 '{layer}'）") from exc
-    return specs
+    return found
+
+
+def _refuse_unmarked(t: dict[str, TensorInfo], markers: dict[str, QuantSpec]) -> None:
+    """An I8 / F8 weight, or a quantization tensor, on a layer without a marker (weights first)."""
+    unmarked = sorted(n for n in t if n.rpartition(".")[0] not in markers)
+    for name in unmarked:
+        layer, _, leaf = name.rpartition(".")
+        dtype = t[name].dtype
+        if leaf == "weight" and (dtype == "I8" or dtype.startswith("F8_")):
+            kind = "int8 の層" if dtype == "I8" else f"{dtype} の重みの層"
+            raise H3FormatError(
+                _NG + f"{kind} '{layer}' に量子化の印がありません"
+                "（comfy_quant も __metadata__._quantization_metadata もありません）"
+            )
+    for name in unmarked:
+        layer, _, leaf = name.rpartition(".")
+        if leaf in _STRAY_AUX and f"{layer}.weight" in t:
+            raise H3FormatError(
+                _NG + f"'{name}' がありますが、その層には量子化の印がありません"
+                f"（重みは {t[f'{layer}.weight'].dtype}。量子化の形式が分かりません）"
+            )
+
+
+def _leaves(t: dict[str, TensorInfo], layer: str) -> set[str]:
+    head = layer + "."
+    return {n[len(head):] for n in t if n.startswith(head) and "." not in n[len(head):]}
+
+
+def _layer_error(layer: str, fmt: str, msg: str) -> H3FormatError:
+    return H3FormatError(_NG + f"{fmt} の層 '{layer}' {msg}")
+
+
+def _expect_weight(layer: str, t: dict[str, TensorInfo], fmt: str, dtype: str) -> TensorInfo:
+    """The layer's ``.weight``: ``dtype`` and 2-D, else refused."""
+    w = t[f"{layer}.weight"]
+    if w.dtype != dtype:
+        raise _layer_error(layer, fmt, f"の重みが {dtype} ではありません（{w.dtype}）")
+    _expect(len(w.shape) == 2, f"'{layer}.weight' は 2 次元であるべきです（{list(w.shape)}）")
+    return w
+
+
+def _check_int8(layer: str, spec: QuantSpec, t: dict[str, TensorInfo]) -> QuantSpec:
+    """int8_tensorwise: I8 ``[N, K]`` weight, F32 ``[N, 1]`` ``weight_scale``."""
+    w = _expect_weight(layer, t, "int8", "I8")
+    scale = f"{layer}.weight_scale"
+    if scale not in t:
+        raise _layer_error(layer, "int8", "に weight_scale がありません")
+    _expect_tensor(scale, t, "F32", (w.shape[0], 1))
+    return spec
+
+
+def _check_fp8(layer: str, spec: QuantSpec, t: dict[str, TensorInfo]) -> QuantSpec:
+    """float8_e4m3fn: F8_E4M3 ``[N, K]`` weight, F32 0-dim ``weight_scale``,
+    optional F32 0-dim ``input_scale``; no ConvRot."""
+    _expect_weight(layer, t, "fp8", "F8_E4M3")
+    if spec.convrot:
+        raise _layer_error(layer, "fp8", "に convrot=true の印があります（回転つきの fp8 には対応していません）")
+    scale = f"{layer}.weight_scale"
+    if scale not in t:
+        raise _layer_error(layer, "fp8", "に weight_scale がありません")
+    _expect_tensor(scale, t, "F32", ())
+    inp = f"{layer}.input_scale"
+    if inp in t:
+        _expect_tensor(inp, t, "F32", ())
+    return dataclasses.replace(spec, has_input_scale=inp in t)
+
+
+def _check_w4a8(layer: str, spec: QuantSpec, t: dict[str, TensorInfo]) -> QuantSpec:
+    """asym_w4a8_int8: I8 ``[N, K/2]`` packed weight, F8_E4M3 ``[N, K/G]``
+    ``weight_s_rel``, F32 ``[N]`` ``weight_s_channel``, optional F32 ``[16]``
+    ``weight_codebook``; ConvRot in groups of 256.
+
+    The group-size condition is comfy-kitchen's ``AsymW4A8Int8Layout.Params``
+    (``tensor/w4a8_int8.py``), copied term by term. The asymmetric variant
+    (``*_correction``) is not taken.
+    """
+    w = _expect_weight(layer, t, "w4a8", "I8")
+    if spec.convrot_groupsize != W4A8_CONVROT_GROUPSIZE:
+        raise _layer_error(
+            layer, "w4a8",
+            f"の convrot_groupsize={spec.convrot_groupsize} には対応していません（対応: {W4A8_CONVROT_GROUPSIZE}）",
+        )
+    if spec.full_precision:
+        raise _layer_error(layer, "w4a8", "に full_precision_matrix_mult の印があります（w4a8 では対応していません）")
+    correction = sorted(leaf for leaf in _leaves(t, layer) if leaf.endswith("_correction"))
+    if correction:
+        raise _layer_error(
+            layer, "w4a8", f"に {correction[0]} があります（非対称の補正つきの w4a8 には対応していません）"
+        )
+    n, k, g = w.shape[0], 2 * w.shape[1], spec.group_size
+    if (
+        g < 4
+        or k % 16 != 0
+        or k % g != 0
+        or k % W4A8_CONVROT_GROUPSIZE != 0
+        or (16 % g != 0 and g % 16 != 0)
+    ):
+        raise _layer_error(
+            layer, "w4a8",
+            f"の入力幅 K={k} と group_size={g} の組み合わせには対応していません"
+            f"（K は 16・group_size・{W4A8_CONVROT_GROUPSIZE} の倍数、group_size は 4 以上で 16 の約数か倍数）",
+        )
+    _expect_tensor(f"{layer}.weight_s_rel", t, "F8_E4M3", (n, k // g))
+    _expect_tensor(f"{layer}.weight_s_channel", t, "F32", (n,))
+    codebook = f"{layer}.weight_codebook"
+    if codebook in t:
+        _expect_tensor(codebook, t, "F32", (16,))
+    return dataclasses.replace(spec, has_codebook=codebook in t)
+
+
+_CHECKS = {INT8: _check_int8, FP8: _check_fp8, W4A8: _check_w4a8}
+
+
+def _expect_tensor(name: str, t: dict[str, TensorInfo], dtype: str, shape: tuple[int, ...]) -> None:
+    info = t.get(name)
+    if info is None:
+        raise H3FormatError(_NG + f"'{name}' がありません")
+    _expect(
+        info.dtype == dtype and tuple(info.shape) == shape,
+        f"'{name}' は {dtype} {list(shape)} であるべきです（{info.dtype} {list(info.shape)}）",
+    )
+
+
+def _logical_shapes(t: dict[str, TensorInfo], quant: dict[str, QuantSpec]) -> dict[str, TensorInfo]:
+    """``t`` with each w4a8 weight at its logical ``[N, K]`` (it is stored packed, ``[N, K/2]``)."""
+    out = dict(t)
+    for layer, spec in quant.items():
+        if spec.format == W4A8:
+            info = t[f"{layer}.weight"]
+            out[f"{layer}.weight"] = dataclasses.replace(info, shape=(info.shape[0], 2 * info.shape[1]))
+    return out
+
+
+def _quant_aux(quant: dict[str, QuantSpec]) -> set[str]:
+    """The auxiliary tensor names of the quantized layers (known, never ``unknown``)."""
+    return {f"{layer}.{leaf}" for layer, spec in quant.items() for leaf in _AUX[spec.format]}
 
 
 def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
@@ -295,12 +504,8 @@ def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
     header = _read_header(path)
     names = set(header.tensors)
     if not is_h3_dit_header(header):
-        if any("transformer_blocks.0." in n for n in names):
-            raise H3FormatError(_NG + "LTX の DiT です（MiniMax H3 の DiT ではありません）")
-        raise H3FormatError(
-            _NG + "video_patch_proj.weight と audio_patch_proj.weight がそろっていません"
-            "（MiniMax H3 の DiT ではありません）"
-        )
+        # Deliberately names no other model: tensor names cannot tell which model a non-H3 file belongs to.
+        raise H3FormatError(_NG_BARE)
     prefix = detect_h3_prefix(names)
     t = {n[len(prefix):]: info for n, info in header.tensors.items() if n.startswith(prefix)}
     outside = sorted(n for n in names if not n.startswith(prefix))
@@ -319,6 +524,11 @@ def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
     stripped = set(t)
     num_layers = _count_contiguous(stripped, "blocks.", _BLOCK_REQUIRED, "本体のブロック")
     refiner_layers = _count_contiguous(stripped, "token_refiner.blocks.", _REFINER_REQUIRED, "token_refiner のブロック")
+
+    # The markers first: they say which weights are packed w4a8 ([N, K/2]), and
+    # the shape table below reads every weight at its logical [N, K].
+    quant = _quant_layers(path, header, t, prefix, DIT_FORMATS)
+    t = _logical_shapes(t, quant)
 
     vp = _shape(t, "video_patch_proj.weight")
     ap = _shape(t, "audio_patch_proj.weight")
@@ -378,8 +588,7 @@ def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
             shp = expect_block[leaf]
             _expect(got == shp, f"token_refiner.blocks.{i}.{leaf} {list(got)} ≠ {list(shp)}")
 
-    quant = _quant_layers(path, header, t, lambda n: prefix + n)
-    quant_aux = {f"{layer}.{leaf}" for layer in quant for leaf in ("weight_scale", "comfy_quant")}
+    quant_aux = _quant_aux(quant)
     unknown = sorted(n for n in t if not (_DIT_KNOWN.match(n) or n in quant_aux))
     cfg = H3DiTConfig(
         prefix=prefix,
@@ -461,7 +670,7 @@ def inspect_h3_te(path: str) -> tuple[Header, H3TEConfig]:
         for leaf, shp in expect.items():
             got = _shape(t, f"model.layers.{i}.{leaf}")
             _expect(got == shp, f"model.layers.{i}.{leaf} {list(got)} ≠ {list(shp)}")
-    quant = _quant_layers(path, header, t, lambda n: n)
+    quant = _quant_layers(path, header, t, "", TE_FORMATS)
     cfg = H3TEConfig(
         num_layers=num_layers,
         quant=quant,

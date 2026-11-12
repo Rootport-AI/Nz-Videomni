@@ -6481,11 +6481,101 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - **時間軸の「のりしろ」**: 押せないモックの欄（オーナー裁定 D4）のまま、弾 2 では触っていません。H3 でも同じく押せない形で出ます。
 - **無音の素材の先回り**: 音声トラックの有無を送信の前に調べて止める判定は足していません。サーバーの 422 を受けてから黄色の注意で案内します（169.3）。
 - **H3 の Gradio**: Inpainting の画面はもともと Gradio に無く、H3 の Gradio の整理はバックエンド台帳 §3-243 の範囲です。
-- **1920×1080 のマスク動画を AviUtl2 側で作れなかった件**: 原因は未調査です（バックエンド台帳 §3-281）。
+- **1920×1080 のマスク動画を作れなかった件**: 操作パネルの解像度一致の門が「シーンの設定」の変更に追従していなかったためでした（原因と修正は §170、バックエンド記録簿 §209）。
 
 ### 169.8 実機の門の結果（2026-11-12）
 
 オーナーの実機確認で 7 項目すべて合格しました。手順と各項目の結果は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.28 です。
 
-- **1920×1080 の素材**: AviUtl2 側の不具合で 1920×1080 のマスク動画を作れなかったため、1080p の素材では確認していません。バックエンドのテストと GPU の門 I2（バックエンド記録簿 §208.6・§208.7）を根拠に合格扱いとしました（169.7）。生成された動画の品質はいずれも合格です。
+- **1920×1080 の素材**: 1920×1080 のマスク動画を作れなかったため、1080p の素材では確認していません。作れなかったのは、操作パネルの解像度一致の門が「シーンの設定」の変更に追従していなかったためです（原因と修正は §170、バックエンド記録簿 §209）。バックエンドのテストと GPU の門 I2（バックエンド記録簿 §208.6・§208.7）を根拠に合格扱いとしました。生成された動画の品質はいずれも合格です。
 - **裁定**: 無音の素材で音声の Strength を 0.5 のまま Generate すると黄色の注意文が出る挙動（169.3）で、よいことになりました。
+
+## 170. Inpainting の解像度一致の門がプロジェクトの解像度の変更に追従しない件の修正（台帳 §3-281 (b)） — `getEditInfo` をマウント時の 1 回から、部分フィルタ／対象動画の右クリックのたびの読み直しへ・不一致の文言に「右クリックし直す」の案内（2026-11-12）
+
+### 170.1 結論
+
+- **AviUtl2 の「シーンの設定」でプロジェクトの解像度を直したあと、部分フィルタか対象動画を右クリックし直せば、Inpainting の解像度一致の門が新しい解像度で判定されるようになりました。** 原因は操作パネルで、プロジェクトの解像度をマウント時に 1 回しか読んでいなかったことです。プラグイン本体（C++）・SDK・bridge の契約・バックエンドは変えていません。
+- 不一致の文言に、直し方の案内を 1 文足しました。LTX と MiniMax H3 で同じです（門は系統に依存しません）。
+- 調査の記録と AviUtl2 の起動時の解像度の正体は、バックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §209 です。
+
+### 170.2 症状と原因
+
+- **症状**（オーナー観察 2026-11-12）: 「シーンの設定」で 1280×768 → 1920×1080 に変えても、「部分フィルタが 1280×768 なので動画と不一致」の文言が出たまま Generate が押せない。§169.8 の「1920×1080 のマスク動画を作れなかった」も同じ現象です（門が止めたので、マスクの描画まで進めなかった）。
+- **原因**: `webui/src/modes/edit/useInpaintForm.ts` の `getEditInfo` を読む `useEffect` の依存が `[]` で、マウント時に 1 回だけ読んだ値を持ち続けていました。Edit 画面は起動時にマウントされ、Inpainting の右クリックでは作り直されません（`shell/AppShell.tsx` :837-848。2 回の右クリックのあいだに画面の状態を捨てないための設計）。一方、門のもう片方の対象動画の実寸と、部分フィルタの rate/scale は右クリックのたびに届くので、解像度だけが古いままになる非対称でした。
+- **層の切り分け**:
+
+| 層 | 判定 | 根拠 |
+|---|---|---|
+| 操作パネル | 原因 | 上のとおり |
+| プラグイン本体 | 無実 | `getEditInfo`（`native/src/bridge_core.cpp` :128 → `native/src/bridge.cpp` :3767-3774）も `timeline.renderMaskVideo`（同 :3661-3686）も、呼ばれるたびに `get_edit_info` で AviUtl2 から読み直す |
+| SDK | 可能性は低い | `get_edit_info`（`aviutl2_sdk/plugin2.h` :598）は呼ばれた時点の編集情報を返す関数で、上の再読で足りる |
+
+### 170.3 直し方と採らなかった案
+
+- **直し方**: effect の依存を `[bridge, slots.subTabRequest]` にしました。`subTabRequest`（`timeline/inpaintSlots.ts` :104）は、部分フィルタの publish でも対象動画の publish でも、同じ対象の右クリックし直しでも増えるので、右クリックのたびに `getEditInfo` を読み直します（Create 画面の右クリックと同じ作法）。初回の描画でも走るので、マウント時の 1 回も残ります。
+- **古い応答**: 既存の `alive` フラグと cleanup で捨てます（依存が変わるたびに前の effect の cleanup が走る）。連番は足していません。
+- **読み直し中と失敗**: 新しい値が届くまでは前の値を保ちます。読み直しに失敗したら `null` にし、「寸法が読めない」（`mediaInfoUnknown`）で止めます。古い値で門を通しません。
+- **文言**: `i18n/strings.ts` の `edit.inpainting` の `resolutionMismatch` の「一致させてください。」の直後に、「AviUtl2の「シーンの設定」でプロジェクトの解像度を動画に合わせてから、部分フィルタを右クリックし直してください。」（英語 "Match the project resolution to the video in AviUtl2's Scene Settings, then right-click the partial filter again."）を足しました。
+- **採らなかった案**:
+  - 門の評価のたびに読む: 描画のたびに RPC〔プラグインへの呼び出し〕が走る。
+  - Generate を押したときだけ読む: 押せない門は解けない。
+  - Edit タブの表示時やウィンドウのフォーカス時に読む: 契機の配線が広がる。
+  - native の右クリックの通知に幅と高さを足す: 契約の改版とプラグイン本体の変更が要る。再読で足りる。
+  - 「シーンの設定」の変更を自動で検知する: 足さない。代わりに文言で右クリックし直すよう案内する。
+
+### 170.4 変更したファイル
+
+| ファイル | 要旨 |
+|---|---|
+| `webui/src/modes/edit/useInpaintForm.ts` | `getEditInfo` の effect の依存を `[bridge, slots.subTabRequest]` に（eslint の抑止コメントを外す）。失敗時は `null`。`projectWidth` の説明を「右クリックのたびに読み直す」に |
+| `webui/src/i18n/strings.ts` | `edit.inpainting.resolutionMismatch` に案内の 1 文（英日） |
+| `webui/src/modes/edit/useInpaintForm.test.tsx` | 170.5 の 2 件 |
+
+### 170.5 テスト
+
+- 追加: `modes/edit/useInpaintForm.test.tsx` の 2 件。「部分フィルタを右クリックし直すとプロジェクトの解像度を読み直す（シーンの設定の変更に追従）」（1280×768 → 1920×1080 に書き換えて publish し直すと `projectWidth` が 1920 になり、不一致の理由が消える）と、「対象動画を右クリックし直してもプロジェクトの解像度を読み直す」。
+- `npm run typecheck` 合格、`npx vitest run --exclude "**/backend.integration.test.ts"` 188 ファイル・3,781 件合格（2026-11-12）。aux2 は `build.ps1 -RunTests`（doctest 402 件合格）で再ビルドし `deploy.ps1` で実機と配布コピーへ配布（12:03）。
+
+### 170.6 実機の門
+
+- 手順と結果は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.29 です。`.aux2` は `scripts/build.ps1` で作り直し、`scripts/deploy.ps1` で実機と backend リポジトリの配布コピーの 2 箇所へ置きます。
+- 結果: ①〜③ とも合格（2026-11-12、オーナー実機確認。MiniMax H3 と LTX の両方）。
+
+
+## 171. Settings のモデル読み込み欄で、422 の拒否はサーバーが書いた理由（`detail`）を表示する（台帳 1-283 の弾 2・設計正本 裁定 101 ⑥） — `useModels.ts` の失敗の状態に `detail` と `httpStatus`・`ModelsPanel.tsx` は 422 のときだけ `detail` を表示・aux2 の配布（2026-11-12）
+
+### 171.1 結論
+
+- **Settings の「選択したモデルを読込」が 422 で断られたとき、欄にサーバーが書いた具体的な理由が出るようになりました。** たとえば LTX のファイルを MiniMax H3 の動画モデル (checkpoint) に選んで読み込むと、「モデルの読込に失敗しました: MiniMax H3 の重みファイルとして使えません」と出ます（文は 2026-11-13 に改めた。理由はバックエンド記録簿 §211.12）。これまでは、種類ごとの定型文（「選択したファイルはこの用途のモデルとして不正です。別のモデルを選んでください。」）しか出ていませんでした。
+- 422 以外の失敗（503 `PIPELINE_LOAD_FAILED` など）は、技術的な英文を含みうるので、これまでどおり定型文です。ヘッダーのベースモデル欄（`shell/useBaseModels.ts`）と同じ条件です。
+- バックエンドの同じ台帳の項目（MiniMax H3 の fp8・w4a8 の重み）は、バックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §211 です。fp8・w4a8 を受けるのはバックエンドの事前検査で、操作パネルの側は変えていません（モデルの一覧は `GET /models` から取るため）。
+
+### 171.2 経緯
+
+- バックエンドの事前検査は、断る理由を `detail` に日本語で書いていました（例はバックエンド [`Videomni_Backend_Specification.md`](../../../Videomni_Backend_Specification.md) §6.8 の `MODEL_INCOMPATIBLE`）。`api/client.ts` の `BackendApiError` も `detail` を持っていましたが、`shell/useModels.ts` が失敗の状態に `code` と `message` だけを残して `detail` を捨てていました。
+- オーナー裁定（2026-11-12。設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 101 ⑥）で、旧式の印への対応とは別の不具合として直すことになりました。
+
+### 171.3 設計の判断
+
+- **422 のときだけ**: 422（`MODEL_INCOMPATIBLE`・`MODEL_FILE_MISSING`）の `detail` は、サーバーが利用者向けに書いた文です。503 などの `detail` は例外の文がそのまま入りうるので、表示しません。
+- **文言の資源は変えない**: `i18n/strings.ts` の `models.loadFailed`（「モデルの読込に失敗しました: 」に続けて理由を出す）と `errorHints` はそのまま使います。`detail` が無い 422 は従来の定型文です。
+- サーバー側のログは足していません（H3 だけの例外になるため。バックエンド記録簿 §211.2）。
+
+### 171.4 変更したファイル
+
+| ファイル | 要旨 |
+|---|---|
+| `webui/src/shell/useModels.ts` | 失敗の状態 `{ status: "error" }` に `detail` と `httpStatus` を足す（`BackendApiError` から写す。それ以外の例外では `undefined`） |
+| `webui/src/shell/ModelsPanel.tsx` | `httpStatus === 422` のときは `detail`（無ければ定型文）を `loadFailed(...)` に渡す |
+| `webui/src/shell/useModels.test.ts` | 171.5 の 1 件 |
+| `webui/src/shell/SettingsPanel.test.tsx` | 171.5 の 2 件 |
+| `webui/src/api/client.ts` | 注釈だけ。`detail` を表示するのは `useBaseModels.ts` だけ、という説明を、`ModelsPanel.tsx` も 422 のとき表示する現状に直した（弾 3。コードは変えていない） |
+
+### 171.5 テスト
+
+- 追加: `useModels.test.ts` の「`loadPipeline()` が 422 の `detail` と状態の番号を保つ」、`SettingsPanel.test.tsx` の「422 の読み込みの拒否はサーバーの `detail` を理由として出す」と「422 以外の読み込みの失敗は `detail` ではなく定型文のまま」。
+- `npm run typecheck`・lint・`npx vitest run --exclude "**/backend.integration.test.ts"` 合格（3,784 件。2026-11-12）。aux2 は `build.ps1` で再ビルド（ネイティブのテスト 402 件合格）し、`deploy.ps1` で実機と backend リポジトリの配布コピーへ配布（18:31）。
+
+### 171.6 実機の門
+
+- 項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-283 です（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.30 からも参照）。

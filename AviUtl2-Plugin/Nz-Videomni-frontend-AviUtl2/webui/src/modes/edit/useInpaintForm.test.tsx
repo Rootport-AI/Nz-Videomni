@@ -316,6 +316,43 @@ describe("useInpaintForm — 解像度ゲート（オーナー裁定 D5）", () 
     });
     await waitFor(() => expect(second.result.current.validityReasons).toContain("mediaInfoUnknown"));
   });
+
+  it("部分フィルタを右クリックし直すとプロジェクトの解像度を読み直す（シーンの設定の変更に追従）", async () => {
+    // 起動時のプロジェクトは 1280×768。対象動画は 1920×1080 なので門が止める。
+    const options: BridgeOptions = { editInfo: { width: 1280, height: 768, rate: 30, scale: 1 } };
+    seedBothSlots();
+    const { result, request } = renderForm(options);
+    await waitFor(() => expect(result.current.validityReasons).toContain("resolutionMismatch"));
+    expect(result.current.projectWidth).toBe(1280);
+    const readsBefore = request.mock.calls.filter(([method]) => method === "getEditInfo").length;
+
+    // 「シーンの設定」で 1920×1080 に変えてから、部分フィルタを右クリックし直す。
+    options.editInfo = { width: 1920, height: 1080, rate: 30, scale: 1 };
+    act(() => {
+      publishInpaintPartialFilter({ layer: 5, frameStart: 100, frameEnd: 340, rate: 30, scale: 1, midpoints: 3 });
+    });
+    await waitFor(() => expect(result.current.projectWidth).toBe(1920));
+    expect(request.mock.calls.filter(([method]) => method === "getEditInfo").length).toBeGreaterThan(readsBefore);
+    expect(result.current.projectHeight).toBe(1080);
+    await waitFor(() => expect(result.current.validityReasons).not.toContain("resolutionMismatch"));
+  });
+
+  it("対象動画を右クリックし直してもプロジェクトの解像度を読み直す", async () => {
+    const options: BridgeOptions = { editInfo: { width: 1280, height: 768, rate: 30, scale: 1 } };
+    seedBothSlots();
+    const { result, request } = renderForm(options);
+    await waitFor(() => expect(result.current.validityReasons).toContain("resolutionMismatch"));
+    const readsBefore = request.mock.calls.filter(([method]) => method === "getEditInfo").length;
+
+    options.editInfo = { width: 1920, height: 1080, rate: 30, scale: 1 };
+    const item = makeItem();
+    act(() => {
+      publishInpaintTarget({ item, selection: makeSelection(item) });
+    });
+    await waitFor(() => expect(result.current.projectWidth).toBe(1920));
+    expect(request.mock.calls.filter(([method]) => method === "getEditInfo").length).toBeGreaterThan(readsBefore);
+    await waitFor(() => expect(result.current.validityReasons).not.toContain("resolutionMismatch"));
+  });
 });
 
 describe("useInpaintForm — マスク", () => {

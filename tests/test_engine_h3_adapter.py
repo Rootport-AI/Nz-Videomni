@@ -1422,7 +1422,40 @@ def test_precheck_refuses_an_ltx_safetensors_as_the_h3_transformer(three_family_
     assert r.status_code == 422, r.text
     error = r.json()["error"]
     assert error["code"] == "MODEL_INCOMPATIBLE"
-    assert "LTX の DiT です" in error["detail"]
+    assert error["detail"] == "MiniMax H3 の重みファイルとして使えません"
+
+
+@pytest.mark.parametrize("fmt", ["fp8", "fp8_full", "fp8_noinput", "w4a8", {"fmt": "w4a8", "g": 4, "codebook": False}])
+def test_precheck_accepts_fp8_and_w4a8_h3_transformers(three_family_client, fmt):
+    """台帳 §1-283: a small fp8 / w4a8 H3 DiT passes the H3 precheck and loads (mock)."""
+    from test_h3_format import WIDE, _dit_tensors, _write  # noqa: PLC0415
+
+    _activate(three_family_client, "MiniMaxH3")
+    models_dir = Path(three_family_client.app_context.config.model.models_dir)
+    t = _dit_tensors(layers=2, refiner=1, fmt_of=lambda layer: fmt if layer.startswith("blocks.") else None, **WIDE)
+    _write(models_dir / "MiniMaxH3" / "Weights" / "small_quant.safetensors", t)
+    r = three_family_client.post(
+        "/api/v1/pipeline/load",
+        json={"base_model": "MiniMaxH3", "models": {"transformer": "small_quant"}},
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_precheck_refuses_an_unsupported_h3_quant_with_its_reason(three_family_client):
+    """A marker this engine cannot run (nvfp4) is MODEL_INCOMPATIBLE with the Japanese reason."""
+    from test_h3_format import _dit_tensors, _write  # noqa: PLC0415
+
+    _activate(three_family_client, "MiniMaxH3")
+    models_dir = Path(three_family_client.app_context.config.model.models_dir)
+    _write(models_dir / "MiniMaxH3" / "Weights" / "nvfp4.safetensors", _dit_tensors(), marker={"format": "nvfp4"})
+    r = three_family_client.post(
+        "/api/v1/pipeline/load",
+        json={"base_model": "MiniMaxH3", "models": {"transformer": "nvfp4"}},
+    )
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "MODEL_INCOMPATIBLE"
+    assert "format='nvfp4'" in error["detail"]
 
 
 def test_mock_outpaint_over_http_records_h3_outpaint(three_family_client, tmp_path):

@@ -57,8 +57,10 @@ export class BackendApiError extends Error {
    * the key entirely when unset). `message` alone is often a template
    * ("selected model 'transformer/default' failed the compatibility
    * precheck") while `detail` carries the sentence actually worth showing
-   * ("このtransformerはltxv 2.5.0です。…"), so `shell/useBaseModels.ts` shows
-   * `detail` verbatim for a 422 rather than paraphrasing it client-side.
+   * ("このtransformerはltxv 2.5.0です。…"), so both `shell/useBaseModels.ts`
+   * (the header's base-model switch) and `shell/ModelsPanel.tsx` (Settings'
+   * model load, via `useModels.ts`) show `detail` verbatim for a 422 rather
+   * than paraphrasing it client-side; other statuses keep their generic copy.
    *
    * `undefined` when absent OR when the backend sent the LIST form (the
    * `VALIDATION_ERROR` envelope's `detail` is an array of

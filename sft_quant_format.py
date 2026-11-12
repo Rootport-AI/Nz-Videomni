@@ -45,6 +45,7 @@ __all__ = [
     "detect_prefix",
     "inspect",
     "layer_schemes",
+    "metadata_layers",
     "parse_metadata",
     "read_header",
     "read_tensor_bytes",
@@ -593,7 +594,7 @@ def _resolve_markers(path, header: Header, groups: dict[str, dict[str, str]]) ->
     ``_quantization_metadata`` is ignored as a whole.
     """
     resolved: dict[str, tuple] = {}
-    for layer, conf in _metadata_layers(header.metadata.get("_quantization_metadata")).items():
+    for layer, conf in metadata_layers(header.metadata.get("_quantization_metadata")).items():
         where = f"__metadata__._quantization_metadata.layers['{layer}']"
         resolved[layer] = _read_marker(conf, where)
 
@@ -625,8 +626,11 @@ def _read_marker(conf, where: str) -> tuple:
     return fmt, conf, where
 
 
-def _metadata_layers(raw) -> dict:
-    """``_quantization_metadata`` -> its ``layers`` table (unreadable or absent -> {})."""
+def metadata_layers(raw) -> dict:
+    """``_quantization_metadata`` -> its ``layers`` table (unreadable or absent -> {}).
+
+    Public because ``h3_format`` reads the same table (MiniMax H3's DiT).
+    """
     if not isinstance(raw, str):
         return {}
     try:

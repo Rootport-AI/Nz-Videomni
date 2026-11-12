@@ -259,7 +259,8 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 - **NVIDIA ドライバ**: R580 以上（CUDA 13 系を使うため。これより古いドライバでは動きません）。
 - **GPU**: RTX 20 シリーズ（Turing 世代）以降。GTX 10 シリーズ以前（Pascal 世代以前）は CUDA 13 の対象外のため動きません。
   - 動作を確かめたのは RTX 40 シリーズ（Ada Lovelace 世代。RTX 4070 Ti SUPER）と RTX 30 シリーズ（Ampere 世代。RTX 3080 Laptop 16GB）です。RTX 50 シリーズ（Blackwell 世代）は、まだ確かめていません。
-  - RTX 20 シリーズは、int8（8 ビットの整数）の計算が遅い経路になり、SageAttention も使えません（標準の SDPA で動きます）。動くかどうかも未確認です。
+  - RTX 20 シリーズは、int8（8 ビットの整数）の計算が遅い経路になり、SageAttention も使えません（標準の SDPA で動きます）。動くかどうかも未確認です。w4a8 の重み（下の「MiniMax H3 の重みの形式」）は、RTX 20 シリーズでは読み込みの時点で断ります（Settings には定型文が出ます。理由はアプリのフォルダの `logs\h3_worker.log` に残ります）。
+  - fp8 の重みは、RTX 40 シリーズ以降では fp8 のまま行列の計算をし、RTX 30 シリーズ以前では毎回 bf16（16 ビットの浮動小数点）に戻して計算します。戻すぶん、RTX 30 シリーズでは RTX 40 シリーズより遅くなります。w4a8 の重みは RTX 30 シリーズ以降で動きます。仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §5 です。
 
 attention は全世代で PyTorch の SDPA を既定にしており、xformers や flash-attn はインストールもしなければコードからも呼びません（16GB 環境で速度を決めているのは attention ではなく重みの転送であるため。仕様書 §5.4）。SageAttention に必要なパッケージは `setup.bat` が標準で入れるため、追加の作業は要りません（`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24。後者は必要なコンパイラを同梱しているため、**Visual Studio の導入は不要**です）。MiniMax H3 の仮想環境に入れる SageAttention は、CUDA 13 系の torch に合わせたものを `install-MiniMaxH3.bat` が入れます。
 
@@ -377,7 +378,13 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 - **`config.yaml` の `dit_cpu_load` は有効（既定の `true`）のままにしてください。** 無効にすると量子化された transformer を GPU 上で組むことになり必ずメモリが溢れるため、読み込みの時点でエラーにしています。
 - **実機での確認**: LTX 2.3・LTX 2.5 の実在の int8 系の配布物（REDGraft の混在を含む）で、単発・スタイル LoRA・IC-LoRA・Chained・keep_resident の生成を確かめ、出来上がった動画も目で見て合格としています（記録は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121）。確認したのは 5 本です（[`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §121.4）。それ以外の配布物は、標準形式なら通る設計ですが未検証です。
 
-**MiniMax H3 は、ここまでの規則（GGUF・fp8／int8 safetensors）の対象外です。** `models/MiniMaxH3/Weights/` の `.safetensors` も同じように一覧へ並びますが、読み込む前の検査で通るのは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。主に試してあるのは公式の配布物で、コミュニティ版のうち PinkCherry Hybrid は、置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版への対応は後回しにしています（§7.6）。
+**MiniMax H3 は、ここまでの規則（GGUF・fp8／int8 safetensors）とは別の規則です。** `models/MiniMaxH3/Weights/` の `.safetensors` も同じように一覧へ並びます。<a id="h3-weight-formats"></a>**MiniMax H3 の重みの形式**: 読み込む前の検査で通るのは、枝刈り版（`install-MiniMaxH3.bat` が取得するものと同じ構造）の DiT で、量子化の形式が次の 3 つのものです。1 つのファイルに混ざっていても構いません。
+
+- **int8 ConvRot**（ComfyUI の `int8_tensorwise`）: `install-MiniMaxH3.bat` が取得する公式の形式です。いちばん速く動きます。
+- **fp8**（ComfyUI の `float8_e4m3fn`。Comfy-Org の `minimax_h3_fl2va_pruned_fp8_scaled` など）: ComfyUI で使っている fp8 の重みを、できるだけ同じ計算で再現します。int8 ConvRot より遅くなります。
+- **w4a8**（重みを 4 ビット・入力を 8 ビットにして計算する形式。ComfyUI の `asym_w4a8_int8`。Kijai 氏の `minimax_h3_fl2va_pruned_w4a8_mixed` など）: 重みのファイルが小さくなります。RTX 30 シリーズ以降が必要です。
+
+量子化の印（どの層がどの形式かを示す情報）を、層ごとではなくファイルの先頭にまとめて書いた古い書き方のファイルも読めます。テキストエンコーダは、これまでどおり int8 ConvRot だけです。速さと VRAM の実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §211、GPU の世代による違いは上の「ハードウェア要件の詳細」の MiniMax H3 の項です。事前検査で使えないと分かったファイルを Settings で読み込もうとすると、「MiniMax H3 の重みファイルとして使えません」で始まる文が出ます。主に試してあるのは公式の配布物と、検証に使った第三者の fp8・w4a8 です。コミュニティ版のうち PinkCherry Hybrid は、置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版の動作は保証していません（§7.6）。
 
 **LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所は、LTX 2.3 と LTX 2.5 では共通です**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。**MiniMax H3 は置き場所が別で、`models/MiniMaxH3/LoRA/` です**（下に書きます）。H3 を選ぶと、一覧にはこのフォルダの LoRA だけが並びます。H3 は IC-LoRA（参照動画による制御）には対応していません（§7.6）。
 
@@ -415,7 +422,7 @@ models/
     ├─ Upscaler/             空間アップスケーラ
     └─ IC-LoRA/              alpha-gen（Alpha Gen 用。install-LTX25.bat が置く）
 └─ MiniMaxH3/                MiniMax H3 のためのファイル一式（install-MiniMaxH3.bat が置く）
-    ├─ Weights/              DiT（枝刈り版の int8 ConvRot の safetensors）
+    ├─ Weights/              DiT（枝刈り版の safetensors。int8 ConvRot・fp8・w4a8）
     ├─ TextEncoder/          テキストエンコーダ（int8 ConvRot の safetensors）
     │   └─ qwen3vl_tokenizer/ tokenizer 一式（重みは含まない）
     ├─ VAE/                  映像 VAE・音声 VAE
@@ -475,7 +482,7 @@ models/
 - 検証の表で MISSING と出て終わったときは、**MISSING と出た行のファイルを 1 つだけ消して**（tokenizer の行なら、そのフォルダの中身を消して）もう一度実行してください。`models\MiniMaxH3` をフォルダごと消さないでください。**MISSING の表が出ないまま止まったとき**（Python 環境の構築やダウンロードの途中で止まったとき）は、**何も消さずに**もう一度実行してください。
 - **`git pull` と `setup.bat` による更新では、MiniMax H3 の仮想環境は当て直されません。** 更新で H3 の依存が変わったときは、このバッチをもう一度実行してください（§1「更新のしかた」）。
 
-**MiniMax H3 のために取得して検証するファイルは下表のとおりです**（記述子 `scripts/manifests/40-minimaxh3.json` に載っているファイル。すべて `models/` からの相対パスです）。**下表はバッチが置く場所の内訳で、手で置きたい場合の対応表も兼ねています**——ただし公開元のリポジトリ内のフォルダ名（`diffusion_models/`・`text_encoders/`・`vae/`・`FL2VA/text_encoder/`）は下表のフォルダ名と違うので、置く場所は下表に合わせてください。**仮想環境はバッチでしか作れないので、重みを手で置いた場合も `install-MiniMaxH3.bat` を一度実行してください**（揃っている重みは取り直しません）。
+**MiniMax H3 のために取得して検証するファイルは下表のとおりです**（記述子 `scripts/manifests/40-minimaxh3.json` に載っているファイル。すべて `models/` からの相対パスです）。**下表はバッチが置く場所の内訳で、手で置きたい場合の対応表も兼ねています**——ただし公開元のリポジトリ内のフォルダ名（`diffusion_models/`・`text_encoders/`・`vae/`・`FL2VA/text_encoder/`）は下表のフォルダ名と違うので、置く場所は下表に合わせてください。**仮想環境はバッチでしか作れないので、重みを手で置いた場合も `install-MiniMaxH3.bat` を一度実行してください**（揃っている重みは取り直しません）。バッチが取得する DiT は int8 ConvRot です。fp8 や w4a8 の DiT は自分で用意して `MiniMaxH3/Weights/` に置けば、一覧に並んで選べます（§1 の「[MiniMax H3 の重みの形式](#h3-weight-formats)」）。
 
 | 役割 | 期待するパスとファイル名 | 取得元リポジトリ |
 |------|--------------------------|------------------|
@@ -1048,7 +1055,7 @@ Chained タブでは、クリップごとに別々の参照素材（Ref2VA）を
 - 参照の読み込みに失敗する素材（読めない動画・短すぎる音声）があると、そのクリップの番になってから生成が失敗します。
 - API では `POST /generate/chain` の各クリップの `references`（正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2b (h)）を使います。LTX 2.3／2.5 は断ります。**MCP の `submit_chain` と Gradio UI の Chain タブにはまだ入口がありません。**
 
-**読み込める重みは、`install-MiniMaxH3.bat` が取得するものと同じ形（枝刈り版の int8 ConvRot）だけです。** 主に試してあるのは公式の配布物です。コミュニティが配っている派生版のうち PinkCherry Hybrid は、フォルダに置いて生成できた実績があります（動作の保証はありません）。別の量子化など、それ以外の派生版への対応は後回しにしています。
+**読み込める重みは、枝刈り版の DiT で、量子化の形式が int8 ConvRot・fp8・w4a8 のものです**（§1 の「[MiniMax H3 の重みの形式](#h3-weight-formats)」）。枝刈りしていない版と、nvfp4・w4a4・GGUF などの形式は読み込めません。テキストエンコーダは int8 ConvRot だけです。fp8 は int8 ConvRot より遅く、RTX 30 シリーズ以前ではさらに遅くなります。w4a8 は RTX 20 シリーズでは使えません。主に試してあるのは公式の配布物と、検証に使った第三者の fp8・w4a8 です。コミュニティが配っている派生版のうち PinkCherry Hybrid は、フォルダに置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版の動作は保証していません。
 
 **快適上限と速さ**
 

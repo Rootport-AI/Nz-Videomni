@@ -17,7 +17,7 @@ How it is wired (Docs/MINIMAX_H3_DESIGN.md §6.6):
   and ``drop_to_meta`` carry them with the block, and the state dict does not
   change), a ``_lora_specs`` list, and ONE forward hook per module that calls
   :func:`apply` on every ``Module.__call__``;
-* ``H3Int8Linear.forward_rows`` (VRAM 16GB mode's qkv, which does not go
+* The quantized Linear's ``forward_rows`` (VRAM 16GB mode's qkv, which does not go
   through ``__call__``) calls :func:`apply` itself with its ``[n0, n1)`` rows of
   B, and ``lowvram.block_forward`` computes ``f32(h) @ A^T`` once per block
   (:func:`xa_for`) instead of once per head group; ``forward_rows_q`` (the same
@@ -49,7 +49,7 @@ import torch.nn as nn
 import h3_lora_format
 import sft_quant_format
 from engine_h3 import constants as _C
-from engine_h3.quant_linear import H3Int8Linear
+from engine_h3.quant_linear import H3QuantLinear
 
 _TORCH_DTYPES = {"BF16": torch.bfloat16, "F16": torch.float16, "F32": torch.float32}
 assert tuple(_TORCH_DTYPES) == h3_lora_format.H3_LORA_DTYPES   # one list of accepted dtypes
@@ -170,7 +170,7 @@ def _hook(module, args, out):
 def attach(dit: nn.Module, files) -> list[dict]:
     """Attach every ``(H3LoraFile, strength)`` to ``dit``; returns one report per file.
 
-    A pair whose module is not in the model, is not an ``H3Int8Linear`` /
+    A pair whose module is not in the model, is not an ``H3QuantLinear`` (int8 / fp8 / w4a8) /
     ``nn.Linear``, or whose shapes are not ``A [r, in]`` / ``B [out, r]`` is
     skipped and recorded. Buffers keep the file's dtype and device (CPU).
     """
@@ -190,7 +190,7 @@ def attach(dit: nn.Module, files) -> list[dict]:
             except AttributeError:
                 report["skipped"].append({"module": module_name, "reason": "not in this model"})
                 continue
-            if not isinstance(module, (H3Int8Linear, nn.Linear)):
+            if not isinstance(module, (H3QuantLinear, nn.Linear)):
                 report["skipped"].append({"module": module_name, "reason": f"not a Linear ({type(module).__name__})"})
                 continue
             r = int(a.shape[0]) if a.dim() == 2 else -1
@@ -288,7 +288,7 @@ def apply(module, x: torch.Tensor, out: torch.Tensor, n0: int = 0, n1: int | Non
     ``out`` holds output features ``[n0, n1)`` (``forward_rows``) or all of them;
     ``xa``: :func:`xa_for`'s result for this ``x`` (VRAM 16GB mode), else it is
     computed here; the row count comes from ``xa`` when given, so
-    ``H3Int8Linear.forward_rows_q`` passes ``x=None`` and always passes ``xa``.
+    the quantized Linear's ``forward_rows_q`` passes ``x=None`` and always passes ``xa``.
     Every matmul operand is float32; the f32 sum is added into
     the bf16 ``out`` once per element (the in-place add computes in f32 and
     rounds once).

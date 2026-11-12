@@ -88,7 +88,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from engine_h3.constants import ATTENTION_BACKENDS, MODALITY_AUDIO, MODALITY_TEXT, MODALITY_VIDEO
-from engine_h3.quant_linear import H3Int8Linear
+from engine_h3.quant_linear import H3QuantLinear
 from engine_h3.rope import apply_rope
 from engine_h3.vsf import flip_values
 from h3_format import H3DiTConfig
@@ -483,8 +483,8 @@ class H3DiT(nn.Module):
         * float32: video_patch_proj, audio_patch_proj, final_layer.video_out /
           audio_out, every ``adaln_proj.linear``, ``adaln_t_table``,
           ``rope.inv_freq`` (the islands);
-        * untouched: ``H3Int8Linear`` (int8 weight, float32 scale, its own bias
-          cast);
+        * untouched: every ``H3QuantLinear`` (int8 / fp8 / w4a8 codes and their scales;
+          int8 casts its own bias);
         * bfloat16: every other floating Parameter / buffer.
 
         On the official Comfy-Org file the only change is the AdaLN
@@ -496,7 +496,7 @@ class H3DiT(nn.Module):
         f32_modules.update(m.linear for m in self.modules() if isinstance(m, H3AdaLNProj))
         changed = 0
         for mod in self.modules():
-            if isinstance(mod, H3Int8Linear):
+            if isinstance(mod, H3QuantLinear):
                 continue
             target = torch.float32 if (mod in f32_modules or mod is self) else torch.bfloat16
             for name, p in list(mod._parameters.items()):

@@ -49,7 +49,7 @@ import torch.nn as nn
 import h3_lora_format
 import sft_quant_format
 from engine_h3 import constants as _C
-from engine_h3.quant_linear import H3Int8Linear
+from engine_h3.quant_linear import H3QuantLinear
 
 _TORCH_DTYPES = {"BF16": torch.bfloat16, "F16": torch.float16, "F32": torch.float32}
 assert tuple(_TORCH_DTYPES) == h3_lora_format.H3_LORA_DTYPES   # one list of accepted dtypes
@@ -170,7 +170,7 @@ def _hook(module, args, out):
 def attach(dit: nn.Module, files) -> list[dict]:
     """Attach every ``(H3LoraFile, strength)`` to ``dit``; returns one report per file.
 
-    A pair whose module is not in the model, is not an ``H3Int8Linear`` /
+    A pair whose module is not in the model, is not an ``H3QuantLinear`` (int8 / fp8 / w4a8) /
     ``nn.Linear``, or whose shapes are not ``A [r, in]`` / ``B [out, r]`` is
     skipped and recorded. Buffers keep the file's dtype and device (CPU).
     """
@@ -190,7 +190,7 @@ def attach(dit: nn.Module, files) -> list[dict]:
             except AttributeError:
                 report["skipped"].append({"module": module_name, "reason": "not in this model"})
                 continue
-            if not isinstance(module, (H3Int8Linear, nn.Linear)):
+            if not isinstance(module, (H3QuantLinear, nn.Linear)):
                 report["skipped"].append({"module": module_name, "reason": f"not a Linear ({type(module).__name__})"})
                 continue
             r = int(a.shape[0]) if a.dim() == 2 else -1

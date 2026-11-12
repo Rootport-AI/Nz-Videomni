@@ -35,6 +35,7 @@ Called inside ``torch.no_grad()`` (the pipeline's), like the off path.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import math
 from dataclasses import dataclass
@@ -184,12 +185,21 @@ def block_forward(
     h2 = _rows_into(torch.empty_like(n2), chunks,
                     lambda r0, r1: _dit._modulate(n2[r0:r1], shift_mlp, scale_mlp, adaln_index[r0:r1]))
     del n2
-    m = _rows_into(torch.empty_like(x2), chunks, lambda r0, r1: block.mlp(h2[r0:r1]))
+    # fc1 / fc2 run once per chunk: an fp8 layer on the bf16 path keeps its dequantized
+    # weight for this loop only (H3QuantLinear.dequant_cache; a no-op for the others)
+    with _dequant_cache(block.mlp.fc1), _dequant_cache(block.mlp.fc2):
+        m = _rows_into(torch.empty_like(x2), chunks, lambda r0, r1: block.mlp(h2[r0:r1]))
     del h2
 
     # FFN residual, per row chunk
     return _rows_into(torch.empty_like(x2), chunks,
                       lambda r0, r1: _dit._gate(x2[r0:r1], gate_mlp, m[r0:r1], adaln_index[r0:r1]))
+
+
+def _dequant_cache(layer):
+    """``layer.dequant_cache()``; a plain bf16 ``nn.Linear`` has none (a partly
+    quantized file whose fc1 / fc2 were left in bf16)."""
+    return getattr(layer, "dequant_cache", contextlib.nullcontext)()
 
 
 def embed_rows_packed(dit, text_refined, audio_rows, video_rows, cond_rows, *, ref_video_rows, ref_audio_rows):

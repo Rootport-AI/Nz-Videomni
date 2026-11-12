@@ -1,4 +1,11 @@
-"""int8 ConvRot Linear for MiniMax H3, executed by ``comfy_kitchen.int8_linear``.
+"""Quantized Linears for MiniMax H3: the common base, the int8 ConvRot Linear
+(``comfy_kitchen.int8_linear``), the swap, and the load-time backend checks.
+
+The fp8 and w4a8 Linears live in ``engine_h3.fp8_linear`` / ``engine_h3.w4a8_linear``
+(台帳 §1-283, 裁定 101). All three derive from :class:`H3QuantLinear`, carry the
+same attribute and method names (VRAM 16GB mode and the LoRA use them by
+duck typing), and call comfy-kitchen through :func:`_ck` of THIS module, so a
+test that fakes ``_ck`` fakes every kernel.
 
 Why a module of our own instead of comfy-kitchen's ``QuantizedTensor``
 ---------------------------------------------------------------------
@@ -15,7 +22,7 @@ anyway (R1 "2-2 追加" (a)(b); Docs/Outputs-archive/h3-stage1-reports-2026-10-1
 
 Fail loud, never slow
 ---------------------
-``require_cuda_int8`` disables comfy-kitchen's ``triton`` backend (issue #136
+``require_cuda_quant`` disables comfy-kitchen's ``triton`` backend (issue #136
 lives on that path) and its ``eager`` backend. With both gone, a call the CUDA
 backend refuses (weight still on the CPU, wrong dtype, ...) raises
 ``NoCapableBackendError`` instead of silently running ``torch._int_mm`` with a
@@ -33,7 +40,7 @@ block (the kernel ``int8_linear`` itself runs, same arguments; it is
 deterministic), and :meth:`H3Int8Linear.forward_rows_q` hands the result to
 ``_int8_gemm_prequantized``, a copy of ``int8_linear``'s code after the
 quantization (the same GEMM kernels, chosen the same way). Both are
-comfy-kitchen 0.2.37 internals, not its API: ``require_cuda_int8`` ends with
+comfy-kitchen 0.2.37 internals, not its API: ``require_cuda_quant`` ends with
 ``_probe_shared_quant``, which checks the version, the symbols and their
 argument lists, and on any mismatch leaves the sharing off (logged; the load
 goes on) so every call takes ``forward_rows`` as before. That path bypasses the
@@ -50,13 +57,21 @@ weight.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import torch
 import torch.nn as nn
 
-from h3_format import QuantSpec
+from h3_format import FP8, INT8, W4A8, QuantSpec
+
+#: fp8: ``F.scaled_mm`` from Ada (8.9) on, as ComfyUI's ``supports_fp8_compute``;
+#: below it the weight is dequantized to bf16 (裁定 101 ⑧).
+FP8_SCALED_MIN_CAPABILITY = (8, 9)
+#: w4a8: ``AsymW4A8Int8Layout.MIN_SM_VERSION`` (the CUDA kernels need Ampere).
+W4A8_MIN_CAPABILITY = (8, 0)
+FP8_MODES = ("scaled", "dequant")
 
 _ck_module = None
 
@@ -140,7 +155,52 @@ def _ck():
     return _ck_module
 
 
-class H3Int8Linear(nn.Module):
+class H3QuantLinear(nn.Module):
+    """Common base of the H3 quantized Linears (int8 / fp8 / w4a8).
+
+    Deliberately minimal: it exists so ``dit.normalize_dtypes`` and
+    ``lora.attach`` can test ONE class. The names every subclass carries
+    (``in_features``, ``out_features``, ``spec``, ``bias`` -- None except on
+    int8 --, ``forward``, ``forward_rows``, ``shares_input``,
+    ``quantize_input``, ``forward_rows_q``, ``extra_repr``) are not declared
+    here; the tests pin them.
+    """
+
+    def dequant_cache(self):
+        """Context in which a layer may keep a dequantized copy of its weight.
+
+        ``engine_h3.lowvram.block_forward`` enters it around the MLP's row-chunk
+        loop (fc1 and fc2 are called once per chunk). No-op here; the fp8
+        Linear's bf16 path overrides it. Nothing is kept outside the context:
+        block swap reuses the same memory for another block.
+        """
+        return contextlib.nullcontext()
+
+
+def _as_2d(x: torch.Tensor) -> tuple[tuple[int, ...], torch.Tensor]:
+    """``(leading shape, x as a contiguous bf16 [M, K])``: the cast every H3 quantized Linear makes."""
+    lead = tuple(x.shape[:-1])
+    x2d = x.reshape(-1, x.shape[-1])
+    if x2d.dtype != torch.bfloat16:
+        x2d = x2d.to(torch.bfloat16)
+    return lead, x2d.contiguous()
+
+
+def add_lora(module: nn.Module, x, out: torch.Tensor, n0: int, n1: int, lora_xa) -> torch.Tensor:
+    """``lora.apply`` on rows ``[n0, n1)`` when a LoRA is attached to ``module``, else ``out``.
+
+    For the fp8 / w4a8 ``forward_rows`` / ``forward_rows_q``, which do not go
+    through ``Module.__call__`` (so not through the LoRA hook either); the same
+    call for every H3 quantized Linear (int8 included).
+    """
+    if getattr(module, "_lora_specs", None):
+        from engine_h3 import lora  # noqa: PLC0415 -- only a LoRA job gets here
+
+        out = lora.apply(module, x, out, n0, n1, xa=lora_xa)
+    return out
+
+
+class H3Int8Linear(H3QuantLinear):
     """Linear whose weight is a raw int8 Parameter and whose scale is a float32
     ``[N, 1]`` buffer; the forward is ``comfy_kitchen.int8_linear``.
 
@@ -241,11 +301,7 @@ class H3Int8Linear(nn.Module):
             convrot_groupsize=int(self.spec.convrot_groupsize),
         )
         out = out.reshape(*lead, n1 - n0)
-        if getattr(self, "_lora_specs", None):
-            from engine_h3 import lora  # noqa: PLC0415 -- only a LoRA job gets here
-
-            out = lora.apply(self, x, out, n0, n1, xa=lora_xa)
-        return out
+        return add_lora(self, x, out, n0, n1, lora_xa)
 
     def shares_input(self, x: torch.Tensor) -> bool:
         """Whether :meth:`quantize_input` + :meth:`forward_rows_q` may stand in for
@@ -305,11 +361,7 @@ class H3Int8Linear(nn.Module):
         out = _int8_gemm_prequantized(
             xq, xs, self.weight[n0:n1], self.weight_scale[n0:n1], bias, torch.bfloat16
         )
-        if getattr(self, "_lora_specs", None):
-            from engine_h3 import lora  # noqa: PLC0415 -- only a LoRA job gets here
-
-            out = lora.apply(self, None, out, n0, n1, xa=lora_xa)
-        return out
+        return add_lora(self, None, out, n0, n1, lora_xa)
 
     def extra_repr(self) -> str:
         return (
@@ -320,14 +372,36 @@ class H3Int8Linear(nn.Module):
 
 
 def require_cuda_int8() -> dict:
-    """Make sure comfy-kitchen's CUDA backend can run ``int8_linear``, then pin
-    every int8 call to it. Returns ``list_backends()`` (after the disables) for
-    the load log and the ``done`` event.
+    """:func:`require_cuda_quant` for an int8-only model (the GPU tests)."""
+    return require_cuda_quant((INT8,))
+
+
+#: comfy-kitchen functions each DiT format calls (``int8_linear`` is always
+#: needed: the text encoder is int8).
+_FORMAT_FUNCTIONS = {
+    FP8: ("quantize_per_tensor_fp8", "dequantize_per_tensor_fp8"),
+    W4A8: ("w4a8_int8_linear",),
+}
+
+
+def require_cuda_quant(formats: Iterable[str], *, fp8_mode: str = "scaled") -> dict:
+    """Make sure comfy-kitchen's CUDA backend can run every kernel the model's
+    quantized layers call, then pin every call to it. Returns ``list_backends()``
+    (after the disables) for the load log and the ``done`` event.
+
+    ``formats``: the DiT's layer formats (``h3_format`` names); ``int8_linear``
+    is required whatever they are. fp8 also needs ``quantize_per_tensor_fp8`` /
+    ``dequantize_per_tensor_fp8`` and, on the ``scaled`` path, torch's
+    ``F.scaled_mm`` (``comfy_kitchen.scaled_mm_v2.has_scaled_mm_v2``); w4a8
+    needs ``w4a8_int8_linear``. The capability list names what is REGISTERED,
+    whatever the GPU generation: :func:`fp8_mode_for` /
+    :func:`require_w4a8_capability` judge the generation.
 
     ``available`` alone is not enough: the CUDA extension can load while
     cuBLASLt (``cublasLt64_13.dll``) is missing, and then ``int8_linear`` is
     simply not registered on it (R1 2-2). So the capability list is the test.
     """
+    formats = set(formats)
     ck = _ck()
     backends = ck.list_backends()
     cuda = backends.get("cuda")
@@ -352,12 +426,52 @@ def require_cuda_int8() -> dict:
             "（cuBLASLt＝cublasLt64_13.dll が見つからない可能性があります。"
             f"unavailable_reason: {cuda.get('unavailable_reason')}）。"
         )
+    capabilities = cuda.get("capabilities") or []
+    for fmt in sorted(formats & _FORMAT_FUNCTIONS.keys()):
+        missing = [name for name in _FORMAT_FUNCTIONS[fmt] if name not in capabilities]
+        if missing:
+            raise RuntimeError(
+                f"comfy-kitchen の CUDA バックエンドに {'・'.join(missing)} がありません"
+                f"（このモデルの {fmt} の層に必要です。unavailable_reason: {cuda.get('unavailable_reason')}）。"
+            )
+    if FP8 in formats and fp8_mode == "scaled" and not _has_scaled_mm_v2():
+        raise RuntimeError(
+            "この torch には fp8 の行列積（torch.nn.functional.scaled_mm）がありません。"
+            "MiniMax H3 の fp8 のモデルを RTX 40 系以降で動かすには、それを持つ torch が必要です。"
+        )
     # triton: issue #136. eager: would accept every call the CUDA backend
     # refuses and run it slowly; with it gone such a call raises instead.
     ck.disable_backend("triton")
     ck.disable_backend("eager")
     _probe_shared_quant()
     return ck.list_backends()
+
+
+def _has_scaled_mm_v2() -> bool:
+    """``comfy_kitchen.scaled_mm_v2.has_scaled_mm_v2()`` (an accessor, so tests can fake it)."""
+    from comfy_kitchen.scaled_mm_v2 import has_scaled_mm_v2  # noqa: PLC0415
+
+    return bool(has_scaled_mm_v2())
+
+
+def fp8_mode_for(capability: tuple[int, int]) -> str:
+    """The fp8 path for a GPU of compute ``capability``, decided once at load.
+
+    ``"scaled"`` (the fp8 matmul) from :data:`FP8_SCALED_MIN_CAPABILITY` on,
+    else ``"dequant"`` (the weight back to bf16, then ``F.linear``): the rule of
+    ComfyUI's ``supports_fp8_compute``.
+    """
+    return "scaled" if tuple(capability) >= FP8_SCALED_MIN_CAPABILITY else "dequant"
+
+
+def require_w4a8_capability(capability: tuple[int, int]) -> None:
+    """Refuse a w4a8 model below :data:`W4A8_MIN_CAPABILITY` (RTX 20 series: Turing)."""
+    if tuple(capability) < W4A8_MIN_CAPABILITY:
+        major, minor = capability
+        raise RuntimeError(
+            f"この GPU（計算能力 {major}.{minor}）では w4a8 のモデルを動かせません。"
+            "w4a8 の計算には計算能力 8.0 以上（RTX 30 系以降）が必要です。int8 か fp8 のモデルを選んでください。"
+        )
 
 
 def _shared_quant_missing(cb) -> str | None:
@@ -499,14 +613,21 @@ def swap_in_int8_linears(
     quant: dict[str, QuantSpec],
     *,
     bias_dtype_of: Callable[[str], torch.dtype],
+    fp8_mode: str = "scaled",
 ) -> int:
     """Replace each ``nn.Linear`` named in ``quant`` (dotted, relative to
-    ``root``, e.g. ``"blocks.0.attn.qkv_proj"``) by an ``H3Int8Linear`` built on
-    the meta device. Returns how many were replaced.
+    ``root``, e.g. ``"blocks.0.attn.qkv_proj"``) by the quantized Linear of its
+    format, built on the meta device. Returns how many were replaced.
+
+    int8 -> :class:`H3Int8Linear`, fp8 -> ``fp8_linear.H3Fp8Linear`` (on the
+    ``fp8_mode`` path decided at load: :func:`fp8_mode_for`), w4a8 ->
+    ``w4a8_linear.H3W4A8Linear``. The name stays: ``text_encoder`` binds it at
+    import (int8 only there).
 
     A name with no module, or a module that is not an ``nn.Linear``, raises:
     a quantized tensor the skeleton cannot hold would otherwise be dropped by
-    ``load_state_dict(strict=False)`` and leave a bf16 meta weight behind.
+    ``load_state_dict(strict=False)`` and leave a bf16 meta weight behind. So
+    does an fp8 / w4a8 entry on a Linear with a bias (those Linears carry none).
     """
     count = 0
     for name in sorted(quant):
@@ -515,22 +636,41 @@ def swap_in_int8_linears(
         try:
             parent = root.get_submodule(parent_name) if parent_name else root
         except AttributeError as exc:
-            raise RuntimeError(f"int8 層 '{name}' の親モジュールがモデルにありません: {exc}") from exc
+            raise RuntimeError(f"量子化層 '{name}' の親モジュールがモデルにありません: {exc}") from exc
         old = getattr(parent, leaf, None)
         if old is None or not isinstance(old, nn.Module):
-            raise RuntimeError(f"int8 層 '{name}' がモデルにありません")
+            raise RuntimeError(f"量子化層 '{name}' がモデルにありません")
         if not isinstance(old, nn.Linear):
             raise RuntimeError(
-                f"int8 層 '{name}' は nn.Linear ではありません（{type(old).__name__}）"
+                f"量子化層 '{name}' は nn.Linear ではありません（{type(old).__name__}）"
             )
         with torch.device("meta"):
-            new = H3Int8Linear(
-                old.in_features,
-                old.out_features,
-                bias=old.bias is not None,
-                spec=spec,
-                bias_dtype=bias_dtype_of(name),
-            )
+            new = _quant_linear_for(name, old, spec, bias_dtype_of=bias_dtype_of, fp8_mode=fp8_mode)
         setattr(parent, leaf, new)
         count += 1
     return count
+
+
+def _quant_linear_for(
+    name: str, old: nn.Linear, spec: QuantSpec, *, bias_dtype_of: Callable[[str], torch.dtype], fp8_mode: str
+) -> H3QuantLinear:
+    """The quantized Linear of ``spec.format`` standing in for ``old`` (built on the caller's device)."""
+    if spec.format == INT8:
+        return H3Int8Linear(
+            old.in_features,
+            old.out_features,
+            bias=old.bias is not None,
+            spec=spec,
+            bias_dtype=bias_dtype_of(name),
+        )
+    if spec.format not in (FP8, W4A8):
+        raise RuntimeError(f"量子化層 '{name}' の形式 {spec.format!r} はこのエンジンで動かせません")
+    if old.bias is not None:
+        raise RuntimeError(f"量子化層 '{name}'（{spec.format}）はバイアスつきの Linear です（対応していません）")
+    if spec.format == FP8:
+        from engine_h3.fp8_linear import H3Fp8Linear  # noqa: PLC0415 -- it imports this module
+
+        return H3Fp8Linear(old.in_features, old.out_features, spec=spec, mode=fp8_mode)
+    from engine_h3.w4a8_linear import H3W4A8Linear  # noqa: PLC0415 -- it imports this module
+
+    return H3W4A8Linear(old.in_features, old.out_features, spec=spec)

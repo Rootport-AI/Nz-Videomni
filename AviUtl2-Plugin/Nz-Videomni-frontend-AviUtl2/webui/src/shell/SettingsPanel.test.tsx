@@ -846,6 +846,65 @@ describe("SettingsPanel", () => {
     ]);
   });
 
+  /** Answers `POST /pipeline/load` on `bridge` with `status`/`error` and
+   * passes everything else through to the fixture. */
+  function rejectPipelineLoad(
+    bridge: ReturnType<typeof createMockBridge>,
+    status: number,
+    error: { code: string; message: string; detail?: string },
+  ) {
+    const original = bridge.request.bind(bridge);
+    vi.spyOn(bridge, "request").mockImplementation(((method: string, params: unknown) => {
+      if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/pipeline/load") {
+        return Promise.resolve({ status, body: { error } });
+      }
+      return (original as (m: string, p: unknown) => Promise<unknown>)(method, params);
+    }) as typeof bridge.request);
+  }
+
+  it("a 422 model-load refusal shows the server's detail as the reason", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    rejectPipelineLoad(bridge, 422, {
+      code: "MODEL_INCOMPATIBLE",
+      message: "selected model 'transformer/default' failed the compatibility precheck",
+      detail: "This transformer uses a quantization format this engine cannot load.",
+    });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    const loadButton = await screen.findByRole("button", { name: "Load selected models" });
+    await waitFor(() => expect(loadButton).toBeEnabled());
+    await user.click(loadButton);
+
+    expect(
+      await screen.findByText(
+        "Model load failed: This transformer uses a quantization format this engine cannot load.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("a non-422 model-load failure keeps the generic hint, not the server's detail", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    rejectPipelineLoad(bridge, 500, {
+      code: "PIPELINE_LOAD_FAILED",
+      message: "pipeline load failed",
+      detail: "RuntimeError: CUDA out of memory",
+    });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    const loadButton = await screen.findByRole("button", { name: "Load selected models" });
+    await waitFor(() => expect(loadButton).toBeEnabled());
+    await user.click(loadButton);
+
+    expect(
+      await screen.findByText(
+        "Model load failed: Failed to load the model pipeline. Check the server's VRAM and logs, then retry.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/CUDA out of memory/)).not.toBeInTheDocument();
+  });
+
   it("closing calls onClose", async () => {
     const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
     const user = userEvent.setup();

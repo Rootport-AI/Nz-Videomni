@@ -110,7 +110,11 @@ export function ModelsPanel({ apiClient }: ModelsPanelProps) {
   let errorMessage: string | null = null;
   if (load.status === "error") {
     const hint = strings.models.errorHints[load.code as keyof typeof strings.models.errorHints] ?? load.message;
-    errorMessage = strings.models.loadFailed(hint);
+    // A 422 is a refusal the server already worded for the user (e.g. the
+    // compatibility precheck's reason), so its `detail` is shown verbatim —
+    // the same condition as `useBaseModels`'s `classifySwitchFailure`. Any
+    // other failure keeps the generic hint, since its text can be technical.
+    errorMessage = strings.models.loadFailed(load.httpStatus === 422 ? (load.detail ?? hint) : hint);
   }
 
   return (

@@ -90,7 +90,7 @@ pinkcherry v18Hybrid: 見つからなかった。あったのは「PinkCherry fl
 
 ## 問 6 知られている問題と数字
 
-RTX 5090（joeygambino）の 1 ステップあたりの秒数（s/it）: nvfp4 12.7、int8 13.5、w4a8 14.05、fp8 14.8、Q8_0 の GGUF 19.4。RTX 4090: w4a8 17.4 に対して fp8 31.0（fp8 は CPU への退避が起きている）。4070 12 GB: fp8 で 544p・5 秒の Turbo に約 105 秒。ほかの人は fp8 が int8 より遅いと言っている。12〜16 GB での int8／fp8／int4 の比較は見つからなかった。
+RTX 5090（joeygambino）の 1 ステップあたりの秒数（s/it）: nvfp4 12.7、int8 13.5、w4a8 14.05、fp8 14.8、Q8_0 の GGUF 19.4。RTX 4090: w4a8 17.4 に対して fp8 31.0（fp8 は重みが VRAM に収まらず主記憶へ逃がすオフロードが起きている）。4070 12 GB: fp8 で 544p・5 秒の Turbo に約 105 秒。ほかの人は fp8 が int8 より遅いと言っている。12〜16 GB での int8／fp8／int4 の比較は見つからなかった。
 
 ComfyUI の issue: #17098 は RTX 5060 Ti で int8_convrot だとノイズが出て、fp8_scaled ではきれい（未解決）。#15563 は v0.32 の bf16 で黒いフレーム。#15524 は int8 ConvRot の VAE で黒いフレーム。fp8 に固有の黒いフレームの報告はない。
 

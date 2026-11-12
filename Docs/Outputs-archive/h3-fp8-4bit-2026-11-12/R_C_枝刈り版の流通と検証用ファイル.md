@@ -71,7 +71,7 @@ nvfp4 は大きさだけでは判断できない。lilcheaty の `nvfp4_full` 18
 ## 問 3 VRAM 12〜24 GB の GPU 向けの案内
 
 - [P] Comfy の公式の雛形（テンプレート）は、すべて `*_pruned_int8_convrot` を読み込む。https://github.com/Comfy-Org/workflow_templates/blob/main/templates/video_minimax_h3_i2v.json
-- [P] Comfy のブログは、RTX 3060 で動くのは枝刈り＋int8＋動的な退避（dynamic offloading）のおかげだとしている。https://blog.comfy.org/p/minimax-h3-day-0-support-in-comfyui
+- [P] Comfy のブログは、RTX 3060 で動くのは枝刈り＋int8＋動的なオフロード（重みを主記憶へ逃がすこと。dynamic offloading）のおかげだとしている。https://blog.comfy.org/p/minimax-h3-day-0-support-in-comfyui
 - [P] Comfy-Org のモデルカード: int8_convrot を優先し、fp8_scaled は int8_convrot が使えないときだけ。https://huggingface.co/Comfy-Org/MiniMax-H3
 - [I] 一般向けの GPU に非枝刈り版の量子化ファイルを勧める案内はない。実際上は枝刈り版が標準である。
 

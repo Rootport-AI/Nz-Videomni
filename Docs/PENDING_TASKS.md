@@ -31,7 +31,7 @@
 ### 1-283. MiniMax H3 の fp8 と 4bit 系（w4a8）の重みを、置くだけで動かす（起票：2026-11-12）
 
 - **概要**: CivitAI などで配布される MiniMax H3 の fp8（ComfyUI の `float8_e4m3fn`。テンソルごとの倍率つき）と w4a8（重み 4bit・活性化 8bit の `asym_w4a8_int8`）の safetensors を、現行の int8 ConvRot と同じく `models\MiniMaxH3\Weights\` に置くだけで選んで生成できるようにする。あわせて、量子化の印（`comfy_quant`）を層ごとのテンソルでなくファイル先頭のメタデータ `_quantization_metadata` に持つ書き方のファイルも読めるようにする（現状は `h3_format.py` が意図的に拒否している。h3ErosMax beta5 の 2 本と Kijai の w4a8 が該当）。
-- **範囲（オーナー裁定 2026-11-12）**: DiT（映像と音声を作る本体）のみで、テキストエンコーダは触らない。RTX 30 系（Ampere）でも動くこと。4bit 系は w4a8 を本命とし、nvfp4 と w4a4 は対象外。GGUF と BF16／FP16 のフルモデルは対象外。快適上限の線と較正は別の機会に見送る（線は据え置き）。非枝刈り版（`adaln_t_table` を持たず、時刻の埋め込みの枝をそのまま持つ版）の扱いは判断待ち。
+- **範囲（オーナー裁定 2026-11-12）**: DiT（映像と音声を作る本体）のみで、テキストエンコーダは触らない。RTX 30 系（Ampere）でも動くこと。4bit 系は w4a8 を本命とし、nvfp4 と w4a4 は対象外。GGUF と BF16／FP16 のフルモデルは対象外。快適上限の線と較正は別の機会に見送る（線は据え置き）。非枝刈り版（`adaln_t_table` を持たず、時刻の埋め込みの枝をそのまま持つ版）は対象外。
 - **あわせて直すもの**: Settings のモデル読み込み欄が、サーバーの返す具体的な理由（422 の `detail`）を捨てて種類ごとの定型文だけを表示する件（`useModels.ts`・`ModelsPanel.tsx`。ヘッダーのベースモデル欄は `detail` を表示している）。
 - **前提**: 実行方式（comfy-kitchen のカーネル／毎回 bf16 に戻す／読み込み時に int8 へ変換する）は比較のうえオーナーが選ぶ。前例は LTX 側の量子化 safetensors の判定器 `sft_quant_format.py`（fp8・int8・w4a8 とメタデータ式の印を扱う）と、その実行方式（毎回 bf16 に戻す。規則は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.3）。H3 の block swap と VRAM 16GB mode は `H3Int8Linear` の形（`forward_rows` など）に依存する（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5・§6.5）。fp8 の行列積のカーネルは RTX 40 系以降、w4a8 のカーネルは RTX 30 系以降で使える。
 - **検証用の実物**（`models\MiniMaxH3\Weights\` に置く）: Comfy-Org `minimax_h3_fl2va_pruned_fp8_scaled`、Kijai `minimax_h3_fl2va_pruned_w4a8_mixed`（印はメタデータ式のみ）、h3ErosMax beta5 `10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized`（w4a8 と int8 の層が混在。group size も混在。`adaln_t_table` が BF16）。

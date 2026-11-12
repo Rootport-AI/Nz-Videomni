@@ -17,7 +17,7 @@ How it is wired (Docs/MINIMAX_H3_DESIGN.md §6.6):
   and ``drop_to_meta`` carry them with the block, and the state dict does not
   change), a ``_lora_specs`` list, and ONE forward hook per module that calls
   :func:`apply` on every ``Module.__call__``;
-* ``H3Int8Linear.forward_rows`` (VRAM 16GB mode's qkv, which does not go
+* The quantized Linear's ``forward_rows`` (VRAM 16GB mode's qkv, which does not go
   through ``__call__``) calls :func:`apply` itself with its ``[n0, n1)`` rows of
   B, and ``lowvram.block_forward`` computes ``f32(h) @ A^T`` once per block
   (:func:`xa_for`) instead of once per head group; ``forward_rows_q`` (the same
@@ -288,7 +288,7 @@ def apply(module, x: torch.Tensor, out: torch.Tensor, n0: int = 0, n1: int | Non
     ``out`` holds output features ``[n0, n1)`` (``forward_rows``) or all of them;
     ``xa``: :func:`xa_for`'s result for this ``x`` (VRAM 16GB mode), else it is
     computed here; the row count comes from ``xa`` when given, so
-    ``H3Int8Linear.forward_rows_q`` passes ``x=None`` and always passes ``xa``.
+    the quantized Linear's ``forward_rows_q`` passes ``x=None`` and always passes ``xa``.
     Every matmul operand is float32; the f32 sum is added into
     the bf16 ``out`` once per element (the in-place add computes in f32 and
     rounds once).

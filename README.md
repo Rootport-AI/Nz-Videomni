@@ -259,7 +259,7 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
 - **NVIDIA ドライバ**: R580 以上（CUDA 13 系を使うため。これより古いドライバでは動きません）。
 - **GPU**: RTX 20 シリーズ（Turing 世代）以降。GTX 10 シリーズ以前（Pascal 世代以前）は CUDA 13 の対象外のため動きません。
   - 動作を確かめたのは RTX 40 シリーズ（Ada Lovelace 世代。RTX 4070 Ti SUPER）と RTX 30 シリーズ（Ampere 世代。RTX 3080 Laptop 16GB）です。RTX 50 シリーズ（Blackwell 世代）は、まだ確かめていません。
-  - RTX 20 シリーズは、int8（8 ビットの整数）の計算が遅い経路になり、SageAttention も使えません（標準の SDPA で動きます）。動くかどうかも未確認です。w4a8 の重み（下の「MiniMax H3 の重みの形式」）は、RTX 20 シリーズでは読み込みの時点で理由を示して断ります。
+  - RTX 20 シリーズは、int8（8 ビットの整数）の計算が遅い経路になり、SageAttention も使えません（標準の SDPA で動きます）。動くかどうかも未確認です。w4a8 の重み（下の「MiniMax H3 の重みの形式」）は、RTX 20 シリーズでは読み込みの時点で断ります（Settings には定型文が出ます。理由はアプリのフォルダの `logs\h3_worker.log` に残ります）。
   - fp8 の重みは、RTX 40 シリーズ以降では fp8 のまま行列の計算をし、RTX 30 シリーズ以前では毎回 bf16（16 ビットの浮動小数点）に戻して計算します。戻すぶん、RTX 30 シリーズでは RTX 40 シリーズより遅くなります。w4a8 の重みは RTX 30 シリーズ以降で動きます。仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §5 です。
 
 attention は全世代で PyTorch の SDPA を既定にしており、xformers や flash-attn はインストールもしなければコードからも呼びません（16GB 環境で速度を決めているのは attention ではなく重みの転送であるため。仕様書 §5.4）。SageAttention に必要なパッケージは `setup.bat` が標準で入れるため、追加の作業は要りません（`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24。後者は必要なコンパイラを同梱しているため、**Visual Studio の導入は不要**です）。MiniMax H3 の仮想環境に入れる SageAttention は、CUDA 13 系の torch に合わせたものを `install-MiniMaxH3.bat` が入れます。
@@ -384,7 +384,7 @@ GGUF の要件: (1) KVメタデータに `config`（モデル設定のJSON文字
 - **fp8**（ComfyUI の `float8_e4m3fn`。Comfy-Org の `minimax_h3_fl2va_pruned_fp8_scaled` など）: ComfyUI で使っている fp8 の重みを、できるだけ同じ計算で再現します。int8 ConvRot より遅くなります。
 - **w4a8**（重みを 4 ビット・入力を 8 ビットにして計算する形式。ComfyUI の `asym_w4a8_int8`。Kijai 氏の `minimax_h3_fl2va_pruned_w4a8_mixed` など）: 重みのファイルが小さくなります。RTX 30 シリーズ以降が必要です。
 
-量子化の印（どの層がどの形式かを示す情報）を、層ごとではなくファイルの先頭にまとめて書いた古い書き方のファイルも読めます。テキストエンコーダは、これまでどおり int8 ConvRot だけです。速さと VRAM の実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §211、GPU の世代による違いは上の「ハードウェア要件の詳細」の MiniMax H3 の項です。使えないファイルを Settings で読み込もうとすると、「MiniMax H3 のファイルとして使えません: 」で始まる理由が出ます。主に試してあるのは公式の配布物と、検証に使った第三者の fp8・w4a8 です。コミュニティ版のうち PinkCherry Hybrid は、置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版の動作は保証していません（§7.6）。
+量子化の印（どの層がどの形式かを示す情報）を、層ごとではなくファイルの先頭にまとめて書いた古い書き方のファイルも読めます。テキストエンコーダは、これまでどおり int8 ConvRot だけです。速さと VRAM の実測は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §211、GPU の世代による違いは上の「ハードウェア要件の詳細」の MiniMax H3 の項です。事前検査で使えないと分かったファイルを Settings で読み込もうとすると、「MiniMax H3 の重みファイルとして使えません」で始まる文が出ます。主に試してあるのは公式の配布物と、検証に使った第三者の fp8・w4a8 です。コミュニティ版のうち PinkCherry Hybrid は、置いて生成できた実績があります（動作の保証はありません）。それ以外の派生版の動作は保証していません（§7.6）。
 
 **LoRA**: ここで言う LoRA は、利用者が自分で用意する**画風・キャラクター系（スタイル LoRA）**のことです。`config.yaml` の `ic_loras:` に登録済みの IC-LoRA（`pixel-spatial-upscaler-x2` / `canny-control` / `pose-control` / `depth-control` / `deblur` / `in-outpainting`、LTX 2.5 の `alpha-gen`〔`install-LTX25.bat` が取得〕）は `install_ltx.ps1` が自動取得するので、下記の手動配置の対象ではありません。**LoRA の置き場所は、LTX 2.3 と LTX 2.5 では共通です**——LTX 2.5 を選んでいるときも、`models/LTX23/StyleLoRA/` と `config.yaml` の `ic_loras:` に登録した同じファイルがそのまま使われます（効き方の違いは §7.1）。**MiniMax H3 は置き場所が別で、`models/MiniMaxH3/LoRA/` です**（下に書きます）。H3 を選ぶと、一覧にはこのフォルダの LoRA だけが並びます。H3 は IC-LoRA（参照動画による制御）には対応していません（§7.6）。
 

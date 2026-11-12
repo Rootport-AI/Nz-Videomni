@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-12
+- 作成: 2026-07-15／最終更新: 2026-11-13
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -34,21 +34,21 @@
 
 ### 1-283. MiniMax H3 の fp8 と 4bit 系（w4a8）の重みを、置くだけで動かす（起票：2026-11-12）
 
-- **概要**: MiniMax H3 の DiT が、int8 ConvRot に加えて fp8（`float8_e4m3fn`）と w4a8（`asym_w4a8_int8`）の safetensors を受け、量子化の印をファイル先頭のメタデータに書く旧式のファイルも読む。Settings のモデル読み込み欄は、422 の拒否でサーバーの理由（`detail`）を表示する。バックエンド（弾 1）と操作パネル（弾 2）は dev に入り、機械の門・GPU の門（開発機で 7 条件）・オーナーの視聴は合格（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211）。RTX 20 系での w4a8 の拒否は実機では確かめず、エンジンの単体テストで押さえる（手元に Turing の機械が無い）。
+- **概要**: MiniMax H3 の DiT が、int8 ConvRot に加えて fp8（`float8_e4m3fn`）と w4a8（`asym_w4a8_int8`）の safetensors を受け、量子化の印をファイル先頭のメタデータに書く旧式のファイルも読む。Settings のモデル読み込み欄は、422 の拒否でサーバーの理由（`detail`）を表示する。バックエンド（弾 1）と操作パネル（弾 2）は dev に入り、機械の門・GPU の門（開発機で 7 条件）・オーナーの視聴は合格（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211）。RTX 20 系での w4a8 の拒否は実機では確かめず、エンジンの単体テストで押さえる（手元に Turing の機械が無い）。開発機の 3 項目は 2026-11-13 に合格した。サブ検証機の 3 項目は、dev を main へ統合した後に行う（オーナー指示 2026-11-13）。同じ日に、H3 でないファイルを断る文を短くした（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211.12）。
 - **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5・§7・裁定 101、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211、フロントエンド `Docs/DEVLOG.md` §171。本節が実機確認の項目の正本（フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30 はここを参照する）。
 
 #### Settings の理由文（開発機。`.aux2` は配備済み）
 
-- [ ] LTX 2.3 の量子化 safetensors（`models\LTX23\Weights\` の fp8 か int8 の `.safetensors`）を 1 本 `models\MiniMaxH3\Weights\` に写す。ベースモデルを MiniMax H3 にして、Settings の「モデル一覧を更新」を押し、「動画モデル (checkpoint)」でそのファイルを選んで「選択したモデルを読込」を押す → 欄に「モデルの読込に失敗しました: MiniMax H3 のファイルとして使えません: LTX の DiT です（MiniMax H3 の DiT ではありません）」と出る（「選択したファイルはこの用途のモデルとして不正です。」の文ではない）。確かめたら、写したファイルを消す。
+- [x] LTX 2.3 の量子化 safetensors（`models\LTX23\Weights\` の fp8 か int8 の `.safetensors`）を 1 本 `models\MiniMaxH3\Weights\` に写す。ベースモデルを MiniMax H3 にして、Settings の「モデル一覧を更新」を押し、「動画モデル (checkpoint)」でそのファイルを選んで「選択したモデルを読込」を押す → 欄に「モデルの読込に失敗しました: MiniMax H3 の重みファイルとして使えません」と出る（「選択したファイルはこの用途のモデルとして不正です。」の文ではない）。確かめたら、写したファイルを消す。（合格 2026-11-13。確かめたときの文は旧文「…LTX の DiT です（MiniMax H3 の DiT ではありません）」。同じ日に今の文へ改め、単体テストで固定した）
 
 #### 旧式の印の int8（開発機）
 
-- [ ] Settings の「動画モデル (checkpoint)」で `h3ErosMax_beta5_3185154` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る（このファイルは GPU の門 G5 で完走済み）。
-- [ ] 同じく `h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。続けて Single で 1280×768・73 フレーム・Steps 8・Shift（映像）10・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる。
+- [x] Settings の「動画モデル (checkpoint)」で `h3ErosMax_beta5_3185154` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る（このファイルは GPU の門 G5 で完走済み）。（合格 2026-11-13）
+- [x] 同じく `h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。続けて Single で 1280×768・73 フレーム・Steps 8・Shift（映像）10・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる。（合格 2026-11-13）
 
-#### サブ検証機（RTX 3080 mobile。計算能力 8.6＝fp8 は bf16 に戻す経路）
+#### サブ検証機（RTX 3080 mobile。計算能力 8.6＝fp8 は bf16 に戻す経路。main への統合後に実施〔オーナー指示 2026-11-13〕）
 
-前準備: サブ検証機を dev の最新に更新し、開発機の `models\MiniMaxH3\Weights\` から `minimax_h3_fl2va_pruned_fp8_scaled.safetensors` と `minimax_h3_fl2va_pruned_w4a8_mixed.safetensors` を同じフォルダへ写す。
+前準備: サブ検証機を main の最新に更新し、開発機の `models\MiniMaxH3\Weights\` から `minimax_h3_fl2va_pruned_fp8_scaled.safetensors` と `minimax_h3_fl2va_pruned_w4a8_mixed.safetensors` を同じフォルダへ写す。
 
 - [ ] Settings の「動画モデル (checkpoint)」で `minimax_h3_fl2va_pruned_fp8_scaled` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。アプリのフォルダの `logs\h3_worker.log` を開いて末尾を見る → `[h3_worker] fp8: 200 layer(s), path 'dequant' (compute capability 8.6); 50 marked full_precision_matrix_mult run dequantized` の行がある。
 - [ ] 上の fp8 のまま、Single で 1280×768・73 フレーム・Steps 20・Shift（映像）12・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる（int8 より時間がかかる）。

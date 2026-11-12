@@ -24035,3 +24035,14 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の 1-283 は、§1 から §2（実装済み・オーナーのテスト待ち）へ移しました。確かめるのは、Settings の理由文（開発機）、サブ検証機での fp8 の `dequant` の経路と w4a8 の完走、旧式の印の h3ErosMax beta5 の 2 本の読み込みです。項目の正本は台帳 §2 で、フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30 からはそこを参照します。
 - RTX 20 系での w4a8 の拒否は、実機では確かめません（開発機もサブ検証機も Turing ではない）。根拠はエンジンの単体テスト（計算能力の差し替え）です。
 - VRAM 16GB mode の w4a8 が int8 より約 1 割遅い件（qkv の片ごとにカーネルが入力を量子化し直す）は、台帳 §3-284 に起票しました。
+
+### 211.12 オーナーの実機確認（開発機）と、H3 でないファイルを断る文の整理（2026-11-13）
+
+- **結果**: 結果の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-283 です。開発機の 3 項目（Settings の理由文、旧式の印の int8 の 2 本の読み込み、`h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` での Single の生成）が合格しました。
+- **オーナーの問い**: 確かめたときの文「MiniMax H3 のファイルとして使えません: LTX の DiT です（MiniMax H3 の DiT ではありません）」の「LTX の DiT です」に根拠はあるか。
+- **調べた結果**: コードは、H3 のヘッダの判定に落ちたあと、テンソル名のどれかに `transformer_blocks.0.` が含まれるかだけを見ていました。この名前は Diffusers〔Hugging Face の画像・動画生成の部品集〕式の一般的な付け方で、LTX のほか Diffusers 形式の FLUX・HunyuanVideo・CogVideoX にも共通します。つまり「LTX」は当て推量で、LTX だと見分けてはいませんでした。オーナーが例に挙げた Wan 2.x は `blocks.<n>.` の名前なので、LTX とは書かれず、もう一方の文「video_patch_proj.weight と audio_patch_proj.weight がそろっていません」になっていました。
+- **裁定（オーナー）**: LTX だと見分けていない以上、理由は付けない。H3 の DiT でないファイルは、どれも「MiniMax H3 の重みファイルとして使えません」だけを返します（Settings では「モデルの読込に失敗しました: MiniMax H3 の重みファイルとして使えません」）。
+- **監督の判断（オーナーが覆してよい）**: オーナーの文が「重みファイル」なので、H3 の拒否の文すべての頭を「MiniMax H3 のファイルとして使えません: 」から「MiniMax H3 の重みファイルとして使えません: 」へそろえました。
+- **変えたもの**: `h3_format.py`（`inspect_h3_dit` の `transformer_blocks.0.` の分かれ道を消した）、`tests/test_h3_format.py`・`tests/test_engine_h3_adapter.py`・`tests/test_model_swap_load.py`（3 ファイル・4 件のテストが文を一字一句で確かめる）。仕様書 v0.5.122 §6.8 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §7 の文も合わせました。
+- **文書と注釈のレビュー**: 文書とコード内の注釈に敵対的レビューを受け、11 件（矛盾 5・更新漏れ 5・参照誤り 1）をすべて反映した。主なもの: 裁定 94 の理由の現行化、CLOSED 1-124 の §3-281 (b) の参照を本記録簿 §209.6 へ、ヘッダが読めないファイルの文の例外（仕様書 §6.8）、README の「RTX 20 系の w4a8 の拒否は Settings では定型文」、`lowvram.py`・`lora.py` の注釈の `H3Int8Linear` を 3 クラス共通の言い方に。
+- **残り**: サブ検証機の 3 項目（fp8 の読み込みと `path 'dequant'` のログの行、fp8 の生成、w4a8 の読み込みと生成）は、dev を main へ統合した後に行います（オーナー指示 2026-11-13）。

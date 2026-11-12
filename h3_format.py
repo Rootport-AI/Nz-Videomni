@@ -27,8 +27,9 @@ SPECIFICATION (R2 report, section H); no ComfyUI code is copied:
   accepts: the DiT takes :data:`DIT_FORMATS` (int8, fp8, w4a8), the text
   encoder :data:`TE_FORMATS` (int8 only).
 
-What this module refuses, each with a Japanese reason the UI can show as is:
-not H3 / the non-pruned DiT (no ``adaln_t_table``; it needs the time embedder
+What this module refuses, with a Japanese message the UI can show as is (a
+file that is not an H3 DiT gets the bare refusal, everything else a reason):
+the non-pruned DiT (no ``adaln_t_table``; it needs the time embedder
 this engine does not build yet) / a required tensor missing / a shape that
 contradicts the others / a quantized layer whose tensors do not match its
 format exactly / an I8 or F8 weight without a marker / a float layer with a
@@ -72,7 +73,8 @@ _STRAY_AUX = tuple(sorted({leaf for leaves in _AUX.values() for leaf in leaves} 
 
 H3_PREFIXES = ("", "model.diffusion_model.", "model.model.", "net.")
 
-_NG = "MiniMax H3 のファイルとして使えません: "
+_NG_BARE = "MiniMax H3 の重みファイルとして使えません"
+_NG = _NG_BARE + ": "
 
 
 class H3FormatError(ValueError):
@@ -502,12 +504,8 @@ def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
     header = _read_header(path)
     names = set(header.tensors)
     if not is_h3_dit_header(header):
-        if any("transformer_blocks.0." in n for n in names):
-            raise H3FormatError(_NG + "LTX の DiT です（MiniMax H3 の DiT ではありません）")
-        raise H3FormatError(
-            _NG + "video_patch_proj.weight と audio_patch_proj.weight がそろっていません"
-            "（MiniMax H3 の DiT ではありません）"
-        )
+        # Deliberately names no other model: tensor names cannot tell which model a non-H3 file belongs to.
+        raise H3FormatError(_NG_BARE)
     prefix = detect_h3_prefix(names)
     t = {n[len(prefix):]: info for n, info in header.tensors.items() if n.startswith(prefix)}
     outside = sorted(n for n in names if not n.startswith(prefix))

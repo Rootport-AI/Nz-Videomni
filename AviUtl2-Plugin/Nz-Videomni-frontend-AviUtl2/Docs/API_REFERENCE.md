@@ -211,7 +211,7 @@
 - ボディ `{"models": {"transformer":"名前", "text_encoder":"名前", ...}}`: モデルスワップ(worker再構築、数分かかる)。カテゴリは `transformer`/`text_encoder`/`video_vae`/`audio`。`"default"`は既定に戻す意味。
 - 応答の`models`欄(`webui/src/api/types.ts`の`PipelineLoadResponse.models?: Record<ModelCategory, string>`): リクエストが**非空の`models`ブロックを含んだ場合のみ**応答に含まれ、確定した各カテゴリのactive選択をエコーする。ボディ省略/空でロードした場合(上記の1つ目のケース)はこの欄自体が応答に無い。
 - ジョブ実行中は `409 JOB_BUSY`。ロード失敗は `503 PIPELINE_LOAD_FAILED`(フォールバック無し)。
-- 選んだファイルが事前検査に通らないときは `422 MODEL_INCOMPATIBLE`(ファイルが無いときは`422 MODEL_FILE_MISSING`)。`detail`にサーバーが書いた利用者向けの理由が入る(MiniMax H3 では「MiniMax H3 のファイルとして使えません: 」で始まる日本語の文。例はバックエンド仕様書 §6.8)。**Settings のモデル読み込み欄(`shell/ModelsPanel.tsx`)は、422 のときだけ`detail`をそのまま表示し、それ以外の失敗は従来の定型文を出す**(2026-11-12。ヘッダーのベースモデル欄`useBaseModels.ts`と同じ条件。`DEVLOG.md` §171)。
+- 選んだファイルが事前検査に通らないときは `422 MODEL_INCOMPATIBLE`(ファイルが無いときは`422 MODEL_FILE_MISSING`)。`detail`にサーバーが書いた利用者向けの理由が入る(MiniMax H3 では「MiniMax H3 の重みファイルとして使えません」で始まる日本語の文。例はバックエンド仕様書 §6.8)。**Settings のモデル読み込み欄(`shell/ModelsPanel.tsx`)は、422 のときだけ`detail`をそのまま表示し、それ以外の失敗は従来の定型文を出す**(2026-11-12。ヘッダーのベースモデル欄`useBaseModels.ts`と同じ条件。`DEVLOG.md` §171)。
 - **ロードは遅い**ので httpx タイムアウトは600秒推奨(`gradio_ui/api_client.py`の`ApiClient.load_pipeline`／`ApiClient.load_pipeline_models`)。
 
 ### 3.4 `POST /pipeline/unload`(`api/pipeline.py::unload_pipeline`)— 認証あり

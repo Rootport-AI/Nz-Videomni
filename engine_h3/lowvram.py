@@ -8,11 +8,12 @@ calls (``_modulate``, ``_gate``, ``block.mlp``, ``_attention``, ``apply_rope``,
 ``_linear_f32``, the norms, and the negative prompt's ``vsf.flip_values``),
 only over a range of rows or a group of heads at a time, written into
 preallocated outputs. The one exception is how the qkv input reaches the
-int8 kernels: it is quantized once per block and the head groups' slices
-reuse it (``H3Int8Linear.quantize_input`` / ``forward_rows_q``,
+quantized kernels: the layer's ``shares_input`` decides. When it says yes
+(int8, and fp8 ``scaled``) the input is quantized once per block and the head
+groups' slices reuse it (the layer's ``quantize_input`` / ``forward_rows_q``,
 台帳 §1-105 ①; the same comfy-kitchen kernels with the same arguments, see
-``engine_h3.quant_linear``), or, when ``shares_input`` says no, once per slice
-by ``forward_rows`` as before. Every one of those operations is
+``engine_h3.quant_linear``); otherwise (w4a8, whose kernel quantizes inside)
+once per slice by ``forward_rows`` as before. Every one of those operations is
 per row or per head, so the target is the off path's result bit for bit
 (裁定 46; checked by the CPU tests and the GPU gates A-G2 / A-G3b). sdpa is
 bit-identical; with sage, 2 of the 50 blocks differ (the SageAttention kernel
@@ -20,7 +21,7 @@ depends on the heads per call), accepted by 裁定 53 (VERIFICATION_LOG §169.3)
 
 What is cut, and why it lowers the peak (VERIFICATION_LOG §168):
   * attention: q, k and v are projected per head group straight from the
-    rows of the stacked ``[q; k; v]`` weight (``H3Int8Linear.forward_rows``, or
+    rows of the stacked ``[q; k; v]`` weight (the quantized Linear's ``forward_rows``, or
     ``forward_rows_q`` on the input quantized once per block),
     so the fused ``[S, 3 * 7168]`` qkv never exists; the group's output is
     copied into one ``[S, 7168]`` buffer before ``out_proj``;

@@ -1422,7 +1422,7 @@ def test_precheck_refuses_an_ltx_safetensors_as_the_h3_transformer(three_family_
     assert r.status_code == 422, r.text
     error = r.json()["error"]
     assert error["code"] == "MODEL_INCOMPATIBLE"
-    assert "LTX の DiT です" in error["detail"]
+    assert error["detail"] == "MiniMax H3 の重みファイルとして使えません"
 
 
 @pytest.mark.parametrize("fmt", ["fp8", "fp8_full", "fp8_noinput", "w4a8", {"fmt": "w4a8", "g": 4, "codebook": False}])

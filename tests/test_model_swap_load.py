@@ -324,7 +324,7 @@ def test_precheck_h3_dit_is_judged_by_its_fingerprint(tmp_path):
 
 def test_precheck_h3_refusal_is_model_incompatible_not_a_500(tmp_path):
     """An LTX safetensors offered as the H3 transformer: ``H3FormatError`` (a
-    ValueError) becomes MODEL_INCOMPATIBLE with the inspection's reason."""
+    ValueError) becomes MODEL_INCOMPATIBLE with the plain refusal message."""
     from test_h3_format import _write
 
     ltx_like = _write(
@@ -334,7 +334,7 @@ def test_precheck_h3_refusal_is_model_incompatible_not_a_500(tmp_path):
     with pytest.raises(APIError) as ei:
         precheck_model_file("transformer", "ltx", Path(ltx_like), engine_family="h3")
     assert ei.value.code == "MODEL_INCOMPATIBLE"
-    assert "LTX の DiT です" in ei.value.detail
+    assert ei.value.detail == "MiniMax H3 の重みファイルとして使えません"
 
 
 def test_precheck_h3_text_encoder_refusal(tmp_path):

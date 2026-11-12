@@ -198,8 +198,9 @@ def test_ltx_header_is_not_h3(tmp_path):
     }
     path = _write(tmp_path / "ltx.safetensors", t, metadata={"config": "{}"})
     assert not h3_format.is_h3_dit_header(h3_format.read_header(path))
-    with pytest.raises(H3FormatError, match="LTX"):
+    with pytest.raises(H3FormatError) as ei:
         h3_format.inspect_h3_dit(path)
+    assert str(ei.value) == "MiniMax H3 の重みファイルとして使えません"
 
 
 def test_video_patch_alone_is_not_h3(tmp_path):
@@ -207,8 +208,9 @@ def test_video_patch_alone_is_not_h3(tmp_path):
     del t["audio_patch_proj.weight"]
     path = _write(tmp_path / "dit.safetensors", t)
     assert not h3_format.is_h3_dit_header(h3_format.read_header(path))
-    with pytest.raises(H3FormatError, match="audio_patch_proj"):
+    with pytest.raises(H3FormatError) as ei:
         h3_format.inspect_h3_dit(path)
+    assert str(ei.value) == "MiniMax H3 の重みファイルとして使えません"
 
 
 def test_detect_prefix_without_video_patch_raises():

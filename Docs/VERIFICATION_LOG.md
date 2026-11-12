@@ -23724,7 +23724,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - 単体テスト: `useInpaintForm.test.tsx` に 2 件（部分フィルタの右クリックし直しで読み直して門が解ける／対象動画の右クリックし直しでも読み直す）。件名は DEVLOG §170.5。
 - `npm run typecheck` 合格、vitest 188 ファイル・3,781 件合格（追加 2 件を含む）、aux2 を `build.ps1 -RunTests` で再ビルド（doctest 402 件合格）し `deploy.ps1` で実機と配布コピーへ配布（2026-11-12 12:03）。
 - 実機: フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.29。
-- オーナーの判定: （未）
+- オーナーの判定: 3 項目とも合格（2026-11-12。MiniMax H3 と LTX の両方）。main への merge は、別セッションの作業中の更新が dev に含まれうるため保留（オーナー指示）。
 
 ### 209.6 台帳の扱い
 

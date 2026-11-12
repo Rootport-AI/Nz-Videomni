@@ -6539,3 +6539,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 170.6 実機の門
 
 - 手順と結果は [`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.29 です。`.aux2` は `scripts/build.ps1` で作り直し、`scripts/deploy.ps1` で実機と backend リポジトリの配布コピーの 2 箇所へ置きます。
+- 結果: ①〜③ とも合格（2026-11-12、オーナー実機確認。MiniMax H3 と LTX の両方）。
+

@@ -3412,5 +3412,5 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
   - 元動画への合成が、マスクで覆いきれない縁の映り込みを吸収した（同 §208.10）。
 - **留保**: 時間方向の精密な対応（[`PENDING_TASKS.md`](PENDING_TASKS.md) §3-282）・`OutpaintSpec.source_video_id` の空文字（同 §3-280 (c)）・1080p のマスク動画を作れなかった件（同 §3-281 (b)）。
 - **派生**: なし。
-- **状態**: 完結（日付 2026-11-12）。main への merge: （監督が追記）。コミットのハッシュは git の履歴を正とします。
+- **状態**: 完結（日付 2026-11-12）。main へマージ済み（`65b035c`）。コミットのハッシュは git の履歴を正とします。
 - **正本・出典**: 仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`、マスクの受け渡しは [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §169、記録は記録簿 §207・§208。起票はオーナー指示 2026-11-02、判定はオーナー 2026-11-12。

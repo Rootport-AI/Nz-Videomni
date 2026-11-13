@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from api.errors import APIError
 from config import AppConfig, EngineComfortProfile
+from h3_format import H3_QUANT_CLASSES
 from services.alpha_output_manager import AlphaOutputManager
 from services.audio_upload_store import AudioUploadStore
 from services.base_models import BaseModelDescriptor, load_base_models
@@ -122,6 +123,10 @@ class AppContext:
             # TO, and to publish the new active base back.
             model_registry=self.model_registry,
         )
+        # The restored selection's weight kind (H3), so the comfort marker is
+        # on the right line before anything is loaded. Header only; None when
+        # the file is missing.
+        self.pipeline_manager.identify_quant_class()
         # Last, and independent of everything above: tracking shares no state
         # with the pipeline (no base model, no selection, no queue).
         self.tracking_manager = TrackingManager(self.config)
@@ -214,8 +219,10 @@ def build_comfort_budgets(
     that does not validate as :class:`EngineComfortProfile`, a row whose
     ``requires.weight_class`` is missing or not one of ``WEIGHT_CLASSES``, or
     two descriptors of the same family both carrying ``comfort`` raise
-    :class:`RuntimeError`. A profile with no ``rows`` and only
-    ``single_rows_budget`` (a rows-line family, MiniMax H3) is valid.
+    :class:`RuntimeError`, and so does a ``single_rows_budget_by_quant_class``
+    key that is not one of ``h3_format.H3_QUANT_CLASSES``. A profile with no
+    ``rows`` and only ``single_rows_budget`` (a rows-line family, MiniMax H3)
+    is valid.
     """
     budgets: dict[str, EngineComfortProfile] = {}
     for base_id, descriptor in base_models.items():
@@ -234,6 +241,13 @@ def build_comfort_budgets(
                     f"base-model descriptor {base_id}: comfort: "
                     f"rows[{index}].requires.weight_class must be one of "
                     f"{list(WEIGHT_CLASSES)} (got {weight_class!r})"
+                )
+        for key in profile.single_rows_budget_by_quant_class:
+            if key not in H3_QUANT_CLASSES:
+                raise RuntimeError(
+                    f"base-model descriptor {base_id}: comfort: "
+                    f"single_rows_budget_by_quant_class key must be one of "
+                    f"{list(H3_QUANT_CLASSES)} (got {key!r})"
                 )
         family = descriptor.engine_family
         if family in budgets:

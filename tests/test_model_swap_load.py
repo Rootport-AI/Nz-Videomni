@@ -364,7 +364,7 @@ def test_shipped_h3_descriptor_shape():
     assert h3.display_name == "MiniMax H3"
     assert list(h3.categories) == ["transformer", "text_encoder", "video_vae", "audio"]
     assert h3.assets == {"tokenizer_dir": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer"}
-    assert h3.comfort == {"single_rows_budget": 219516}
+    assert h3.comfort == {"single_rows_budget": 219516, "single_rows_budget_by_quant_class": {"w4a8": 203092}}
 
 
 def _shipped_ltx23():

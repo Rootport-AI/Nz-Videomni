@@ -40,6 +40,13 @@ two-layer shape and describes the ACTIVE base model. Alongside it:
     successful load filled (services/weight_identity.py). Never computed here;
     ``null`` for every non-active base model, a base model without
     ``known_weights``, a file that matches none, or one not yet hashed.
+    And ``transformer_quant_class`` (``"int8"``/``"fp8"``/``"w4a8"``/
+    ``null``): the kind of the selected H3 transformer's weights
+    (``h3_format.quant_class``), the key a client matches against
+    ``limits.comfort_budgets.h3.single_rows_budget_by_quant_class``. Read
+    from the header when the selection changes (a successful load, and once
+    at startup); never computed here. ``null`` for every non-active base
+    model, an LTX one, and a file that is missing or cannot be read.
 
 CATEGORY ORDER IS CARRIED BY AN ARRAY, NOT BY OBJECT KEY ORDER. Both
 ``categories`` blocks are emitted in declaration order and Python dicts keep
@@ -190,6 +197,14 @@ def list_models(context: AppContext = Depends(get_context)) -> dict:
                         base_active,
                         context.pipeline_manager.weight_identity,
                     )
+                    if is_active
+                    else None
+                ),
+                # The weight kind of the selected H3 transformer (see the
+                # module docstring). Only read here: the pipeline manager
+                # records it when the selection changes.
+                "transformer_quant_class": (
+                    context.pipeline_manager.transformer_quant_class
                     if is_active
                     else None
                 ),

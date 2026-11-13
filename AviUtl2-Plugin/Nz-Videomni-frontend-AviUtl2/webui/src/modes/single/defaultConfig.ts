@@ -141,7 +141,15 @@ export const FALLBACK_APP_CONFIG: AppConfig = {
         ],
         outpaint_budget: 46080,
       },
-      h3: { spatial_factor: 32, temporal_factor: 8, rows: [], single_rows_budget: 219516 },
+      // §1-286: the w4a8 weights take a lower rows line; int8/fp8 fall back
+      // to `single_rows_budget` (`Docs/COMFORT_LIMIT_TABLE.md` §21).
+      h3: {
+        spatial_factor: 32,
+        temporal_factor: 8,
+        rows: [],
+        single_rows_budget: 219516,
+        single_rows_budget_by_quant_class: { w4a8: 203092 },
+      },
     },
   },
   upload: {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, BackendApiError } from "../api/client";
 import type { ApiClient } from "../api/client";
-import type { BaseModelBlock, BaseModelConstraints, TransformerRole } from "../api/types";
+import type { BaseModelBlock, BaseModelConstraints, TransformerQuantClass, TransformerRole } from "../api/types";
 import type { AppMode } from "./AppShell";
 import { disabledModesFor } from "./featureScope";
 import { resolveGenerationConstraints } from "./generationConstraints";
@@ -70,6 +70,13 @@ export interface BaseModelOption {
    * this is not the active base model, or the field was omitted (a backend
    * older than §1-107). */
   transformerRole: TransformerRole | null;
+  /** §1-286: the quantisation kind of the MiniMax H3 transformer this base
+   * model has selected (`BaseModelBlock.transformer_quant_class`): `"int8"`,
+   * `"fp8"`, `"w4a8"`, or `null` when the server could not tell, this is an
+   * LTX or non-active base model, or the field was omitted (a backend older
+   * than §1-286). `shell/comfortTable.ts`'s `resolveSequenceRowsBudget` reads
+   * `null` as "use the default rows line". */
+  quantClass: TransformerQuantClass | null;
   /** The numeric rules this base model's engine checks a request against
    * (`BaseModelBlock.constraints`), copied as served.
    * `null` on a backend that does not publish the key —
@@ -174,6 +181,12 @@ export interface UseBaseModelsResult {
    * after a pipeline load exactly like {@link activeWeightClass}. `null` =
    * unknown. */
   activeTransformerRole: TransformerRole | null;
+  /** §1-286: the LOADED base model's transformer quantisation kind — see
+   * {@link BaseModelOption.quantClass}. Read off `active` and refreshed after
+   * a pipeline load exactly like {@link activeWeightClass}, and threaded down
+   * to every `resolveSequenceRowsBudget` caller. `null` = unknown (the default
+   * rows line). */
+  activeQuantClass: TransformerQuantClass | null;
   /** The LOADED base model's numeric rules, already
    * flattened by `shell/generationConstraints.ts`: Create's frame grid, size
    * multiple, fps range and sampling sliders. Read off `active` for the same
@@ -212,6 +225,8 @@ function toOption(block: BaseModelBlock): BaseModelOption {
     weightClass: block.transformer_weight_class ?? "",
     // Same "null or absent = unknown" rule (§1-107).
     transformerRole: block.transformer_role ?? null,
+    // Same "null or absent = unknown" rule (§1-286).
+    quantClass: block.transformer_quant_class ?? null,
     // Absent (a backend that predates the key) means "the LTX rules";
     // `resolveGenerationConstraints` supplies them.
     constraints: block.constraints ?? null,
@@ -323,6 +338,10 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     () => options.find((o) => o.id === active)?.transformerRole ?? null,
     [options, active],
   );
+  const activeQuantClass = useMemo(
+    () => options.find((o) => o.id === active)?.quantClass ?? null,
+    [options, active],
+  );
   // Keyed on the block's CONTENT, not on `options`' identity: the shell
   // re-runs `refresh()` after every pipeline load, which rebuilds `options`
   // even when nothing changed, and Create resets its sampling sliders to the
@@ -346,6 +365,7 @@ export function useBaseModels(deps: UseBaseModelsDeps = {}): UseBaseModelsResult
     activeEngineFamily,
     activeWeightClass,
     activeTransformerRole,
+    activeQuantClass,
     activeConstraints,
     disabledModes,
     switchBaseModel,

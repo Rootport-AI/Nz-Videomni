@@ -395,6 +395,49 @@ describe("resolveSequenceRowsBudget", () => {
       expect(resolveSequenceRowsBudget(limitsWithH3Budget(bad), "h3")).toBeNull();
     }
   });
+
+  // Ledger §1-286: the per-kind line picked by the transformer's quantisation kind.
+  /** The served limits with an `h3` profile carrying `single_rows_budget_by_quant_class`. */
+  function limitsWithH3ByClass(byClass: Record<string, number> | null | undefined): AppLimits {
+    return limitsWith({
+      comfort_budgets: {
+        ...FALLBACK_APP_CONFIG.limits.comfort_budgets,
+        h3: {
+          spatial_factor: 32,
+          temporal_factor: 8,
+          rows: [],
+          single_rows_budget: 219516,
+          ...(byClass === undefined ? {} : { single_rows_budget_by_quant_class: byClass }),
+        },
+      },
+    });
+  }
+
+  it("returns the w4a8 line for w4a8 and the default line for int8/fp8/null/undefined", () => {
+    expect(resolveSequenceRowsBudget(limitsWith(), "h3", "w4a8")).toBe(203092);
+    for (const kind of ["int8", "fp8", null, undefined] as const) {
+      expect(resolveSequenceRowsBudget(limitsWith(), "h3", kind)).toBe(219516);
+    }
+  });
+
+  it("falls back to the default line when the per-kind value is unusable or the map is absent", () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(resolveSequenceRowsBudget(limitsWithH3ByClass({ w4a8: bad }), "h3", "w4a8")).toBe(219516);
+    }
+    // An older backend (no key) and an explicit `null` map both mean "no per-kind line".
+    expect(resolveSequenceRowsBudget(limitsWithH3ByClass(undefined), "h3", "w4a8")).toBe(219516);
+    expect(resolveSequenceRowsBudget(limitsWithH3ByClass(null), "h3", "w4a8")).toBe(219516);
+    expect(resolveSequenceRowsBudget(limitsWithH3ByClass({}), "h3", "w4a8")).toBe(219516);
+  });
+
+  it("leaves LTX and a missing profile untouched whatever the kind", () => {
+    for (const family of ["ltx", "ltx25", "wan", "", undefined]) {
+      for (const kind of ["int8", "fp8", "w4a8", null, undefined] as const) {
+        expect(resolveSequenceRowsBudget(limitsWith(), family, kind)).toBeNull();
+      }
+    }
+    expect(resolveSequenceRowsBudget(limitsWithoutTable(), "h3", "w4a8")).toBeNull();
+  });
 });
 
 describe("singleLegacySpillTable", () => {

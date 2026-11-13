@@ -705,7 +705,7 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
     expect(MOCK_CONFIG_BODY.limits.comfort_budgets.ltx.rows.every((row) => !("alpha_gen_budget" in row))).toBe(true);
   });
 
-  it("h3: no rows, only the sequence-rows line (台帳 §1-119)", () => {
+  it("h3: no rows, only the sequence-rows line and its per-kind lines (台帳 §1-119・§1-286)", () => {
     // Mirrors `scripts/manifests/40-minimaxh3.json`'s `comfort`. The `null`
     // keys the server's `model_dump()` also sends (`outpaint_budget`) are
     // omitted here, as everywhere in this fixture.
@@ -714,6 +714,7 @@ describe("MOCK_CONFIG_BODY.limits <-> FALLBACK_APP_CONFIG.limits parity (B-1)", 
       temporal_factor: 8,
       rows: [],
       single_rows_budget: 219516,
+      single_rows_budget_by_quant_class: { w4a8: 203092 },
     });
   });
 });

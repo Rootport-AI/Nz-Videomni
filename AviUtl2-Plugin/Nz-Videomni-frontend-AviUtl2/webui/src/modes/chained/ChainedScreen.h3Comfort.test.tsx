@@ -73,13 +73,12 @@ function Providers({ children, nativeBridge }: { children: ReactNode; nativeBrid
   );
 }
 
-function renderChain(
-  extra: Partial<ChainedScreenProps> = H3_PROPS,
-  options: Omit<MockBridgeOptions, "delayMs"> = {},
-  transformerRole: TransformerRole | null = null,
+function chainTree(
+  nativeBridge: ReturnType<typeof createMockBridge>,
+  extra: Partial<ChainedScreenProps>,
+  transformerRole: TransformerRole | null,
 ) {
-  const nativeBridge = createMockBridge({ delayMs: 0, ...options });
-  return render(
+  return (
     <Providers nativeBridge={nativeBridge}>
       <ChainedScreen
         prompt="a cat riding a skateboard"
@@ -91,8 +90,21 @@ function renderChain(
         transformerRole={transformerRole}
         {...extra}
       />
-    </Providers>,
+    </Providers>
   );
+}
+
+function renderChain(
+  extra: Partial<ChainedScreenProps> = H3_PROPS,
+  options: Omit<MockBridgeOptions, "delayMs"> = {},
+  transformerRole: TransformerRole | null = null,
+) {
+  const nativeBridge = createMockBridge({ delayMs: 0, ...options });
+  const view = render(chainTree(nativeBridge, extra, transformerRole));
+  /** Re-renders the SAME tree (state kept) with new props. */
+  const rerenderWith = (next: Partial<ChainedScreenProps>) =>
+    view.rerender(chainTree(nativeBridge, next, transformerRole));
+  return { ...view, rerenderWith };
 }
 
 const clipCards = () => Array.from(document.querySelectorAll<HTMLElement>(".clip-card"));
@@ -154,6 +166,32 @@ describe("ChainedScreen — MiniMax H3 per-clip comfort marker (§1-276)", () =>
     await attachOpeningImage();
     await waitFor(() => expect(marker(0)).toBe("345"));
     expect(marker(1)).toBe("362");
+  });
+
+  // Ledger §1-286: the w4a8 weights take the per-kind line
+  // (`single_rows_budget_by_quant_class.w4a8 = 203092`); int8/fp8 keep 219516.
+  it("1920x1088 with the opening image: w4a8 marks clip 0 at 328, int8 at 345", async () => {
+    for (const [kind, expected] of [
+      ["w4a8", "328"],
+      ["int8", "345"],
+    ] as const) {
+      const view = renderChain({ ...H3_PROPS, transformerQuantClass: kind }, { pickFileName: "start.png" });
+      await waitForClips();
+      setSize(1920, 1088);
+      await attachOpeningImage();
+      await waitFor(() => expect(marker(0)).toBe(expected));
+      view.unmount();
+    }
+  });
+
+  it("changing only the quantisation kind moves the marker 345 -> 328 on the same screen", async () => {
+    const view = renderChain({ ...H3_PROPS, transformerQuantClass: "int8" }, { pickFileName: "start.png" });
+    await waitForClips();
+    setSize(1920, 1088);
+    await attachOpeningImage();
+    await waitFor(() => expect(marker(0)).toBe("345"));
+    view.rerenderWith({ ...H3_PROPS, transformerQuantClass: "w4a8" });
+    await waitFor(() => expect(marker(0)).toBe("328"));
   });
 
   it("2560x1472 with the opening image: 192 on both clips", async () => {

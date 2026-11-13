@@ -20,7 +20,7 @@
  * 追加はサーバ側の**行の追加だけ**で済む。
  */
 
-import type { AppLimits } from "../api/types";
+import type { AppLimits, TransformerQuantClass } from "../api/types";
 import { clamp } from "../modes/single/paramUtils";
 import type { AccelerationSettings } from "./accelerationSettings";
 import { effectiveAccelerationFields } from "./accelerationSettings";
@@ -248,15 +248,40 @@ function servedProfile(limits: AppLimits, engineFamily: string | undefined) {
   return Object.prototype.hasOwnProperty.call(table, engineFamily) ? table[engineFamily] : undefined;
 }
 
+/** A served rows line is usable only as a positive finite number. */
+function usableRowsBudget(budget: unknown): number | null {
+  return typeof budget === "number" && Number.isFinite(budget) && budget > 0 ? budget : null;
+}
+
 /** Ledger §1-119: the sequence-rows line (S, the DiT's total rows — MiniMax
  * H3) when the engine's profile publishes one, as a positive finite number.
  * `null` with no table, an unknown family, a missing profile, a `null`/absent
  * value (every LTX profile is served with `single_rows_budget: null`) or an
  * unusable one (0, negative, NaN). The caller then derives the marker with
- * `shell/h3SequenceRows.ts`'s `h3ComfortFrames`. */
-export function resolveSequenceRowsBudget(limits: AppLimits, engineFamily: string | undefined): number | null {
-  const budget = servedProfile(limits, engineFamily)?.single_rows_budget;
-  return typeof budget === "number" && Number.isFinite(budget) && budget > 0 ? budget : null;
+ * `shell/h3SequenceRows.ts`'s `h3ComfortFrames`.
+ *
+ * Ledger §1-286: `quantClass` (the selected transformer's quantisation kind,
+ * `useBaseModels`' `activeQuantClass`) picks the profile's per-kind line
+ * `single_rows_budget_by_quant_class[quantClass]` when that is usable; a kind
+ * the map does not list, an unusable per-kind value, a `null`/absent kind or
+ * an older backend without the map all fall back to `single_rows_budget` —
+ * the per-kind line only ever replaces a value, it never creates or removes
+ * a marker on its own. */
+export function resolveSequenceRowsBudget(
+  limits: AppLimits,
+  engineFamily: string | undefined,
+  quantClass?: TransformerQuantClass | null,
+): number | null {
+  const profile = servedProfile(limits, engineFamily);
+  if (quantClass !== null && quantClass !== undefined) {
+    const byClass = profile?.single_rows_budget_by_quant_class;
+    const perClass =
+      byClass && Object.prototype.hasOwnProperty.call(byClass, quantClass)
+        ? usableRowsBudget(byClass[quantClass])
+        : null;
+    if (perClass !== null) return perClass;
+  }
+  return usableRowsBudget(profile?.single_rows_budget);
 }
 
 /** The legacy LTX table (`spill_free_frames`) Create and its right-click seeds

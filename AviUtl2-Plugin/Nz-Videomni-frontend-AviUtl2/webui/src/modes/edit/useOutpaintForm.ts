@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, createApiClient } from "../../api/client";
 import type { ApiClient } from "../../api/client";
-import type { AppConfig, GenerateRequest, SamplingConstraints, SamplingParamConstraint } from "../../api/types";
+import type {
+  AppConfig,
+  GenerateRequest,
+  SamplingConstraints,
+  SamplingParamConstraint,
+  TransformerQuantClass,
+} from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
@@ -124,6 +130,10 @@ export interface UseOutpaintFormDeps {
    * **no line at all** — and with no line there is no warning (オーナー裁定
    * 2026-09-05). */
   engineFamily?: string | undefined;
+  /** §1-286: the LOADED H3 transformer's quantisation kind
+   * (`useBaseModels().activeQuantClass`), which picks the per-kind rows line
+   * (`resolveSequenceRowsBudget`). Omitted/`null` ⇒ the default line. */
+  quantClass?: TransformerQuantClass | null | undefined;
   /** §1-27 (2026-09-05): Settings' shared acceleration choice, owned by
    * `AppShell` — same "caller owns the state" shape Create/Chain take it in.
    * Omitted keeps `accelerationRequestFields` sending nothing at all. */
@@ -280,7 +290,7 @@ export interface UseOutpaintFormResult {
  *    source can't leave a stale clamp behind.
  */
 export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintFormResult {
-  const { nativeBridge, initialIntent, config, engineFamily, acceleration, loraRefreshKey } = deps;
+  const { nativeBridge, initialIntent, config, engineFamily, quantClass, acceleration, loraRefreshKey } = deps;
   // §1-125: 読み込み中のベースモデルの規則。分岐は `h3`（`constraints.outpaint` の有無）の
   // 1 つに集める（手本 `useRetakeForm`）。フレームの格子・固定 fps・サンプリングは
   // 分岐せずに読む —— ただしキャンバスの格子だけは LTX では `dimensionMultiple`（64）
@@ -589,7 +599,7 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
   // キーフレームも Reference も無い）で警告と目盛りを出す。固定行は行数を増やさない。
   const limits = (config ?? FALLBACK_APP_CONFIG).limits;
   const comfortBudget = h3 ? null : resolveOutpaintComfortBudget(limits, engineFamily);
-  const rowsBudget = h3 ? resolveSequenceRowsBudget(limits, engineFamily) : null;
+  const rowsBudget = h3 ? resolveSequenceRowsBudget(limits, engineFamily, quantClass) : null;
   const h3Shape = { width: canvas.width, height: canvas.height, ...H3_NO_CONDITIONING };
   const h3Rows = h3 && known ? h3SequenceRows(h3Shape, numFrames) : null;
   const comfortTokens = h3 ? (h3Rows?.total ?? 0) : comfortTokenEstimate(canvas.width, canvas.height, numFrames);

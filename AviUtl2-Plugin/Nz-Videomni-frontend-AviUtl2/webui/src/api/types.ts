@@ -194,6 +194,11 @@ export interface InpaintSpec {
  * ({@link BaseModelBlock.transformer_role}). */
 export type TransformerRole = "fl2va" | "ref2va";
 
+/** §1-286: the MiniMax H3 transformer quantisation kinds the server reports
+ * ({@link BaseModelBlock.transformer_quant_class}). A file with even one w4a8
+ * layer is `"w4a8"`, else one with an fp8 layer is `"fp8"`, else `"int8"`. */
+export type TransformerQuantClass = "int8" | "fp8" | "w4a8";
+
 /** §1-107: one Reference card in {@link GenerateRequest.references}. */
 export interface ReferenceInputBody {
   kind: "picture" | "video" | "audio";
@@ -1121,6 +1126,15 @@ export interface EngineComfortProfile {
    * `resolveSequenceRowsBudget` を読む）。数値の正本はバックエンドの
    * `Docs/COMFORT_LIMIT_TABLE.md` §17・§18。 */
   single_rows_budget?: number | null;
+  /** 台帳 §1-286: 重みの形式の種類ごとの行数の線（鍵は
+   * {@link TransformerQuantClass} の部分集合。MiniMax H3 は `{ w4a8: … }`、
+   * LTX は `{}`）。鍵に無い種類・種類が `null` のときは
+   * {@link single_rows_budget} が既定値として効く。
+   *
+   * 読む側は必ず `shell/comfortTable.ts` の `resolveSequenceRowsBudget` を
+   * 通すこと。数値の正本はバックエンドの `Docs/COMFORT_LIMIT_TABLE.md` §21。
+   * 古いバックエンドは鍵を送らない。 */
+  single_rows_budget_by_quant_class?: Record<string, number> | null;
 }
 
 /** One entry of `AppConfig.model.ic_loras` (Docs/API_REFERENCE.md §3.2) — a
@@ -1286,6 +1300,16 @@ export interface BaseModelBlock {
    *
    * Optional: a backend older than §1-107 omits the field. */
   transformer_role?: TransformerRole | null;
+  /** §1-286: the quantisation kind of the MiniMax H3 transformer the ACTIVE
+   * base model has SELECTED, judged from the file's safetensors header:
+   * `"int8"`, `"fp8"`, `"w4a8"` (a file with any w4a8 layer, mixed ones
+   * included), or `null` for an LTX base model, an inactive one, or a file
+   * the server could not read. It picks the per-kind line in
+   * {@link EngineComfortProfile.single_rows_budget_by_quant_class} — read it
+   * through `shell/useBaseModels.ts`'s `activeQuantClass`.
+   *
+   * Optional: a backend older than §1-286 omits the field. */
+  transformer_quant_class?: TransformerQuantClass | null;
   active: boolean;
   installed: boolean;
   present: boolean;

@@ -186,7 +186,15 @@ export const MOCK_CONFIG_BODY = {
         ],
         outpaint_budget: 46080,
       },
-      h3: { spatial_factor: 32, temporal_factor: 8, rows: [], single_rows_budget: 219516 },
+      // §1-286: the w4a8 weights take a lower rows line; int8/fp8 fall back
+      // to `single_rows_budget` (`Docs/COMFORT_LIMIT_TABLE.md` §21).
+      h3: {
+        spatial_factor: 32,
+        temporal_factor: 8,
+        rows: [],
+        single_rows_budget: 219516,
+        single_rows_budget_by_quant_class: { w4a8: 203092 },
+      },
     },
   },
   output: { dir: "./outputs", format: "mp4", save_metadata_json: true, keep_raw_frames: false },
@@ -1596,6 +1604,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         // fixture has no files, so it reads the selected transformer's NAME
         // (for eyeballing the notices during development). Active H3 only.
         transformer_role: isActive && base.engine_family === "h3" ? mockTransformerRole(activeModels.transformer) : null,
+        // §1-286: the real server judges the quantisation kind from the
+        // file's header; the fixture's only H3 transformer is the int8
+        // default. Active H3 only, like the real endpoint.
+        transformer_quant_class: isActive && base.engine_family === "h3" ? "int8" : null,
         active: isActive,
         installed: missing.length === 0,
         present: missing.length < MOCK_MODEL_CATEGORIES.length,

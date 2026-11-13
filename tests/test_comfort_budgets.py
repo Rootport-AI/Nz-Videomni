@@ -10,7 +10,8 @@ Pins the SHIPPED rows (Docs/COMFORT_LIMIT_TABLE.md §1): every row carries
 all-five-toggles-on configuration (the default configuration falls back to
 ``spill_free_frames``), its 8bit row and all LTX 2.5 rows are unconditional.
 MiniMax H3 carries no rows, only the sequence-rows line ``single_rows_budget``
-(Docs/COMFORT_LIMIT_TABLE.md §17 / §18).
+(Docs/COMFORT_LIMIT_TABLE.md §17 / §18) and its per-weight-kind override
+``single_rows_budget_by_quant_class`` (§21; 台帳 §1-286).
 """
 
 from __future__ import annotations
@@ -77,9 +78,11 @@ def test_family_id_set_matches_engine_registry():
 
 def test_h3_profile_is_a_rows_line_only():
     """MiniMax H3: the S line 219,516 (Docs/COMFORT_LIMIT_TABLE.md §17 / §18),
-    no token rows, no outpaint line."""
+    no token rows, no outpaint line. w4a8 weights take their own line
+    (S 203,092, §21); int8 / fp8 fall back to the default."""
     profile = _shipped()["h3"]
     assert profile.single_rows_budget == 219516
+    assert profile.single_rows_budget_by_quant_class == {"w4a8": 203092}
     assert profile.rows == []
     assert profile.outpaint_budget is None
 
@@ -88,6 +91,7 @@ def test_ltx_profiles_carry_no_rows_line():
     budgets = _shipped()
     for family_id in ("ltx", "ltx25"):
         assert budgets[family_id].single_rows_budget is None
+        assert budgets[family_id].single_rows_budget_by_quant_class == {}
 
 
 def test_ltx_rows():
@@ -236,6 +240,7 @@ def test_descriptor_comfort_reaches_get_config(tmp_path: Path):
     expected = copy.deepcopy(COMFORT)
     expected["rows"][0]["alpha_gen_budget"] = None
     expected["single_rows_budget"] = None
+    expected["single_rows_budget_by_quant_class"] = {}
     assert limits["comfort_budgets"] == {"ltx": expected}
     # a bool survives JSON -> pydantic -> model_dump as a real bool
     assert limits["comfort_budgets"]["ltx"]["rows"][0]["requires"]["keep_resident"] is True
@@ -245,9 +250,11 @@ def test_descriptor_comfort_reaches_get_config(tmp_path: Path):
 
 
 def test_rows_line_reaches_get_config(tmp_path: Path):
-    """``single_rows_budget`` is declared on the profile: without that,
-    pydantic's ``extra='ignore'`` would drop it before ``/config``."""
-    app = _boot(tmp_path, [_with_comfort({"single_rows_budget": 219516})])
+    """``single_rows_budget`` and ``single_rows_budget_by_quant_class`` are
+    declared on the profile: without that, pydantic's ``extra='ignore'``
+    would drop them before ``/config``."""
+    comfort = {"single_rows_budget": 219516, "single_rows_budget_by_quant_class": {"w4a8": 203092}}
+    app = _boot(tmp_path, [_with_comfort(comfort)])
     with TestClient(app) as c:
         limits = c.get("/api/v1/config").json()["limits"]
     assert limits["comfort_budgets"] == {
@@ -257,6 +264,7 @@ def test_rows_line_reaches_get_config(tmp_path: Path):
             "rows": [],
             "outpaint_budget": None,
             "single_rows_budget": 219516,
+            "single_rows_budget_by_quant_class": {"w4a8": 203092},
         }
     }
 
@@ -265,6 +273,26 @@ def test_rows_line_reaches_get_config(tmp_path: Path):
 def test_bad_single_rows_budget_fails_startup(tmp_path: Path, value):
     with pytest.raises(RuntimeError, match="LTX23: comfort"):
         _boot(tmp_path, [_with_comfort({"single_rows_budget": value})])
+
+
+@pytest.mark.parametrize("key", ["W4A8", "4bit", "bf16"], ids=["upper-case", "ltx-class", "unknown"])
+def test_bad_quant_class_key_fails_startup(tmp_path: Path, key):
+    comfort = {"single_rows_budget": 219516, "single_rows_budget_by_quant_class": {key: 203092}}
+    with pytest.raises(RuntimeError, match="single_rows_budget_by_quant_class key must be one of"):
+        _boot(tmp_path, [_with_comfort(comfort)])
+
+
+@pytest.mark.parametrize("value", [0, -1, "lots"], ids=["zero", "negative", "not-a-number"])
+def test_bad_quant_class_budget_fails_startup(tmp_path: Path, value):
+    comfort = {"single_rows_budget": 219516, "single_rows_budget_by_quant_class": {"w4a8": value}}
+    with pytest.raises(RuntimeError, match="LTX23: comfort"):
+        _boot(tmp_path, [_with_comfort(comfort)])
+
+
+def test_engine_comfort_profile_defaults_quant_class_lines_to_empty():
+    from config import EngineComfortProfile
+
+    assert EngineComfortProfile().single_rows_budget_by_quant_class == {}
 
 
 @pytest.mark.parametrize(

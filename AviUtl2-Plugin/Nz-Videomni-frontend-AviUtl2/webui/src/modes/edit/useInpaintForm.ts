@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppConfig, GenerateRequest, SamplingConstraints, SamplingParamConstraint } from "../../api/types";
+import type {
+  AppConfig,
+  GenerateRequest,
+  SamplingConstraints,
+  SamplingParamConstraint,
+  TransformerQuantClass,
+} from "../../api/types";
 import { BridgeError, TIMELINE_MASK_PROGRESS_EVENT, bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge, TimelineMaskProgressData } from "../../bridge";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
@@ -111,6 +117,10 @@ export interface UseInpaintFormDeps {
   /** 読み込み中のベースモデルの系統。快適上限マーカーの線を配信テーブルから
    * 引くためだけに使う（`shell/outpaintBudget.ts`）。線が無ければ警告も出ない。 */
   engineFamily?: string | undefined;
+  /** 台帳 §1-286: 読み込み中の H3 の重みの形式の種類
+   * （`useBaseModels().activeQuantClass`）。H3 の行数の線を種類ごとに引く
+   * （`resolveSequenceRowsBudget`）。省略／`null` は既定の線。 */
+  quantClass?: TransformerQuantClass | null | undefined;
   /** Settings の共有加速設定。Create/Chain/Retake と同じ「呼び手が状態を持つ」形。 */
   acceleration?: AccelerationSettings | undefined;
   /**
@@ -279,7 +289,7 @@ export interface UseInpaintFormResult {
  *    描画→アップロード→送信を一続きで行う。マスク動画は利用者に見せない（D7）。
  */
 export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormResult {
-  const { nativeBridge, engineFamily, acceleration } = deps;
+  const { nativeBridge, engineFamily, quantClass, acceleration } = deps;
   const submitting = deps.submitting ?? false;
   const config = deps.config ?? FALLBACK_APP_CONFIG;
   const prompt = deps.prompt ?? "";
@@ -541,7 +551,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
   // キーフレームも Reference も無い。固定トークンは行数を増やさない）で警告と目盛りを出す。
   const canvasKnown = canvasWidth > 0 && canvasHeight > 0;
   const comfortBudget = h3 ? null : resolveOutpaintComfortBudget(config.limits, engineFamily);
-  const rowsBudget = h3 ? resolveSequenceRowsBudget(config.limits, engineFamily) : null;
+  const rowsBudget = h3 ? resolveSequenceRowsBudget(config.limits, engineFamily, quantClass) : null;
   const h3Shape = { width: canvasWidth, height: canvasHeight, ...H3_NO_CONDITIONING };
   const h3Rows = h3 && canvasKnown ? h3SequenceRows(h3Shape, numFrames) : null;
   const comfortTokens = h3 ? (h3Rows?.total ?? 0) : comfortTokenEstimate(canvasWidth, canvasHeight, numFrames);

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import chain_math
 import h3_chain_math
+import h3_format
 from api.errors import (
     end_source_too_short,
     gpu_oom,
@@ -249,6 +250,13 @@ class PipelineManager:
         # the state file; written by :meth:`_identify_transformer` and read by
         # GET /models (``transformer_role``).
         self.weight_identity = weight_identity or WeightIdentity.for_config(config)
+        # The H3 transformer's weight kind (``h3_format.quant_class``: "int8" /
+        # "fp8" / "w4a8"), or None (LTX, no file, unreadable header). Written by
+        # :meth:`identify_quant_class` when the selection changes (a successful
+        # load/reload, and once at startup for the restored one); read by
+        # GET /models (``transformer_quant_class``). An unload keeps it, like
+        # ``active_models``.
+        self.transformer_quant_class: str | None = None
 
     # --------------------------------------------------------------- status
 
@@ -460,6 +468,7 @@ class PipelineManager:
         self._active_selection_paths = dict(selection)
         self._remember()
         self._identify_transformer()
+        self.identify_quant_class()
 
     def reload(
         self,
@@ -512,6 +521,7 @@ class PipelineManager:
         self._active_selection_paths = dict(selection)
         self._remember()
         self._identify_transformer()
+        self.identify_quant_class()
 
     def unload(self) -> None:
         # One rule for the whole lifecycle: while a load is in flight, every
@@ -671,6 +681,33 @@ class PipelineManager:
             logger.warning("重みの種別を判定できませんでした: %s", path, exc_info=True)
             return
         logger.info("Transformer weight role: %s (%s)", role, Path(path).name)
+
+    def identify_quant_class(self) -> None:
+        """Read the selected H3 transformer's header and record its weight
+        kind (``h3_format.quant_class``), so GET /models can report
+        ``transformer_quant_class`` (台帳 §1-286; the comfort marker picks
+        its line by it).
+
+        Called on the SUCCESS PATH of ``load``/``reload`` and once at startup
+        for the restored selection (``AppContext``) — the only times the
+        selection changes — so GET /models just reads the attribute. Header
+        only (tens to hundreds of KB). Non-H3 base models, a manager without
+        a model registry and an unresolvable file all record None. The path
+        comes from :func:`transformer_path`, like
+        :meth:`_identify_transformer`. Any failure here is a WARNING with
+        None recorded: the kind is a courtesy and never fails a load.
+        """
+        self.transformer_quant_class = None
+        if self.model_registry is None or self.active_engine_family != "h3":
+            return
+        path = transformer_path(self.model_registry, self.active_base_model, self.active_models)
+        if path is None:
+            return
+        try:
+            _, cfg = h3_format.inspect_h3_dit(str(path))
+            self.transformer_quant_class = h3_format.quant_class(cfg)
+        except Exception:
+            logger.warning("重みの形式の種類を判定できませんでした: %s", path, exc_info=True)
 
     def _cleanup_after_error(self) -> None:
         try:

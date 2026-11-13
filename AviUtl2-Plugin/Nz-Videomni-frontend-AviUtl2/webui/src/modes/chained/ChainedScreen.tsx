@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AppConfig, GenerateChainRequest, ReferenceInputBody, TransformerRole } from "../../api/types";
+import type {
+  AppConfig,
+  GenerateChainRequest,
+  ReferenceInputBody,
+  TransformerQuantClass,
+  TransformerRole,
+} from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -187,6 +193,11 @@ export interface ChainedScreenProps {
    * {@link engineFamily} to `useChainForm`'s `resolveComfortRow`.
    * Omitted/`""` ⇒ unknown. */
   weightClass?: string | undefined;
+  /** §1-286: the LOADED MiniMax H3 transformer's quantisation kind
+   * (`useBaseModels().activeQuantClass`), which picks the per-kind rows line
+   * for every clip's marker and the right-click seed
+   * (`resolveSequenceRowsBudget`). Omitted/`null` ⇒ the default line. */
+  transformerQuantClass?: TransformerQuantClass | null | undefined;
   /** §3-165: the LOADED base model's display name (`/models`
    * `base_models[].display_name`), printed in the stage-2 window dropdown's
    * labels. Omitted ⇒ `""`. */
@@ -275,6 +286,7 @@ export function ChainedScreen({
   sageAvailable,
   engineFamily,
   weightClass,
+  transformerQuantClass,
   engineLabel,
   loraRefreshKey,
   v2vUnavailable,
@@ -319,6 +331,7 @@ export function ChainedScreen({
       sageAvailable={sageAvailable}
       engineFamily={engineFamily}
       weightClass={weightClass}
+      transformerQuantClass={transformerQuantClass}
       engineLabel={engineLabel}
       loraRefreshKey={loraRefreshKey}
       v2vUnavailable={v2vUnavailable}
@@ -358,6 +371,7 @@ interface ChainedScreenBodyProps {
   sageAvailable?: boolean | null | undefined;
   engineFamily?: string | undefined;
   weightClass?: string | undefined;
+  transformerQuantClass?: TransformerQuantClass | null | undefined;
   engineLabel?: string | undefined;
   loraRefreshKey?: string | undefined;
   v2vUnavailable?: boolean | undefined;
@@ -395,6 +409,7 @@ function ChainedScreenBody({
   sageAvailable,
   engineFamily,
   weightClass,
+  transformerQuantClass,
   engineLabel,
   loraRefreshKey,
   v2vUnavailable = false,
@@ -508,9 +523,21 @@ function ChainedScreenBody({
       acceleration,
       sageAvailable,
       weightClass,
+      quantClass: transformerQuantClass,
       constraints,
     });
-  }, [initialIntent, config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, constraints]);
+  }, [
+    initialIntent,
+    config,
+    sizePolicy,
+    fpsPolicy,
+    engineFamily,
+    acceleration,
+    sageAvailable,
+    weightClass,
+    transformerQuantClass,
+    constraints,
+  ]);
 
   /** §1-120 (plan §10): #18 on MiniMax H3's assign mode. The long audio is
    * assigned to the clips from the default lengths, as with 📁, so clip 0 never
@@ -637,7 +664,7 @@ function ChainedScreenBody({
     const comfort: Record<string, number | null> = {};
     const openingImage = startFrameItems.some((item) => item.status === "ready" || item.status === "uploading");
     clips.forEach((clip, index) => {
-      const budget = resolveSequenceRowsBudget(config.limits, engineFamily);
+      const budget = resolveSequenceRowsBudget(config.limits, engineFamily, transformerQuantClass);
       if (budget === null) return;
       const entry = clipReferences[clip.id];
       comfort[clip.id] = h3ComfortFrames(
@@ -666,6 +693,7 @@ function ChainedScreenBody({
     isH3,
     config.limits,
     engineFamily,
+    transformerQuantClass,
     clipFrameMin,
     clipFrameMax,
   ]);
@@ -1112,7 +1140,7 @@ function ChainedScreenBody({
         // §1-120 (plan §10): not on H3's assign mode — clip 0 keeps the default
         // length the audio is assigned from (and stays intact for the y/n rule).
         if (sizePolicy === "project" && !h3LongA2vAssign) {
-          const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
+          const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily, transformerQuantClass);
           let target: number | null;
           if (rowsBudget !== null) {
             const rules = constraints?.chain != null ? constraints : LTX_GENERATION_CONSTRAINTS;

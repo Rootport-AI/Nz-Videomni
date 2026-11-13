@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { AppConfig, GenerateChainRequest, GenerateRequest, TransformerRole } from "../../api/types";
+import type {
+  AppConfig,
+  GenerateChainRequest,
+  GenerateRequest,
+  TransformerQuantClass,
+  TransformerRole,
+} from "../../api/types";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -100,6 +106,7 @@ interface ProjectOverwriteArgs {
   acceleration: AccelerationSettings | undefined;
   sageAvailable: boolean | null | undefined;
   weightClass: string | undefined;
+  quantClass: TransformerQuantClass | null | undefined;
   /** The width/height/fps this right-click's seed just applied — read back for
    * an axis whose policy is NOT `project` (the form state has not committed
    * yet when the overwrite starts, so `form.values` would be stale). */
@@ -122,7 +129,7 @@ interface ProjectOverwriteArgs {
  * place (③ fallback).
  */
 async function applyProjectOverwrite(a: ProjectOverwriteArgs): Promise<void> {
-  const { config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass } = a;
+  const { config, sizePolicy, fpsPolicy, engineFamily, acceleration, sageAvailable, weightClass, quantClass } = a;
   try {
     const editInfo = await a.bridge.request("getEditInfo", {});
     if (!a.isCurrent()) return;
@@ -175,7 +182,7 @@ async function applyProjectOverwrite(a: ProjectOverwriteArgs): Promise<void> {
     // Reference card, whatever the acceleration settings, and never falls to
     // the legacy lookup (`singleLegacySpillTable`); the `acceleration` gate
     // applies to the LTX token line only.
-    const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
+    const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily, quantClass);
     const spillFreeFrames = singleLegacySpillTable(config.limits, engineFamily);
     const frameLimits = frameLimitsFor(rules, config.limits.max_num_frames);
     const comfortRow =
@@ -287,6 +294,12 @@ export interface SingleScreenProps {
    * {@link engineFamily} to every `resolveComfortRow` call this screen makes.
    * Omitted/`""` ⇒ unknown ⇒ no `weight_class` in the match. */
   weightClass?: string | undefined;
+  /** §1-286: the LOADED MiniMax H3 transformer's quantisation kind
+   * (`useBaseModels().activeQuantClass`), threaded down the same road as
+   * {@link weightClass} to every `resolveSequenceRowsBudget` call this screen
+   * makes (the marker and the right-click DURATION seed). Omitted/`null` ⇒ the
+   * default rows line. */
+  transformerQuantClass?: TransformerQuantClass | null | undefined;
   /** §1-107: the LOADED MiniMax H3 transformer's role
    * (`useBaseModels().activeTransformerRole`), threaded down the same road as
    * {@link weightClass}. `"fl2va"` keeps the Reference cards out of the
@@ -353,6 +366,7 @@ export function SingleScreen({
   sageAvailable,
   engineFamily,
   weightClass,
+  transformerQuantClass,
   transformerRole,
   batchUnavailable,
   constraints,
@@ -386,6 +400,7 @@ export function SingleScreen({
       sageAvailable={sageAvailable}
       engineFamily={engineFamily}
       weightClass={weightClass}
+      transformerQuantClass={transformerQuantClass}
       transformerRole={transformerRole}
       batchUnavailable={batchUnavailable}
       constraints={constraints}
@@ -414,6 +429,7 @@ interface SingleScreenBodyProps {
   sageAvailable?: boolean | null | undefined;
   engineFamily?: string | undefined;
   weightClass?: string | undefined;
+  transformerQuantClass?: TransformerQuantClass | null | undefined;
   transformerRole?: TransformerRole | null | undefined;
   batchUnavailable?: boolean | undefined;
   constraints?: GenerationConstraints | undefined;
@@ -440,6 +456,7 @@ function SingleScreenBody({
   sageAvailable,
   engineFamily,
   weightClass,
+  transformerQuantClass = null,
   transformerRole = null,
   batchUnavailable = false,
   constraints,
@@ -552,6 +569,7 @@ function SingleScreenBody({
     sageAvailable,
     engineFamily,
     weightClass,
+    quantClass: transformerQuantClass,
     constraints,
     referenceVideoUnavailable: sectionsUnavailable?.referenceVideo,
     sequenceShape,
@@ -704,6 +722,7 @@ function SingleScreenBody({
     acceleration,
     sageAvailable,
     weightClass,
+    quantClass: transformerQuantClass,
     nativeBridge,
     toasts,
   };
@@ -778,6 +797,7 @@ function SingleScreenBody({
         acceleration: ctx.acceleration,
         sageAvailable: ctx.sageAvailable,
         weightClass: ctx.weightClass,
+        quantClass: ctx.quantClass,
         constraints: ctx.constraints,
       });
 
@@ -814,6 +834,7 @@ function SingleScreenBody({
           acceleration: ctx.acceleration,
           sageAvailable: ctx.sageAvailable,
           weightClass: ctx.weightClass,
+          quantClass: ctx.quantClass,
           seeded: {
             width: seed.derived.width,
             height: seed.derived.height,

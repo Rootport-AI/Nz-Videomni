@@ -416,6 +416,51 @@ describe("useBaseModels", () => {
     expect(view.result.current.activeTransformerRole).toBeNull();
   });
 
+  // ── §1-286: activeQuantClass (H3 int8 / fp8 / w4a8) ─────────────────────────
+
+  it("activeQuantClass reads the ACTIVE base model's transformer_quant_class; null / absent read as null", async () => {
+    const real = createApiClient(createMockBridge({ delayMs: 0 }));
+    let served: "int8" | "fp8" | "w4a8" | null | undefined = "w4a8";
+    const apiClient: ApiClient = {
+      ...real,
+      getModels: async () => {
+        const models = await real.getModels();
+        return {
+          ...models,
+          base_models: (models.base_models ?? []).map(({ transformer_quant_class: _drop, ...rest }) =>
+            rest.active && served !== undefined ? { ...rest, transformer_quant_class: served } : rest,
+          ),
+        };
+      },
+    };
+    const view = renderHook(() => useBaseModels({ apiClient }));
+    // Before the first response: unknown.
+    expect(view.result.current.activeQuantClass).toBeNull();
+    await waitFor(() => expect(view.result.current.activeQuantClass).toBe("w4a8"));
+    // Only the active entry carries a kind.
+    expect(view.result.current.options.filter((o) => o.quantClass !== null)).toHaveLength(1);
+
+    // A transformer swap is picked up by refresh() (the shell's post-load refetch).
+    served = "fp8";
+    await act(async () => {
+      await view.result.current.refresh();
+    });
+    expect(view.result.current.activeQuantClass).toBe("fp8");
+
+    served = null;
+    await act(async () => {
+      await view.result.current.refresh();
+    });
+    expect(view.result.current.activeQuantClass).toBeNull();
+
+    // A backend older than §1-286 omits the field.
+    served = undefined;
+    await act(async () => {
+      await view.result.current.refresh();
+    });
+    expect(view.result.current.activeQuantClass).toBeNull();
+  });
+
   it("switching to a restricted base model moves the restrictions with it", async () => {
     // THE RESTRICTION IS SYNTHETIC (`withExtraUnsupportedFeatures`), and since
     // the Outpainting increment it has to be: LTX 2.5's real list no longer

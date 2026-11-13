@@ -426,6 +426,19 @@ describe("mockBridge — MiniMax H3", () => {
     expect(await roleOf("MiniMaxH3")).toBeNull();
     expect(await roleOf("LTX23")).toBeNull();
   });
+
+  it("publishes `transformer_quant_class` as \"int8\" for the active H3 (null otherwise)", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    const kindOf = async (id: string) =>
+      (await listModels(bridge)).find((b) => b.id === id)?.transformer_quant_class;
+    // LTX active: every entry is null, the inactive H3 included.
+    expect(await kindOf("LTX23")).toBeNull();
+    expect(await kindOf("MiniMaxH3")).toBeNull();
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    // The fixture's only H3 transformer is the int8 default.
+    expect(await kindOf("MiniMaxH3")).toBe("int8");
+    expect(await kindOf("LTX23")).toBeNull();
+  });
 });
 
 function blocksFeature(blocks: BaseModelBlock[], id: string): string[] {

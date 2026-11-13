@@ -29,7 +29,7 @@
  * `panel`, so there "the panel's values" are the rebuilt form's defaults.
  */
 
-import type { AppConfig } from "../api/types";
+import type { AppConfig, TransformerQuantClass } from "../api/types";
 import { pxFromVLatent } from "../modes/chained/chainUtils";
 import { MIN_HEIGHT, MIN_WIDTH } from "../modes/single/defaultConfig";
 import { snapFrameRate } from "../modes/single/paramUtils";
@@ -286,6 +286,12 @@ export interface ResolvePrefillSeedArgs {
    * `weight_class` in the match). Every caller (`AppShell`, `SingleScreen`,
    * `ChainedScreen`) must hand in the same value (R-4). */
   weightClass?: string | undefined;
+  /** §1-286: the loaded H3 transformer's quantisation kind
+   * (`useBaseModels().activeQuantClass`), passed to
+   * `resolveSequenceRowsBudget` so the seeded length matches the per-kind
+   * rows line the marker shows. Optional; omitted or `null` = the default
+   * line. Every caller must hand in the same value, like {@link weightClass}. */
+  quantClass?: TransformerQuantClass | null | undefined;
   /** The LOADED base model's numeric rules
    * (`useBaseModels().activeConstraints`) — the frame grid and floor, the size
    * multiple, and a fixed frame rate (which wins over `fpsPolicy`). Applied to
@@ -354,6 +360,7 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
     acceleration,
     sageAvailable,
     weightClass,
+    quantClass,
   } = args;
   // The served rules apply to the Single screen's seeds, and to a
   // Chain-targeted seed only on an engine that fixes the chain's overlap; any
@@ -492,7 +499,8 @@ export function resolvePrefillSeed(args: ResolvePrefillSeedArgs): PrefillSeed {
   // ledger §1-119) takes its rows line, independent of the acceleration
   // settings, and never falls to the legacy lookup either
   // (`singleLegacySpillTable`). `acceleration` gates the LTX branch only.
-  const rowsBudget = singleTarget || chainTarget ? resolveSequenceRowsBudget(config.limits, engineFamily) : null;
+  const rowsBudget =
+    singleTarget || chainTarget ? resolveSequenceRowsBudget(config.limits, engineFamily, quantClass) : null;
   const spillFreeFrames = singleTarget
     ? singleLegacySpillTable(config.limits, engineFamily)
     : rowsBudget !== null

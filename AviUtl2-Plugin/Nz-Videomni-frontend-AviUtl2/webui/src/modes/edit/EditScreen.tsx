@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient as defaultApiClient, createApiClient } from "../../api/client";
 import type { ApiClient } from "../../api/client";
+import type { TransformerQuantClass } from "../../api/types";
 import { EditSubTabs } from "./EditSubTabs";
 import type { EditSubMode } from "./EditSubTabs";
 import type { EditSubTabsDisabled } from "../../shell/featureScope";
@@ -86,6 +87,11 @@ export interface EditScreenProps {
    * — Outpainting's line (`shell/outpaintBudget.ts`) is not split by weight
    * class. Omitted/`""` ⇒ unknown. */
   weightClass?: string | undefined;
+  /** §1-286: the LOADED MiniMax H3 transformer's quantisation kind
+   * (`useBaseModels().activeQuantClass`), passed to the Inpainting and
+   * Outpainting hooks, whose H3 rows line it picks
+   * (`resolveSequenceRowsBudget`). Omitted/`null` ⇒ the default line. */
+  transformerQuantClass?: TransformerQuantClass | null | undefined;
   /** §3-165: the LOADED base model's display name (`/models`
    * `base_models[].display_name`), printed in the Retake stage-2 window labels.
    * Omitted ⇒ `""`. */
@@ -190,6 +196,7 @@ export function EditScreen({
   acceleration,
   sageAvailable,
   weightClass,
+  transformerQuantClass,
   engineLabel,
   loraRefreshKey,
   constraints,
@@ -255,6 +262,7 @@ export function EditScreen({
     initialIntent,
     config,
     engineFamily,
+    quantClass: transformerQuantClass,
     acceleration,
     loraRefreshKey,
     // §1-125: Retake と同じ 2 つ。`constraints.outpaint` の有無で H3 の形に切り替わる。
@@ -426,6 +434,7 @@ export function EditScreen({
     config,
     nativeBridge,
     engineFamily,
+    quantClass: transformerQuantClass,
     acceleration,
     submitting: inpaintSubmitting,
     onMaskError: onInpaintMaskError,

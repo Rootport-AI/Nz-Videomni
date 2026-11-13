@@ -611,6 +611,28 @@ def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
     return header, cfg
 
 
+#: The kinds :func:`quant_class` returns (the keys of the descriptor's
+#: ``comfort.single_rows_budget_by_quant_class``).
+H3_QUANT_CLASSES = ("int8", "fp8", "w4a8")
+
+
+def quant_class(cfg: H3DiTConfig) -> str:
+    """The kind of a DiT's weights, for picking the comfort marker's line (台帳 §1-286).
+
+    ``"w4a8"`` when any layer is w4a8 (a mixed file runs out of memory like a
+    w4a8 one, so it takes that line), else ``"fp8"`` when any layer is fp8,
+    else ``"int8"``. ``"int8"`` means "neither w4a8 nor fp8": a DiT with no
+    quantized layer at all is ``"int8"`` too. ``inspect_h3_dit`` already
+    refuses formats outside :data:`DIT_FORMATS`, so no other branch exists.
+    """
+    formats = {spec.format for spec in cfg.quant.values()}
+    if W4A8 in formats:
+        return "w4a8"
+    if FP8 in formats:
+        return "fp8"
+    return "int8"
+
+
 # --------------------------------------------------------------------------- #
 # Text encoder (Comfy-Org layout: model.layers.N / model.embed_tokens / visual.*)
 # --------------------------------------------------------------------------- #

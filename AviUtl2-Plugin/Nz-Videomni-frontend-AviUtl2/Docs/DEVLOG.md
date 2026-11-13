@@ -6579,3 +6579,55 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 171.6 実機の門
 
 - 項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-283 です（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.30 からも参照）。
+
+
+## 172. MiniMax H3 の快適上限マーカーを、読み込んだ重みの形式の線に出す（台帳 1-286・設計正本 裁定 102） — `resolveSequenceRowsBudget` の第 3 引数 `quantClass`・出所は `useBaseModels` の `activeQuantClass`・配線 8 箇所と依存配列・aux2 の配布（2026-11-13）
+
+### 172.1 結論
+
+- **MiniMax H3 の印（快適上限マーカー）が、読み込んだ重みの形式で位置を変えるようになりました。** w4a8 の層を 1 層でも含む重み（w4a8 と int8 の層が混在する TenStrip の Eros も）は w4a8 の線、int8・fp8 は従来の線です。線の値の正本はバックエンド [`COMFORT_LIMIT_TABLE.md`](../../../Docs/COMFORT_LIMIT_TABLE.md) §21、配信の形は同 §1.1 です。
+- Single・Chained（クリップごと）・Inpaint・Outpaint の 4 つの印と、右クリックの種（新規オブジェクトの初期フレーム数）の 5 か所が同じ解決関数を通るので、同時に切り替わります。印の文言と表示の規則は変えていません（位置が動くだけ）。
+- バックエンドは `GET /models` の `transformer_quant_class` で種類を配り、`GET /config` の `limits.comfort_budgets.h3.single_rows_budget_by_quant_class` で種類ごとの線を配ります（欄の説明は [`API_REFERENCE.md`](API_REFERENCE.md) §3.2・§3.5）。門とオーナーの目視の結果はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §213 にだけ書きます。
+
+### 172.2 設計の判断
+
+- **線を選ぶのは 1 か所**: `webui/src/shell/comfortTable.ts` の `resolveSequenceRowsBudget(limits, engineFamily, quantClass?)` が、`single_rows_budget_by_quant_class[quantClass]` が正の有限数ならそれを、そうでなければ従来の `single_rows_budget` を返します。種類が `null`・`undefined`、鍵に無い種類、不正な値、鍵の無い古いサーバーは、どれも既定の線に落ちます。種類ごとの線は値を置き換えるだけで、印を新たに出したり消したりしません。`singleLegacySpillTable` は変えていません（系統の判別は `single_rows_budget` が null でないかのまま）。
+- **出所は `useBaseModels`**: `toOption` が `transformer_quant_class ?? null` を `quantClass` に写し、`activeQuantClass` は有効なベースモデルの値を返します（`transformerRole` と同じ `?? null`。`activeWeightClass` の `?? ""` には揃えていません）。型は `api/types.ts` の `TransformerQuantClass`（`"int8" | "fp8" | "w4a8"`）。読込のたびに一覧を取り直す既存の仕組み（`AppShell.tsx`。§3.5 の `transformer_weight_class` と同じ）で、読込の後に印が動きます。別の入口（MCP など）で重みが替わったときは次の取り直しまで古いままです（`transformer_role` と同じ既存の性質）。
+- **配線（8 箇所）**: どれも `baseModels.activeQuantClass` を `AppShell.tsx` から渡し、`resolveSequenceRowsBudget` の第 3 引数へ届けます。
+  1. `modes/single/useGenerationForm.ts`（フックの引数 `quantClass`）。
+  2. `modes/single/SingleScreen.tsx` の `applyProjectOverwrite`（モジュール関数。引数の型 → `prefillCtx` → 呼び出し → 外側の `SingleScreen` から `SingleScreenBody` への受け渡しの 4 段。props は `transformerQuantClass`）。
+  3. `modes/chained/ChainedScreen.tsx` のクリップごとの印（`clipComfort`）。
+  4. 同じく、右クリックから開いたときにプロジェクトの寸法でクリップ 0 の長さを決め直す線（寸法がプロジェクトに従う設定のとき）。Chained は外側と Body の 2 段で props `transformerQuantClass` を受けます。
+  5. `modes/edit/useInpaintForm.ts`。
+  6. `modes/edit/useOutpaintForm.ts`（5・6 は `EditScreen.tsx` が props `transformerQuantClass` を受けて `quantClass` で渡す）。
+  7. `shell/AppShell.tsx` の `handleRoute`（右クリックの対象のオブジェクトの線）。
+  8. `timeline/prefillSeed.ts` の `resolvePrefillSeed`（引数 `quantClass`。呼び出し元の `ChainedScreen`・`SingleScreen`・`AppShell` の 3 か所が同じ値を渡す）。
+- **メモ化の依存配列**: `ChainedScreen.tsx` の `clipComfort` と `resolvePrefillSeed` の `useMemo`、`AppShell.tsx` の `handleRoute` の `useCallback` の依存配列に種類を足しました。足さないと、種類だけが替わったときに印が古い位置に残ります（計画の敵対的レビューの重大の指摘。型検査と既存のテストでは捕まらない）。
+- **モックと予備の設定**: `bridge/mockBridge.ts` の `/models` は、有効な H3 の区画だけ `transformer_quant_class: "int8"`、ほかは `null`（モックの H3 の候補は `"default"` だけなので、名前で種類を分ける規則は書いていません）。`mockBridge.ts` と `modes/single/defaultConfig.ts` の `h3` のプロファイルに `single_rows_budget_by_quant_class` を足しました（2 つの一致は既存の試験が見ます）。
+
+### 172.3 変更したファイル
+
+| ファイル | 要旨 |
+|---|---|
+| `webui/src/api/types.ts` | `TransformerQuantClass`、`EngineComfortProfile.single_rows_budget_by_quant_class`、`BaseModelBlock.transformer_quant_class` |
+| `webui/src/shell/comfortTable.ts` | `resolveSequenceRowsBudget` の第 3 引数と、値の妥当性の判定 `usableRowsBudget` |
+| `webui/src/shell/useBaseModels.ts` | `BaseModelOption.quantClass` と `activeQuantClass` |
+| `webui/src/shell/AppShell.tsx` | 各画面への `transformerQuantClass`、`handleRoute` の線と依存配列 |
+| `webui/src/modes/single/useGenerationForm.ts`・`SingleScreen.tsx` | Single の印と、プロジェクトの上書きの種 |
+| `webui/src/modes/chained/ChainedScreen.tsx` | クリップごとの印・種と依存配列 |
+| `webui/src/modes/edit/EditScreen.tsx`・`useInpaintForm.ts`・`useOutpaintForm.ts` | Inpaint・Outpaint の印 |
+| `webui/src/timeline/prefillSeed.ts` | 右クリックの種の線 |
+| `webui/src/bridge/mockBridge.ts`・`modes/single/defaultConfig.ts` | モックと予備の設定 |
+| テスト 5 本 | 172.4 |
+
+### 172.4 テスト
+
+- `shell/comfortTable.test.ts`: w4a8 は w4a8 の線、int8・fp8・`null`・`undefined` は既定の線。種類ごとの値が不正・鍵が無いときは既定の線。LTX と、プロファイルが無いときは種類に関わらず変わらない。
+- `shell/useBaseModels.test.ts`: `activeQuantClass` は有効なベースモデルの `transformer_quant_class` を読み、`null`・欄なしは `null`。
+- `bridge/mockBridge.test.ts`（h3 のプロファイルの一致）と `bridge/mockBridge.h3.test.ts`（有効な H3 は `"int8"`、ほかは `null`）。
+- `modes/chained/ChainedScreen.h3Comfort.test.tsx`: 1920×1088・冒頭画像 1 枚でクリップ 0 の印が w4a8 は 328、int8 は 345。**`transformerQuantClass` だけを替えて描画し直すと 345 → 328 に動く**（依存配列の漏れを捕まえる試験。確かめた結果は記録簿 §213.4）。
+- `npm run typecheck`・`npx vitest run --exclude "**/backend.integration.test.ts"` の結果と、aux2 の再ビルド・配布はバックエンド記録簿 §213 です。
+
+### 172.5 実機の門
+
+- オーナーの実機目視（6 項目）は合格しました（2026-11-13）。項目と結果の正本はバックエンド記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §213 です。

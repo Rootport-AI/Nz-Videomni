@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, PositiveInt, computed_field
 
 from chain_math import (
     CHAIN_COMFORT_TOKEN_BUDGET,
@@ -339,6 +339,14 @@ class EngineComfortProfile(BaseModel):
     Single source of truth for the value and the formula:
     Docs/COMFORT_LIMIT_TABLE.md §17 / §18 / §19 (per-clip inputs).
 
+    ``single_rows_budget_by_quant_class`` overrides that line per H3 weight
+    kind: the keys are the kind names (``h3_format.H3_QUANT_CLASSES``, matched
+    against GET /models' ``transformer_quant_class``; ``build_comfort_budgets``
+    refuses any other key), the values the line for that kind. A kind that is
+    not a key, and a ``null`` kind, fall back to ``single_rows_budget``.
+    Advisory-only — the server never reads it. Single source of truth for
+    the values: Docs/COMFORT_LIMIT_TABLE.md §21.
+
     The profiles are not defined in code: each base-model manifest's
     ``comfort`` block (``scripts/manifests/*.json``) is validated against this
     model at startup by ``api/context.py``'s ``build_comfort_budgets``.
@@ -352,6 +360,7 @@ class EngineComfortProfile(BaseModel):
     rows: list[ComfortRow] = Field(default_factory=list)
     outpaint_budget: int | None = None
     single_rows_budget: int | None = Field(default=None, gt=0)
+    single_rows_budget_by_quant_class: dict[str, PositiveInt] = Field(default_factory=dict)
 
 
 # キーフレーム画像（conditioning_images）の枚数上限。設定項目ではなく契約定数で、

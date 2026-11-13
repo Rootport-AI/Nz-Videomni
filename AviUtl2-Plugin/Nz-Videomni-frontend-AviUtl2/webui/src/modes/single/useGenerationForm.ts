@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
-import type { AppConfig, ConditioningImage, CropOutput, GenerateRequest } from "../../api/types";
+import type { AppConfig, ConditioningImage, CropOutput, GenerateRequest, TransformerQuantClass } from "../../api/types";
 import { combineLoras } from "../../lora/controlLoras";
 import type { ControlLoraSelection } from "../../lora/controlLoras";
 import { clampLoraStrength, parseLoraPrompt } from "../../lora/loraTags";
@@ -182,6 +182,11 @@ export interface UseGenerationFormDeps {
    * match, so a typed row misses and the marker falls back to the legacy
    * table. */
   weightClass?: string | undefined;
+  /** §1-286: the LOADED H3 transformer's quantisation kind
+   * (`useBaseModels().activeQuantClass`), which picks the per-kind rows line
+   * in `shell/comfortTable.ts`'s `resolveSequenceRowsBudget`. Omitted/`null`
+   * = the default rows line (`single_rows_budget`). */
+  quantClass?: TransformerQuantClass | null | undefined;
   /** The LOADED base model's numeric rules
    * (`useBaseModels().activeConstraints`) — the frame grid and its floor, the
    * size multiple, the fps range (a fixed rate disables the field) and the
@@ -495,6 +500,8 @@ export function useGenerationForm(
   const engineFamily = deps.engineFamily;
   // §1-31: the weight class joins the match beside the engine family.
   const weightClass = deps.weightClass;
+  // §1-286: the quantisation kind picks the per-kind rows line (H3).
+  const quantClass = deps.quantClass;
   // The loaded base model's numeric rules. Omitted = LTX.
   const rules = deps.constraints ?? LTX_GENERATION_CONSTRAINTS;
   const frameGrid = rules.frameGrid;
@@ -724,7 +731,7 @@ export function useGenerationForm(
   // §1-119) draws its rows line off the form's composition (`sequenceShape`),
   // whatever the acceleration settings, and never falls back either
   // (`comfortTable.singleLegacySpillTable`).
-  const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily);
+  const rowsBudget = resolveSequenceRowsBudget(config.limits, engineFamily, quantClass);
   const legacySpillTable = singleLegacySpillTable(config.limits, engineFamily);
   const sequenceShape = deps.sequenceShape ?? H3_NO_CONDITIONING;
   const comfortRow = useMemo(

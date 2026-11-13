@@ -1067,7 +1067,11 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     // the item's keyframe count and no Reference card, and never falls to the
     // LTX lookup either (`singleLegacySpillTable`).
     const cursorItemFrameLimits = frameLimitsFor(baseModels.activeConstraints, config.limits.max_num_frames);
-    const cursorItemRowsBudget = resolveSequenceRowsBudget(config.limits, baseModels.activeEngineFamily);
+    const cursorItemRowsBudget = resolveSequenceRowsBudget(
+      config.limits,
+      baseModels.activeEngineFamily,
+      baseModels.activeQuantClass,
+    );
     const cursorItemSpillFreeFrames = singleLegacySpillTable(config.limits, baseModels.activeEngineFamily);
     const cursorItemComfortRow =
       (intent === "text-to-video" || intent === "image-from-frame") &&
@@ -1379,6 +1383,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
         acceleration: accelerationControls.acceleration,
         sageAvailable: sageAvail,
         weightClass: baseModels.activeWeightClass,
+        // §1-286: the quantisation kind picks H3's per-kind rows line, as in
+        // `SingleScreen`'s own call.
+        quantClass: baseModels.activeQuantClass,
         // The same rules `SingleScreen` hands its own call.
         constraints: baseModels.activeConstraints,
       });
@@ -1546,6 +1553,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
     baseModels.activeEngineFamily,
     // §1-31: the weight class picks the comfort row beside the engine family.
     baseModels.activeWeightClass,
+    // §1-286: the quantisation kind picks H3's rows line (the cursor-item
+    // ceiling and the seed both read it).
+    baseModels.activeQuantClass,
     // The frame grid / fps / size rules the seeds follow.
     baseModels.activeConstraints,
     accelerationControls.acceleration,
@@ -1861,6 +1871,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               /* §1-31: the loaded transformer's weight class picks the row
                  beside the engine family. */
               weightClass={baseModels.activeWeightClass}
+              /* §1-286: the loaded H3 transformer's quantisation kind picks the
+                 rows line of the comfort markers. */
+              transformerQuantClass={baseModels.activeQuantClass}
               /* §1-107: the loaded H3 transformer's role (FL2VA / Ref2VA)
                  decides whether the Reference cards are sent and which
                  notice shows under Generate. */
@@ -1905,6 +1918,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
               sageAvailable={sageAvail}
               engineFamily={baseModels.activeEngineFamily}
               weightClass={baseModels.activeWeightClass}
+              /* §1-286: the loaded H3 transformer's quantisation kind picks the
+                 rows line of the comfort markers. */
+              transformerQuantClass={baseModels.activeQuantClass}
               /* §3-165: the stage-2 window dropdown names the loaded engine. */
               engineLabel={activeEngineLabel}
               loraRefreshKey={baseModels.active}
@@ -1964,6 +1980,9 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
                  Alpha Gen's line read are matched by weight class too
                  (Outpainting's line is not). */
               weightClass={baseModels.activeWeightClass}
+              /* §1-286: the loaded H3 transformer's quantisation kind picks the
+                 rows line of the comfort markers. */
+              transformerQuantClass={baseModels.activeQuantClass}
               /* §3-165: the Retake stage-2 window labels read the same comfort
                  row Chained's do, and name the loaded engine; Alpha Gen's line
                  reads its row through the same inputs. */

@@ -3414,3 +3414,15 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **派生**: なし。
 - **状態**: 完結（日付 2026-11-12）。main へマージ済み（`65b035c`）。コミットのハッシュは git の履歴を正とします。
 - **正本・出典**: 仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.3 の `InpaintSpec`、マスクの受け渡しは [`INPAINTING_DESIGN.md`](INPAINTING_DESIGN.md) §6.4、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §169、記録は記録簿 §207・§208。起票はオーナー指示 2026-11-02、判定はオーナー 2026-11-12。
+
+### 1-285. MiniMax H3 の fp8 と w4a8 の重みでの快適上限の較正（起票：2026-11-13、クローズ：2026-11-13）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-285 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-285（2026-11-13 起票）。**同書側は欠番**。採番規定の変更（本書冒頭。オーナー裁定 2026-11-02）により、番号を変えずに持ち込みました。起票の出典はオーナー裁定 2026-11-13 で、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210.2 で「快適上限の線は据え置き、較正は別の機会に回す」とした、その機会です。
+- **到達条件**: 2026-11-12 から受けるようになった fp8（RTX 40 系の `scaled` 経路）と w4a8 の重みで、2026-11-04 の再較正と同じ条件・同じ計測台（製品の HTTP API 経由の `calib.py`・判定規則 v3″）で MiniMax H3 の Single の境界を測り、線が int8 ConvRot と同じか、動くなら向きと量を結論する（本線は Comfy-Org の fp8 と Kijai の w4a8 の 2 本、TenStrip Eros は 1 点の確認。範囲は「測って結論」まで）。**達成しました。**
+- **何が完了したか**: fp8 は int8 ConvRot と同じ境界、Kijai の w4a8 は 1920×1088・2560×1472 とも 1 段下、TenStrip Eros は int8 の線より下で OOM（GPU メモリ不足）、と結論しました。操作パネルの印は形式によらず配信の線（総行数 S 219,516）に出るので、fp8 では印と結果が合い、Kijai の w4a8 と Eros では印の内側で OOM する形があります。配信値は変えていません。線の判断に要る値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §21、全点は記録簿 §212 です。
+- **合格の根拠**: 集計の台本で `run.json` から組み直して突き合わせ、違反 0（記録簿 §212.4）。int8 の対照点が 11-04 と同じく OOM し、OOM の文の 4 つの数が一致して、環境が 11-04 と同じことを確かめました（同 §212.3）。完了した全点で製品が使った値が送った要求と一致し（`used_check_h3` が真）、S は全点で予測と差 0（同 §212.1）。Kijai の c は 2 回快適で、2 回目が 1 回目と MiB 単位で一致しました（同 §212.7）。
+- **裁定**: オーナー裁定 2026-11-13: 本線は fp8 と Kijai の w4a8 の 2 本、Eros は 1920×1088×345 の 1 点。fp8 の RTX 30 系の経路は留保。スコープは「測る→仕組みの考察→結論」で閉じ、記述子・印を形式で分ける仕組みは設計しない。条件は 2026-11-04 の再較正と同じ。計画外の 2 点（int8 の 2560×1472×175 と Eros の 1920×1088×328）を足し、Eros は 328 で打ち止め。線を形式で分ける受け皿は §1 に起票（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-286）。
+- **留保**: 20 ステップでの確認は int8 だけで、fp8・w4a8 では取っていません。fp8 の RTX 30 系の経路は測っていません。Eros の線の量は未定です。弾 Z-②（fp8 の c の 2 回目）と弾 Z-③（1280×768×481）は打っていません。w4a8 のカーネル（comfy-kitchen）の二重確保を上流へ報告するかは、オーナーの判断待ちです。全部の留保は記録簿 §212.9。
+- **一次記録**: `outputs/comfort-calib-h3-quant-2026-11-13/`（git 管理外。`RESULTS.md`・`progress.md`・`analysis/`・計測台の差分・点ごとの `runs/`）。複写は [`Docs/Outputs-archive/comfort-calib-h3-quant-2026-11-13/`](Outputs-archive/comfort-calib-h3-quant-2026-11-13/)（`runs/`・`plans/` は写していない）。
+- **派生**: 線を形式ごとに分ける受け皿は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-286。
+- **状態**: 完結（日付 2026-11-13）。コミットのハッシュは git の履歴を正とします。

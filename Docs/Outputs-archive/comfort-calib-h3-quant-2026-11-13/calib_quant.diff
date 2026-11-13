@@ -1,0 +1,42 @@
+--- calib.py	2026-11-04 10:18:53.317606700 +0900
++++ calib_quant.py	2026-11-13 09:31:59.239329300 +0900
+@@ -2204,7 +2204,10 @@
+     metadata.json) still shows which weights and options it ran with."""
+     path = WORKER_LOGS["h3"]
+     out = {"log": str(path), "upto_bytes": upto, "transformer_path_line": None,
+-           "transformer_path": None, "load_ok_options": None, "load_ok_device": None}
++           "transformer_path": None, "load_ok_options": None, "load_ok_device": None,
++           # 2026-11-13 (plan graceful-fluttering-reddy §6.2-1): the weights' format
++           # as the worker loaded them (LOAD_OK dit / quant_backends).
++           "load_ok_dit": None, "load_ok_quant_backends": None}
+     if not path.exists():
+         return out
+     with open(path, "rb") as fh:
+@@ -2218,6 +2221,10 @@
+                 payload = json.loads(line[line.index("{"):])
+                 out["load_ok_options"] = payload.get("options")
+                 out["load_ok_device"] = payload.get("device")
++                dit = payload.get("dit") or {}
++                out["load_ok_dit"] = {key: dit.get(key) for key in (
++                    "quant_layers", "quant_layers_by_format", "fp8_mode", "quant_specs")}
++                out["load_ok_quant_backends"] = payload.get("quant_backends")
+             except Exception:
+                 out["load_ok_options"] = {"unparsed": line.strip()[:400]}
+     return out
+@@ -3674,6 +3681,16 @@
+             errors.append("baseline_label %r resolves to no known point" % base)
+         if base == label:
+             errors.append("baseline_label points at the point itself")
++        # 2026-11-13 (plan graceful-fluttering-reddy §6.2-2): a point and its
++        # baseline run the same weights -- the plan strings must be equal.
++        base_plan = PLANS_DIR / ("p_%s.json" % base)
++        base_points = ([p for p in load_plan(base_plan) if p.get("label") == base]
++                       if base_plan.exists() else [])
++        if not base_points:
++            errors.append("baseline plan %s with label %r is not found" % (base_plan.name, base))
++        elif base_points[0].get("transformer") != point.get("transformer"):
++            errors.append("transformer %r differs from the baseline %r's %r"
++                          % (point.get("transformer"), base, base_points[0].get("transformer")))
+     elif not exempt:
+         errors.append("baseline_label is missing (declare is_baseline/smoke if "
+                       "this point IS a baseline)")

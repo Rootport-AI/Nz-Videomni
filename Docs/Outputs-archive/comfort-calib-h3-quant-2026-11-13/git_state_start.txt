@@ -1,0 +1,14 @@
+> 複写（スナップショット）: 原本 `outputs/comfort-calib-h3-quant-2026-11-13/git_state_start.txt`（git 管理外）・複写日 2026-11-13
+
+## P0 start
+fcccdcf49484f5b385a9e13c97a7f00a68070d0c
+--- porcelain
+ M Docs/PENDING_TASKS.md
+--- date
+Fri Nov 13 09:29:11     2026
+--- P0-3 09:29:47
+commit_monitor PID 9048 (powershell, Start-Process hidden)
+nvidia-smi: memory.used [MiB]
+780 MiB
+commit (time,committed_gib,limit_gib,pct): 2026-11-13 09:29:45,18.41,138.08,13.3
+--- P0-5 09:30:08 engine.worker/engine_h3 orphans: none (python 17004 main.py parent 22936, 10512 main.py parent 17004 only)

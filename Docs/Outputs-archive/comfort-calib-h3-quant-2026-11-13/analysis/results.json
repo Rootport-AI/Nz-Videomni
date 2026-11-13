@@ -1,0 +1,3074 @@
+{
+ "points": [
+  {
+   "label": "warm__default",
+   "役割": "煙",
+   "形式": "int8",
+   "形式（計画の transformer から）": "int8",
+   "計画の transformer": "default",
+   "重みの名前（metadata）": "default",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "int8_tensorwise": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "load_int8.txt（run.json に欄なし＝差分 1 より前の点）",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1193.1,
+     "samples": 6,
+     "run_json_median_mb": 1193.1
+    },
+    "decode": {
+     "median_mb": 1177.3,
+     "samples": 8,
+     "run_json_median_mb": 1177.3
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 3848,
+   "予約の山_decode": 5382,
+   "割り当ての山_denoise": 3816,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 10175,
+   "retries": 0,
+   "inactive_split_MiB": 92,
+   "1ステップ秒_meta": 1.867,
+   "1ステップ秒_log": 1.675,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 3848,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 58.21,
+   "開始": "2026-11-13 09:36:51.687",
+   "快適の回数": null
+  },
+  {
+   "label": "warm__default_x",
+   "役割": "煙",
+   "形式": "int8",
+   "形式（計画の transformer から）": "int8",
+   "計画の transformer": "default",
+   "重みの名前（metadata）": "default",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "int8_tensorwise": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1167.0,
+     "samples": 7,
+     "run_json_median_mb": 1167.0
+    },
+    "decode": {
+     "median_mb": 1167.0,
+     "samples": 8,
+     "run_json_median_mb": 1167.0
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 3848,
+   "予約の山_decode": 5382,
+   "割り当ての山_denoise": 3816,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 10175,
+   "retries": 0,
+   "inactive_split_MiB": 92,
+   "1ステップ秒_meta": 1.875,
+   "1ステップ秒_log": 1.675,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 3848,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 54.13,
+   "開始": "2026-11-13 15:00:19.574",
+   "快適の回数": null
+  },
+  {
+   "label": "b1080_int8",
+   "役割": "基準点",
+   "形式": "int8",
+   "形式（計画の transformer から）": "int8",
+   "計画の transformer": "default",
+   "重みの名前（metadata）": "default",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "int8_tensorwise": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "load_int8.txt（run.json に欄なし＝差分 1 より前の点）",
+   "W": 1920,
+   "H": 1088,
+   "F": 56,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 38984,
+   "S_実測": 38984,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1175.4,
+     "samples": 79,
+     "run_json_median_mb": 1175.4
+    },
+    "decode": {
+     "median_mb": 1192.6,
+     "samples": 34,
+     "run_json_median_mb": 1192.6
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 5866,
+   "予約の山_decode": 10486,
+   "割り当ての山_denoise": 4340,
+   "割り当ての山_decode": 8143,
+   "余裕_MiB": 8133,
+   "retries": 0,
+   "inactive_split_MiB": 616,
+   "1ステップ秒_meta": 19.865,
+   "1ステップ秒_log": 19.675,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 5866,
+   "run_json_S": 38984,
+   "request_matches_point": true,
+   "所要秒": 144.45,
+   "開始": "2026-11-13 09:40:26.344",
+   "快適の回数": null
+  },
+  {
+   "label": "b1440_int8",
+   "役割": "基準点",
+   "形式": "int8",
+   "形式（計画の transformer から）": "int8",
+   "計画の transformer": "default",
+   "重みの名前（metadata）": "default",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "int8_tensorwise": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 56,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 70144,
+   "S_実測": 70144,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1192.0,
+     "samples": 193,
+     "run_json_median_mb": 1192.0
+    },
+    "decode": {
+     "median_mb": 1180.4,
+     "samples": 57,
+     "run_json_median_mb": 1180.4
+    }
+   },
+   "cap_MiB": 14001,
+   "予約の山_denoise": 8214,
+   "予約の山_decode": 14800,
+   "割り当ての山_denoise": 5709,
+   "割り当ての山_decode": 10768,
+   "余裕_MiB": 5787,
+   "retries": 0,
+   "inactive_split_MiB": 1233,
+   "1ステップ秒_meta": 48.513,
+   "1ステップ秒_log": 48.325,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14001,
+   "run_json_res_denoise": 8214,
+   "run_json_S": 70144,
+   "request_matches_point": true,
+   "所要秒": 286.96,
+   "開始": "2026-11-13 15:03:50.057",
+   "快適の回数": null
+  },
+  {
+   "label": "s1080_362_int8",
+   "役割": "点",
+   "形式": "int8",
+   "形式（計画の transformer から）": "int8",
+   "計画の transformer": "default",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "int8_tensorwise": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "load_int8.txt（run.json に欄なし＝差分 1 より前の点）",
+   "W": 1920,
+   "H": 1088,
+   "F": 362,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 223604,
+   "S_実測": 223604,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1080_int8",
+   "窓": {
+    "denoise": {
+     "median_mb": 1159.9,
+     "samples": 352,
+     "run_json_median_mb": 1159.9
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": 352.9,
+   "OOM": {
+    "場所": "o の確保",
+    "行": "o = torch.empty((s, inner), dtype=torch.bfloat16, device=x.device)",
+    "最後のフレーム": "y:147 block_forward",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 2,
+    "job_current_step": 1,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 2.99,
+     "総量_GiB": 15.99,
+     "free_GiB": 3.89,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 6.94,
+     "予約済みの空き_GiB": 3.84,
+     "表記": {
+      "要求": "2.99 GiB",
+      "free": "3.89 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "6.94 GiB",
+      "予約済みの空き": "3.84 GiB"
+     },
+     "原文": "Tried to allocate 2.99 GiB. GPU 0 has a total capacity of 15.99 GiB of which 3.89 GiB is free. 13.67 GiB allowed; Of the allocated memory 6.94 GiB is allocated by PyTorch, and 3.84 GiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 223604,
+   "request_matches_point": true,
+   "所要秒": 395.43,
+   "開始": "2026-11-13 09:45:26.905",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1080_362_int8"
+   ]
+  },
+  {
+   "label": "s1440_175_int8",
+   "役割": "点",
+   "形式": "int8",
+   "形式（計画の transformer から）": "int8",
+   "計画の transformer": "default",
+   "重みの名前（metadata）": "default",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "int8_tensorwise": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 175,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 199342,
+   "S_実測": 199342,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1440_int8",
+   "窓": {
+    "denoise": {
+     "median_mb": 1165.9,
+     "samples": 1142,
+     "run_json_median_mb": 1165.9,
+     "baseline_median_mb": 1192.0,
+     "baseline_samples": 193,
+     "delta_mb": -26.1
+    },
+    "decode": {
+     "median_mb": 1162.1,
+     "samples": 176,
+     "run_json_median_mb": 1162.1,
+     "baseline_median_mb": 1180.4,
+     "baseline_samples": 57,
+     "delta_mb": -18.3
+    }
+   },
+   "cap_MiB": 14001,
+   "予約の山_denoise": 12700,
+   "予約の山_decode": 14846,
+   "割り当ての山_denoise": 12007,
+   "割り当ての山_decode": 10861,
+   "余裕_MiB": 1301,
+   "retries": 9,
+   "inactive_split_MiB": 4396,
+   "1ステップ秒_meta": 286.517,
+   "1ステップ秒_log": 286.3,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14001,
+   "run_json_res_denoise": 12700,
+   "run_json_S": 199342,
+   "request_matches_point": true,
+   "所要秒": 1359.95,
+   "開始": "2026-11-13 15:11:13.385",
+   "快適の回数": 1,
+   "同じ形の点": [
+    "s1440_175_int8"
+   ]
+  },
+  {
+   "label": "warm__minimax_h3_fl2va_pruned_w4a8_mixed",
+   "役割": "煙",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 663.9,
+     "samples": 7,
+     "run_json_median_mb": 663.9
+    },
+    "decode": {
+     "median_mb": 663.9,
+     "samples": 7,
+     "run_json_median_mb": 663.9
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 2888,
+   "予約の山_decode": 5374,
+   "割り当ての山_denoise": 2846,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 11135,
+   "retries": 0,
+   "inactive_split_MiB": 117,
+   "1ステップ秒_meta": 2.013,
+   "1ステップ秒_log": 1.825,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 2888,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 42.11,
+   "開始": "2026-11-13 09:58:39.703",
+   "快適の回数": null
+  },
+  {
+   "label": "warm__minimax_h3_fl2va_pruned_w4a8_mixed_rec1113102714",
+   "役割": "煙",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 662.8,
+     "samples": 7,
+     "run_json_median_mb": 662.8
+    },
+    "decode": {
+     "median_mb": 662.8,
+     "samples": 7,
+     "run_json_median_mb": 662.8
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 2888,
+   "予約の山_decode": 5374,
+   "割り当ての山_denoise": 2846,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 11135,
+   "retries": 0,
+   "inactive_split_MiB": 117,
+   "1ステップ秒_meta": 2.005,
+   "1ステップ秒_log": 1.85,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 2888,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 32.09,
+   "開始": "2026-11-13 10:27:16.978",
+   "快適の回数": null
+  },
+  {
+   "label": "warm__minimax_h3_fl2va_pruned_w4a8_mixed_rec1113111425",
+   "役割": "煙",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 671.8,
+     "samples": 7,
+     "run_json_median_mb": 671.8
+    },
+    "decode": {
+     "median_mb": 671.8,
+     "samples": 7,
+     "run_json_median_mb": 671.8
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 2888,
+   "予約の山_decode": 5374,
+   "割り当ての山_denoise": 2846,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 11135,
+   "retries": 0,
+   "inactive_split_MiB": 117,
+   "1ステップ秒_meta": 2.0,
+   "1ステップ秒_log": 1.85,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 2888,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 34.15,
+   "開始": "2026-11-13 11:14:27.548",
+   "快適の回数": null
+  },
+  {
+   "label": "b1080_w4a8",
+   "役割": "基準点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 56,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 38984,
+   "S_実測": 38984,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 5052,
+   "予約の山_decode": 10486,
+   "割り当ての山_denoise": 3465,
+   "割り当ての山_decode": 8143,
+   "余裕_MiB": 8947,
+   "retries": 0,
+   "inactive_split_MiB": 578,
+   "1ステップ秒_meta": 21.545,
+   "1ステップ秒_log": 21.4,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 5052,
+   "run_json_S": 38984,
+   "request_matches_point": true,
+   "所要秒": 140.42,
+   "開始": "2026-11-13 10:01:58.628",
+   "快適の回数": null
+  },
+  {
+   "label": "b1080_w4a8_r2",
+   "役割": "基準点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 56,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 38984,
+   "S_実測": 38984,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 662.5,
+     "samples": 85,
+     "run_json_median_mb": 662.5
+    },
+    "decode": {
+     "median_mb": 661.5,
+     "samples": 34,
+     "run_json_median_mb": 661.5
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 5052,
+   "予約の山_decode": 10486,
+   "割り当ての山_denoise": 3465,
+   "割り当ての山_decode": 8143,
+   "余裕_MiB": 8947,
+   "retries": 0,
+   "inactive_split_MiB": 578,
+   "1ステップ秒_meta": 21.5,
+   "1ステップ秒_log": 21.325,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 5052,
+   "run_json_S": 38984,
+   "request_matches_point": true,
+   "所要秒": 140.5,
+   "開始": "2026-11-13 10:06:56.351",
+   "快適の回数": null
+  },
+  {
+   "label": "b1440_w4a8",
+   "役割": "基準点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 56,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 70144,
+   "S_実測": 70144,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 662.3,
+     "samples": 204,
+     "run_json_median_mb": 662.3
+    },
+    "decode": {
+     "median_mb": 650.1,
+     "samples": 56,
+     "run_json_median_mb": 650.1
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 8178,
+   "予約の山_decode": 14800,
+   "割り当ての山_denoise": 5097,
+   "割り当ての山_decode": 10768,
+   "余裕_MiB": 5821,
+   "retries": 0,
+   "inactive_split_MiB": 1119,
+   "1ステップ秒_meta": 51.288,
+   "1ステップ秒_log": 51.1,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 8178,
+   "run_json_S": 70144,
+   "request_matches_point": true,
+   "所要秒": 286.85,
+   "開始": "2026-11-13 10:56:56.193",
+   "快適の回数": null
+  },
+  {
+   "label": "s1080_328_w4a8",
+   "役割": "点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 328,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 203092,
+   "S_実測": 203092,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1080_w4a8_r2",
+   "窓": {
+    "denoise": {
+     "median_mb": 651.2,
+     "samples": 1216,
+     "run_json_median_mb": 651.2,
+     "baseline_median_mb": 662.5,
+     "baseline_samples": 85,
+     "delta_mb": -11.3
+    },
+    "decode": {
+     "median_mb": 657.8,
+     "samples": 192,
+     "run_json_median_mb": 657.8,
+     "baseline_median_mb": 661.5,
+     "baseline_samples": 34,
+     "delta_mb": -3.7
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 13444,
+   "予約の山_decode": 10540,
+   "割り当ての山_denoise": 12240,
+   "割り当ての山_decode": 8261,
+   "余裕_MiB": 555,
+   "retries": 16,
+   "inactive_split_MiB": 4230,
+   "1ステップ秒_meta": 305.285,
+   "1ステップ秒_log": 305.1,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 13444,
+   "run_json_S": 203092,
+   "request_matches_point": true,
+   "所要秒": 1434.97,
+   "開始": "2026-11-13 10:30:24.396",
+   "快適の回数": 2,
+   "同じ形の点": [
+    "s1080_328_w4a8",
+    "s1080_328_w4a8_r2"
+   ]
+  },
+  {
+   "label": "s1080_328_w4a8_r2",
+   "役割": "点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 328,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 203092,
+   "S_実測": 203092,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1080_w4a8_r2",
+   "窓": {
+    "denoise": {
+     "median_mb": 630.6,
+     "samples": 1219,
+     "run_json_median_mb": 630.6,
+     "baseline_median_mb": 662.5,
+     "baseline_samples": 85,
+     "delta_mb": -31.9
+    },
+    "decode": {
+     "median_mb": 648.4,
+     "samples": 192,
+     "run_json_median_mb": 648.4,
+     "baseline_median_mb": 661.5,
+     "baseline_samples": 34,
+     "delta_mb": -13.1
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 13444,
+   "予約の山_decode": 10540,
+   "割り当ての山_denoise": 12240,
+   "割り当ての山_decode": 8261,
+   "余裕_MiB": 555,
+   "retries": 16,
+   "inactive_split_MiB": 4230,
+   "1ステップ秒_meta": 305.787,
+   "1ステップ秒_log": 305.575,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 13444,
+   "run_json_S": 203092,
+   "request_matches_point": true,
+   "所要秒": 1436.61,
+   "開始": "2026-11-13 11:44:52.633",
+   "快適の回数": 2,
+   "同じ形の点": [
+    "s1080_328_w4a8",
+    "s1080_328_w4a8_r2"
+   ]
+  },
+  {
+   "label": "s1080_345_w4a8",
+   "役割": "点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 345,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 213348,
+   "S_実測": 213348,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1080_w4a8_r2",
+   "窓": {
+    "denoise": {
+     "median_mb": 642.6,
+     "samples": 665,
+     "run_json_median_mb": 642.6
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": 333.9,
+   "OOM": {
+    "場所": "sage の中",
+    "行": "b, h_kv, head_dim, padded_len), dtype=v.dtype, device=v.device)",
+    "最後のフレーム": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py:1778 _wrapped_call_impl",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 3,
+    "job_current_step": 2,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 0.4082,
+     "総量_GiB": 15.99,
+     "free_GiB": 1.33,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 11.88,
+     "予約済みの空き_GiB": 1.42,
+     "表記": {
+      "要求": "418.00 MiB",
+      "free": "1.33 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "11.88 GiB",
+      "予約済みの空き": "1.42 GiB"
+     },
+     "原文": "Tried to allocate 418.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.33 GiB is free. 13.67 GiB allowed; Of the allocated memory 11.88 GiB is allocated by PyTorch, and 1.42 GiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 213348,
+   "request_matches_point": true,
+   "所要秒": 698.62,
+   "開始": "2026-11-13 10:11:55.427",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1080_345_w4a8"
+   ]
+  },
+  {
+   "label": "s1440_175_w4a8",
+   "役割": "点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 175,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 199342,
+   "S_実測": 199342,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1440_w4a8",
+   "窓": {
+    "denoise": {
+     "median_mb": 647.6,
+     "samples": 1175,
+     "run_json_median_mb": 647.6,
+     "baseline_median_mb": 662.3,
+     "baseline_samples": 204,
+     "delta_mb": -14.7
+    },
+    "decode": {
+     "median_mb": 649.6,
+     "samples": 176,
+     "run_json_median_mb": 649.6,
+     "baseline_median_mb": 650.1,
+     "baseline_samples": 56,
+     "delta_mb": -0.5
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 13838,
+   "予約の山_decode": 14846,
+   "割り当ての山_denoise": 12058,
+   "割り当ての山_decode": 10861,
+   "余裕_MiB": 161,
+   "retries": 13,
+   "inactive_split_MiB": 4068,
+   "1ステップ秒_meta": 294.773,
+   "1ステップ秒_log": 294.55,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 13838,
+   "run_json_S": 199342,
+   "request_matches_point": true,
+   "所要秒": 1381.98,
+   "開始": "2026-11-13 11:17:36.941",
+   "快適の回数": 2,
+   "同じ形の点": [
+    "s1440_175_w4a8",
+    "s1440_175_w4a8_r2"
+   ]
+  },
+  {
+   "label": "s1440_175_w4a8_r2",
+   "役割": "点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 175,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 199342,
+   "S_実測": 199342,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1440_w4a8",
+   "窓": {
+    "denoise": {
+     "median_mb": 657.9,
+     "samples": 1175,
+     "run_json_median_mb": 657.9,
+     "baseline_median_mb": 662.3,
+     "baseline_samples": 204,
+     "delta_mb": -4.4
+    },
+    "decode": {
+     "median_mb": 653.4,
+     "samples": 177,
+     "run_json_median_mb": 653.4,
+     "baseline_median_mb": 650.1,
+     "baseline_samples": 56,
+     "delta_mb": 3.3
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 13838,
+   "予約の山_decode": 14846,
+   "割り当ての山_denoise": 12058,
+   "割り当ての山_decode": 10861,
+   "余裕_MiB": 161,
+   "retries": 13,
+   "inactive_split_MiB": 4068,
+   "1ステップ秒_meta": 294.852,
+   "1ステップ秒_log": 294.675,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 13838,
+   "run_json_S": 199342,
+   "request_matches_point": true,
+   "所要秒": 1382.45,
+   "開始": "2026-11-13 12:11:25.871",
+   "快適の回数": 2,
+   "同じ形の点": [
+    "s1440_175_w4a8",
+    "s1440_175_w4a8_r2"
+   ]
+  },
+  {
+   "label": "s1440_192_w4a8",
+   "役割": "点",
+   "形式": "w4a8",
+   "形式（計画の transformer から）": "w4a8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_w4a8_mixed",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 200
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 192,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 217798,
+   "S_実測": 217798,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1440_w4a8",
+   "窓": {
+    "denoise": {
+     "median_mb": 653.5,
+     "samples": 346,
+     "run_json_median_mb": 653.5
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": 346.6,
+   "OOM": {
+    "場所": "線形層の入力の量子化・out_proj（要求＝S×7,168 の int8）",
+    "行": "q_2d = torch.empty(",
+    "最後のフレーム": "i\\.venv-engine-h3\\Lib\\site-packages\\comfy_kitchen\\backends\\cuda\\__init__.py:1604 quantize_int8_rowwise_convrot64",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 2,
+    "job_current_step": 1,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 1.46,
+     "総量_GiB": 15.99,
+     "free_GiB": 2.13,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 10.28,
+     "予約済みの空き_GiB": 2.23,
+     "表記": {
+      "要求": "1.46 GiB",
+      "free": "2.13 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "10.28 GiB",
+      "予約済みの空き": "2.23 GiB"
+     },
+     "原文": "Tried to allocate 1.46 GiB. GPU 0 has a total capacity of 15.99 GiB of which 2.13 GiB is free. 13.67 GiB allowed; Of the allocated memory 10.28 GiB is allocated by PyTorch, and 2.23 GiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 217798,
+   "request_matches_point": true,
+   "所要秒": 387.35,
+   "開始": "2026-11-13 11:04:18.249",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1440_192_w4a8"
+   ]
+  },
+  {
+   "label": "warm__minimax_h3_fl2va_pruned_fp8_scaled",
+   "役割": "煙",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1186.8,
+     "samples": 9,
+     "run_json_median_mb": 1186.8
+    },
+    "decode": {
+     "median_mb": 1186.9,
+     "samples": 8,
+     "run_json_median_mb": 1186.9
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 3848,
+   "予約の山_decode": 5382,
+   "割り当ての山_denoise": 3809,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 10175,
+   "retries": 0,
+   "inactive_split_MiB": 149,
+   "1ステップ秒_meta": 2.545,
+   "1ステップ秒_log": 2.35,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 3848,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 46.14,
+   "開始": "2026-11-13 12:38:30.057",
+   "快適の回数": null
+  },
+  {
+   "label": "warm__minimax_h3_fl2va_pruned_fp8_scaled_rec1113132820",
+   "役割": "煙",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1191.4,
+     "samples": 9,
+     "run_json_median_mb": 1191.4
+    },
+    "decode": {
+     "median_mb": 1191.2,
+     "samples": 8,
+     "run_json_median_mb": 1191.2
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 3848,
+   "予約の山_decode": 5382,
+   "割り当ての山_denoise": 3809,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 10175,
+   "retries": 0,
+   "inactive_split_MiB": 149,
+   "1ステップ秒_meta": 2.53,
+   "1ステップ秒_log": 2.325,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 3848,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 48.12,
+   "開始": "2026-11-13 13:28:22.628",
+   "快適の回数": null
+  },
+  {
+   "label": "b1080_fp8",
+   "役割": "基準点",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 56,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 38984,
+   "S_実測": 38984,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1166.7,
+     "samples": 100,
+     "run_json_median_mb": 1166.7
+    },
+    "decode": {
+     "median_mb": 1158.0,
+     "samples": 34,
+     "run_json_median_mb": 1158.0
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 6014,
+   "予約の山_decode": 10486,
+   "割り当ての山_denoise": 4481,
+   "割り当ての山_decode": 8143,
+   "余裕_MiB": 7985,
+   "retries": 0,
+   "inactive_split_MiB": 679,
+   "1ステップ秒_meta": 25.352,
+   "1ステップ秒_log": 25.15,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 6014,
+   "run_json_S": 38984,
+   "request_matches_point": true,
+   "所要秒": 168.58,
+   "開始": "2026-11-13 12:41:53.773",
+   "快適の回数": null
+  },
+  {
+   "label": "b1440_fp8",
+   "役割": "基準点",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 56,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 70144,
+   "S_実測": 70144,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1176.5,
+     "samples": 232,
+     "run_json_median_mb": 1176.5
+    },
+    "decode": {
+     "median_mb": 1175.7,
+     "samples": 56,
+     "run_json_median_mb": 1175.7
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 8362,
+   "予約の山_decode": 14800,
+   "割り当ての山_denoise": 5811,
+   "割り当ての山_decode": 10768,
+   "余裕_MiB": 5637,
+   "retries": 0,
+   "inactive_split_MiB": 1252,
+   "1ステップ秒_meta": 58.207,
+   "1ステップ秒_log": 58.0,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 8362,
+   "run_json_S": 70144,
+   "request_matches_point": true,
+   "所要秒": 324.9,
+   "開始": "2026-11-13 13:31:46.119",
+   "快適の回数": null
+  },
+  {
+   "label": "s1080_345_fp8",
+   "役割": "点",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 345,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 213348,
+   "S_実測": 213348,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1080_fp8",
+   "窓": {
+    "denoise": {
+     "median_mb": 1163.0,
+     "samples": 1415,
+     "run_json_median_mb": 1163.0,
+     "baseline_median_mb": 1166.7,
+     "baseline_samples": 100,
+     "delta_mb": -3.7
+    },
+    "decode": {
+     "median_mb": 1170.0,
+     "samples": 203,
+     "run_json_median_mb": 1170.0,
+     "baseline_median_mb": 1158.0,
+     "baseline_samples": 34,
+     "delta_mb": 12.0
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 13486,
+   "予約の山_decode": 10548,
+   "割り当ての山_denoise": 12661,
+   "割り当ての山_decode": 8271,
+   "余裕_MiB": 513,
+   "retries": 9,
+   "inactive_split_MiB": 4786,
+   "1ステップ秒_meta": 355.155,
+   "1ステップ秒_log": 354.95,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 13486,
+   "run_json_S": 213348,
+   "request_matches_point": true,
+   "所要秒": 1655.34,
+   "開始": "2026-11-13 12:47:20.065",
+   "快適の回数": 1,
+   "同じ形の点": [
+    "s1080_345_fp8"
+   ]
+  },
+  {
+   "label": "s1080_362_fp8",
+   "役割": "点",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 362,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 223604,
+   "S_実測": 223604,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1080_fp8",
+   "窓": {
+    "denoise": {
+     "median_mb": 1165.2,
+     "samples": 383,
+     "run_json_median_mb": 1165.2
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": 384.5,
+   "OOM": {
+    "場所": "o の確保",
+    "行": "o = torch.empty((s, inner), dtype=torch.bfloat16, device=x.device)",
+    "最後のフレーム": "y:147 block_forward",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 2,
+    "job_current_step": 1,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 2.99,
+     "総量_GiB": 15.99,
+     "free_GiB": 3.89,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 6.93,
+     "予約済みの空き_GiB": 3.85,
+     "表記": {
+      "要求": "2.99 GiB",
+      "free": "3.89 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "6.93 GiB",
+      "予約済みの空き": "3.85 GiB"
+     },
+     "原文": "Tried to allocate 2.99 GiB. GPU 0 has a total capacity of 15.99 GiB of which 3.89 GiB is free. 13.67 GiB allowed; Of the allocated memory 6.93 GiB is allocated by PyTorch, and 3.85 GiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 223604,
+   "request_matches_point": true,
+   "所要秒": 427.48,
+   "開始": "2026-11-13 13:17:32.072",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1080_362_fp8"
+   ]
+  },
+  {
+   "label": "s1440_192_fp8",
+   "役割": "点",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みのファイル（metadata）": "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 192,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 217798,
+   "S_実測": 217798,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "快適",
+   "判定（run.json）": "comfortable",
+   "基準点": "b1440_fp8",
+   "窓": {
+    "denoise": {
+     "median_mb": 1141.1,
+     "samples": 1466,
+     "run_json_median_mb": 1141.1,
+     "baseline_median_mb": 1176.5,
+     "baseline_samples": 232,
+     "delta_mb": -35.4
+    },
+    "decode": {
+     "median_mb": 1163.3,
+     "samples": 194,
+     "run_json_median_mb": 1163.3,
+     "baseline_median_mb": 1175.7,
+     "baseline_samples": 56,
+     "delta_mb": -12.4
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 13764,
+   "予約の山_decode": 14858,
+   "割り当ての山_denoise": 12898,
+   "割り当ての山_decode": 10874,
+   "余裕_MiB": 235,
+   "retries": 9,
+   "inactive_split_MiB": 4912,
+   "1ステップ秒_meta": 367.975,
+   "1ステップ秒_log": 367.775,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 13764,
+   "run_json_S": 217798,
+   "request_matches_point": true,
+   "所要秒": 1703.38,
+   "開始": "2026-11-13 13:39:48.427",
+   "快適の回数": 1,
+   "同じ形の点": [
+    "s1440_192_fp8"
+   ]
+  },
+  {
+   "label": "s1440_209_fp8",
+   "役割": "点",
+   "形式": "fp8",
+   "形式（計画の transformer から）": "fp8",
+   "計画の transformer": "minimax_h3_fl2va_pruned_fp8_scaled",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "float8_e4m3fn": 200
+    },
+    "fp8_mode": "scaled",
+    "quant_specs": [
+     "float8_e4m3fn/convrot=False/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 2560,
+   "H": 1472,
+   "F": 209,
+   "res": "1440",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 236254,
+   "S_実測": 236254,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1440_fp8",
+   "窓": {
+    "denoise": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": null,
+   "OOM": {
+    "場所": "sage の中",
+    "行": "h_kv, head_dim, padded_len), dtype=v.dtype, device=v.device)",
+    "最後のフレーム": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py:1778 _wrapped_call_impl",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 1,
+    "job_current_step": 0,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 0.4512,
+     "総量_GiB": 15.99,
+     "free_GiB": 1.29,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 12.79,
+     "予約済みの空き_GiB": 0.5469,
+     "表記": {
+      "要求": "462.00 MiB",
+      "free": "1.29 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "12.79 GiB",
+      "予約済みの空き": "560.07 MiB"
+     },
+     "原文": "Tried to allocate 462.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.29 GiB is free. 13.67 GiB allowed; Of the allocated memory 12.79 GiB is allocated by PyTorch, and 560.07 MiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 236254,
+   "request_matches_point": true,
+   "所要秒": 40.15,
+   "開始": "2026-11-13 14:10:49.436",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1440_209_fp8"
+   ]
+  },
+  {
+   "label": "warm__10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "役割": "煙",
+   "形式": "eros",
+   "形式（計画の transformer から）": "eros",
+   "計画の transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みの名前（metadata）": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みのファイル（metadata）": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 180,
+     "int8_tensorwise": 20
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16",
+     "asym_w4a8_int8/convrot=True/g256/G4",
+     "asym_w4a8_int8/convrot=True/g256/G8",
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1178.2,
+     "samples": 7,
+     "run_json_median_mb": 1178.2
+    },
+    "decode": {
+     "median_mb": 1178.2,
+     "samples": 7,
+     "run_json_median_mb": 1178.2
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 3848,
+   "予約の山_decode": 5382,
+   "割り当ての山_denoise": 3816,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 10175,
+   "retries": 0,
+   "inactive_split_MiB": 112,
+   "1ステップ秒_meta": 1.988,
+   "1ステップ秒_log": 1.75,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 3848,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 42.16,
+   "開始": "2026-11-13 14:17:41.325",
+   "快適の回数": null
+  },
+  {
+   "label": "warm__10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized_x",
+   "役割": "煙",
+   "形式": "eros",
+   "形式（計画の transformer から）": "eros",
+   "計画の transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みの名前（metadata）": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みのファイル（metadata）": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 180,
+     "int8_tensorwise": 20
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16",
+     "asym_w4a8_int8/convrot=True/g256/G4",
+     "asym_w4a8_int8/convrot=True/g256/G8",
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 640,
+   "H": 384,
+   "F": 56,
+   "res": "384",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 4784,
+   "S_実測": 4784,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "煙",
+   "判定（run.json）": "smoke",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1192.0,
+     "samples": 7,
+     "run_json_median_mb": 1192.0
+    },
+    "decode": {
+     "median_mb": 1191.8,
+     "samples": 8,
+     "run_json_median_mb": 1191.8
+    }
+   },
+   "cap_MiB": 14023,
+   "予約の山_denoise": 3848,
+   "予約の山_decode": 5382,
+   "割り当ての山_denoise": 3816,
+   "割り当ての山_decode": 5062,
+   "余裕_MiB": 10175,
+   "retries": 0,
+   "inactive_split_MiB": 112,
+   "1ステップ秒_meta": 1.988,
+   "1ステップ秒_log": 1.75,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 14023,
+   "run_json_res_denoise": 3848,
+   "run_json_S": 4784,
+   "request_matches_point": true,
+   "所要秒": 44.13,
+   "開始": "2026-11-13 15:37:41.587",
+   "快適の回数": null
+  },
+  {
+   "label": "b1080_eros",
+   "役割": "基準点",
+   "形式": "eros",
+   "形式（計画の transformer から）": "eros",
+   "計画の transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みの名前（metadata）": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みのファイル（metadata）": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 180,
+     "int8_tensorwise": 20
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16",
+     "asym_w4a8_int8/convrot=True/g256/G4",
+     "asym_w4a8_int8/convrot=True/g256/G8",
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 56,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 38984,
+   "S_実測": 38984,
+   "S_実測の出所": "metadata",
+   "S_差": 0,
+   "status": "completed",
+   "判定": "基準点",
+   "判定（run.json）": "baseline",
+   "基準点": null,
+   "窓": {
+    "denoise": {
+     "median_mb": 1175.0,
+     "samples": 85,
+     "run_json_median_mb": 1175.0
+    },
+    "decode": {
+     "median_mb": 1174.7,
+     "samples": 34,
+     "run_json_median_mb": 1174.7
+    }
+   },
+   "cap_MiB": 13999,
+   "予約の山_denoise": 5866,
+   "予約の山_decode": 10486,
+   "割り当ての山_denoise": 4436,
+   "割り当ての山_decode": 8143,
+   "余裕_MiB": 8133,
+   "retries": 0,
+   "inactive_split_MiB": 718,
+   "1ステップ秒_meta": 21.378,
+   "1ステップ秒_log": 21.175,
+   "OOM": null,
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "metadata",
+   "used_check_h3": true,
+   "used_check_h3_mismatches": {},
+   "prefetch": "on",
+   "run_json_cap": 13999,
+   "run_json_res_denoise": 5866,
+   "run_json_S": 38984,
+   "request_matches_point": true,
+   "所要秒": 142.47,
+   "開始": "2026-11-13 14:21:00.823",
+   "快適の回数": null
+  },
+  {
+   "label": "s1080_328_eros",
+   "役割": "点",
+   "形式": "eros",
+   "形式（計画の transformer から）": "eros",
+   "計画の transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 180,
+     "int8_tensorwise": 20
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16",
+     "asym_w4a8_int8/convrot=True/g256/G4",
+     "asym_w4a8_int8/convrot=True/g256/G8",
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 328,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 203092,
+   "S_実測": 203092,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1080_eros",
+   "窓": {
+    "denoise": {
+     "median_mb": 1142.2,
+     "samples": 303,
+     "run_json_median_mb": 1142.2
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": 304.7,
+   "OOM": {
+    "場所": "線形層の入力の量子化・qkv（要求＝S×5,376 の int8）",
+    "行": "q_2d = torch.empty(",
+    "最後のフレーム": "i\\.venv-engine-h3\\Lib\\site-packages\\comfy_kitchen\\backends\\cuda\\__init__.py:1604 quantize_int8_rowwise_convrot64",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 2,
+    "job_current_step": 1,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 1.02,
+     "総量_GiB": 15.99,
+     "free_GiB": 1.96,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 11.4,
+     "予約済みの空き_GiB": 1.26,
+     "表記": {
+      "要求": "1.02 GiB",
+      "free": "1.96 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "11.40 GiB",
+      "予約済みの空き": "1.26 GiB"
+     },
+     "原文": "Tried to allocate 1.02 GiB. GPU 0 has a total capacity of 15.99 GiB of which 1.96 GiB is free. 13.67 GiB allowed; Of the allocated memory 11.40 GiB is allocated by PyTorch, and 1.26 GiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 203092,
+   "request_matches_point": true,
+   "所要秒": 343.27,
+   "開始": "2026-11-13 15:41:01.047",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1080_328_eros"
+   ]
+  },
+  {
+   "label": "s1080_345_eros",
+   "役割": "点",
+   "形式": "eros",
+   "形式（計画の transformer から）": "eros",
+   "計画の transformer": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+   "重みの名前（metadata）": null,
+   "重みのファイル（metadata）": null,
+   "transformer_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\Weights\\10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+   "load_ok_dit": {
+    "quant_layers": 200,
+    "quant_layers_by_format": {
+     "asym_w4a8_int8": 180,
+     "int8_tensorwise": 20
+    },
+    "fp8_mode": null,
+    "quant_specs": [
+     "asym_w4a8_int8/convrot=True/g256/G16",
+     "asym_w4a8_int8/convrot=True/g256/G4",
+     "asym_w4a8_int8/convrot=True/g256/G8",
+     "int8_tensorwise/convrot=True/g256"
+    ]
+   },
+   "load_ok_dit の出所": "run.json",
+   "W": 1920,
+   "H": 1088,
+   "F": 345,
+   "res": "1080",
+   "K": 1,
+   "steps": 4,
+   "attention": "sage",
+   "S_predict": 213348,
+   "S_実測": 213348,
+   "S_実測の出所": "worker_log",
+   "S_差": 0,
+   "status": "failed",
+   "判定": "OOM",
+   "判定（run.json）": "oom",
+   "基準点": "b1080_eros",
+   "窓": {
+    "denoise": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    },
+    "decode": {
+     "median_mb": null,
+     "samples": 0,
+     "run_json_median_mb": null
+    }
+   },
+   "cap_MiB": null,
+   "予約の山_denoise": null,
+   "予約の山_decode": null,
+   "割り当ての山_denoise": null,
+   "割り当ての山_decode": null,
+   "余裕_MiB": null,
+   "retries": null,
+   "inactive_split_MiB": null,
+   "1ステップ秒_meta": null,
+   "1ステップ秒_log": null,
+   "OOM": {
+    "場所": "sage の中",
+    "行": "h_kv, head_dim, padded_len), dtype=v.dtype, device=v.device)",
+    "最後のフレーム": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\.venv-engine-h3\\Lib\\site-packages\\torch\\nn\\modules\\module.py:1778 _wrapped_call_impl",
+    "行の実在": true,
+    "段": "denoise",
+    "線に数える": true,
+    "落ちたステップ": 1,
+    "job_current_step": 0,
+    "total_steps": 4,
+    "数": {
+     "要求_GiB": 0.4082,
+     "総量_GiB": 15.99,
+     "free_GiB": 1.02,
+     "許可_GiB": 13.67,
+     "割り当て_GiB": 12.83,
+     "予約済みの空き_GiB": 0.7807,
+     "表記": {
+      "要求": "418.00 MiB",
+      "free": "1.02 GiB",
+      "許可": "13.67 GiB",
+      "割り当て": "12.83 GiB",
+      "予約済みの空き": "799.40 MiB"
+     },
+     "原文": "Tried to allocate 418.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 1.02 GiB is free. 13.67 GiB allowed; Of the allocated memory 12.83 GiB is allocated by PyTorch, and 799.40 MiB is reserved"
+    }
+   },
+   "shift": [
+    12.0,
+    3.0
+   ],
+   "shift の出所": "ワーカーの generate 行（metadata なし）",
+   "used_check_h3": null,
+   "used_check_h3_mismatches": {},
+   "prefetch": null,
+   "run_json_cap": null,
+   "run_json_res_denoise": null,
+   "run_json_S": 213348,
+   "request_matches_point": true,
+   "所要秒": 40.08,
+   "開始": "2026-11-13 14:26:00.077",
+   "快適の回数": 0,
+   "同じ形の点": [
+    "s1080_345_eros"
+   ]
+  }
+ ],
+ "conclusions": {
+  "int8": {
+   "解像度": {
+    "1080": {
+     "基準点（標本のある最新）": "b1080_int8",
+     "c": null,
+     "U": 362,
+     "帯_S": [
+      null,
+      223604
+     ],
+     "向き": "未確定",
+     "点": [
+      "s1080_362_int8"
+     ],
+     "int8 の現行": {
+      "c": 345,
+      "U": 362
+     },
+     "注記": []
+    },
+    "1440": {
+     "基準点（標本のある最新）": "b1440_int8",
+     "c": 175,
+     "U": null,
+     "帯_S": [
+      199342,
+      null
+     ],
+     "向き": "未確定",
+     "点": [
+      "s1440_175_int8"
+     ],
+     "int8 の現行": {
+      "c": 192,
+      "U": 209
+     },
+     "注記": [
+      "c=175 は快適 1 回（_r2 は弾 Z。§5 の根拠を添える）"
+     ]
+    }
+   },
+   "帯の重なり": null,
+   "結論の形": "対照（弾 I・§7.2）: 1080 の U=362 が OOM（環境は 11-04 と同じかは §5 の 4 つの数で見る）。追加の点（弾 X）: 1440×175 が 快適（Kijai との比較用。線の判定には使わない）"
+  },
+  "w4a8": {
+   "解像度": {
+    "1080": {
+     "基準点（標本のある最新）": "b1080_w4a8_r2",
+     "c": 328,
+     "U": 345,
+     "帯_S": [
+      203092,
+      213348
+     ],
+     "向き": "下",
+     "点": [
+      "s1080_328_w4a8",
+      "s1080_328_w4a8_r2",
+      "s1080_345_w4a8"
+     ],
+     "int8 の現行": {
+      "c": 345,
+      "U": 362
+     },
+     "注記": []
+    },
+    "1440": {
+     "基準点（標本のある最新）": "b1440_w4a8",
+     "c": 175,
+     "U": 192,
+     "帯_S": [
+      199342,
+      217798
+     ],
+     "向き": "下",
+     "点": [
+      "s1440_175_w4a8",
+      "s1440_175_w4a8_r2",
+      "s1440_192_w4a8"
+     ],
+     "int8 の現行": {
+      "c": 192,
+      "U": 209
+     },
+     "注記": []
+    }
+   },
+   "帯の重なり": {
+    "重なる": true,
+    "共通の帯_S": [
+     203092,
+     213348
+    ],
+    "int8 の線 219,516 が共通の帯の中": false
+   },
+   "結論の形": "(下)"
+  },
+  "fp8": {
+   "解像度": {
+    "1080": {
+     "基準点（標本のある最新）": "b1080_fp8",
+     "c": 345,
+     "U": 362,
+     "帯_S": [
+      213348,
+      223604
+     ],
+     "向き": "同",
+     "点": [
+      "s1080_345_fp8",
+      "s1080_362_fp8"
+     ],
+     "int8 の現行": {
+      "c": 345,
+      "U": 362
+     },
+     "注記": [
+      "c=345 は快適 1 回（_r2 は弾 Z。§5 の根拠を添える）"
+     ]
+    },
+    "1440": {
+     "基準点（標本のある最新）": "b1440_fp8",
+     "c": 192,
+     "U": 209,
+     "帯_S": [
+      217798,
+      236254
+     ],
+     "向き": "同",
+     "点": [
+      "s1440_192_fp8",
+      "s1440_209_fp8"
+     ],
+     "int8 の現行": {
+      "c": 192,
+      "U": 209
+     },
+     "注記": [
+      "c=192 は快適 1 回（_r2 は弾 Z。§5 の根拠を添える）"
+     ]
+    }
+   },
+   "帯の重なり": {
+    "重なる": true,
+    "共通の帯_S": [
+     217798,
+     223604
+    ],
+    "int8 の線 219,516 が共通の帯の中": true
+   },
+   "結論の形": "(同)"
+  },
+  "eros": {
+   "解像度": {
+    "1080": {
+     "基準点（標本のある最新）": "b1080_eros",
+     "c": null,
+     "U": 328,
+     "帯_S": [
+      null,
+      203092
+     ],
+     "向き": "未確定",
+     "点": [
+      "s1080_328_eros",
+      "s1080_345_eros"
+     ],
+     "int8 の現行": {
+      "c": 345,
+      "U": 362
+     },
+     "注記": []
+    }
+   },
+   "帯の重なり": null,
+   "結論の形": "345・328 とも OOM → Eros の線は S 203,092 より下。量は未定（オーナー裁定で打ち止め）"
+  }
+ },
+ "predictions": [
+  {
+   "label": "s1080_328_w4a8",
+   "形式": "w4a8",
+   "int8 の点": "s1080_328",
+   "S": 203092,
+   "int8 の予約の山": 12964,
+   "int8 の余裕": 1035,
+   "a×S＋b_MiB": 120.5,
+   "予測の予約の山": 13084.5,
+   "予測の余裕": 914.5,
+   "予測": "快適",
+   "実測の判定": "快適",
+   "実測の予約の山": 13444,
+   "差_MiB（実測−予測）": 359.5,
+   "実測の cap": 13999,
+   "実測の余裕": 555,
+   "実測の retries": 16,
+   "照合": "判定は一致・山は予測より高い側（差 +359.5 MiB）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 964.1,
+    "予約の読み a=+7,228（弾 X で否定）": 555.1
+   }
+  },
+  {
+   "label": "s1080_328_w4a8_r2",
+   "形式": "w4a8",
+   "int8 の点": "s1080_328",
+   "S": 203092,
+   "int8 の予約の山": 12964,
+   "int8 の余裕": 1035,
+   "a×S＋b_MiB": 120.5,
+   "予測の予約の山": 13084.5,
+   "予測の余裕": 914.5,
+   "予測": "快適",
+   "実測の判定": "快適",
+   "実測の予約の山": 13444,
+   "差_MiB（実測−予測）": 359.5,
+   "実測の cap": 13999,
+   "実測の余裕": 555,
+   "実測の retries": 16,
+   "照合": "判定は一致・山は予測より高い側（差 +359.5 MiB）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 964.1,
+    "予約の読み a=+7,228（弾 X で否定）": 555.1
+   }
+  },
+  {
+   "label": "s1080_345_w4a8",
+   "形式": "w4a8",
+   "int8 の点": "s1080_345",
+   "S": 213348,
+   "int8 の予約の山": 13486,
+   "int8 の余裕": 513,
+   "a×S＋b_MiB": 173.0,
+   "予測の予約の山": 13659.0,
+   "予測の余裕": 340.0,
+   "予測": "快適",
+   "実測の判定": "OOM",
+   "実測の予約の山": null,
+   "差_MiB（実測−予測）": null,
+   "実測の cap": null,
+   "実測の余裕": null,
+   "実測の retries": null,
+   "照合": "外れ（予測は快適・実測は OOM＝山が高い側）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 392.1,
+    "予約の読み a=+7,228（弾 X で否定）": -37.6
+   }
+  },
+  {
+   "label": "s1440_175_w4a8",
+   "形式": "w4a8",
+   "int8 の点": "s1440_175_int8（今回）",
+   "S": 199342,
+   "int8 の予約の山": 12700,
+   "int8 の余裕": 1301,
+   "a×S＋b_MiB": 101.3,
+   "予測の予約の山": 12801.3,
+   "予測の余裕": 1199.7,
+   "予測": "快適",
+   "実測の判定": "快適",
+   "実測の予約の山": 13838,
+   "差_MiB（実測−予測）": 1036.7,
+   "実測の cap": 13999,
+   "実測の余裕": 161,
+   "実測の retries": 13,
+   "照合": "判定は一致・山は予測より高い側（差 +1036.7 MiB）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 1248.4,
+    "予約の読み a=+7,228（弾 X で否定）": 846.9
+   }
+  },
+  {
+   "label": "s1440_175_w4a8_r2",
+   "形式": "w4a8",
+   "int8 の点": "s1440_175_int8（今回）",
+   "S": 199342,
+   "int8 の予約の山": 12700,
+   "int8 の余裕": 1301,
+   "a×S＋b_MiB": 101.3,
+   "予測の予約の山": 12801.3,
+   "予測の余裕": 1199.7,
+   "予測": "快適",
+   "実測の判定": "快適",
+   "実測の予約の山": 13838,
+   "差_MiB（実測−予測）": 1036.7,
+   "実測の cap": 13999,
+   "実測の余裕": 161,
+   "実測の retries": 13,
+   "照合": "判定は一致・山は予測より高い側（差 +1036.7 MiB）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 1248.4,
+    "予約の読み a=+7,228（弾 X で否定）": 846.9
+   }
+  },
+  {
+   "label": "s1440_192_w4a8",
+   "形式": "w4a8",
+   "int8 の点": "s1440_192",
+   "S": 217798,
+   "int8 の予約の山": 13764,
+   "int8 の余裕": 235,
+   "a×S＋b_MiB": 195.8,
+   "予測の予約の山": 13959.8,
+   "予測の余裕": 39.2,
+   "予測": "快適",
+   "実測の判定": "OOM",
+   "実測の予約の山": null,
+   "差_MiB（実測−予測）": null,
+   "実測の cap": null,
+   "実測の余裕": null,
+   "実測の retries": null,
+   "照合": "外れ（予測は快適・実測は OOM＝山が高い側）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 92.4,
+    "予約の読み a=+7,228（弾 X で否定）": -346.3
+   }
+  },
+  {
+   "label": "s1080_345_fp8",
+   "形式": "fp8",
+   "int8 の点": "s1080_345",
+   "S": 213348,
+   "int8 の予約の山": 13486,
+   "int8 の余裕": 513,
+   "a×S＋b_MiB": -2.8,
+   "予測の予約の山": 13483.2,
+   "予測の余裕": 515.8,
+   "予測": "快適",
+   "実測の判定": "快適",
+   "実測の予約の山": 13486,
+   "差_MiB（実測−予測）": 2.8,
+   "実測の cap": 13999,
+   "実測の余裕": 513,
+   "実測の retries": 9,
+   "照合": "一致（差 +2.8 MiB）",
+   "別の読みの余裕": null
+  },
+  {
+   "label": "s1440_192_fp8",
+   "形式": "fp8",
+   "int8 の点": "s1440_192",
+   "S": 217798,
+   "int8 の予約の山": 13764,
+   "int8 の余裕": 235,
+   "a×S＋b_MiB": -2.8,
+   "予測の予約の山": 13761.2,
+   "予測の余裕": 237.8,
+   "予測": "快適",
+   "実測の判定": "快適",
+   "実測の予約の山": 13764,
+   "差_MiB（実測−予測）": 2.8,
+   "実測の cap": 13999,
+   "実測の余裕": 235,
+   "実測の retries": 9,
+   "照合": "一致（差 +2.8 MiB）",
+   "別の読みの余裕": null
+  },
+  {
+   "label": "s1080_328_eros",
+   "形式": "eros",
+   "int8 の点": "s1080_328",
+   "S": 203092,
+   "int8 の予約の山": 12964,
+   "int8 の余裕": 1035,
+   "a×S＋b_MiB": 1040.5,
+   "予測の予約の山": 14004.5,
+   "予測の余裕": -5.5,
+   "予測": "OOM",
+   "実測の判定": "OOM",
+   "実測の予約の山": null,
+   "差_MiB（実測−予測）": null,
+   "実測の cap": null,
+   "実測の余裕": null,
+   "実測の retries": null,
+   "照合": "一致（OOM）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": 44.1,
+    "予約の読み a=+7,228（弾 X で否定）": -364.9
+   }
+  },
+  {
+   "label": "s1080_345_eros",
+   "形式": "eros",
+   "int8 の点": "s1080_345",
+   "S": 213348,
+   "int8 の予約の山": 13486,
+   "int8 の余裕": 513,
+   "a×S＋b_MiB": 1093.0,
+   "予測の予約の山": 14579.0,
+   "予測の余裕": -580.0,
+   "予測": "OOM",
+   "実測の判定": "OOM",
+   "実測の予約の山": null,
+   "差_MiB（実測−予測）": null,
+   "実測の cap": null,
+   "実測の余裕": null,
+   "実測の retries": null,
+   "照合": "一致（OOM）",
+   "別の読みの余裕": {
+    "割り当ての読み a=+5,116": -527.9,
+    "予約の読み a=+7,228（弾 X で否定）": -957.6
+   }
+  }
+ ],
+ "checks": {
+  "violations": [],
+  "notes": [
+   {
+    "label": "warm__default",
+    "msg": "load_ok_dit は load_int8.txt（run.json に欄なし＝差分 1 より前の点） から"
+   },
+   {
+    "label": "b1080_int8",
+    "msg": "load_ok_dit は load_int8.txt（run.json に欄なし＝差分 1 より前の点） から"
+   },
+   {
+    "label": "s1080_362_int8",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1080_362_int8",
+    "msg": "load_ok_dit は load_int8.txt（run.json に欄なし＝差分 1 より前の点） から"
+   },
+   {
+    "label": "s1080_362_int8",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   },
+   {
+    "label": "b1080_w4a8",
+    "msg": "共有メモリの標本なし（二重起動の事故。progress.md 参照）・数値は 1 本目のジョブの値"
+   },
+   {
+    "label": "b1080_w4a8",
+    "msg": "manifest.jsonl に submit_failed の行 1 件（HTTP 409）"
+   },
+   {
+    "label": "s1080_345_w4a8",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1080_345_w4a8",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   },
+   {
+    "label": "s1440_192_w4a8",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1440_192_w4a8",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   },
+   {
+    "label": "s1080_362_fp8",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1080_362_fp8",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   },
+   {
+    "label": "s1440_209_fp8",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1440_209_fp8",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   },
+   {
+    "label": "s1080_328_eros",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1080_328_eros",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   },
+   {
+    "label": "s1080_345_eros",
+    "msg": "used_check_h3 は対象外（failed・metadata なし）"
+   },
+   {
+    "label": "s1080_345_eros",
+    "msg": "shift 12.0／3.0 は ワーカーの generate 行（metadata なし）"
+   }
+  ]
+ }
+}

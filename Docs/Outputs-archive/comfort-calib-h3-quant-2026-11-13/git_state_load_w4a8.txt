@@ -1,0 +1,8 @@
+> 複写（スナップショット）: 原本 `outputs/comfort-calib-h3-quant-2026-11-13/git_state_load_w4a8.txt`（git 管理外）・複写日 2026-11-13
+
+## before load w4a8 (minimax_h3_fl2va_pruned_w4a8_mixed)
+fcccdcf49484f5b385a9e13c97a7f00a68070d0c
+--- porcelain
+ M Docs/PENDING_TASKS.md
+--- date
+Fri Nov 13 09:55:11     2026

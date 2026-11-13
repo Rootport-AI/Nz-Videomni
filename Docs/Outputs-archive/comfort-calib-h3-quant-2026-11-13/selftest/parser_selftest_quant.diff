@@ -1,0 +1,25 @@
+--- selftest/parser_selftest.py	2026-11-04 10:20:06.571428600 +0900
++++ selftest/parser_selftest_quant.py	2026-11-13 09:32:39.273716900 +0900
+@@ -562,7 +562,9 @@
+        any("references given together" in e
+            for e in errs(keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0]})),
+        errs(keyframes={"image_path": "keyframe_f0.png", "frame_idx": [0]}, references=[],
+-            transformer="default", predict=None)), ([], True, []))
++            transformer="default", predict=None,
++            # 2026-11-13: smoke, so the Ref2VA baseline's transformer is not compared
++            baseline_label=None, smoke=True)), ([], True, []))
+ check("H(5): 10 pictures exceed the cap 9",
+       any("exceed the cap 9" in e for e in errs(references=[pic(i) for i in range(1, 11)])), True)
+ check("H(5): picture slot 10 outside 1..9",
+@@ -591,6 +593,11 @@
+       any("outside this campaign" in e for e in errs(loras=[{"name": "x", "strength": 1.0}])), True)
+ check("H(5): unknown baseline refused",
+       any("resolves to no known point" in e for e in errs(baseline_label="nope")), True)
++# 2026-11-13 (plan graceful-fluttering-reddy §6.2-2)
++check("H(5): a transformer other than the baseline plan's / no baseline plan refused",
++      (any("differs from the baseline" in e for e in errs(
++          transformer="minimax_h3_fl2va_pruned_w4a8_mixed", references=[], predict=None)),
++       any("is not found" in e for e in errs(baseline_label="nope"))), (True, True))
+ check("H(5): the LTX 8n+1 / 401 / LTX23-25 rules are NOT applied to H3",
+       [e for e in errs() if "8n+1" in e or "source clip" in e or "LTX23/LTX25" in e], [])
+ 

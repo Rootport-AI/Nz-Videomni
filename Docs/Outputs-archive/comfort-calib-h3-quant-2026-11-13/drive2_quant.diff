@@ -1,0 +1,54 @@
+--- drive2.sh	2026-11-13 09:24:20.470881700 +0900
++++ drive2_quant.sh	2026-11-13 09:34:13.588227700 +0900
+@@ -3,7 +3,7 @@
+ # recorded during that point; if the peak reached 95% of the limit, stops and does not start the next.
+ # H3 (2026-11-01, plan §2.4-8/-9): before each point, if GET /status says pipeline_loaded=false
+ # (an OOM unloads the pipeline), recover: calib.py load -> idle-calib --minutes 1 -> the warm plan
+-# ($WARM_PLAN, default plans/p_warm.json) under a fresh label suffix.  --job-timeout auto
++# under a fresh label suffix.  --job-timeout auto
+ # (7,200 s for <=4 steps, 10,800 s otherwise).
+ # usage: drive2.sh <log> <plan.json> [<plan.json> ...]
+ cd "S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-quant-2026-11-13" || exit 2
+@@ -12,10 +12,10 @@
+ CSV="S:/OriginalApps/12_Nz-LTX23-AviUtl2/Nz-Videomni/outputs/comfort-calib-h3-quant-2026-11-13/commit_log.csv"
+ PY="../../.venv/Scripts/python.exe"
+ BASE_MODEL="${BASE_MODEL:-MiniMaxH3}"
+-# 2026-11-03 (Ref2VA bench): the recovery load uses the Ref2VA entry name of GET /models
+-# (categories.transformer.entries[].name = the file stem) unless TRANSFORMER is set.
+-TRANSFORMER="${TRANSFORMER:-minimax_h3_ref2va_pruned_int8_convrot}"
+-WARM_PLAN="${WARM_PLAN:-plans/p_warm.json}"
++# 2026-11-13 (plan graceful-fluttering-reddy §6.2-3): the recovery load takes the weights from
++# the point being recovered (its plan's [0].transformer = the GET /models entry name), and the
++# warm plan is plans/p_warm__<transformer>.json.  TRANSFORMER / WARM_PLAN are no longer read
++# from the environment.
+ say(){ echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+ queue_empty(){ curl -s -m 10 http://127.0.0.1:18620/api/v1/status | "$PY" -c "import sys,json; q=json.load(sys.stdin)['queue']; sys.exit(0 if q['pending']==0 and q['running']==0 else 1)"; }
+ # exit 0 = loaded, 1 = not loaded, 2 = could not read /status
+@@ -23,15 +23,24 @@
+ try: s=json.load(sys.stdin)
+ except Exception: sys.exit(2)
+ sys.exit(0 if s.get('pipeline_loaded') is True else 1)"; }
++# first point's string field of a plan file: plan_field <plan.json> <key>  (no newline written)
++plan_field(){ "$PY" -c "import sys,json; sys.stdout.write(str(json.load(open(sys.argv[1],encoding='utf-8'))[0][sys.argv[2]]))" "$1" "$2"; }
+ recover(){
+-  say "RECOVER: pipeline_loaded=false before $1 -> load $BASE_MODEL/$TRANSFORMER, idle-calib 1 min, warm-up"
++  TRANSFORMER=$(plan_field "$1" transformer) && [ -n "$TRANSFORMER" ] || { say "ABORT: cannot read the transformer of $1"; exit 7; }
++  WARM_PLAN="plans/p_warm__${TRANSFORMER}.json"
++  say "RECOVER: pipeline_loaded=false before $1 -> load $BASE_MODEL/$TRANSFORMER, idle-calib 1 min, warm-up $WARM_PLAN"
++  [ -f "$WARM_PLAN" ] || { say "ABORT: warm plan $WARM_PLAN missing"; exit 7; }
++  warm_label=$(plan_field "$WARM_PLAN" label) && [ -n "$warm_label" ] || { say "ABORT: cannot read the label of $WARM_PLAN"; exit 7; }
+   "$PY" calib.py load --base-model "$BASE_MODEL" --transformer "$TRANSFORMER" >> recover_output.txt 2>&1 || { say "ABORT: recovery load failed (recover_output.txt)"; exit 7; }
+   "$PY" calib.py idle-calib --minutes 1 >> recover_output.txt 2>&1 || { say "ABORT: recovery idle-calib failed"; exit 7; }
+-  [ -f "$WARM_PLAN" ] || { say "ABORT: warm plan $WARM_PLAN missing"; exit 7; }
+   sfx="_rec$(date '+%m%d%H%M%S')"
+   "$PY" calib.py run --plan "$WARM_PLAN" --label-suffix "$sfx" --job-timeout auto --cooldown 150 >> "run_warm${sfx}_output.txt" 2>&1
+-  say "recovered: warm-up $(basename "$WARM_PLAN" .json)$sfx rc=$?"
++  rc=$?
++  status=$("$PY" -c "import sys,json; sys.stdout.write(str(json.load(open(sys.argv[1],encoding='utf-8')).get('status')))" "runs/${warm_label}${sfx}/run.json" 2>/dev/null)
++  say "recovered: warm-up ${warm_label}${sfx} rc=$rc status=$status"
++  [ "$rc" -eq 0 ] || { say "ABORT: recovery warm-up rc=$rc"; exit 7; }
+   pipeline_loaded || { say "ABORT: still not loaded after the recovery"; exit 7; }
++  [ "$status" = completed ] || { say "ABORT: recovery warm-up status=$status (runs/${warm_label}${sfx}/run.json)"; exit 7; }
+   say "cool-down 150 s after the recovery warm-up"; sleep 150
+ }
+ first=1

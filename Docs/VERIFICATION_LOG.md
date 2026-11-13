@@ -24079,7 +24079,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 - **Kijai の w4a8 は 1920×1088・2560×1472 とも 1 段下です**（結論の形 (下)）。2 つの解像度の帯は S で重なり、共通部分は 203,092〜213,348 です。c は 2 回快適で確定しました（2 回目が 1 回目と MiB 単位で一致。212.7）。
 - **Eros は 1920×1088 の 345 と 328 がどちらも OOM** で、Eros の線は S 203,092 より下です。量は未定です（オーナー裁定で打ち止め。311 は打っていない）。
 - **配信の線 219,516 との関係**: 操作パネルは形式によらず S ≤ 219,516 を快適の印にしています。Kijai の w4a8 では、印の内側（S 203,092 を超え 219,516 以下）で OOM する形があります（1920×1088×345＝S 213,348、2560×1472×192＝S 217,798）。fp8 では印と結果が合っています（線 219,516 は 2 つの解像度の共通の帯 217,798〜223,604 の中）。Eros も 328（S 203,092）・345（S 213,348）が印の内側で OOM しました。
-- 線を形式で分ける受け皿（記述子・印・種別判定）は、この計測では設計していません（オーナー裁定）。受け皿は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-286 です。
+- 線を形式で分ける受け皿（記述子・印・種別判定）は、この計測では設計していません（オーナー裁定）。受け皿は台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-286 です。
 
 | 形式 | 腕 | c／U | S の帯 | 結論の形 | int8 との比較 |
 |---|---|---|---|---|---|
@@ -24251,4 +24251,65 @@ GPU は使っていません。材料はコード読みと記録（`run.json`・
 - **終了処理**（本線の後 14:27 と、弾 X の後 15:47 の 2 回）: 重みの選択を元（`h3ErosMax_beta5_3178732_int8_TURBO_Hybrid`）に戻して読み込み（`restore-state` rc 0）、`POST /pipeline/unload` の後、`/status` は unloaded・キュー空でした（最後は完了 24・失敗 7。失敗は OOM の 7 点）。`state.json` と開始時の `original_state.json` は、基盤モデルの選択と重みの選択が全部一致し、違うのは記録用の鍵だけでした。コミット量の監視は停止し、孤児のプロセスは無く、GPU の待機時の使用量は 773MiB、git は `fcccdcf`・作業ツリーの差は台帳の起票 1 件のままでした。
 - **一次記録（git 管理外）**: 作業場所 `outputs/comfort-calib-h3-quant-2026-11-13/`。結果の集計は `RESULTS.md`、計測担当の記録は `progress.md`、集計は `analysis/`（`results.json`・`results_table.md`・`mechanism_w4a8.md`・`make_results_md.py`）と `check_results_quant.py`、点ごとの正本は `runs/<label>/run.json`、計測台の差分は `calib_quant.diff`・`drive2_quant.diff`・`selftest/parser_selftest_quant.diff`、重みの形式は `load_*.txt`、git の状態は `git_state_*.txt` です。計画は監督の計画ファイル（`graceful-fluttering-reddy`）です。
 - **複写**: [`Docs/Outputs-archive/comfort-calib-h3-quant-2026-11-13/`](Outputs-archive/comfort-calib-h3-quant-2026-11-13/)（`RESULTS.md`・`progress.md`・`analysis/`〔`check_results_quant.py` を含む〕・差分 3 本・`load_*.txt`・`git_state_*.txt`・計画の写し `計画.md`。`runs/`・`plans/`・`materials/`・ログ・台本の本体は写していません。一覧は複写の `README.md`）。
-- **台帳と文書**: 台帳は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-285 でクローズし、線を形式ごとに分ける受け皿は [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-286 として起票済みです。快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) に §21 を新設し、§1.1 の H3 の線の文と §17 冒頭の注記を更新しました。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 101 ①に更新注記を足し、README の §7.6「快適上限と速さ」に w4a8 の印の注意を足しました。**配信値は変えていません。** **Docs の中での数値の正本は本節です。**
+- **台帳と文書**: 台帳は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-285 でクローズし、線を形式ごとに分ける受け皿は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-286 として起票済みです。快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) に §21 を新設し、§1.1 の H3 の線の文と §17 冒頭の注記を更新しました。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 101 ①に更新注記を足し、README の §7.6「快適上限と速さ」に w4a8 の印の注意を足しました。**配信値は変えていません。** **Docs の中での数値の正本は本節です。**
+
+## 213. ★台帳 §1-286 MiniMax H3 の快適上限マーカーを重みの形式ごとに正しい位置へ出す受け皿（2026-11-13）
+
+### 213.1 結論
+
+- **結論を先に**: **操作パネルの MiniMax H3 の快適上限マーカー（印）が、読み込んだ重みの形式で位置を変えるようになりました。** w4a8 の層を 1 層でも含む重み（w4a8 と int8 の層が混在する TenStrip の Eros も）は w4a8 の線、int8・fp8 は従来の線です。機械の門は全件合格し、オーナーの実機目視は 6 項目すべて合格しました（213.4・213.5）。
+- §212 の較正で、fp8 は int8 と同じ境界、Kijai の w4a8 は 1 段下、Eros はさらに下で OOM（GPU メモリ不足）と分かったことへの受け皿です。決めたこと（オーナー裁定 A3＋B1＋C1 と理由）は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 102、線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §21、記述子の形は同 §1.1 と仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.123 §6.7、API の欄は同 §6.9(c) にあり、本節には写しません。**門と目視の数値の正本は本節です。**
+
+### 213.2 計画とレビュー
+
+- 計画は監督の計画ファイル（`graceful-fluttering-reddy`。前の §212 の計画は保管庫の `Outputs-archive/comfort-calib-h3-quant-2026-11-13/計画.md`）です。計画への敵対的レビューの指摘 17 件（重大 2・軽微 11・削る 4）を、「過剰設計やスパゲッティ化の危険は無いか」「裏付けを得られるか」の 2 点で選別し、全件を採用しました。棄却はありません。
+- 重大の 2 件は、メモ化の依存配列（`ChainedScreen.tsx` の 2 つの `useMemo`・`AppShell.tsx` の `handleRoute`）に種類を足さないと印が古い位置に残ること（型検査と既存のテストでは捕まらない）と、完全一致で壊れるテストの行番号の誤りです。削る 4 件で、専用のキャッシュ・`model_validator` と既定の線との相互検証・モックの名前による判定・MCP の設計書への新しい項を計画から外しました。
+
+### 213.3 実装の要点
+
+**バックエンド**:
+
+- `h3_format.py`: 種類の名前 `H3_QUANT_CLASSES = ("int8", "fp8", "w4a8")` と、規則 `quant_class(cfg)`（w4a8 の層があれば `"w4a8"`、そうでなく fp8 の層があれば `"fp8"`、それ以外は `"int8"`。量子化の層が無い DiT も `"int8"`）。torch に依存しません。
+- `services/pipeline_manager.py`: 属性 `transformer_quant_class`（初期値 None）と、判定の呼び口 `identify_quant_class()`。選択中の H3 の transformer のパスを `transformer_path` で解決し、`inspect_h3_dit`（ヘッダだけ）→ `quant_class` を属性に書きます。H3 でない系統・モデルの登録簿の無い管理器・解決できないファイルは None、例外は WARNING と None で、読み込みは失敗させません。`load`／`reload` の成功経路で `_identify_transformer()` の直後に呼び、`unload` では触りません。
+- `api/context.py`: 起動時に `PipelineManager` を作った直後に 1 回 `identify_quant_class()` を呼びます（復元した選択に対する印が最初から正しくなる）。`build_comfort_budgets` は `single_rows_budget_by_quant_class` の鍵を `H3_QUANT_CLASSES` と照合し、違えば `RuntimeError` です。
+- `api/models_registry.py`: `GET /models` の `base_models[]` に `transformer_quant_class`（有効なベースモデルだけ属性を読む。ファイルは読まない）。
+- `config.py`: `EngineComfortProfile.single_rows_budget_by_quant_class: dict[str, PositiveInt]`（既定 `{}`）。
+- 記述子 `scripts/manifests/40-minimaxh3.json`: `comfort` に `single_rows_budget_by_quant_class` を足し、`_note` を合わせました。
+- ワーカー・ワーカーへの送り物・`services/weight_class.py`・Gradio は変えていません。
+
+**操作パネル**（判断の記録はフロントエンド `Docs/DEVLOG.md` §172）:
+
+- `shell/comfortTable.ts` の `resolveSequenceRowsBudget(limits, engineFamily, quantClass)` が種類の線を引き、無ければ既定の線に落ちます。種類の出所は `shell/useBaseModels.ts` の `activeQuantClass` です。
+- Single・Chained・Inpaint・Outpaint・右クリックの種へ 8 箇所で配線し、メモ化の依存配列にも種類を足しました。モック（`bridge/mockBridge.ts`）と予備の設定（`modes/single/defaultConfig.ts`）も合わせました。
+
+**テスト**: バックエンドは新規 `tests/test_h3_quant_class.py`（読み込みの後の種類 int8／fp8／w4a8／混在、量子化の層が無い DiT、起動時の復元した選択、ファイルが無いとき、解放で保持・LTX の読み込みで null、ヘッダが読めないときの WARNING、`GET /models` がファイルを読まないこと、登録簿の無い管理器）と、`tests/test_comfort_budgets.py`（鍵の検証と完全一致）・`tests/test_model_swap_load.py`（記述子の生の dict の一致）の更新。操作パネルは DEVLOG §172.4 の 5 本です。
+
+### 213.4 機械の門と配置（2026-11-13・監督が一括）
+
+- **pytest 全件**: 4,128 件合格・80 件スキップ・失敗 0。オーナーのサーバーが動いていたので `LTX_MCP_BASE_URL=http://127.0.0.1:1` を付けて回しました。
+- **黄金のペイロードのテスト**（`tests/test_model_swap_load.py`）は変更なしで合格しました＝ワーカーへの送り物は変わっていません。
+- **操作パネル**: `npm run typecheck` エラー 0。`npx vitest run --exclude "**/backend.integration.test.ts"` は 188 ファイル・3,791 件合格。
+- **依存配列の漏れの試験**（`ChainedScreen.h3Comfort.test.tsx`。`transformerQuantClass` だけを替えて描画し直すと印が 345 → 328 に動く）は、依存配列から種類を外すと実際に落ちることを確かめました。
+- **aux2**: `scripts/build.ps1 -RunTests` が成功（ネイティブの doctest 402 件合格）し、`scripts/deploy.ps1` で実機 `D:\For_Videos\AviUtl2\aviutl2_v2.0.54\data\Plugin\NzVideomni\NzVideomni.aux2` と配布用 `AviUtl2-Plugin/NzVideomni.aux2` に置きました（2 つの sha256 は一致。`c6ed683ae77c31fe…`）。
+
+### 213.5 オーナーの実機目視（2026-11-13・6 項目すべて合格）
+
+開発機（VRAM 16GB）で、サーバーを再起動した後に確かめました。印の数字は Single タブのフレーム数のスライダー（キーフレーム 1 枚）の印の位置です。
+
+| # | 操作 | 期待（従来の位置） | 結果 |
+|---|---|---|---|
+| 1 | Settings で Kijai の w4a8（`minimax_h3_fl2va_pruned_w4a8_mixed`）を選んで読み込み、Single を 1920×1088 と 2560×1472 にする | 328（345）・175（192） | 合格 |
+| 2 | fp8（`minimax_h3_fl2va_pruned_fp8_scaled`）を読み込む。続けて既定の int8 の FL2VA を読み込む | どちらも 345・192 | 合格 |
+| 3 | Eros（w4a8 と int8 の混在）を読み込む | 328・175 | 合格 |
+| 4 | Chained タブのクリップの印を見る | Single と同じ位置 | 合格（Inpaint・Outpaint の印は目視していない。同じ解決関数を通り、オーナーが「重要度が低いので問題ない」と判断） |
+| 5 | Kijai の w4a8 を選んだままサーバーを再起動し、何も読み込まずに操作パネルを開く | 328 | 合格 |
+| 6 | MCP の `list_models` を呼ぶ（監督が自前の stdio クライアントで確認） | `MiniMaxH3` の区画に `transformer_quant_class: "w4a8"`（Kijai を選択・未読み込み）、LTX23／LTX25 は null | 合格 |
+
+### 213.6 留保
+
+留保は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 102 の「留保」にあります（本節には写しません）。
+
+### 213.7 終了処理
+
+- **コミット**: コードは dev `9a83409`。本節を含む文書の更新は未コミットです（コミットは監督が行う）。
+- **文書の更新箇所**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 102 の新設と、裁定 94・裁定 101 ①の更新注記。仕様書 v0.5.123（§6.7・§6.9(c)）。MCP の `mcp_server/tools/system.py` の `list_models`・`get_config` の docstring。快適上限表 §1.1・§17 冒頭・§19・§20 の末尾・§21。README §7.6「快適上限と速さ」。操作パネル側の `Docs/API_REFERENCE.md` §3.2・§3.5 と `Docs/DEVLOG.md` §172。台帳 1-286 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移しました。

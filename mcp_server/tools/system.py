@@ -67,7 +67,9 @@ async def get_config() -> dict[str, Any]:
         共有メモリへ溢れない目安）の助言値で、行は重みの種別
         ``weight_class`` で分かれます。MiniMax H3 の系統は行を持たず
         ``single_rows_budget``（DiT に入る総行数の線。超えると VRAM 不足で
-        失敗する可能性がある）だけを持ちます。Chained（連結生成）の各クリップにも同じ線を
+        失敗する可能性がある）と、重みの形式ごとにそれを置き換える
+        ``single_rows_budget_by_quant_class``（鍵は list_models の
+        ``transformer_quant_class``）だけを持ちます。Chained（連結生成）の各クリップにも同じ線を
         当てます（クリップごとの総行数は Single と同じ式）。読み方と経緯は
         ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節。
     """
@@ -100,7 +102,17 @@ async def list_models() -> dict[str, Any]:
             できない機能名のリスト）、``transformer_weight_class``（有効な
             ベースモデルで選択中の transformer の重みの種別 ``4bit`` /
             ``8bit`` / ``q6k`` / null。快適上限の行の照合に使う。
-            ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節参照）、``constraints``
+            ``Docs/COMFORT_LIMIT_TABLE.md`` 第 1 節参照）、
+            ``transformer_role``（有効なベースモデルで選択中の transformer が
+            既知の配布物のどれか。MiniMax H3 の ``fl2va`` / ``ref2va`` / null。
+            読み込みの成功時にファイルの SHA-256 で判定した保存値）、
+            ``transformer_quant_class``（有効なベースモデルで選択中の
+            MiniMax H3 の transformer の重みの形式 ``int8`` / ``fp8`` /
+            ``w4a8`` / null。w4a8 の層を 1 層でも含めば ``w4a8``。読み込みの
+            成功時と起動時にヘッダから判定した値で、LTX は null。get_config
+            の ``limits.comfort_budgets.h3.single_rows_budget_by_quant_class``
+            の鍵と照合して快適上限の線を選ぶ。``Docs/COMFORT_LIMIT_TABLE.md``
+            第 1.1 節参照）、``constraints``
             （そのベースモデルが受け付ける要求の形。``num_frames`` の格子
             ``{step, offset, min, max}``（LTX は 8n+1＝``{8, 1, 9, 481}``、
             MiniMax H3 は 17n+5 かつ 22 以上）、``dimension_multiple``（幅と

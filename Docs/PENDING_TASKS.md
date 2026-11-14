@@ -400,12 +400,12 @@
 - **前提**: 第 1 弾は、スパイクで確かめた塊の和集合で出す（設計正本の裁定 100-③）。(b) は、門では境目の飛びが基準内だった（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208.7 の合否 6）。動きの大きい素材で問題が出たら再訪する。
 - **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 の「既知の限界」・記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208.7。
 
-#### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
+#### 3-287. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-11-14。元は §1-108〔2026-10-19 起票〕の内容をそのまま引き継いだもの）
 
 - **概要**: 姿勢（DWpose）と深度（Depth）による制御。
 - **前提**: 事前調査が要る。H3 の「ControlNet」が何者か（参照行で動く IC-LoRA 型か、別の網か、コミュニティの配布物があるか）を一次資料で確かめる。Ref2VA の参照行の仕組み（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2）に乗る可能性が高い。
 - **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
-- **状態**: 将来の研究課題（着手時期未定。2026-11-14 に §1 から移動。番号は変えない）。
+- **状態**: 将来の研究課題（着手時期未定）。§1-108 は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-108 へ移植済み。
 
 ---
 

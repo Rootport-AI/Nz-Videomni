@@ -3438,3 +3438,7 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **派生**: なし。
 - **状態**: 完結（日付 2026-11-13）。コミットのハッシュは git の履歴を正とします。
 - **正本・出典**: 設計は設計正本 裁定 102、線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §21、記述子の形は同 §1.1、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.123 §6.7・§6.9(c)、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §172、記録は記録簿 §213。
+
+### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19、クローズ：2026-11-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-108 からクローズ）
+
+- 内容はそのまま [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-287（将来の研究課題）へ新規項目として移動した（オーナー指示 2026-11-14。番号は案件ごとに一意なので 1-108 は本書で閉じ、§3 では新しい番号を振った）。

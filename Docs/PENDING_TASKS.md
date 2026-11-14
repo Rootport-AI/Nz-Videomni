@@ -15,12 +15,6 @@
 
 実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
 
-### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
-
-- **概要**: 姿勢（DWpose）と深度（Depth）による制御。
-- **前提**: 事前調査が要る。H3 の「ControlNet」が何者か（参照行で動く IC-LoRA 型か、別の網か、コミュニティの配布物があるか）を一次資料で確かめる。Ref2VA の参照行の仕組み（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2）に乗る可能性が高い。
-- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
-
 ### 1-115. Reference とキーフレーム入力の併用（起票：2026-10-28）
 
 - **概要**: Ref2VA の重みで参照画像とキーフレーム（先頭フレームの画像）を一緒に入れると、生成は最後まで走るが、出力の先頭フレームがキーフレームの画像に固定されない。併用で先頭フレームを固定できるようにする。事象と条件は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §180.4（G-R5）。
@@ -405,6 +399,13 @@
 - **概要**: H3 の Inpainting は、マスクを 17 枚の塊ごとの和集合で潜在へ対応させている（塊の中で 1 度でも白になった升目は、その塊の 17 枚のあいだずっと描き直す）。動く物のマスクでは、描き直す範囲が実際の動きより広がる。改良の候補は 2 つ: (a) 17 枚の塊の中で、潜在 1 個が覆う画素フレームとの精密な対応を使う。(b) 復号器が塊の境目の前後で隣の塊の潜在とも混ぜるので、境目の前後 2 枚を隣の塊との和集合にする。
 - **前提**: 第 1 弾は、スパイクで確かめた塊の和集合で出す（設計正本の裁定 100-③）。(b) は、門では境目の飛びが基準内だった（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208.7 の合否 6）。動きの大きい素材で問題が出たら再訪する。
 - **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 の「既知の限界」・記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208.7。
+
+#### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19）
+
+- **概要**: 姿勢（DWpose）と深度（Depth）による制御。
+- **前提**: 事前調査が要る。H3 の「ControlNet」が何者か（参照行で動く IC-LoRA 型か、別の網か、コミュニティの配布物があるか）を一次資料で確かめる。Ref2VA の参照行の仕組み（実装済み。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2）に乗る可能性が高い。
+- **出典**: [`OWNER_memo_speedup_longvideo.md`](Outputs-archive/h3-roadmap-2026-10-19/OWNER_memo_speedup_longvideo.md)（未裏取り）。
+- **状態**: 将来の研究課題（着手時期未定。2026-11-14 に §1 から移動。番号は変えない）。
 
 ---
 

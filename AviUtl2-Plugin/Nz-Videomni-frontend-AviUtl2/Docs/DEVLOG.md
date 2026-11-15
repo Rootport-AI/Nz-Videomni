@@ -6578,7 +6578,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 ### 171.6 実機の門
 
-- 項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-283 です（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.30 からも参照）。
+- 項目の正本はバックエンド台帳 [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-283 です（[`REAL_BACKEND_CHECKLIST.md`](REAL_BACKEND_CHECKLIST.md) §4.30 からも参照）。
 
 
 ## 172. MiniMax H3 の快適上限マーカーを、読み込んだ重みの形式の線に出す（台帳 1-286・設計正本 裁定 102） — `resolveSequenceRowsBudget` の第 3 引数 `quantClass`・出所は `useBaseModels` の `activeQuantClass`・配線 8 箇所と依存配列・aux2 の配布（2026-11-13）

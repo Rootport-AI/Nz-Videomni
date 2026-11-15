@@ -3442,3 +3442,27 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 ### 1-108. MiniMax H3 の ControlNet（DWpose・Depth）（起票：2026-10-19、クローズ：2026-11-14）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-108 からクローズ）
 
 - 内容はそのまま [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-287（将来の研究課題）へ新規項目として移動した（オーナー指示 2026-11-14。番号は案件ごとに一意なので 1-108 は本書で閉じ、§3 では新しい番号を振った）。
+
+### 1-283. MiniMax H3 の fp8 と 4bit 系（w4a8）の重みを、置くだけで動かす（起票：2026-11-12、クローズ：2026-11-15）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-283 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-283（2026-11-12 起票。実装の後は同書 §2 のチェックリスト）。**同書側は欠番**。同書 §2 は空になったので見出しごと削除しました。採番規定の変更（本書冒頭。オーナー裁定 2026-11-02）により、番号を変えずに持ち込みました。
+- **到達条件**: MiniMax H3 の fp8（8 ビットの浮動小数点の重み。`float8_e4m3fn`）と w4a8（重みを 4 ビット・入力を 8 ビットにして計算する形式。`asym_w4a8_int8`）の safetensors を、`models\MiniMaxH3\Weights\` に置くだけで選んで生成できるようにする。**達成しました。**
+- **何が完了したか**: H3 の DiT が、int8 ConvRot に加えて fp8 と w4a8 の safetensors を受け、量子化の印をファイル先頭のメタデータに書く旧式のファイルも読むようになりました（弾 1＝バックエンド）。Settings のモデル読み込み欄は、422 の拒否でサーバーの理由（`detail`）を表示します（弾 2＝操作パネル）。H3 でないファイルを断る文は「MiniMax H3 の重みファイルとして使えません」に短くしました（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211.12）。コードは 2026-11-13 に main へ統合しました。
+- **合格の根拠**: スパイク（記録簿 §210）、機械の門と GPU の門（開発機で 7 条件。同 §211.6）、オーナーの視聴（同 §211.7）、オーナーの実機確認（下の 6 項目。開発機は同 §211.12、サブ検証機は同 §211.13）。
+- **チェックリスト**:
+  - Settings の理由文（開発機。`.aux2` は配備済み）
+    - [x] LTX 2.3 の量子化 safetensors（`models\LTX23\Weights\` の fp8 か int8 の `.safetensors`）を 1 本 `models\MiniMaxH3\Weights\` に写す。ベースモデルを MiniMax H3 にして、Settings の「モデル一覧を更新」を押し、「動画モデル (checkpoint)」でそのファイルを選んで「選択したモデルを読込」を押す → 欄に「モデルの読込に失敗しました: MiniMax H3 の重みファイルとして使えません」と出る（「選択したファイルはこの用途のモデルとして不正です。」の文ではない）。確かめたら、写したファイルを消す。（合格 2026-11-13。確かめたときの文は旧文「…LTX の DiT です（MiniMax H3 の DiT ではありません）」。同じ日に今の文へ改め、単体テストで固定した）
+  - 旧式の印の int8（開発機）
+    - [x] Settings の「動画モデル (checkpoint)」で `h3ErosMax_beta5_3185154` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る（このファイルは GPU の門 G5 で完走済み）。（合格 2026-11-13）
+    - [x] 同じく `h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。続けて Single で 1280×768・73 フレーム・Steps 8・Shift（映像）10・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる。（合格 2026-11-13）
+  - サブ検証機（RTX 3080 mobile。計算能力 8.6＝fp8 は bf16 に戻す経路。main への統合後に実施〔オーナー指示 2026-11-13〕）
+    - 前準備: サブ検証機を main の最新に更新し、開発機の `models\MiniMaxH3\Weights\` から `minimax_h3_fl2va_pruned_fp8_scaled.safetensors` と `minimax_h3_fl2va_pruned_w4a8_mixed.safetensors` を同じフォルダへ写す。
+    - [x] Settings の「動画モデル (checkpoint)」で `minimax_h3_fl2va_pruned_fp8_scaled` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。アプリのフォルダの `logs\h3_worker.log` を開いて末尾を見る → `[h3_worker] fp8: 200 layer(s), path 'dequant' (compute capability 8.6); 50 marked full_precision_matrix_mult run dequantized` の行がある。（合格 2026-11-15）
+    - [x] 上の fp8 のまま、Single で 1280×768・73 フレーム・Steps 20・Shift（映像）12・Shift（音声）3 にして Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる（int8 より時間がかかる）。（合格 2026-11-15）
+    - [x] `minimax_h3_fl2va_pruned_w4a8_mixed` を選んで「選択したモデルを読込」を押す → 欄に「モデルを読み込みました: 」で始まる文が出る。続けて上と同じ条件で Generate を押す → ジョブが完了し、音声つきの動画がタイムラインに置かれる。（合格 2026-11-15）
+- **主な裁定**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 101（本書には写しません）。
+- **教訓**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211.9（本書には写しません）。
+- **留保**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §211.13 の「残る留保」（本書には写しません）。
+- **派生**: fp8 と w4a8 の快適上限の較正は本書 1-285、線を形式ごとに分ける受け皿は本書 1-286（いずれも 2026-11-13 にクローズ）。
+- **状態**: 完結（日付 2026-11-15）。コミットのハッシュは git の履歴を正とします。
+- **正本・出典**: 仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5・§7・裁定 101、記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211、操作パネルの判断はフロントエンド `Docs/DEVLOG.md` §171、実機確認の入口はフロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30。

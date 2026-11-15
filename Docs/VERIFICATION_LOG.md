@@ -23913,7 +23913,7 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 
 **§210 のスパイクで確かめた試作の層を、製品のコードに載せました。** MiniMax H3 の fp8（8 ビットの浮動小数点の重み。ComfyUI の `float8_e4m3fn`）と w4a8（重みを 4 ビット・入力を 8 ビットにして計算する形式。`asym_w4a8_int8`）の safetensors を、`models\MiniMaxH3\Weights\` に置くだけで選んで生成できます。量子化の印をファイル先頭のメタデータに書く旧式のファイルも読めるようになりました。あわせて、操作パネルの Settings のモデル読み込み欄が、サーバーの返す具体的な理由を表示するように直しました（弾 2）。
 
-機械の門は全件合格し、MCP〔Model Context Protocol。外部の道具からアプリを操作する仕組み〕経由で製品を通した GPU の門は、7 条件すべてが完走して自己検査に合格しました（211.6）。1 ステップの時間と VRAM の山は、スパイクの値とそろいました。オーナーの視聴の判定は「7 本とも明白な崩れはない」です（211.7）。残るのは、オーナーの実機確認（Settings の理由文と、サブ検証機〔RTX 3080 mobile〕での fp8 と w4a8）で、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-283 に置きました（211.11）。
+機械の門は全件合格し、MCP〔Model Context Protocol。外部の道具からアプリを操作する仕組み〕経由で製品を通した GPU の門は、7 条件すべてが完走して自己検査に合格しました（211.6）。1 ステップの時間と VRAM の山は、スパイクの値とそろいました。オーナーの視聴の判定は「7 本とも明白な崩れはない」です（211.7）。残るのは、オーナーの実機確認（Settings の理由文と、サブ検証機〔RTX 3080 mobile〕での fp8 と w4a8）で、当時の台帳 §2 の 1-283 に置きました（211.11）。いずれも合格し、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-283 へ移しました（211.12・211.13）。
 
 仕組みの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §5（量子化層の実行方式）・§7（ヘッダの判定）・裁定 101、API の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.121 です。**GPU の門の数値の正本は本節**で、生の値は保管庫の JSON です（211.10）。
 
@@ -24032,20 +24032,37 @@ Hugging Face の `round13-h3-outpaint/`（205.9）で、オーナーが門の動
 
 ### 211.11 台帳の扱い
 
-- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の 1-283 は、§1 から §2（実装済み・オーナーのテスト待ち）へ移しました。確かめるのは、Settings の理由文（開発機）、サブ検証機での fp8 の `dequant` の経路と w4a8 の完走、旧式の印の h3ErosMax beta5 の 2 本の読み込みです。項目の正本は台帳 §2 で、フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30 からはそこを参照します。
+- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の 1-283 は、§1 から §2（実装済み・オーナーのテスト待ち）へ移しました。確かめるのは、Settings の理由文（開発機）、サブ検証機での fp8 の `dequant` の経路と w4a8 の完走、旧式の印の h3ErosMax beta5 の 2 本の読み込みです。項目の正本は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-283 で、フロントエンド `Docs/REAL_BACKEND_CHECKLIST.md` §4.30 からはそこを参照します。
 - RTX 20 系での w4a8 の拒否は、実機では確かめません（開発機もサブ検証機も Turing ではない）。根拠はエンジンの単体テスト（計算能力の差し替え）です。
 - VRAM 16GB mode の w4a8 が int8 より約 1 割遅い件（qkv の片ごとにカーネルが入力を量子化し直す）は、台帳 §3-284 に起票しました。
 
 ### 211.12 オーナーの実機確認（開発機）と、H3 でないファイルを断る文の整理（2026-11-13）
 
-- **結果**: 結果の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-283 です。開発機の 3 項目（Settings の理由文、旧式の印の int8 の 2 本の読み込み、`h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` での Single の生成）が合格しました。
+- **結果**: 結果の正本は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-283 です。開発機の 3 項目（Settings の理由文、旧式の印の int8 の 2 本の読み込み、`h3ErosMax_beta5_3178732_int8_TURBO_Hybrid` での Single の生成）が合格しました。
 - **オーナーの問い**: 確かめたときの文「MiniMax H3 のファイルとして使えません: LTX の DiT です（MiniMax H3 の DiT ではありません）」の「LTX の DiT です」に根拠はあるか。
 - **調べた結果**: コードは、H3 のヘッダの判定に落ちたあと、テンソル名のどれかに `transformer_blocks.0.` が含まれるかだけを見ていました。この名前は Diffusers〔Hugging Face の画像・動画生成の部品集〕式の一般的な付け方で、LTX のほか Diffusers 形式の FLUX・HunyuanVideo・CogVideoX にも共通します。つまり「LTX」は当て推量で、LTX だと見分けてはいませんでした。オーナーが例に挙げた Wan 2.x は `blocks.<n>.` の名前なので、LTX とは書かれず、もう一方の文「video_patch_proj.weight と audio_patch_proj.weight がそろっていません」になっていました。
 - **裁定（オーナー）**: LTX だと見分けていない以上、理由は付けない。H3 の DiT でないファイルは、どれも「MiniMax H3 の重みファイルとして使えません」だけを返します（Settings では「モデルの読込に失敗しました: MiniMax H3 の重みファイルとして使えません」）。
 - **監督の判断（オーナーが覆してよい）**: オーナーの文が「重みファイル」なので、H3 の拒否の文すべての頭を「MiniMax H3 のファイルとして使えません: 」から「MiniMax H3 の重みファイルとして使えません: 」へそろえました。
 - **変えたもの**: `h3_format.py`（`inspect_h3_dit` の `transformer_blocks.0.` の分かれ道を消した）、`tests/test_h3_format.py`・`tests/test_engine_h3_adapter.py`・`tests/test_model_swap_load.py`（3 ファイル・4 件のテストが文を一字一句で確かめる）。仕様書 v0.5.122 §6.8 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §7 の文も合わせました。
 - **文書と注釈のレビュー**: 文書とコード内の注釈に敵対的レビューを受け、11 件（矛盾 5・更新漏れ 5・参照誤り 1）をすべて反映した。主なもの: 裁定 94 の理由の現行化、CLOSED 1-124 の §3-281 (b) の参照を本記録簿 §209.6 へ、ヘッダが読めないファイルの文の例外（仕様書 §6.8）、README の「RTX 20 系の w4a8 の拒否は Settings では定型文」、`lowvram.py`・`lora.py` の注釈の `H3Int8Linear` を 3 クラス共通の言い方に。
-- **残り**: サブ検証機の 3 項目（fp8 の読み込みと `path 'dequant'` のログの行、fp8 の生成、w4a8 の読み込みと生成）は、dev を main へ統合した後に行います（オーナー指示 2026-11-13）。
+- **残り**: サブ検証機の 3 項目（fp8 の読み込みと `path 'dequant'` のログの行、fp8 の生成、w4a8 の読み込みと生成）は、dev を main へ統合した後に行います（オーナー指示 2026-11-13）。→ 2026-11-15 に合格（211.13）。
+
+### 211.13 オーナーの実機確認（サブ検証機 RTX 3080 mobile・2026-11-15）
+
+**サブ検証機の 3 項目はすべて合格し、1-283 の実機確認はこれで全部終わりました。** 台帳の項目は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-283 へ移しました。**所要時間の正本は本節**です。
+
+- **機械**: RTX 3080 mobile（Laptop 16GB・Ampere・計算能力 8.6）。結果はオーナー報告 2026-11-15 です。
+- **生成の条件**（2 と 3 で共通）: Single・1280×768・73 フレーム・Steps 20・Shift（映像）12・Shift（音声）3。
+
+| # | 操作 | 結果 | 判定 |
+|---|---|---|---|
+| 1 | Settings の「動画モデル (checkpoint)」で `minimax_h3_fl2va_pruned_fp8_scaled` を選んで「選択したモデルを読込」 | 欄に「モデルを読み込みました: 」で始まる文。`logs\h3_worker.log` の末尾に `[h3_worker] fp8: 200 layer(s), path 'dequant' (compute capability 8.6); 50 marked full_precision_matrix_mult run dequantized` の行 | 合格 |
+| 2 | その fp8 のまま、上の条件で Generate | ジョブ完了。所要 925.62 秒 | 合格 |
+| 3 | `minimax_h3_fl2va_pruned_w4a8_mixed` を読み込み、同じ条件で Generate | 読み込みは「モデルを読み込みました: 」で始まる文。ジョブ完了。所要 633 秒 | 合格 |
+
+- **意味**: 1 の `path 'dequant'` の行は、fp8 の重みを bf16 に戻して計算する経路（`dequant`）が、強制のスイッチではなく計算能力による自動の選択で、RTX 30 系の実機で動いたことの初めての確認です（スパイクの S3 は開発機で強制のスイッチにより試した。210）。
+- **オーナーの所見**: 「いずれも RTX 3080 では生成時間が長く、試行錯誤してプロンプトを練る用途には向かなさそうだ。反面、就寝中にバッチ処理などで回せば充分に有用だろう。」
+- **残る留保**: RTX 20 系（Turing）での w4a8 の拒否は、実機では確かめていません（根拠は計算能力を差し替える単体テスト。211.2・211.11）。RTX 50 系は確かめていません。fp8 の RTX 30 系の経路の快適上限は較正していません（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-286 の留保・設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 102）。
 
 ## 212. ★台帳 §1-285 MiniMax H3 の fp8 と w4a8 の重みでの快適上限の較正（2026-11-13）
 

@@ -11,6 +11,14 @@
 
 import type { MaterialKind } from "../timeline/menuRouting";
 
+/** The one run-lock sentence the three batch panels share (Batch A2V, Batch
+ * i2v-long, Batch v2v-ref-long): it names no other panel, so it stays right
+ * whichever of them holds the lock. */
+const BATCH_LOCKED_BY_OTHER_EN =
+  "Another batch is running. Only one batch can run at a time — wait for it to finish, or stop that batch.";
+const BATCH_LOCKED_BY_OTHER_JA =
+  "別のバッチが実行中です。バッチは同時に 1 つしか実行できません。終わるまで待つか、そのバッチを停止してください。";
+
 export const en = {
   /** Header BASE MODEL dropdown, in the old static "Nz-Videomni" title's spot.
    * Really wired since the multi-engine groundwork (§3-97 P7): picking an entry
@@ -1293,8 +1301,8 @@ export const en = {
      * Create form. Warning only — does not block Start. */
     icLoraActiveWarning: "A reference video (IC-LoRA) is active on the Create form, so the batch uses its 128-grid resolution.",
     /** §1-7 相互ロック: the shared run lock (`shell/runLock.ts`) is held by
-     * Batch i2v-long on the Clip Chain screen. Blocks Start. */
-    lockedByOther: "Batch i2v-long is running on the Clip Chain screen. Only one batch runs at a time — wait for it to finish, or stop it there.",
+     * another batch panel. Blocks Start. */
+    lockedByOther: BATCH_LOCKED_BY_OTHER_EN,
     /** §1-7 相互ロック 第2段: the backend is occupied — its single job slot is
      * taken, or a model load is in flight — the same gate Batch i2v-long's
      * `blockReasons.jobActive` states. The KEY keeps its original name (it is
@@ -1419,10 +1427,9 @@ export const en = {
       promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's own Additional prompt column.",
       unknownLoraTag: "The prompt has a LoRA name that does not exist. Fix or remove the tag.",
       jobActive: "The server is busy: another job is running, or a model is being loaded. Wait for it to finish.",
-      /** The shared run lock (`shell/runLock.ts`) is held by the OTHER batch
-       * panel (Batch A2V, on the Create screen) — only one batch runs at a
-       * time. */
-      lockedByOther: "Batch A2V is running on the Create screen. Only one batch runs at a time — stop it, or wait for it to finish.",
+      /** The shared run lock (`shell/runLock.ts`) is held by another batch
+       * panel — only one batch runs at a time. */
+      lockedByOther: BATCH_LOCKED_BY_OTHER_EN,
     },
     /** Row-aware variant of the `promptEmpty` block reason above: once the
      * folder has been scanned the panel knows exactly WHICH rows are at fault,
@@ -1436,6 +1443,126 @@ export const en = {
     notes: {
       seedFixed: "The seed is fixed, so every image is generated with the same seed. Set the seed to -1 on the Clip Chain form to vary it per image.",
       startFrameIgnored: "The start frame on the Clip Chain form is not used — each row's own image takes its place.",
+      concurrency: "Only one batch runs at a time, and Generate on the Clip Chain form is unavailable while this batch is running.",
+    },
+  },
+  /** Batch v2v-ref-long (MiniMax H3, Chain screen): one chain per row, each row
+   * taking its opening video and its reference files from folders. Clip and
+   * row numbers passed in here are the DISPLAY numbers (1-based). The field
+   * names are not copy — they are `referenceTag(kind, slot)` (`<Picture 1>`). */
+  batchV2vRefLong: {
+    heading: "Batch v2v-ref-long",
+    videoDir: {
+      label: "Video folder (opening)",
+      button: "Choose video folder…",
+      none: "No folder of opening videos selected.",
+    },
+    joined: "Joined",
+    refFolders: {
+      heading: (filled: number): string => `Reference folders (${filled})`,
+      frameTitle: (clipNo: number): string => `Clip ${clipNo}`,
+      frameTotal: (filled: number, max: number): string => `(${filled}/${max})`,
+      pictureCount: (filled: number, max: number): string => `Image folders (${filled}/${max})`,
+      videoCount: (filled: number, max: number): string => `Video folders (${filled}/${max})`,
+      audioCount: (filled: number, max: number): string => `Audio folders (${filled}/${max})`,
+      fieldButton: "Choose folder…",
+      addPicture: "Add image folder",
+      addVideo: "Add video folder",
+      addAudio: "Add audio folder",
+      addFrame: "Add clip",
+      removeFrame: "Remove this clip's folders",
+      fillFollowing: "Use the same reference files for the following clips",
+      unusedFrames: (clipNo: number): string =>
+        `The folders for clip ${clipNo} and later are not used (they still count toward the number of rows).`,
+    },
+    outDir: {
+      label: "Output folder",
+      button: "Choose output folder…",
+      auto: (path: string): string => `Auto: ${path}`,
+      none: "No output folder yet — scanning sets it automatically, next to the folder with the most files.",
+    },
+    scanButton: "Scan folders",
+    scanningButton: (done: number, total: number): string => `Scanning… ${done}/${total}`,
+    scanError: (message: string): string => `Scan failed: ${message}`,
+    emptyField: (label: string): string => `${label}: no files of a supported format. This field is not used.`,
+    allFieldsEmpty: "None of the folders has files of a supported format.",
+    table: {
+      clipCount: (clips: number): string => `Chained clips: ${clips}`,
+      promptMode: {
+        label: "How the main prompt is used:",
+        add: "Add to the prompt",
+        replace: "Replace the prompt",
+      },
+      queue: "#",
+      baseFile: (label: string): string => `${label} file name`,
+      sourceLabel: "Opening video",
+      clipFieldLabel: (clipNo: number, tag: string): string => `Clip ${clipNo} ${tag}`,
+      v2v: "v2v",
+      mainPrompt: "Main prompt edit",
+      stat: "Status",
+      output: "Output",
+      mainPromptInputLabel: "Main prompt edit",
+      expandRow: "Show this row's clips",
+      collapseRow: "Hide this row's clips",
+      copyChainPromptButton: "Use the prompt",
+      resetButton: "Reset to Waiting",
+      empty: "No rows yet — choose the folders and scan them.",
+    },
+    summary: (done: number, total: number): string => `${done} / ${total} done`,
+    currentRow: (name: string): string => `Processing: ${name}`,
+    clipCard: {
+      title: (clipNo: number): string => `Clip ${clipNo}`,
+      promptMode: {
+        label: "Clip prompt:",
+        add: "Add",
+        replace: "Replace",
+      },
+      promptInputLabel: "Clip prompt",
+      referenceButton: (filled: number, max: number): string => `Reference ${filled}/${max}`,
+    },
+    stat: {
+      waiting: "Waiting",
+      generating: "Generating",
+      done: "Done",
+      failed: "Failed",
+      skip: "Skip",
+    },
+    ignoredClips: (clipNos: readonly number[]): string =>
+      `${clipNos.length > 1 ? "Clips" : "Clip"} ${clipNos.join(", ")}: the Reference has cards that are not used (greyed out).`,
+    rowBlockReasons: {
+      noSourceSingleClip:
+        "This row has no opening video and the chain has 1 clip. Without an opening video, at least 2 clips are needed.",
+      sourceTooShort: (frames: number): string => `The opening video is shorter than ${frames} frames.`,
+      clip0TooShort: (minFrames: number): string =>
+        `With an opening video, clip 1 needs at least ${minFrames} frames.`,
+      fileTooLarge: (name: string, limitMb: number): string => `${name} is over the ${limitMb} MB limit.`,
+      noMaterial: "This row has no material (neither an opening video nor any reference is assigned).",
+    },
+    blockReasons: {
+      notScanned: "Scan the folders first.",
+      scanStale: "The folders changed after the scan. Scan them again.",
+      outDirMissing: "Choose an output folder.",
+      noRunnableRows:
+        "There are no rows to run. 🚫 rows are skipped. Press 🔁 on a finished row to put it back to Waiting.",
+      fl2vaLoaded:
+        "An FL2VA model is loaded. To run a batch that uses reference material, load a Ref2VA model or a Hybrid model before starting.",
+      sourceAudioAttached: "An audio file is attached to the Clip Chain form. This batch does not use it — remove it.",
+      promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's Main prompt edit column.",
+      unknownLoraTag: "The prompt has a LoRA name that does not exist. Fix or remove the tag.",
+      jobActive: "The server is busy: another job is running, or a model is being loaded. Wait for it to finish.",
+      lockedByOther: BATCH_LOCKED_BY_OTHER_EN,
+    },
+    promptRowIssues: {
+      empty: (rowNos: readonly number[]): string =>
+        `These rows would be sent with an empty prompt: ${rowNos.join(", ")}. Write a prompt on the Clip Chain form, or in each row's Main prompt edit column.`,
+    },
+    joinFailed: (message: string): string => `Join failed: ${message}`,
+    startButton: "Start batch",
+    runningButton: "Running…",
+    stoppingButton: "Stopping…",
+    stopButton: "Stop",
+    notes: {
+      seedFixed: "The seed is fixed, so every row is generated with the same seed. Set the seed to -1 on the Clip Chain form to vary it per row.",
       concurrency: "Only one batch runs at a time, and Generate on the Clip Chain form is unavailable while this batch is running.",
     },
   },
@@ -3249,7 +3376,7 @@ export const ja: Strings = {
       `幅と高さは${multiple}の倍数にしてください。開始する前に、上の「作る」フォームでサイズを修正してください。`,
     fpsMismatch: "FPSまたはDURATIONがスキャン時と異なります。フレーム数はバッチ開始時に現在の値で自動的に再計算されます。",
     icLoraActiveWarning: "「作る」フォームで参照動画（IC-LoRA）が有効なため、バッチはその128グリッドの解像度を使用します。",
-    lockedByOther: "クリップチェーン画面でバッチi2v-longが実行中です。バッチは同時に1つしか実行できません。終わるまで待つか、そちらで停止してください。",
+    lockedByOther: BATCH_LOCKED_BY_OTHER_JA,
     jobActive: "サーバーが処理中です（ほかの生成が実行中か、モデルを読み込み中です）。同時に1つしか動かせないため、終わるまで待ってから開始してください。",
     promptEmptyRows: (queues: string): string =>
       `プロンプトが空のまま送信される行があります: ${queues}。上の「作る」フォームのプロンプトか、その行の追加プロンプト欄に入力してください。`,
@@ -3323,7 +3450,7 @@ export const ja: Strings = {
       promptEmpty: "プロンプトを入力してください（クリップチェーンのプロンプトか、行ごとの追加プロンプト欄のどちらかで）。",
       unknownLoraTag: "プロンプトに存在しないLoRA名が含まれています。タグを修正するか削除してください。",
       jobActive: "サーバーが処理中です（他のジョブが実行中か、モデルを読み込み中です）。終わるまで待ってください。",
-      lockedByOther: "作成画面のバッチA2Vが実行中です。バッチは同時に1つしか実行できません。停止するか、終わるまで待ってください。",
+      lockedByOther: BATCH_LOCKED_BY_OTHER_JA,
     },
     promptRowIssues: {
       empty: (queues: string): string =>
@@ -3332,6 +3459,119 @@ export const ja: Strings = {
     notes: {
       seedFixed: "シードが固定されているため、すべての画像が同じシードで生成されます。画像ごとに変えたい場合は、クリップチェーンのシードを-1にしてください。",
       startFrameIgnored: "クリップチェーンの開始フレーム画像は使われません。各行の画像がその位置に入ります。",
+      concurrency: "バッチは同時に1つしか実行できません。実行中はクリップチェーンの生成ボタンも使えなくなります。",
+    },
+  },
+  batchV2vRefLong: {
+    heading: "バッチ v2v-ref-long",
+    videoDir: {
+      label: "動画フォルダ（冒頭用）",
+      button: "動画フォルダを選択…",
+      none: "冒頭用の動画のフォルダが選択されていません。",
+    },
+    joined: "Joined",
+    refFolders: {
+      heading: (filled: number): string => `参照素材フォルダ（${filled}）`,
+      frameTitle: (clipNo: number): string => `クリップ ${clipNo}`,
+      frameTotal: (filled: number, max: number): string => `（${filled}/${max}）`,
+      pictureCount: (filled: number, max: number): string => `画像フォルダ（${filled}/${max}）`,
+      videoCount: (filled: number, max: number): string => `動画フォルダ（${filled}/${max}）`,
+      audioCount: (filled: number, max: number): string => `音声フォルダ（${filled}/${max}）`,
+      fieldButton: "フォルダを選択…",
+      addPicture: "画像フォルダを追加",
+      addVideo: "動画フォルダを追加",
+      addAudio: "音声フォルダを追加",
+      addFrame: "クリップを追加",
+      removeFrame: "このクリップの枠を消す",
+      fillFollowing: "後続クリップにも同じ参照ファイルを入力",
+      unusedFrames: (clipNo: number): string => `クリップ ${clipNo} 以降の枠は使われません（行数の決定には入ります）。`,
+    },
+    outDir: {
+      label: "出力フォルダ",
+      button: "出力フォルダを選択…",
+      auto: (path: string): string => `自動: ${path}`,
+      none: "出力フォルダは未設定です — スキャンすると、ファイルが最も多いフォルダの隣に自動で決まります。",
+    },
+    scanButton: "フォルダをスキャン",
+    scanningButton: (done: number, total: number): string => `スキャン中… ${done}/${total}`,
+    scanError: (message: string): string => `スキャンに失敗しました: ${message}`,
+    emptyField: (label: string): string => `${label}：対応する形式のファイルがありません。この欄は使われません。`,
+    allFieldsEmpty: "どのフォルダにも対応する形式のファイルがありません。",
+    table: {
+      clipCount: (clips: number): string => `連結クリップ数：${clips}`,
+      promptMode: {
+        label: "メインプロンプトの扱い：",
+        add: "プロンプトに追加する",
+        replace: "プロンプトを置き換える",
+      },
+      queue: "#",
+      baseFile: (label: string): string => `${label}のファイル名`,
+      sourceLabel: "冒頭動画",
+      clipFieldLabel: (clipNo: number, tag: string): string => `クリップ ${clipNo} ${tag}`,
+      v2v: "v2v",
+      mainPrompt: "メインプロンプトの編集",
+      stat: "状態",
+      output: "出力",
+      mainPromptInputLabel: "メインプロンプトの編集",
+      expandRow: "この行のクリップを表示",
+      collapseRow: "この行のクリップを隠す",
+      copyChainPromptButton: "プロンプトを流し込む",
+      resetButton: "待機中に戻す",
+      empty: "行がまだありません — フォルダを選んでスキャンしてください。",
+    },
+    summary: (done: number, total: number): string => `${done} / ${total} 件完了`,
+    currentRow: (name: string): string => `処理中: ${name}`,
+    clipCard: {
+      title: (clipNo: number): string => `クリップ ${clipNo}`,
+      promptMode: {
+        label: "個別プロンプト：",
+        add: "追加",
+        replace: "置換",
+      },
+      promptInputLabel: "個別プロンプト",
+      referenceButton: (filled: number, max: number): string => `Reference ${filled}/${max}`,
+    },
+    stat: {
+      waiting: "待機中",
+      generating: "生成中",
+      done: "完了",
+      failed: "失敗",
+      skip: "対象外",
+    },
+    ignoredClips: (clipNos: readonly number[]): string =>
+      `クリップ ${clipNos.join("、")} の Reference に、使われない（灰色の）カードがあります。`,
+    rowBlockReasons: {
+      noSourceSingleClip:
+        "この行には冒頭動画が無く、連結クリップ数が 1 です。冒頭動画が無いときはクリップが 2 つ以上要ります。",
+      sourceTooShort: (frames: number): string => `冒頭動画が ${frames} フレームに足りません。`,
+      clip0TooShort: (minFrames: number): string => `冒頭動画があるとき、クリップ 1 は ${minFrames} フレーム以上要ります。`,
+      fileTooLarge: (name: string, limitMb: number): string => `${name} が上限の ${limitMb} MB を超えています。`,
+      noMaterial: "この行には素材がありません（冒頭動画も参照も割り振られていません）。",
+    },
+    blockReasons: {
+      notScanned: "先にフォルダをスキャンしてください。",
+      scanStale: "スキャンの後でフォルダの指定が変わりました。もう一度スキャンしてください。",
+      outDirMissing: "出力フォルダを指定してください。",
+      noRunnableRows: "実行できる行がありません。🚫 の行は飛ばします。終わった行は 🔁 で待機中に戻せます。",
+      fl2vaLoaded:
+        "FL2VA モデルがロードされています。参照素材を使うバッチは、Ref2VA モデルまたは Hybrid モデルをロードしてから開始してください。",
+      sourceAudioAttached: "クリップチェーンに音声が設定されています。このバッチでは使わないので外してください。",
+      promptEmpty: "プロンプトを入力してください（クリップチェーンのプロンプトか、行ごとのメインプロンプトの編集欄のどちらかで）。",
+      unknownLoraTag: "プロンプトに存在しないLoRA名が含まれています。タグを修正するか削除してください。",
+      jobActive: "サーバーが処理中です（他のジョブが実行中か、モデルを読み込み中です）。終わるまで待ってください。",
+      lockedByOther: BATCH_LOCKED_BY_OTHER_JA,
+    },
+    promptRowIssues: {
+      empty: (rowNos: readonly number[]): string =>
+        `プロンプトが空のまま送信される行があります: ${rowNos.join("、")}。クリップチェーンのプロンプトか、その行のメインプロンプトの編集欄に入力してください。`,
+    },
+    joinFailed: (message: string): string => `Join に失敗しました: ${message}`,
+    startButton: "バッチを開始",
+    runningButton: "実行中…",
+    stoppingButton: "停止処理中…",
+    stopButton: "停止",
+    notes: {
+      seedFixed: "シードが固定されているため、すべての行が同じシードで生成されます。行ごとに変えたい場合は、クリップチェーンのシードを-1にしてください。",
       concurrency: "バッチは同時に1つしか実行できません。実行中はクリップチェーンの生成ボタンも使えなくなります。",
     },
   },

@@ -493,4 +493,38 @@ describe("ReferenceAccordion", () => {
     expect(screen.getByText("【🔴ON】")).toBeInTheDocument();
     expect(screen.getAllByRole("checkbox", { name: "Audio to video" })).toHaveLength(3);
   });
+
+  it("defaultOpen: open on the first render; later prop changes do not reopen it", () => {
+    const api = makeApi(createInitialState(RULES));
+    const { container, rerender, props } = renderAccordion(api, { defaultOpen: true });
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(true);
+    details.open = false;
+    rerender(
+      <LanguageProvider>
+        <ReferenceAccordion {...props} disabled />
+      </LanguageProvider>,
+    );
+    expect(details.open).toBe(false);
+  });
+
+  it("onToggle: called with the current open state on every toggle", () => {
+    const onToggle = vi.fn();
+    const { container } = renderAccordion(makeApi(createInitialState(RULES)), { onToggle });
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    expect(onToggle).toHaveBeenLastCalledWith(true);
+    details.open = false;
+    fireEvent(details, new Event("toggle"));
+    expect(onToggle).toHaveBeenLastCalledWith(false);
+  });
+
+  it("without defaultOpen / onToggle: closed by default, as before", () => {
+    const { container } = renderAccordion(makeApi(createInitialState(RULES)));
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    details.open = true;
+    expect(() => fireEvent(details, new Event("toggle"))).not.toThrow();
+  });
 });

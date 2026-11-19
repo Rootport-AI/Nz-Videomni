@@ -70,6 +70,7 @@ import {
   type ReferenceRules,
 } from "../single/referenceRules";
 import { BatchI2vLongSection } from "../batch-i2v-long/BatchI2vLongSection";
+import { BatchV2vRefLongSection } from "../batch-v2v-ref-long/BatchV2vRefLongSection";
 import { ChainAudioPanel } from "./ChainAudioPanel";
 import { ChainEndSourcePanel } from "./ChainEndSourcePanel";
 import { ChainReferencePanel } from "./ChainReferencePanel";
@@ -2008,6 +2009,18 @@ function ChainedScreenBody({
       <BatchI2vLongSection
         config={config}
         chain={form}
+        serverBusy={serverBusy}
+        nativeBridge={nativeBridge}
+        loraRefreshKey={loraRefreshKey}
+      />
+    )}
+    {/* Batch v2v-ref-long: MiniMax H3 only (live reference rules, fixed overlap). */}
+    {liveReferenceRules !== null && fixedOverlap && (
+      <BatchV2vRefLongSection
+        config={config}
+        chain={form}
+        rules={liveReferenceRules}
+        role={role}
         serverBusy={serverBusy}
         nativeBridge={nativeBridge}
         loraRefreshKey={loraRefreshKey}

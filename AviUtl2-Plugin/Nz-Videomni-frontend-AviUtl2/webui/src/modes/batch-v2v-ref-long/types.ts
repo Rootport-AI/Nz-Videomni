@@ -258,8 +258,9 @@ export interface UseV2vRefLongFormResult {
   /** 📁 then {@link attachClipFile}; a cancelled dialog does nothing. */
   pickClipFile(rowIndex: number, clip: number, kind: ReferenceKind, slot: number): Promise<void>;
   clearClipSlot(rowIndex: number, clip: number, kind: ReferenceKind, slot: number): void;
-  /** ✒: appends the card's tag to the row's clip prompt. */
-  appendClipTag(rowIndex: number, clip: number, kind: ReferenceKind, slot: number): void;
+  /** ✒: appends the card's tag (as the Reference accordion hands it) to the
+   * row's clip prompt. */
+  appendClipTag(rowIndex: number, clip: number, tag: string): void;
   /** 🔁: Done/Failed back to Waiting. */
   resetRow(rowIndex: number): void;
 

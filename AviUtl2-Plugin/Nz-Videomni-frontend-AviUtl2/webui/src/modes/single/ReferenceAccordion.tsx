@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStrings } from "../../i18n/LanguageContext";
 import type { NativeBridge } from "../../bridge";
 import {
@@ -55,6 +55,11 @@ export interface ReferenceAccordionProps {
    * given (§1-120: MiniMax H3 with `constraints.chain.source_audio`). Default
    * `false` (Create, unchanged). */
   embedded?: boolean | undefined;
+  /** Open once on the first render (the element's `open` is written, React
+   * never holds it). Default `false`. */
+  defaultOpen?: boolean | undefined;
+  /** Called with the new open state whenever the `<details>` toggles. */
+  onToggle?: ((open: boolean) => void) | undefined;
 }
 
 const ACCEPT: Record<ReferenceKind, readonly string[]> = {
@@ -332,9 +337,15 @@ export function ReferenceAccordion({
   nativeBridge,
   disabled = false,
   embedded = false,
+  defaultOpen = false,
+  onToggle,
 }: ReferenceAccordionProps) {
   const t = useStrings().single.reference;
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const initialOpen = useRef(defaultOpen);
+  useLayoutEffect(() => {
+    if (initialOpen.current && detailsRef.current) detailsRef.current.open = true;
+  }, []);
   const lastSignal = useRef(openSignal);
   useEffect(() => {
     if (lastSignal.current === openSignal) return;
@@ -351,7 +362,11 @@ export function ReferenceAccordion({
     : state.enabled;
 
   return (
-    <details className="form-accordion ref-accordion" ref={detailsRef}>
+    <details
+      className="form-accordion ref-accordion"
+      ref={detailsRef}
+      onToggle={onToggle ? (e) => onToggle(e.currentTarget.open) : undefined}
+    >
       <summary className="form-accordion-summary">
         {t.heading}
         {badgeOn && <span className="nag-on-badge">{t.onBadge}</span>}

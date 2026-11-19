@@ -1,0 +1,7 @@
+﻿{
+    "run":  "a1_010_conflict",
+    "first_psnr_db":  12.56,
+    "threshold_db":  20,
+    "reproduced":  true,
+    "measured":  "2026-11-19T03:49:16"
+}

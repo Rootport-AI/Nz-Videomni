@@ -1,0 +1,3 @@
+A black dragon confronts an armored knight in the ruins of an ancient stone castle. The knight stands in the lower center with his back to the camera, holding a sword and a shield. The dragon lowers its body, then spreads its wings wide. Fire gathers in its open mouth. It raises its head straight up toward the sky, then swings its head down and breathes a stream of fire at the knight, who raises his shield against the flames.
+overall_soundscape: The dragon's roar and the rush of flames.
+non_diegetic_music: <Audio 1> is directly reused as the complete audience-only score, an upbeat, light rock track with electric guitar and drums at a fast tempo.

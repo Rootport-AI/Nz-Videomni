@@ -1,0 +1,52 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119034059
+Username: (redacted)
+RunAs User: (redacted)
+Configuration Name: 
+Machine: (redacted) (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\run_stageA2.ps1
+Process ID: 39696
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+weights, key frame, reference, prompts, venv, weight_identity.json, ffmpeg, script: present
+--- nvidia-smi (compute processes) ---
+
+backend / H3 worker: none
+GPU memory used: 514 MiB
+RAM 63.8 GB + page file allocated 74.7 GB = commit limit about 138.5 GB
+[03:41:00] a1_010_conflict: --name a1_010_conflict --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png
+    exit 0 in 494.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a1_010_conflict.json
+reproduction gate: a1 frame 0 = 12.56 dB (< 20): reproduced, going on
+[03:49:16] a2_010_consistent: --name a2_010_consistent --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_consistent.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png
+    exit 0 in 495.9 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a2_010_consistent.json
+[03:57:32] a3_ctrlF_conflict: --name a3_ctrlF_conflict --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict_noref.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png
+    exit 0 in 479.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a3_ctrlF_conflict.json
+[04:05:32] a4_ctrlR_conflict: --name a4_ctrlR_conflict --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict_noref.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png
+    exit 0 in 479.4 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a4_ctrlR_conflict.json
+[04:13:31] a5_110_conflict: --name a5_110_conflict --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --T on --C on
+    exit 0 in 511.9 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a5_110_conflict.json
+[04:22:03] a6_001_conflict: --name a6_001_conflict --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --T off --C off --L 0
+    exit 0 in 486.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a6_001_conflict.json
+[04:30:10] a7_011_conflict: --name a7_011_conflict --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --T off --C on --L 0
+    exit 0 in 494.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a7_011_conflict.json
+--- results ---
+a1_010_conflict      0
+a2_010_consistent    0
+a3_ctrlF_conflict    0
+a4_ctrlR_conflict    0
+a5_110_conflict      0
+a6_001_conflict      0
+a7_011_conflict      0
+runner exit 0
+**********************
+Windows PowerShell transcript end
+End time: 20261119043825
+**********************

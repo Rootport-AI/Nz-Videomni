@@ -1,0 +1,1272 @@
+{
+  "stage": "A",
+  "runs_selected": [
+    "r02_010_product",
+    "r07_011",
+    "d4_011_s05_dragon"
+  ],
+  "key": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg",
+  "contact_frames": [
+    0,
+    1,
+    4,
+    8,
+    16,
+    17,
+    18,
+    24,
+    40,
+    80,
+    123
+  ],
+  "constants": {
+    "head": 25,
+    "tail_from": 25,
+    "window": 12,
+    "freeze_ratio": 1.3,
+    "jump_ratio": 0.7,
+    "psnr_cap": 99.0
+  },
+  "runs": [
+    {
+      "name": "r02_010_product",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\r02_010_product.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\r02_010_product.json",
+        "ok": true,
+        "mode": "product",
+        "paths": {
+          "implied": {
+            "T": false,
+            "C": true,
+            "L": null
+          },
+          "text_encoder": "references only (key frames hidden from the text encoder, pipeline_h3.py:912-913)",
+          "dit": "cond + ref"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "uploads/key-ref-development/key-001.jpg",
+            "file_sha256": "bb735c74afd068232943809786f10286467c85361fe109575506b4e0f3780785"
+          }
+        ],
+        "gate_second": true,
+        "sequence": {
+          "text": 1086,
+          "cond": 960,
+          "audio": 414,
+          "video": 35520,
+          "total": 38930,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            40
+          ],
+          "ref_video": 950,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 16.06,
+          "image_encode": 1.15,
+          "reference_encode": 0.79,
+          "denoise": 406.82,
+          "decode": 36.73
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1054,
+          "reference_encode": 1054,
+          "denoise": 4328,
+          "decode": 6345
+        },
+        "peak_vram_mb_job": 6345,
+        "text_tokens": 1086,
+        "mask": null,
+        "L_check": null,
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\r02_010_product.mp4",
+          "sha256": "f6487d39e363319e398a65cb7300dc2617a9400ebfc336fb5692e16a099d2910",
+          "bytes": 2177025,
+          "video_md5": "6d49ecdb4c62533fe037106f59f589fd",
+          "audio_md5": "13db05fb2c1698111b89672e34e85c40"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1280,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 28.87,
+        "psnr_vs_key": [
+          28.87,
+          27.89,
+          25.88,
+          25.79,
+          23.23,
+          22.21,
+          21.14,
+          21.12,
+          19.83,
+          19.2,
+          18.48,
+          18.47,
+          17.49,
+          17.07,
+          16.67,
+          16.67,
+          16.14,
+          15.92,
+          15.76,
+          15.75,
+          15.51,
+          15.39,
+          15.24,
+          15.24,
+          15.05
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 33.28,
+            "ratio": 1.354,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 31.43,
+            "ratio": 1.278,
+            "mark": ""
+          },
+          {
+            "t": 3,
+            "psnr_adj": 45.29,
+            "ratio": 1.842,
+            "mark": "freeze"
+          },
+          {
+            "t": 4,
+            "psnr_adj": 27.02,
+            "ratio": 1.099,
+            "mark": ""
+          },
+          {
+            "t": 5,
+            "psnr_adj": 28.82,
+            "ratio": 1.172,
+            "mark": ""
+          },
+          {
+            "t": 6,
+            "psnr_adj": 26.91,
+            "ratio": 1.094,
+            "mark": ""
+          },
+          {
+            "t": 7,
+            "psnr_adj": 45.87,
+            "ratio": 1.866,
+            "mark": "freeze"
+          },
+          {
+            "t": 8,
+            "psnr_adj": 24.07,
+            "ratio": 0.979,
+            "mark": ""
+          },
+          {
+            "t": 9,
+            "psnr_adj": 25.76,
+            "ratio": 1.048,
+            "mark": ""
+          },
+          {
+            "t": 10,
+            "psnr_adj": 24.78,
+            "ratio": 1.008,
+            "mark": ""
+          },
+          {
+            "t": 11,
+            "psnr_adj": 45.81,
+            "ratio": 1.863,
+            "mark": "freeze"
+          },
+          {
+            "t": 12,
+            "psnr_adj": 22.31,
+            "ratio": 0.907,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 24.41,
+            "ratio": 0.993,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 24.57,
+            "ratio": 0.999,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 44.94,
+            "ratio": 1.828,
+            "mark": "freeze"
+          },
+          {
+            "t": 16,
+            "psnr_adj": 23.65,
+            "ratio": 0.962,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 26.46,
+            "ratio": 1.076,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 26.68,
+            "ratio": 1.085,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 41.26,
+            "ratio": 1.678,
+            "mark": "freeze"
+          },
+          {
+            "t": 20,
+            "psnr_adj": 24.51,
+            "ratio": 0.997,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 26.97,
+            "ratio": 1.097,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 26.8,
+            "ratio": 1.09,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 40.2,
+            "ratio": 1.635,
+            "mark": "freeze"
+          },
+          {
+            "t": 24,
+            "psnr_adj": 24.06,
+            "ratio": 0.978,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 24.59,
+        "marks": [
+          "freeze@1",
+          "freeze@3",
+          "freeze@7",
+          "freeze@11",
+          "freeze@15",
+          "freeze@19",
+          "freeze@23"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg",
+            "psnr": 28.87,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 28.87,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 27.89,
+                "psnr_adj": 33.28,
+                "ratio": 1.354,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 25.88,
+                "psnr_adj": 31.43,
+                "ratio": 1.278,
+                "mark": ""
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 25.79,
+                "psnr_adj": 45.29,
+                "ratio": 1.842,
+                "mark": "freeze"
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 23.23,
+                "psnr_adj": 27.02,
+                "ratio": 1.099,
+                "mark": ""
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 22.21,
+                "psnr_adj": 28.82,
+                "ratio": 1.172,
+                "mark": ""
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 21.14,
+                "psnr_adj": 26.91,
+                "ratio": 1.094,
+                "mark": ""
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 21.12,
+                "psnr_adj": 45.87,
+                "ratio": 1.866,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 19.83,
+                "psnr_adj": 24.07,
+                "ratio": 0.979,
+                "mark": ""
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 19.2,
+                "psnr_adj": 25.76,
+                "ratio": 1.048,
+                "mark": ""
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 18.48,
+                "psnr_adj": 24.78,
+                "ratio": 1.008,
+                "mark": ""
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 18.47,
+                "psnr_adj": 45.81,
+                "ratio": 1.863,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 17.49,
+                "psnr_adj": 22.31,
+                "ratio": 0.907,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)",
+          "freeze@3(kf0)",
+          "freeze@7(kf0)",
+          "freeze@11(kf0)"
+        ]
+      }
+    },
+    {
+      "name": "r07_011",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\r07_011.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\r07_011.json",
+        "ok": true,
+        "mode": "harness",
+        "paths": {
+          "T": false,
+          "C": true,
+          "L": 0.0,
+          "T_slot": null,
+          "L_latents": [
+            0
+          ],
+          "text_encoder": "references",
+          "dit": "cond [0] + ref + video_fix latents [0] m=0.0 inject_clean=0.999"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "uploads/key-ref-development/key-001.jpg",
+            "file_sha256": "bb735c74afd068232943809786f10286467c85361fe109575506b4e0f3780785"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1086,
+          "cond": 960,
+          "audio": 414,
+          "video": 35520,
+          "total": 38930,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            40
+          ],
+          "ref_video": 950,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.36,
+          "image_encode": 1.17,
+          "reference_encode": 0.79,
+          "denoise": 407.57,
+          "decode": 37.18
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1054,
+          "reference_encode": 1054,
+          "denoise": 4355,
+          "decode": 6345
+        },
+        "peak_vram_mb_job": 6345,
+        "text_tokens": 1086,
+        "mask": {
+          "video": {
+            "rows": 35520,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 0.999
+          }
+        },
+        "L_check": {
+          "mask_zero_rows": 960,
+          "mask_rows": 35520,
+          "per_frame": [
+            0.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "latents": [
+            {
+              "latent": 0,
+              "equal": true,
+              "max_abs": 0.0
+            }
+          ],
+          "denoise_mask_video": {
+            "rows": 35520,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 0.999
+          },
+          "ok": true
+        },
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\r07_011.mp4",
+          "sha256": "aff2134ec7396a1682722948c0e85689d001eb9bf05a8c0d272867118beb6558",
+          "bytes": 2158635,
+          "video_md5": "b07a68ee871d98ad0e4f320a4e99182b",
+          "audio_md5": "2e5e032c967b32b3188bbc684ed0a1ab"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1280,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 29.53,
+        "psnr_vs_key": [
+          29.53,
+          29.24,
+          25.82,
+          23.84,
+          22.82,
+          21.94,
+          21.12,
+          20.44,
+          19.79,
+          19.2,
+          18.64,
+          18.16,
+          17.7,
+          17.29,
+          16.95,
+          16.68,
+          16.41,
+          16.2,
+          15.99,
+          15.83,
+          15.66,
+          15.54,
+          15.43,
+          15.37,
+          15.27
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 36.98,
+            "ratio": 1.477,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 29.09,
+            "ratio": 1.162,
+            "mark": ""
+          },
+          {
+            "t": 3,
+            "psnr_adj": 29.15,
+            "ratio": 1.164,
+            "mark": ""
+          },
+          {
+            "t": 4,
+            "psnr_adj": 30.52,
+            "ratio": 1.219,
+            "mark": ""
+          },
+          {
+            "t": 5,
+            "psnr_adj": 28.59,
+            "ratio": 1.141,
+            "mark": ""
+          },
+          {
+            "t": 6,
+            "psnr_adj": 27.99,
+            "ratio": 1.117,
+            "mark": ""
+          },
+          {
+            "t": 7,
+            "psnr_adj": 27.68,
+            "ratio": 1.105,
+            "mark": ""
+          },
+          {
+            "t": 8,
+            "psnr_adj": 27.14,
+            "ratio": 1.084,
+            "mark": ""
+          },
+          {
+            "t": 9,
+            "psnr_adj": 26.1,
+            "ratio": 1.042,
+            "mark": ""
+          },
+          {
+            "t": 10,
+            "psnr_adj": 25.93,
+            "ratio": 1.035,
+            "mark": ""
+          },
+          {
+            "t": 11,
+            "psnr_adj": 26.03,
+            "ratio": 1.039,
+            "mark": ""
+          },
+          {
+            "t": 12,
+            "psnr_adj": 25.99,
+            "ratio": 1.038,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 26.08,
+            "ratio": 1.041,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 26.17,
+            "ratio": 1.045,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 26.21,
+            "ratio": 1.047,
+            "mark": ""
+          },
+          {
+            "t": 16,
+            "psnr_adj": 26.22,
+            "ratio": 1.047,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 26.21,
+            "ratio": 1.047,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 26.2,
+            "ratio": 1.046,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 26.24,
+            "ratio": 1.048,
+            "mark": ""
+          },
+          {
+            "t": 20,
+            "psnr_adj": 26.16,
+            "ratio": 1.045,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 25.94,
+            "ratio": 1.036,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 26.1,
+            "ratio": 1.042,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 26.72,
+            "ratio": 1.067,
+            "mark": ""
+          },
+          {
+            "t": 24,
+            "psnr_adj": 27.1,
+            "ratio": 1.082,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 25.04,
+        "marks": [
+          "freeze@1"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg",
+            "psnr": 29.53,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 29.53,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 29.24,
+                "psnr_adj": 36.98,
+                "ratio": 1.477,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 25.82,
+                "psnr_adj": 29.09,
+                "ratio": 1.162,
+                "mark": ""
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 23.84,
+                "psnr_adj": 29.15,
+                "ratio": 1.164,
+                "mark": ""
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 22.82,
+                "psnr_adj": 30.52,
+                "ratio": 1.219,
+                "mark": ""
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 21.94,
+                "psnr_adj": 28.59,
+                "ratio": 1.141,
+                "mark": ""
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 21.12,
+                "psnr_adj": 27.99,
+                "ratio": 1.117,
+                "mark": ""
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 20.44,
+                "psnr_adj": 27.68,
+                "ratio": 1.105,
+                "mark": ""
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 19.79,
+                "psnr_adj": 27.14,
+                "ratio": 1.084,
+                "mark": ""
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 19.2,
+                "psnr_adj": 26.1,
+                "ratio": 1.042,
+                "mark": ""
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 18.64,
+                "psnr_adj": 25.93,
+                "ratio": 1.035,
+                "mark": ""
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 18.16,
+                "psnr_adj": 26.03,
+                "ratio": 1.039,
+                "mark": ""
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 17.7,
+                "psnr_adj": 25.99,
+                "ratio": 1.038,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)"
+        ]
+      }
+    },
+    {
+      "name": "d4_011_s05_dragon",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\d4_011_s05_dragon.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\d4_011_s05_dragon.json",
+        "ok": true,
+        "mode": "harness",
+        "paths": {
+          "T": false,
+          "C": true,
+          "L": 0.5,
+          "T_slot": null,
+          "L_latents": [
+            0
+          ],
+          "text_encoder": "references",
+          "dit": "cond [0] + ref + video_fix latents [0] m=0.5 inject_clean=0.999"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "uploads/key-ref-development/key-001.jpg",
+            "file_sha256": "bb735c74afd068232943809786f10286467c85361fe109575506b4e0f3780785"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1086,
+          "cond": 960,
+          "audio": 414,
+          "video": 35520,
+          "total": 38930,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            40
+          ],
+          "ref_video": 950,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.33,
+          "image_encode": 1.23,
+          "reference_encode": 0.79,
+          "denoise": 406.72,
+          "decode": 38.19
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1054,
+          "reference_encode": 1054,
+          "denoise": 4355,
+          "decode": 6345
+        },
+        "peak_vram_mb_job": 6345,
+        "text_tokens": 1086,
+        "mask": {
+          "video": {
+            "rows": 35520,
+            "min": 0.5,
+            "max": 1.0,
+            "inject_clean": 0.999
+          }
+        },
+        "L_check": {
+          "mask_zero_rows": 0,
+          "mask_rows": 35520,
+          "per_frame": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "latents": [
+            {
+              "latent": 0,
+              "equal": false,
+              "max_abs": 0.26022645831108093
+            }
+          ],
+          "denoise_mask_video": {
+            "rows": 35520,
+            "min": 0.5,
+            "max": 1.0,
+            "inject_clean": 0.999
+          },
+          "ok": true
+        },
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\d4_011_s05_dragon.mp4",
+          "sha256": "093e621e9c956d451c800d148cbcaf74e0e05c7dd5552e62b32a939f09e518f8",
+          "bytes": 2208261,
+          "video_md5": "ed2cfd34c30bbbdeef69e8c3501bb653",
+          "audio_md5": "6d267b987cf19b82d5405ae0fece11be"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1280,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 29.05,
+        "psnr_vs_key": [
+          29.05,
+          28.02,
+          25.88,
+          25.83,
+          23.16,
+          22.1,
+          21.16,
+          21.15,
+          19.87,
+          19.25,
+          18.53,
+          18.52,
+          17.48,
+          17.04,
+          16.66,
+          16.65,
+          16.2,
+          15.98,
+          15.75,
+          15.74,
+          15.5,
+          15.41,
+          15.25,
+          15.25,
+          15.0
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 33.23,
+            "ratio": 1.338,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 31.49,
+            "ratio": 1.267,
+            "mark": ""
+          },
+          {
+            "t": 3,
+            "psnr_adj": 47.4,
+            "ratio": 1.908,
+            "mark": "freeze"
+          },
+          {
+            "t": 4,
+            "psnr_adj": 26.83,
+            "ratio": 1.08,
+            "mark": ""
+          },
+          {
+            "t": 5,
+            "psnr_adj": 28.44,
+            "ratio": 1.145,
+            "mark": ""
+          },
+          {
+            "t": 6,
+            "psnr_adj": 27.16,
+            "ratio": 1.093,
+            "mark": ""
+          },
+          {
+            "t": 7,
+            "psnr_adj": 46.37,
+            "ratio": 1.867,
+            "mark": "freeze"
+          },
+          {
+            "t": 8,
+            "psnr_adj": 24.21,
+            "ratio": 0.974,
+            "mark": ""
+          },
+          {
+            "t": 9,
+            "psnr_adj": 26.21,
+            "ratio": 1.055,
+            "mark": ""
+          },
+          {
+            "t": 10,
+            "psnr_adj": 25.47,
+            "ratio": 1.025,
+            "mark": ""
+          },
+          {
+            "t": 11,
+            "psnr_adj": 45.68,
+            "ratio": 1.839,
+            "mark": "freeze"
+          },
+          {
+            "t": 12,
+            "psnr_adj": 22.75,
+            "ratio": 0.916,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 25.09,
+            "ratio": 1.01,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 24.93,
+            "ratio": 1.003,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 44.89,
+            "ratio": 1.807,
+            "mark": "freeze"
+          },
+          {
+            "t": 16,
+            "psnr_adj": 23.33,
+            "ratio": 0.939,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 26.51,
+            "ratio": 1.067,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 26.31,
+            "ratio": 1.059,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 41.63,
+            "ratio": 1.676,
+            "mark": "freeze"
+          },
+          {
+            "t": 20,
+            "psnr_adj": 24.81,
+            "ratio": 0.999,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 27.81,
+            "ratio": 1.12,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 26.66,
+            "ratio": 1.073,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 40.62,
+            "ratio": 1.635,
+            "mark": "freeze"
+          },
+          {
+            "t": 24,
+            "psnr_adj": 23.01,
+            "ratio": 0.926,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 24.84,
+        "marks": [
+          "freeze@1",
+          "freeze@3",
+          "freeze@7",
+          "freeze@11",
+          "freeze@15",
+          "freeze@19",
+          "freeze@23"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg",
+            "psnr": 29.05,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 29.05,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 28.02,
+                "psnr_adj": 33.23,
+                "ratio": 1.338,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 25.88,
+                "psnr_adj": 31.49,
+                "ratio": 1.267,
+                "mark": ""
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 25.83,
+                "psnr_adj": 47.4,
+                "ratio": 1.908,
+                "mark": "freeze"
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 23.16,
+                "psnr_adj": 26.83,
+                "ratio": 1.08,
+                "mark": ""
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 22.1,
+                "psnr_adj": 28.44,
+                "ratio": 1.145,
+                "mark": ""
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 21.16,
+                "psnr_adj": 27.16,
+                "ratio": 1.093,
+                "mark": ""
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 21.15,
+                "psnr_adj": 46.37,
+                "ratio": 1.867,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 19.87,
+                "psnr_adj": 24.21,
+                "ratio": 0.974,
+                "mark": ""
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 19.25,
+                "psnr_adj": 26.21,
+                "ratio": 1.055,
+                "mark": ""
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 18.53,
+                "psnr_adj": 25.47,
+                "ratio": 1.025,
+                "mark": ""
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 18.52,
+                "psnr_adj": 45.68,
+                "ratio": 1.839,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 17.48,
+                "psnr_adj": 22.75,
+                "ratio": 0.916,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)",
+          "freeze@3(kf0)",
+          "freeze@7(kf0)",
+          "freeze@11(kf0)"
+        ]
+      }
+    }
+  ]
+}

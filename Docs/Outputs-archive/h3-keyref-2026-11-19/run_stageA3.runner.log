@@ -1,0 +1,39 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119055706
+Username: (redacted)
+RunAs User: (redacted)
+Configuration Name: 
+Machine: (redacted) (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\run_stageA3.ps1
+Process ID: 49524
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+weights, key frame, reference, prompts, venv, weight_identity.json, ffmpeg, script: present
+--- nvidia-smi (compute processes) ---
+
+backend / H3 worker: none
+GPU memory used: 561 MiB
+RAM 63.8 GB + page file allocated 74.7 GB = commit limit about 138.5 GB
+[05:57:06] a8_110_decl: --name a8_110_decl --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a3_decl.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --T on --C on
+    exit 0 in 512.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a8_110_decl.json
+[06:05:38] a9_keyasref_decl: --name a9_keyasref_decl --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a3_decl.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png
+    exit 0 in 529.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a9_keyasref_decl.json
+[06:14:28] a10_keyasref_nodecl: --name a10_keyasref_nodecl --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png
+    exit 0 in 529.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\a10_keyasref_nodecl.json
+--- results ---
+a8_110_decl          0
+a9_keyasref_decl     0
+a10_keyasref_nodecl  0
+runner exit 0
+**********************
+Windows PowerShell transcript end
+End time: 20261119062317
+**********************

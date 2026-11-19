@@ -1,0 +1,39 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119043904
+Username: (redacted)
+RunAs User: (redacted)
+Configuration Name: 
+Machine: (redacted) (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\run_stageB.ps1
+Process ID: 5456
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+weights, key frame, reference, prompts, venv, weight_identity.json, ffmpeg, script: present
+--- nvidia-smi (compute processes) ---
+
+backend / H3 worker: none
+GPU memory used: 514 MiB
+RAM 63.8 GB + page file allocated 74.7 GB = commit limit about 138.5 GB
+[04:39:05] gate_B: --name gate_B --mode gate --gate-names b1_010_f17_harness,b1_010_f17_product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 17=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png
+    exit 0 in 929.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\gate_B.json
+[04:54:34] b2_001_f17: --name b2_001_f17 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 17=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T off --C off --L 0
+    exit 0 in 452.7 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\b2_001_f17.json
+[05:02:07] b3_011_f17: --name b3_011_f17 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 17=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T off --C on --L 0
+    exit 0 in 468 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\b3_011_f17.json
+--- results ---
+gate_B               0
+b2_001_f17           0
+b3_011_f17           0
+runner exit 0
+**********************
+Windows PowerShell transcript end
+End time: 20261119050955
+**********************

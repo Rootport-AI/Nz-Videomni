@@ -1,0 +1,60 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119014900
+Username: (redacted)
+RunAs User: (redacted)
+Configuration Name: 
+Machine: (redacted) (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\run_stageA.ps1
+Process ID: 48948
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+weights, key frame, reference, prompts, venv, weight_identity.json, ffmpeg, script: present
+--- nvidia-smi (compute processes) ---
+
+backend / H3 worker: none
+GPU memory used: 527 MiB
+RAM 63.8 GB + page file allocated 74.7 GB = commit limit about 138.5 GB
+[01:49:00] gate: --name gate --mode gate --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png
+    exit 0 in 951.3 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\gate.json
+[02:04:52] r03_ctrlF: --name r03_ctrlF --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_fl2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_noref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg
+    exit 0 in 452.3 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r03_ctrlF.json
+[02:12:24] r04_ctrlR: --name r04_ctrlR --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_noref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg
+    exit 0 in 451.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r04_ctrlR.json
+[02:19:56] r05_110: --name r05_110 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T on --C on
+    exit 0 in 482.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r05_110.json
+[02:27:59] r06_001: --name r06_001 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T off --C off --L 0
+    exit 0 in 453.1 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r06_001.json
+[02:35:32] r07_011: --name r07_011 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T off --C on --L 0
+    exit 0 in 468.3 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r07_011.json
+[02:43:20] r08_000: --name r08_000 --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png
+    exit 0 in 453.4 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r08_000.json
+[02:50:54] r09_100: --name r09_100 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T on --C off
+    exit 0 in 468.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r09_100.json
+[02:58:42] r10_101: --name r10_101 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T on --C off --L 0
+    exit 0 in 469 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r10_101.json
+[03:06:31] r11_111: --name r11_111 --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_ref.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --ref-image uploads\key-ref-development\赤い日傘とゴシックロリータ三面図.png --T on --C on --L 0
+    exit 0 in 482.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\r11_111.json
+--- results ---
+gate         0
+r03_ctrlF    0
+r04_ctrlR    0
+r05_110      0
+r06_001      0
+r07_011      0
+r08_000      0
+r09_100      0
+r10_101      0
+r11_111      0
+runner exit 0
+**********************
+Windows PowerShell transcript end
+End time: 20261119031434
+**********************

@@ -1,0 +1,42 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119051030
+Username: (redacted)
+RunAs User: (redacted)
+Configuration Name: 
+Machine: (redacted) (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\run_stageC.ps1
+Process ID: 54808
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+weights, key frame, reference, prompts, venv, weight_identity.json, ffmpeg, script: present
+--- nvidia-smi (compute processes) ---
+
+backend / H3 worker: none
+GPU memory used: 562 MiB
+RAM 63.8 GB + page file allocated 74.7 GB = commit limit about 138.5 GB
+[05:10:31] gate_C: --name gate_C --mode gate --gate-names c1_010_audio_harness,c1_010_audio_product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_c_audio.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --keyframe 34=uploads\key-ref-development\key-002.jpg --keyframe 51=uploads\key-ref-development\key-003.jpg --keyframe 85=uploads\key-ref-development\key-004.jpg --keyframe 119=uploads\key-ref-development\key-005.jpg --ref-audio uploads\key-ref-development\[OP用]OPED用ジングル６.mp3
+    exit 0 in 1022.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\gate_C.json
+[05:27:33] c2_001_audio: --name c2_001_audio --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_c_audio.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --keyframe 34=uploads\key-ref-development\key-002.jpg --keyframe 51=uploads\key-ref-development\key-003.jpg --keyframe 85=uploads\key-ref-development\key-004.jpg --keyframe 119=uploads\key-ref-development\key-005.jpg --ref-audio uploads\key-ref-development\[OP用]OPED用ジングル６.mp3 --T off --C off --L 0
+    exit 0 in 445.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\c2_001_audio.json
+[05:34:59] c3_011_audio: --name c3_011_audio --mode harness --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_c_audio.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --keyframe 34=uploads\key-ref-development\key-002.jpg --keyframe 51=uploads\key-ref-development\key-003.jpg --keyframe 85=uploads\key-ref-development\key-004.jpg --keyframe 119=uploads\key-ref-development\key-005.jpg --ref-audio uploads\key-ref-development\[OP用]OPED用ジングル６.mp3 --T off --C on --L 0
+    exit 0 in 513.6 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\c3_011_audio.json
+[05:43:33] c4_ctrl_noaudio: --name c4_ctrl_noaudio --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_c_noaudio.txt --keyframe 0=uploads\key-ref-development\key-001.jpg --keyframe 34=uploads\key-ref-development\key-002.jpg --keyframe 51=uploads\key-ref-development\key-003.jpg --keyframe 85=uploads\key-ref-development\key-004.jpg --keyframe 119=uploads\key-ref-development\key-005.jpg
+    exit 0 in 513.9 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\c4_ctrl_noaudio.json
+--- results ---
+gate_C               0
+c2_001_audio         0
+c3_011_audio         0
+c4_ctrl_noaudio      0
+runner exit 0
+**********************
+Windows PowerShell transcript end
+End time: 20261119055207
+**********************

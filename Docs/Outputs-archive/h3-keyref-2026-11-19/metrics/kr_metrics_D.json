@@ -1,0 +1,2938 @@
+{
+  "stage": "A",
+  "runs_selected": [
+    "a1_010_conflict",
+    "a7_011_conflict",
+    "a2_010_consistent",
+    "d2_010_k0k17_conflict_product",
+    "d3_011_k0k17_conflict",
+    "d1_011_s05_conflict"
+  ],
+  "key": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\key-ref-development\\key-001.jpg",
+  "contact_frames": [
+    0,
+    1,
+    4,
+    8,
+    16,
+    17,
+    18,
+    24,
+    40,
+    80,
+    123
+  ],
+  "constants": {
+    "head": 25,
+    "tail_from": 25,
+    "window": 12,
+    "freeze_ratio": 1.3,
+    "jump_ratio": 0.7,
+    "psnr_cap": 99.0
+  },
+  "runs": [
+    {
+      "name": "a1_010_conflict",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\a1_010_conflict.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\a1_010_conflict.json",
+        "ok": true,
+        "mode": "product",
+        "paths": {
+          "implied": {
+            "T": false,
+            "C": true,
+            "L": null
+          },
+          "text_encoder": "references only (key frames hidden from the text encoder, pipeline_h3.py:912-913)",
+          "dit": "cond + ref"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1064,
+          "cond": 1008,
+          "audio": 414,
+          "video": 37296,
+          "total": 40796,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.35,
+          "image_encode": 1.18,
+          "reference_encode": 0.9,
+          "denoise": 433.75,
+          "decode": 37.25
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1055,
+          "reference_encode": 1056,
+          "denoise": 4425,
+          "decode": 6389
+        },
+        "peak_vram_mb_job": 6389,
+        "text_tokens": 1064,
+        "mask": null,
+        "L_check": null,
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\a1_010_conflict.mp4",
+          "sha256": "0fdbfb3cc0a63d6d50621838c50015c8e65b05c3fcf1f36bbc4ea90988408546",
+          "bytes": 1782324,
+          "video_md5": "9e2c5842441028cd5df2ebeaf6b5a8eb",
+          "audio_md5": "47a8c2eab92f79d47cc24c862918619b"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1344,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 12.56,
+        "psnr_vs_key": [
+          12.56,
+          11.93,
+          11.58,
+          11.58,
+          11.57,
+          11.59,
+          11.62,
+          11.66,
+          11.68,
+          11.7,
+          11.71,
+          11.72,
+          11.72,
+          11.72,
+          11.71,
+          11.71,
+          11.71,
+          11.71,
+          11.73,
+          11.75,
+          11.77,
+          11.78,
+          11.79,
+          11.81,
+          11.82
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 21.69,
+            "ratio": 0.968,
+            "mark": ""
+          },
+          {
+            "t": 2,
+            "psnr_adj": 28.11,
+            "ratio": 1.254,
+            "mark": ""
+          },
+          {
+            "t": 3,
+            "psnr_adj": 32.54,
+            "ratio": 1.452,
+            "mark": "freeze"
+          },
+          {
+            "t": 4,
+            "psnr_adj": 31.91,
+            "ratio": 1.424,
+            "mark": "freeze"
+          },
+          {
+            "t": 5,
+            "psnr_adj": 30.83,
+            "ratio": 1.376,
+            "mark": "freeze"
+          },
+          {
+            "t": 6,
+            "psnr_adj": 30.01,
+            "ratio": 1.339,
+            "mark": "freeze"
+          },
+          {
+            "t": 7,
+            "psnr_adj": 30.27,
+            "ratio": 1.351,
+            "mark": "freeze"
+          },
+          {
+            "t": 8,
+            "psnr_adj": 30.81,
+            "ratio": 1.375,
+            "mark": "freeze"
+          },
+          {
+            "t": 9,
+            "psnr_adj": 30.1,
+            "ratio": 1.343,
+            "mark": "freeze"
+          },
+          {
+            "t": 10,
+            "psnr_adj": 29.69,
+            "ratio": 1.325,
+            "mark": "freeze"
+          },
+          {
+            "t": 11,
+            "psnr_adj": 29.74,
+            "ratio": 1.327,
+            "mark": "freeze"
+          },
+          {
+            "t": 12,
+            "psnr_adj": 28.75,
+            "ratio": 1.283,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 27.91,
+            "ratio": 1.245,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 27.18,
+            "ratio": 1.213,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 27.08,
+            "ratio": 1.209,
+            "mark": ""
+          },
+          {
+            "t": 16,
+            "psnr_adj": 26.43,
+            "ratio": 1.18,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 25.57,
+            "ratio": 1.141,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 25.14,
+            "ratio": 1.122,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 24.52,
+            "ratio": 1.094,
+            "mark": ""
+          },
+          {
+            "t": 20,
+            "psnr_adj": 24.87,
+            "ratio": 1.11,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 24.19,
+            "ratio": 1.08,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 23.63,
+            "ratio": 1.055,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 23.37,
+            "ratio": 1.043,
+            "mark": ""
+          },
+          {
+            "t": 24,
+            "psnr_adj": 23.81,
+            "ratio": 1.063,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 22.41,
+        "marks": [
+          "freeze@3",
+          "freeze@4",
+          "freeze@5",
+          "freeze@6",
+          "freeze@7",
+          "freeze@8",
+          "freeze@9",
+          "freeze@10",
+          "freeze@11"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 12.56,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 12.56,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 11.93,
+                "psnr_adj": 21.69,
+                "ratio": 0.968,
+                "mark": ""
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 11.58,
+                "psnr_adj": 28.11,
+                "ratio": 1.254,
+                "mark": ""
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 11.58,
+                "psnr_adj": 32.54,
+                "ratio": 1.452,
+                "mark": "freeze"
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 11.57,
+                "psnr_adj": 31.91,
+                "ratio": 1.424,
+                "mark": "freeze"
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 11.59,
+                "psnr_adj": 30.83,
+                "ratio": 1.376,
+                "mark": "freeze"
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 30.01,
+                "ratio": 1.339,
+                "mark": "freeze"
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 11.66,
+                "psnr_adj": 30.27,
+                "ratio": 1.351,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 11.68,
+                "psnr_adj": 30.81,
+                "ratio": 1.375,
+                "mark": "freeze"
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 11.7,
+                "psnr_adj": 30.1,
+                "ratio": 1.343,
+                "mark": "freeze"
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 11.71,
+                "psnr_adj": 29.69,
+                "ratio": 1.325,
+                "mark": "freeze"
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 11.72,
+                "psnr_adj": 29.74,
+                "ratio": 1.327,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 11.72,
+                "psnr_adj": 28.75,
+                "ratio": 1.283,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@3(kf0)",
+          "freeze@4(kf0)",
+          "freeze@5(kf0)",
+          "freeze@6(kf0)",
+          "freeze@7(kf0)",
+          "freeze@8(kf0)",
+          "freeze@9(kf0)",
+          "freeze@10(kf0)",
+          "freeze@11(kf0)"
+        ]
+      }
+    },
+    {
+      "name": "a7_011_conflict",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\a7_011_conflict.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\a7_011_conflict.json",
+        "ok": true,
+        "mode": "harness",
+        "paths": {
+          "T": false,
+          "C": true,
+          "L": 0.0,
+          "T_slot": null,
+          "L_latents": [
+            0
+          ],
+          "text_encoder": "references",
+          "dit": "cond [0] + ref + video_fix latents [0] m=0.0 inject_clean=0.999"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1064,
+          "cond": 1008,
+          "audio": 414,
+          "video": 37296,
+          "total": 40796,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.34,
+          "image_encode": 1.18,
+          "reference_encode": 0.9,
+          "denoise": 434.12,
+          "decode": 37.12
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1055,
+          "reference_encode": 1056,
+          "denoise": 4453,
+          "decode": 6389
+        },
+        "peak_vram_mb_job": 6389,
+        "text_tokens": 1064,
+        "mask": {
+          "video": {
+            "rows": 37296,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 0.999
+          }
+        },
+        "L_check": {
+          "mask_zero_rows": 1008,
+          "mask_rows": 37296,
+          "per_frame": [
+            0.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "latents": [
+            {
+              "latent": 0,
+              "equal": true,
+              "max_abs": 0.0
+            }
+          ],
+          "denoise_mask_video": {
+            "rows": 37296,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 0.999
+          },
+          "ok": true
+        },
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\a7_011_conflict.mp4",
+          "sha256": "d5f9170256e6ac0eb344048759b82bc42e9d2b56992adc16e8f8e03ef4a112a1",
+          "bytes": 1864243,
+          "video_md5": "871cbe58416bbae5082aa48464831c04",
+          "audio_md5": "2ace46cde96c277a9566e033275afd74"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1344,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 25.85,
+        "psnr_vs_key": [
+          25.85,
+          11.61,
+          11.61,
+          11.6,
+          11.61,
+          11.6,
+          11.6,
+          11.59,
+          11.61,
+          11.63,
+          11.66,
+          11.68,
+          11.71,
+          11.73,
+          11.75,
+          11.77,
+          11.79,
+          11.81,
+          11.85,
+          11.88,
+          11.93,
+          11.98,
+          12.06,
+          12.1,
+          12.11
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 12.03,
+            "ratio": 0.531,
+            "mark": "jump"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 28.79,
+            "ratio": 1.271,
+            "mark": ""
+          },
+          {
+            "t": 3,
+            "psnr_adj": 28.37,
+            "ratio": 1.253,
+            "mark": ""
+          },
+          {
+            "t": 4,
+            "psnr_adj": 27.88,
+            "ratio": 1.231,
+            "mark": ""
+          },
+          {
+            "t": 5,
+            "psnr_adj": 28.54,
+            "ratio": 1.26,
+            "mark": ""
+          },
+          {
+            "t": 6,
+            "psnr_adj": 28.02,
+            "ratio": 1.237,
+            "mark": ""
+          },
+          {
+            "t": 7,
+            "psnr_adj": 27.98,
+            "ratio": 1.236,
+            "mark": ""
+          },
+          {
+            "t": 8,
+            "psnr_adj": 27.63,
+            "ratio": 1.22,
+            "mark": ""
+          },
+          {
+            "t": 9,
+            "psnr_adj": 28.32,
+            "ratio": 1.251,
+            "mark": ""
+          },
+          {
+            "t": 10,
+            "psnr_adj": 28.16,
+            "ratio": 1.243,
+            "mark": ""
+          },
+          {
+            "t": 11,
+            "psnr_adj": 28.17,
+            "ratio": 1.244,
+            "mark": ""
+          },
+          {
+            "t": 12,
+            "psnr_adj": 27.61,
+            "ratio": 1.219,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 28.39,
+            "ratio": 1.254,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 28.07,
+            "ratio": 1.239,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 28.17,
+            "ratio": 1.244,
+            "mark": ""
+          },
+          {
+            "t": 16,
+            "psnr_adj": 27.9,
+            "ratio": 1.232,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 27.41,
+            "ratio": 1.211,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 27.15,
+            "ratio": 1.199,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 26.58,
+            "ratio": 1.174,
+            "mark": ""
+          },
+          {
+            "t": 20,
+            "psnr_adj": 26.95,
+            "ratio": 1.19,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 26.7,
+            "ratio": 1.179,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 26.38,
+            "ratio": 1.165,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 25.99,
+            "ratio": 1.148,
+            "mark": ""
+          },
+          {
+            "t": 24,
+            "psnr_adj": 26.53,
+            "ratio": 1.172,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 22.65,
+        "marks": [
+          "jump@1"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.85,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 25.85,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 11.61,
+                "psnr_adj": 12.03,
+                "ratio": 0.531,
+                "mark": "jump"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 11.61,
+                "psnr_adj": 28.79,
+                "ratio": 1.271,
+                "mark": ""
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 11.6,
+                "psnr_adj": 28.37,
+                "ratio": 1.253,
+                "mark": ""
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 11.61,
+                "psnr_adj": 27.88,
+                "ratio": 1.231,
+                "mark": ""
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 11.6,
+                "psnr_adj": 28.54,
+                "ratio": 1.26,
+                "mark": ""
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 11.6,
+                "psnr_adj": 28.02,
+                "ratio": 1.237,
+                "mark": ""
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 11.59,
+                "psnr_adj": 27.98,
+                "ratio": 1.236,
+                "mark": ""
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 11.61,
+                "psnr_adj": 27.63,
+                "ratio": 1.22,
+                "mark": ""
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 11.63,
+                "psnr_adj": 28.32,
+                "ratio": 1.251,
+                "mark": ""
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 11.66,
+                "psnr_adj": 28.16,
+                "ratio": 1.243,
+                "mark": ""
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 11.68,
+                "psnr_adj": 28.17,
+                "ratio": 1.244,
+                "mark": ""
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 11.71,
+                "psnr_adj": 27.61,
+                "ratio": 1.219,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "jump@1(kf0)"
+        ]
+      }
+    },
+    {
+      "name": "a2_010_consistent",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\a2_010_consistent.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\a2_010_consistent.json",
+        "ok": true,
+        "mode": "product",
+        "paths": {
+          "implied": {
+            "T": false,
+            "C": true,
+            "L": null
+          },
+          "text_encoder": "references only (key frames hidden from the text encoder, pipeline_h3.py:912-913)",
+          "dit": "cond + ref"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1117,
+          "cond": 1008,
+          "audio": 414,
+          "video": 37296,
+          "total": 40849,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.3,
+          "image_encode": 1.24,
+          "reference_encode": 0.89,
+          "denoise": 435.22,
+          "decode": 37.23
+        },
+        "peak_vram_mb": {
+          "encode": 2666,
+          "image_encode": 1055,
+          "reference_encode": 1056,
+          "denoise": 4428,
+          "decode": 6389
+        },
+        "peak_vram_mb_job": 6389,
+        "text_tokens": 1117,
+        "mask": null,
+        "L_check": null,
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\a2_010_consistent.mp4",
+          "sha256": "785b33d45001780e49b98c8c1db42d6ded4cbe330a2b5b58bf346dbbffe3a670",
+          "bytes": 3565544,
+          "video_md5": "77d9051905a57258fd345778de4b6cf9",
+          "audio_md5": "0c2fef260bb98b85b03bc612a0d03e45"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1344,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 25.53,
+        "psnr_vs_key": [
+          25.53,
+          25.59,
+          24.86,
+          23.84,
+          22.64,
+          21.62,
+          20.53,
+          19.86,
+          19.2,
+          18.72,
+          18.26,
+          17.95,
+          17.53,
+          17.19,
+          16.81,
+          16.57,
+          16.27,
+          16.19,
+          15.95,
+          15.72,
+          15.45,
+          15.26,
+          15.01,
+          14.97,
+          14.85
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 34.24,
+            "ratio": 1.659,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 34.94,
+            "ratio": 1.693,
+            "mark": "freeze"
+          },
+          {
+            "t": 3,
+            "psnr_adj": 34.82,
+            "ratio": 1.687,
+            "mark": "freeze"
+          },
+          {
+            "t": 4,
+            "psnr_adj": 34.15,
+            "ratio": 1.654,
+            "mark": "freeze"
+          },
+          {
+            "t": 5,
+            "psnr_adj": 31.58,
+            "ratio": 1.53,
+            "mark": "freeze"
+          },
+          {
+            "t": 6,
+            "psnr_adj": 30.85,
+            "ratio": 1.494,
+            "mark": "freeze"
+          },
+          {
+            "t": 7,
+            "psnr_adj": 31.32,
+            "ratio": 1.517,
+            "mark": "freeze"
+          },
+          {
+            "t": 8,
+            "psnr_adj": 30.0,
+            "ratio": 1.453,
+            "mark": "freeze"
+          },
+          {
+            "t": 9,
+            "psnr_adj": 28.35,
+            "ratio": 1.373,
+            "mark": "freeze"
+          },
+          {
+            "t": 10,
+            "psnr_adj": 27.66,
+            "ratio": 1.34,
+            "mark": "freeze"
+          },
+          {
+            "t": 11,
+            "psnr_adj": 28.25,
+            "ratio": 1.368,
+            "mark": "freeze"
+          },
+          {
+            "t": 12,
+            "psnr_adj": 26.53,
+            "ratio": 1.285,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 25.67,
+            "ratio": 1.244,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 24.97,
+            "ratio": 1.209,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 25.13,
+            "ratio": 1.217,
+            "mark": ""
+          },
+          {
+            "t": 16,
+            "psnr_adj": 24.35,
+            "ratio": 1.18,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 23.76,
+            "ratio": 1.151,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 23.66,
+            "ratio": 1.146,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 23.6,
+            "ratio": 1.143,
+            "mark": ""
+          },
+          {
+            "t": 20,
+            "psnr_adj": 23.76,
+            "ratio": 1.151,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 23.1,
+            "ratio": 1.119,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 22.52,
+            "ratio": 1.091,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 22.31,
+            "ratio": 1.081,
+            "mark": ""
+          },
+          {
+            "t": 24,
+            "psnr_adj": 22.87,
+            "ratio": 1.108,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 20.64,
+        "marks": [
+          "freeze@1",
+          "freeze@2",
+          "freeze@3",
+          "freeze@4",
+          "freeze@5",
+          "freeze@6",
+          "freeze@7",
+          "freeze@8",
+          "freeze@9",
+          "freeze@10",
+          "freeze@11"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.53,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 25.53,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 25.59,
+                "psnr_adj": 34.24,
+                "ratio": 1.659,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 24.86,
+                "psnr_adj": 34.94,
+                "ratio": 1.693,
+                "mark": "freeze"
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 23.84,
+                "psnr_adj": 34.82,
+                "ratio": 1.687,
+                "mark": "freeze"
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 22.64,
+                "psnr_adj": 34.15,
+                "ratio": 1.654,
+                "mark": "freeze"
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 21.62,
+                "psnr_adj": 31.58,
+                "ratio": 1.53,
+                "mark": "freeze"
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 20.53,
+                "psnr_adj": 30.85,
+                "ratio": 1.494,
+                "mark": "freeze"
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 19.86,
+                "psnr_adj": 31.32,
+                "ratio": 1.517,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 19.2,
+                "psnr_adj": 30.0,
+                "ratio": 1.453,
+                "mark": "freeze"
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 18.72,
+                "psnr_adj": 28.35,
+                "ratio": 1.373,
+                "mark": "freeze"
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 18.26,
+                "psnr_adj": 27.66,
+                "ratio": 1.34,
+                "mark": "freeze"
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 17.95,
+                "psnr_adj": 28.25,
+                "ratio": 1.368,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 17.53,
+                "psnr_adj": 26.53,
+                "ratio": 1.285,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)",
+          "freeze@2(kf0)",
+          "freeze@3(kf0)",
+          "freeze@4(kf0)",
+          "freeze@5(kf0)",
+          "freeze@6(kf0)",
+          "freeze@7(kf0)",
+          "freeze@8(kf0)",
+          "freeze@9(kf0)",
+          "freeze@10(kf0)",
+          "freeze@11(kf0)"
+        ]
+      }
+    },
+    {
+      "name": "d2_010_k0k17_conflict_product",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\d2_010_k0k17_conflict_product.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\d2_010_k0k17_conflict_product.json",
+        "ok": true,
+        "mode": "product",
+        "paths": {
+          "implied": {
+            "T": false,
+            "C": true,
+            "L": null
+          },
+          "text_encoder": "references only (key frames hidden from the text encoder, pipeline_h3.py:912-913)",
+          "dit": "cond + ref"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          },
+          {
+            "frame": 17,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          }
+        ],
+        "gate_second": true,
+        "sequence": {
+          "text": 1064,
+          "cond": 2016,
+          "audio": 414,
+          "video": 37296,
+          "total": 41804,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 15.8,
+          "image_encode": 1.94,
+          "reference_encode": 0.89,
+          "denoise": 449.33,
+          "decode": 36.84
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1056,
+          "reference_encode": 1056,
+          "denoise": 4437,
+          "decode": 6389
+        },
+        "peak_vram_mb_job": 6389,
+        "text_tokens": 1064,
+        "mask": null,
+        "L_check": null,
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\d2_010_k0k17_conflict_product.mp4",
+          "sha256": "a55c37b3a09b21e2bc6286a4b755a0430862dca839e9ad1fa8cfd7d60076f532",
+          "bytes": 1966795,
+          "video_md5": "1ec88203ca1e274411b1f70dfad7a48b",
+          "audio_md5": "5fd204c332c5f10c88ae67327ef35011"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        },
+        {
+          "frame": 17,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1344,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 25.61,
+        "psnr_vs_key": [
+          25.61,
+          25.73,
+          25.72,
+          25.73,
+          25.73,
+          25.76,
+          25.75,
+          25.76,
+          25.76,
+          25.77,
+          25.76,
+          25.77,
+          25.77,
+          25.77,
+          25.76,
+          25.78,
+          25.77,
+          25.75,
+          11.62,
+          11.62,
+          11.62,
+          11.62,
+          11.61,
+          11.62,
+          11.62
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 37.3,
+            "ratio": 1.486,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 51.68,
+            "ratio": 2.059,
+            "mark": "freeze"
+          },
+          {
+            "t": 3,
+            "psnr_adj": 54.68,
+            "ratio": 2.179,
+            "mark": "freeze"
+          },
+          {
+            "t": 4,
+            "psnr_adj": 52.72,
+            "ratio": 2.101,
+            "mark": "freeze"
+          },
+          {
+            "t": 5,
+            "psnr_adj": 39.93,
+            "ratio": 1.591,
+            "mark": "freeze"
+          },
+          {
+            "t": 6,
+            "psnr_adj": 53.23,
+            "ratio": 2.121,
+            "mark": "freeze"
+          },
+          {
+            "t": 7,
+            "psnr_adj": 55.1,
+            "ratio": 2.196,
+            "mark": "freeze"
+          },
+          {
+            "t": 8,
+            "psnr_adj": 52.48,
+            "ratio": 2.091,
+            "mark": "freeze"
+          },
+          {
+            "t": 9,
+            "psnr_adj": 41.66,
+            "ratio": 1.66,
+            "mark": "freeze"
+          },
+          {
+            "t": 10,
+            "psnr_adj": 54.05,
+            "ratio": 2.154,
+            "mark": "freeze"
+          },
+          {
+            "t": 11,
+            "psnr_adj": 55.01,
+            "ratio": 2.192,
+            "mark": "freeze"
+          },
+          {
+            "t": 12,
+            "psnr_adj": 52.33,
+            "ratio": 2.085,
+            "mark": "freeze"
+          },
+          {
+            "t": 13,
+            "psnr_adj": 44.42,
+            "ratio": 1.77,
+            "mark": "freeze"
+          },
+          {
+            "t": 14,
+            "psnr_adj": 53.09,
+            "ratio": 2.116,
+            "mark": "freeze"
+          },
+          {
+            "t": 15,
+            "psnr_adj": 52.63,
+            "ratio": 2.097,
+            "mark": "freeze"
+          },
+          {
+            "t": 16,
+            "psnr_adj": 50.05,
+            "ratio": 1.995,
+            "mark": "freeze"
+          },
+          {
+            "t": 17,
+            "psnr_adj": 40.94,
+            "ratio": 1.631,
+            "mark": "freeze"
+          },
+          {
+            "t": 18,
+            "psnr_adj": 11.97,
+            "ratio": 0.477,
+            "mark": "jump"
+          },
+          {
+            "t": 19,
+            "psnr_adj": 45.07,
+            "ratio": 1.796,
+            "mark": "freeze"
+          },
+          {
+            "t": 20,
+            "psnr_adj": 45.89,
+            "ratio": 1.829,
+            "mark": "freeze"
+          },
+          {
+            "t": 21,
+            "psnr_adj": 44.57,
+            "ratio": 1.776,
+            "mark": "freeze"
+          },
+          {
+            "t": 22,
+            "psnr_adj": 37.37,
+            "ratio": 1.489,
+            "mark": "freeze"
+          },
+          {
+            "t": 23,
+            "psnr_adj": 37.03,
+            "ratio": 1.475,
+            "mark": "freeze"
+          },
+          {
+            "t": 24,
+            "psnr_adj": 37.26,
+            "ratio": 1.485,
+            "mark": "freeze"
+          }
+        ],
+        "adjacent_tail_median": 25.09,
+        "marks": [
+          "freeze@1",
+          "freeze@2",
+          "freeze@3",
+          "freeze@4",
+          "freeze@5",
+          "freeze@6",
+          "freeze@7",
+          "freeze@8",
+          "freeze@9",
+          "freeze@10",
+          "freeze@11",
+          "freeze@12",
+          "freeze@13",
+          "freeze@14",
+          "freeze@15",
+          "freeze@16",
+          "freeze@17",
+          "jump@18",
+          "freeze@19",
+          "freeze@20",
+          "freeze@21",
+          "freeze@22",
+          "freeze@23",
+          "freeze@24"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.61,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 25.61,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 25.73,
+                "psnr_adj": 37.3,
+                "ratio": 1.486,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 25.72,
+                "psnr_adj": 51.68,
+                "ratio": 2.059,
+                "mark": "freeze"
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 25.73,
+                "psnr_adj": 54.68,
+                "ratio": 2.179,
+                "mark": "freeze"
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 25.73,
+                "psnr_adj": 52.72,
+                "ratio": 2.101,
+                "mark": "freeze"
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 39.93,
+                "ratio": 1.591,
+                "mark": "freeze"
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 25.75,
+                "psnr_adj": 53.23,
+                "ratio": 2.121,
+                "mark": "freeze"
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 55.1,
+                "ratio": 2.196,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 52.48,
+                "ratio": 2.091,
+                "mark": "freeze"
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 41.66,
+                "ratio": 1.66,
+                "mark": "freeze"
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 54.05,
+                "ratio": 2.154,
+                "mark": "freeze"
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 55.01,
+                "ratio": 2.192,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 52.33,
+                "ratio": 2.085,
+                "mark": "freeze"
+              }
+            ]
+          },
+          {
+            "frame": 17,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.75,
+            "window": [
+              {
+                "t": 5,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 39.93,
+                "ratio": 1.591,
+                "mark": "freeze"
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 25.75,
+                "psnr_adj": 53.23,
+                "ratio": 2.121,
+                "mark": "freeze"
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 55.1,
+                "ratio": 2.196,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 52.48,
+                "ratio": 2.091,
+                "mark": "freeze"
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 41.66,
+                "ratio": 1.66,
+                "mark": "freeze"
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 54.05,
+                "ratio": 2.154,
+                "mark": "freeze"
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 55.01,
+                "ratio": 2.192,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 52.33,
+                "ratio": 2.085,
+                "mark": "freeze"
+              },
+              {
+                "t": 13,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 44.42,
+                "ratio": 1.77,
+                "mark": "freeze"
+              },
+              {
+                "t": 14,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": 53.09,
+                "ratio": 2.116,
+                "mark": "freeze"
+              },
+              {
+                "t": 15,
+                "psnr_vs_key": 25.78,
+                "psnr_adj": 52.63,
+                "ratio": 2.097,
+                "mark": "freeze"
+              },
+              {
+                "t": 16,
+                "psnr_vs_key": 25.77,
+                "psnr_adj": 50.05,
+                "ratio": 1.995,
+                "mark": "freeze"
+              },
+              {
+                "t": 17,
+                "psnr_vs_key": 25.75,
+                "psnr_adj": 40.94,
+                "ratio": 1.631,
+                "mark": "freeze"
+              },
+              {
+                "t": 18,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 11.97,
+                "ratio": 0.477,
+                "mark": "jump"
+              },
+              {
+                "t": 19,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 45.07,
+                "ratio": 1.796,
+                "mark": "freeze"
+              },
+              {
+                "t": 20,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 45.89,
+                "ratio": 1.829,
+                "mark": "freeze"
+              },
+              {
+                "t": 21,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 44.57,
+                "ratio": 1.776,
+                "mark": "freeze"
+              },
+              {
+                "t": 22,
+                "psnr_vs_key": 11.61,
+                "psnr_adj": 37.37,
+                "ratio": 1.489,
+                "mark": "freeze"
+              },
+              {
+                "t": 23,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 37.03,
+                "ratio": 1.475,
+                "mark": "freeze"
+              },
+              {
+                "t": 24,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 37.26,
+                "ratio": 1.485,
+                "mark": "freeze"
+              },
+              {
+                "t": 25,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 36.16,
+                "ratio": 1.441,
+                "mark": "freeze"
+              },
+              {
+                "t": 26,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 33.23,
+                "ratio": 1.324,
+                "mark": "freeze"
+              },
+              {
+                "t": 27,
+                "psnr_vs_key": 11.63,
+                "psnr_adj": 32.08,
+                "ratio": 1.278,
+                "mark": ""
+              },
+              {
+                "t": 28,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 32.09,
+                "ratio": 1.279,
+                "mark": ""
+              },
+              {
+                "t": 29,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 31.68,
+                "ratio": 1.262,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)",
+          "freeze@2(kf0)",
+          "freeze@3(kf0)",
+          "freeze@4(kf0)",
+          "freeze@5(kf0)",
+          "freeze@6(kf0)",
+          "freeze@7(kf0)",
+          "freeze@8(kf0)",
+          "freeze@9(kf0)",
+          "freeze@10(kf0)",
+          "freeze@11(kf0)",
+          "freeze@12(kf0)",
+          "freeze@5(kf17)",
+          "freeze@6(kf17)",
+          "freeze@7(kf17)",
+          "freeze@8(kf17)",
+          "freeze@9(kf17)",
+          "freeze@10(kf17)",
+          "freeze@11(kf17)",
+          "freeze@12(kf17)",
+          "freeze@13(kf17)",
+          "freeze@14(kf17)",
+          "freeze@15(kf17)",
+          "freeze@16(kf17)",
+          "freeze@17(kf17)",
+          "jump@18(kf17)",
+          "freeze@19(kf17)",
+          "freeze@20(kf17)",
+          "freeze@21(kf17)",
+          "freeze@22(kf17)",
+          "freeze@23(kf17)",
+          "freeze@24(kf17)",
+          "freeze@25(kf17)",
+          "freeze@26(kf17)"
+        ]
+      }
+    },
+    {
+      "name": "d3_011_k0k17_conflict",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\d3_011_k0k17_conflict.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\d3_011_k0k17_conflict.json",
+        "ok": true,
+        "mode": "harness",
+        "paths": {
+          "T": false,
+          "C": true,
+          "L": 0.0,
+          "T_slot": null,
+          "L_latents": [
+            0,
+            5
+          ],
+          "text_encoder": "references",
+          "dit": "cond [0, 17] + ref + video_fix latents [0, 5] m=0.0 inject_clean=0.999"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          },
+          {
+            "frame": 17,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1064,
+          "cond": 2016,
+          "audio": 414,
+          "video": 37296,
+          "total": 41804,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.11,
+          "image_encode": 1.95,
+          "reference_encode": 0.9,
+          "denoise": 449.45,
+          "decode": 37.17
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1056,
+          "reference_encode": 1056,
+          "denoise": 4465,
+          "decode": 6389
+        },
+        "peak_vram_mb_job": 6389,
+        "text_tokens": 1064,
+        "mask": {
+          "video": {
+            "rows": 37296,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 0.999
+          }
+        },
+        "L_check": {
+          "mask_zero_rows": 2016,
+          "mask_rows": 37296,
+          "per_frame": [
+            0.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            0.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "latents": [
+            {
+              "latent": 0,
+              "equal": true,
+              "max_abs": 0.0
+            },
+            {
+              "latent": 5,
+              "equal": true,
+              "max_abs": 0.0
+            }
+          ],
+          "denoise_mask_video": {
+            "rows": 37296,
+            "min": 0.0,
+            "max": 1.0,
+            "inject_clean": 0.999
+          },
+          "ok": true
+        },
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\d3_011_k0k17_conflict.mp4",
+          "sha256": "75d1655fb04fa33520bf5fffdf9319640c5b64dabf5a9d4ce8dd9625dc48a756",
+          "bytes": 2132732,
+          "video_md5": "ae641b8d3d67a5a5ef3724727ff23123",
+          "audio_md5": "b4d85562081cd107e17f4deb279ca266"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        },
+        {
+          "frame": 17,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1344,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 25.76,
+        "psnr_vs_key": [
+          25.76,
+          25.83,
+          25.82,
+          25.83,
+          25.83,
+          25.87,
+          25.86,
+          25.87,
+          25.86,
+          25.87,
+          25.85,
+          25.87,
+          25.86,
+          25.88,
+          25.87,
+          25.88,
+          25.87,
+          25.87,
+          11.45,
+          11.44,
+          11.42,
+          11.41,
+          11.4,
+          11.4,
+          11.41
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 37.1,
+            "ratio": 1.598,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 50.58,
+            "ratio": 2.178,
+            "mark": "freeze"
+          },
+          {
+            "t": 3,
+            "psnr_adj": 54.1,
+            "ratio": 2.33,
+            "mark": "freeze"
+          },
+          {
+            "t": 4,
+            "psnr_adj": 51.86,
+            "ratio": 2.234,
+            "mark": "freeze"
+          },
+          {
+            "t": 5,
+            "psnr_adj": 40.13,
+            "ratio": 1.728,
+            "mark": "freeze"
+          },
+          {
+            "t": 6,
+            "psnr_adj": 51.1,
+            "ratio": 2.201,
+            "mark": "freeze"
+          },
+          {
+            "t": 7,
+            "psnr_adj": 55.19,
+            "ratio": 2.377,
+            "mark": "freeze"
+          },
+          {
+            "t": 8,
+            "psnr_adj": 53.81,
+            "ratio": 2.317,
+            "mark": "freeze"
+          },
+          {
+            "t": 9,
+            "psnr_adj": 41.67,
+            "ratio": 1.795,
+            "mark": "freeze"
+          },
+          {
+            "t": 10,
+            "psnr_adj": 52.04,
+            "ratio": 2.241,
+            "mark": "freeze"
+          },
+          {
+            "t": 11,
+            "psnr_adj": 54.78,
+            "ratio": 2.359,
+            "mark": "freeze"
+          },
+          {
+            "t": 12,
+            "psnr_adj": 52.74,
+            "ratio": 2.271,
+            "mark": "freeze"
+          },
+          {
+            "t": 13,
+            "psnr_adj": 44.92,
+            "ratio": 1.935,
+            "mark": "freeze"
+          },
+          {
+            "t": 14,
+            "psnr_adj": 52.52,
+            "ratio": 2.262,
+            "mark": "freeze"
+          },
+          {
+            "t": 15,
+            "psnr_adj": 52.69,
+            "ratio": 2.269,
+            "mark": "freeze"
+          },
+          {
+            "t": 16,
+            "psnr_adj": 50.85,
+            "ratio": 2.19,
+            "mark": "freeze"
+          },
+          {
+            "t": 17,
+            "psnr_adj": 40.93,
+            "ratio": 1.763,
+            "mark": "freeze"
+          },
+          {
+            "t": 18,
+            "psnr_adj": 11.73,
+            "ratio": 0.505,
+            "mark": "jump"
+          },
+          {
+            "t": 19,
+            "psnr_adj": 25.94,
+            "ratio": 1.117,
+            "mark": ""
+          },
+          {
+            "t": 20,
+            "psnr_adj": 26.52,
+            "ratio": 1.142,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 25.93,
+            "ratio": 1.117,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 24.64,
+            "ratio": 1.061,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 24.45,
+            "ratio": 1.053,
+            "mark": ""
+          },
+          {
+            "t": 24,
+            "psnr_adj": 24.76,
+            "ratio": 1.066,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 23.22,
+        "marks": [
+          "freeze@1",
+          "freeze@2",
+          "freeze@3",
+          "freeze@4",
+          "freeze@5",
+          "freeze@6",
+          "freeze@7",
+          "freeze@8",
+          "freeze@9",
+          "freeze@10",
+          "freeze@11",
+          "freeze@12",
+          "freeze@13",
+          "freeze@14",
+          "freeze@15",
+          "freeze@16",
+          "freeze@17",
+          "jump@18"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.76,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 25.76,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 25.83,
+                "psnr_adj": 37.1,
+                "ratio": 1.598,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 25.82,
+                "psnr_adj": 50.58,
+                "ratio": 2.178,
+                "mark": "freeze"
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 25.83,
+                "psnr_adj": 54.1,
+                "ratio": 2.33,
+                "mark": "freeze"
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 25.83,
+                "psnr_adj": 51.86,
+                "ratio": 2.234,
+                "mark": "freeze"
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 40.13,
+                "ratio": 1.728,
+                "mark": "freeze"
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 25.86,
+                "psnr_adj": 51.1,
+                "ratio": 2.201,
+                "mark": "freeze"
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 55.19,
+                "ratio": 2.377,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 25.86,
+                "psnr_adj": 53.81,
+                "ratio": 2.317,
+                "mark": "freeze"
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 41.67,
+                "ratio": 1.795,
+                "mark": "freeze"
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 25.85,
+                "psnr_adj": 52.04,
+                "ratio": 2.241,
+                "mark": "freeze"
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 54.78,
+                "ratio": 2.359,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 25.86,
+                "psnr_adj": 52.74,
+                "ratio": 2.271,
+                "mark": "freeze"
+              }
+            ]
+          },
+          {
+            "frame": 17,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.87,
+            "window": [
+              {
+                "t": 5,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 40.13,
+                "ratio": 1.728,
+                "mark": "freeze"
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 25.86,
+                "psnr_adj": 51.1,
+                "ratio": 2.201,
+                "mark": "freeze"
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 55.19,
+                "ratio": 2.377,
+                "mark": "freeze"
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 25.86,
+                "psnr_adj": 53.81,
+                "ratio": 2.317,
+                "mark": "freeze"
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 41.67,
+                "ratio": 1.795,
+                "mark": "freeze"
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 25.85,
+                "psnr_adj": 52.04,
+                "ratio": 2.241,
+                "mark": "freeze"
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 54.78,
+                "ratio": 2.359,
+                "mark": "freeze"
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 25.86,
+                "psnr_adj": 52.74,
+                "ratio": 2.271,
+                "mark": "freeze"
+              },
+              {
+                "t": 13,
+                "psnr_vs_key": 25.88,
+                "psnr_adj": 44.92,
+                "ratio": 1.935,
+                "mark": "freeze"
+              },
+              {
+                "t": 14,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 52.52,
+                "ratio": 2.262,
+                "mark": "freeze"
+              },
+              {
+                "t": 15,
+                "psnr_vs_key": 25.88,
+                "psnr_adj": 52.69,
+                "ratio": 2.269,
+                "mark": "freeze"
+              },
+              {
+                "t": 16,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 50.85,
+                "ratio": 2.19,
+                "mark": "freeze"
+              },
+              {
+                "t": 17,
+                "psnr_vs_key": 25.87,
+                "psnr_adj": 40.93,
+                "ratio": 1.763,
+                "mark": "freeze"
+              },
+              {
+                "t": 18,
+                "psnr_vs_key": 11.45,
+                "psnr_adj": 11.73,
+                "ratio": 0.505,
+                "mark": "jump"
+              },
+              {
+                "t": 19,
+                "psnr_vs_key": 11.44,
+                "psnr_adj": 25.94,
+                "ratio": 1.117,
+                "mark": ""
+              },
+              {
+                "t": 20,
+                "psnr_vs_key": 11.42,
+                "psnr_adj": 26.52,
+                "ratio": 1.142,
+                "mark": ""
+              },
+              {
+                "t": 21,
+                "psnr_vs_key": 11.41,
+                "psnr_adj": 25.93,
+                "ratio": 1.117,
+                "mark": ""
+              },
+              {
+                "t": 22,
+                "psnr_vs_key": 11.4,
+                "psnr_adj": 24.64,
+                "ratio": 1.061,
+                "mark": ""
+              },
+              {
+                "t": 23,
+                "psnr_vs_key": 11.4,
+                "psnr_adj": 24.45,
+                "ratio": 1.053,
+                "mark": ""
+              },
+              {
+                "t": 24,
+                "psnr_vs_key": 11.41,
+                "psnr_adj": 24.76,
+                "ratio": 1.066,
+                "mark": ""
+              },
+              {
+                "t": 25,
+                "psnr_vs_key": 11.42,
+                "psnr_adj": 25.21,
+                "ratio": 1.086,
+                "mark": ""
+              },
+              {
+                "t": 26,
+                "psnr_vs_key": 11.42,
+                "psnr_adj": 25.06,
+                "ratio": 1.079,
+                "mark": ""
+              },
+              {
+                "t": 27,
+                "psnr_vs_key": 11.42,
+                "psnr_adj": 24.87,
+                "ratio": 1.071,
+                "mark": ""
+              },
+              {
+                "t": 28,
+                "psnr_vs_key": 11.42,
+                "psnr_adj": 24.87,
+                "ratio": 1.071,
+                "mark": ""
+              },
+              {
+                "t": 29,
+                "psnr_vs_key": 11.43,
+                "psnr_adj": 25.25,
+                "ratio": 1.088,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)",
+          "freeze@2(kf0)",
+          "freeze@3(kf0)",
+          "freeze@4(kf0)",
+          "freeze@5(kf0)",
+          "freeze@6(kf0)",
+          "freeze@7(kf0)",
+          "freeze@8(kf0)",
+          "freeze@9(kf0)",
+          "freeze@10(kf0)",
+          "freeze@11(kf0)",
+          "freeze@12(kf0)",
+          "freeze@5(kf17)",
+          "freeze@6(kf17)",
+          "freeze@7(kf17)",
+          "freeze@8(kf17)",
+          "freeze@9(kf17)",
+          "freeze@10(kf17)",
+          "freeze@11(kf17)",
+          "freeze@12(kf17)",
+          "freeze@13(kf17)",
+          "freeze@14(kf17)",
+          "freeze@15(kf17)",
+          "freeze@16(kf17)",
+          "freeze@17(kf17)",
+          "jump@18(kf17)"
+        ]
+      }
+    },
+    {
+      "name": "d1_011_s05_conflict",
+      "mp4": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-keyref-2026-11-19\\d1_011_s05_conflict.mp4",
+      "rep": {
+        "report": "Docs\\Outputs-archive\\h3-keyref-2026-11-19\\d1_011_s05_conflict.json",
+        "ok": true,
+        "mode": "harness",
+        "paths": {
+          "T": false,
+          "C": true,
+          "L": 0.5,
+          "T_slot": null,
+          "L_latents": [
+            0
+          ],
+          "text_encoder": "references",
+          "dit": "cond [0] + ref + video_fix latents [0] m=0.5 inject_clean=0.999"
+        },
+        "num_frames": 124,
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "Docs/Outputs-archive/h3-ref2va-2026-10-28/31d79f30-image.png",
+            "file_sha256": "0d3cf5b20a5c890c6d0704cac1fffa565e3e0993e01bfafc5cdae58c3f8588b9"
+          }
+        ],
+        "gate_second": false,
+        "sequence": {
+          "text": 1064,
+          "cond": 1008,
+          "audio": 414,
+          "video": 37296,
+          "total": 40796,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "seconds": {
+          "encode": 17.34,
+          "image_encode": 1.23,
+          "reference_encode": 0.9,
+          "denoise": 433.69,
+          "decode": 36.97
+        },
+        "peak_vram_mb": {
+          "encode": 2665,
+          "image_encode": 1055,
+          "reference_encode": 1056,
+          "denoise": 4453,
+          "decode": 6389
+        },
+        "peak_vram_mb_job": 6389,
+        "text_tokens": 1064,
+        "mask": {
+          "video": {
+            "rows": 37296,
+            "min": 0.5,
+            "max": 1.0,
+            "inject_clean": 0.999
+          }
+        },
+        "L_check": {
+          "mask_zero_rows": 0,
+          "mask_rows": 37296,
+          "per_frame": [
+            0.5,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "latents": [
+            {
+              "latent": 0,
+              "equal": false,
+              "max_abs": 0.23043608665466309
+            }
+          ],
+          "denoise_mask_video": {
+            "rows": 37296,
+            "min": 0.5,
+            "max": 1.0,
+            "inject_clean": 0.999
+          },
+          "ok": true
+        },
+        "mp4": {
+          "path": "outputs\\h3-keyref-2026-11-19\\d1_011_s05_conflict.mp4",
+          "sha256": "bb072f4a7656c794ea48e1084783b1edeb7c77085e7a49ea796f0321940b1af3",
+          "bytes": 2017671,
+          "video_md5": "d714c9a90844aa93ab423ae16698ad41",
+          "audio_md5": "c9ba31bee34ff6be61909c3babeac775"
+        }
+      },
+      "kf": [
+        {
+          "frame": 0,
+          "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png"
+        }
+      ],
+      "kf_from_report": true,
+      "frames_expected": 124,
+      "frames_ok": true,
+      "metrics": {
+        "size": [
+          1344,
+          768
+        ],
+        "frames": 124,
+        "psnr_first": 25.5,
+        "psnr_vs_key": [
+          25.5,
+          25.11,
+          11.4,
+          11.43,
+          11.45,
+          11.47,
+          11.49,
+          11.53,
+          11.58,
+          11.62,
+          11.62,
+          11.64,
+          11.65,
+          11.65,
+          11.65,
+          11.65,
+          11.65,
+          11.65,
+          11.65,
+          11.66,
+          11.65,
+          11.65,
+          11.63,
+          11.62,
+          11.61
+        ],
+        "adjacent_head": [
+          {
+            "t": 1,
+            "psnr_adj": 31.36,
+            "ratio": 1.35,
+            "mark": "freeze"
+          },
+          {
+            "t": 2,
+            "psnr_adj": 11.68,
+            "ratio": 0.503,
+            "mark": "jump"
+          },
+          {
+            "t": 3,
+            "psnr_adj": 26.1,
+            "ratio": 1.123,
+            "mark": ""
+          },
+          {
+            "t": 4,
+            "psnr_adj": 25.14,
+            "ratio": 1.082,
+            "mark": ""
+          },
+          {
+            "t": 5,
+            "psnr_adj": 25.44,
+            "ratio": 1.095,
+            "mark": ""
+          },
+          {
+            "t": 6,
+            "psnr_adj": 24.82,
+            "ratio": 1.068,
+            "mark": ""
+          },
+          {
+            "t": 7,
+            "psnr_adj": 25.24,
+            "ratio": 1.086,
+            "mark": ""
+          },
+          {
+            "t": 8,
+            "psnr_adj": 25.22,
+            "ratio": 1.086,
+            "mark": ""
+          },
+          {
+            "t": 9,
+            "psnr_adj": 25.25,
+            "ratio": 1.087,
+            "mark": ""
+          },
+          {
+            "t": 10,
+            "psnr_adj": 25.16,
+            "ratio": 1.083,
+            "mark": ""
+          },
+          {
+            "t": 11,
+            "psnr_adj": 25.69,
+            "ratio": 1.106,
+            "mark": ""
+          },
+          {
+            "t": 12,
+            "psnr_adj": 25.38,
+            "ratio": 1.093,
+            "mark": ""
+          },
+          {
+            "t": 13,
+            "psnr_adj": 25.56,
+            "ratio": 1.1,
+            "mark": ""
+          },
+          {
+            "t": 14,
+            "psnr_adj": 24.84,
+            "ratio": 1.069,
+            "mark": ""
+          },
+          {
+            "t": 15,
+            "psnr_adj": 24.81,
+            "ratio": 1.068,
+            "mark": ""
+          },
+          {
+            "t": 16,
+            "psnr_adj": 24.2,
+            "ratio": 1.042,
+            "mark": ""
+          },
+          {
+            "t": 17,
+            "psnr_adj": 23.8,
+            "ratio": 1.025,
+            "mark": ""
+          },
+          {
+            "t": 18,
+            "psnr_adj": 23.12,
+            "ratio": 0.995,
+            "mark": ""
+          },
+          {
+            "t": 19,
+            "psnr_adj": 22.93,
+            "ratio": 0.987,
+            "mark": ""
+          },
+          {
+            "t": 20,
+            "psnr_adj": 23.4,
+            "ratio": 1.007,
+            "mark": ""
+          },
+          {
+            "t": 21,
+            "psnr_adj": 23.41,
+            "ratio": 1.008,
+            "mark": ""
+          },
+          {
+            "t": 22,
+            "psnr_adj": 23.6,
+            "ratio": 1.016,
+            "mark": ""
+          },
+          {
+            "t": 23,
+            "psnr_adj": 23.88,
+            "ratio": 1.028,
+            "mark": ""
+          },
+          {
+            "t": 24,
+            "psnr_adj": 24.66,
+            "ratio": 1.061,
+            "mark": ""
+          }
+        ],
+        "adjacent_tail_median": 23.23,
+        "marks": [
+          "freeze@1",
+          "jump@2"
+        ],
+        "keyframes": [
+          {
+            "frame": 0,
+            "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\Docs\\Outputs-archive\\h3-ref2va-2026-10-28\\31d79f30-image.png",
+            "psnr": 25.5,
+            "window": [
+              {
+                "t": 0,
+                "psnr_vs_key": 25.5,
+                "psnr_adj": null,
+                "ratio": null,
+                "mark": ""
+              },
+              {
+                "t": 1,
+                "psnr_vs_key": 25.11,
+                "psnr_adj": 31.36,
+                "ratio": 1.35,
+                "mark": "freeze"
+              },
+              {
+                "t": 2,
+                "psnr_vs_key": 11.4,
+                "psnr_adj": 11.68,
+                "ratio": 0.503,
+                "mark": "jump"
+              },
+              {
+                "t": 3,
+                "psnr_vs_key": 11.43,
+                "psnr_adj": 26.1,
+                "ratio": 1.123,
+                "mark": ""
+              },
+              {
+                "t": 4,
+                "psnr_vs_key": 11.45,
+                "psnr_adj": 25.14,
+                "ratio": 1.082,
+                "mark": ""
+              },
+              {
+                "t": 5,
+                "psnr_vs_key": 11.47,
+                "psnr_adj": 25.44,
+                "ratio": 1.095,
+                "mark": ""
+              },
+              {
+                "t": 6,
+                "psnr_vs_key": 11.49,
+                "psnr_adj": 24.82,
+                "ratio": 1.068,
+                "mark": ""
+              },
+              {
+                "t": 7,
+                "psnr_vs_key": 11.53,
+                "psnr_adj": 25.24,
+                "ratio": 1.086,
+                "mark": ""
+              },
+              {
+                "t": 8,
+                "psnr_vs_key": 11.58,
+                "psnr_adj": 25.22,
+                "ratio": 1.086,
+                "mark": ""
+              },
+              {
+                "t": 9,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 25.25,
+                "ratio": 1.087,
+                "mark": ""
+              },
+              {
+                "t": 10,
+                "psnr_vs_key": 11.62,
+                "psnr_adj": 25.16,
+                "ratio": 1.083,
+                "mark": ""
+              },
+              {
+                "t": 11,
+                "psnr_vs_key": 11.64,
+                "psnr_adj": 25.69,
+                "ratio": 1.106,
+                "mark": ""
+              },
+              {
+                "t": 12,
+                "psnr_vs_key": 11.65,
+                "psnr_adj": 25.38,
+                "ratio": 1.093,
+                "mark": ""
+              }
+            ]
+          }
+        ],
+        "keyframe_marks": [
+          "freeze@1(kf0)",
+          "jump@2(kf0)"
+        ]
+      }
+    }
+  ]
+}

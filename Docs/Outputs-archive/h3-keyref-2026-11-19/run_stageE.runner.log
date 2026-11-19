@@ -1,0 +1,45 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261119110322
+Username: (redacted)
+RunAs User: (redacted)
+Configuration Name: 
+Machine: (redacted) (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File Docs\Outputs-archive\h3-keyref-2026-11-19\run_stageE.ps1
+Process ID: 56412
+PSVersion: 5.1.26100.9818
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9818
+BuildVersion: 10.0.26100.9818
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+weights, key frame, reference, prompts, venv, weight_identity.json, ffmpeg, script: present
+--- nvidia-smi (compute processes) ---
+
+backend / H3 worker: none
+GPU memory used: 589 MiB
+RAM 63.8 GB + page file allocated 74.7 GB = commit limit about 138.5 GB
+[11:03:22] e_010_conflict_seed1: --name e_010_conflict_seed1 --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --seed 1
+    exit 0 in 503.9 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\e_010_conflict_seed1.json
+[11:11:46] e_010_conflict_seed2: --name e_010_conflict_seed2 --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --seed 2
+    exit 0 in 494.2 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\e_010_conflict_seed2.json
+[11:20:00] e_010_conflict_seed3: --name e_010_conflict_seed3 --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --seed 3
+    exit 0 in 493.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\e_010_conflict_seed3.json
+[11:28:14] e_010_conflict_seed4: --name e_010_conflict_seed4 --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --seed 4
+    exit 0 in 493.8 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\e_010_conflict_seed4.json
+[11:36:28] e_010_conflict_seed5: --name e_010_conflict_seed5 --mode product --transformer models\MiniMaxH3\Weights\minimax_h3_ref2va_pruned_int8_convrot.safetensors --prompt-file Docs\Outputs-archive\h3-keyref-2026-11-19\prompt_a2_conflict.txt --width 1344 --height 768 --keyframe 0=Docs\Outputs-archive\h3-ref2va-2026-10-28\31d79f30-image.png --ref-image Docs\Outputs-archive\h3-ref2va-2026-10-28\17fde0c1-image.png --seed 5
+    exit 0 in 494.5 s -> S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\Docs\Outputs-archive\h3-keyref-2026-11-19\e_010_conflict_seed5.json
+--- results ---
+e_010_conflict_seed1     0
+e_010_conflict_seed2     0
+e_010_conflict_seed3     0
+e_010_conflict_seed4     0
+e_010_conflict_seed5     0
+runner exit 0
+**********************
+Windows PowerShell transcript end
+End time: 20261119114442
+**********************

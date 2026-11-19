@@ -27,11 +27,13 @@ see `../../../Docs/ALPHAGEN_DESIGN.md` §10 and `../Docs/DEVLOG.md` §134, compl
 record `../../../Docs/PENDING_TASKS_CLOSED.md` §3-231)), and **Inventory**
 (job history, downloads, and
 a LoRA browser — model management lives in the settings panel's `ModelsPanel`,
-not here) — plus two batch panels (both stateless and folder-scan-driven, with
+not here) — plus three batch panels (all stateless and folder-scan-driven, with
 no CSV manifest: the batch panel on the Single screen makes one video per
-audio file, or one video per image when only an image folder is given, and
-the batch i2v-long panel on the Chained screen makes one long clip chain per
-image) and a job ledger (a table of all jobs shown
+audio file, or one video per image when only an image folder is given, the
+batch i2v-long panel on the Chained screen makes one long clip chain per
+image, and the batch v2v-ref-long panel on the Chained screen (MiniMax H3
+only) makes one clip chain per row of an opening video and per-clip
+reference files) and a job ledger (a table of all jobs shown
 next to the Generate button; there
 is no separate job lane or reservation queue — the backend runs one job at a
 time, so the Generate button just disables itself while one is running; with
@@ -126,6 +128,9 @@ webui/
       batch/            # Batch panel (Single screen): folder scan, in-memory row list
                         #   (stateless), batch runner
       batch-i2v-long/   # Batch i2v-long panel (Chained screen): one long clip chain per image
+      batch-v2v-ref-long/
+                        # Batch v2v-ref-long panel (Chained screen, MiniMax H3): one chain
+                        #   per row of opening video + per-clip reference folders
       edit/             # Edit screen: EditSubTabs + the Retake, Outpainting,
                         #   Inpainting and Alpha Gen panels
       inventory/        # Inventory screen: job history, LoRA browser

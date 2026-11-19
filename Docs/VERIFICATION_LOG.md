@@ -24504,3 +24504,50 @@ GPU は使っていません。材料はコード読みと記録（`run.json`・
 
 - 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-115 は閉じ、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-115 へ移しました。同書の §1 は空になったので、見出しごと削除しました。
 - 裁定と留保は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の裁定 103 にまとめました。潜在凍結は同書 §3.2 の「採らなかった案」に置き、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4（スコープ外）には起票していません（実験で否定した案なので、再提案を防ぐ記録として設計正本に置く）。
+
+## 215. ★台帳 §1-288 バッチ v2v-ref-long（MiniMax H3 の Chained 画面で、冒頭動画と参照素材のフォルダから行を作り、連結の生成を 1 行ずつ流す）: 機械の門（2026-11-20）
+
+### 215.1 結論
+
+- **結論を先に**: **操作パネルに「バッチ v2v-ref-long」の区画を足し、機械の門（型検査・lint・操作パネルのテスト・プラグインの再ビルドと C++ のテスト）はすべて合格しました。** 変えたのは操作パネルだけで、サーバーとプラグインのネイティブ側は変えていません。実機への配置と GPU を使う生成はまだで、オーナーの実機確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288）で行います。
+- 仕様の正本はフロントエンド `Docs/BATCH_V2V_REF_LONG.md`、裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 104、実装の記録はフロントエンド `Docs/DEVLOG.md` §173 にあり、本節には写しません。**門の数値と、計画の段階で確かめた前提の正本は本節です。**
+
+### 215.2 計画と点検
+
+- 計画は監督の計画ファイル（`adaptive-growing-stonebraker`。オーナー了承 2026-11-20）です。計画の段階で、第三者の点検と事実確認（設計の前提 17 項目を現物のコードで確認）を行いました。
+- 実装の差分の点検は、第 1 弾・スキャンと実行の側・画面の側の 3 回で、いずれも重大な指摘（Major）は 0 件でした。採用した指摘は反映済みです。計画から変えた点と採らなかった指摘は、正本の §18・§19 にあります。
+
+### 215.3 計画の段階で確かめた設計の前提（後から参照されそうなもの）
+
+本節の作成時に、現物のコードでも確かめ直しました。
+
+1. **つないだ動画を出力フォルダへ名前を付けて保存する呼び方は、プラグインのコードで断られていない。** `backend.downloadVideo` の引数の検査（`native/src/bridge_core.cpp` の `ParseDownloadVideo`）は、`kind: "joined"` と `destDir`・`fileName`・`noClobber` の組み合わせを受けます。断るのは、`kind` が 4 種（`output`・`joined`・`rgba`・`chroma`）以外のとき、`joined: true` と別の `kind` を一緒に渡したとき、`chroma` で色が無いときだけです。この組み合わせを使う画面は本機能が初めてです。
+2. **冒頭動画（`source_video`）とクリップの参照（`clips[i].references`）の併用を禁じる検査は、サーバーに無い。** `api/models.py` の連結の要求の検査が `source_video` と一緒に断るのは、最上位とクリップの `source_audio`・`clips[0].conditioning_images`・`reference_video_id`・`retake` です。エンジンの `engine_h3/chain_h3.py` が参照と一緒に断るのは Retake だけです。本記録簿に、この併用で生成した記録はありません（実機確認へ回した。215.5）。
+3. **H3 の `source_video.context_frames` は 22 だけを受ける**（`services/engines/h3/adapter.py`。省略は 22 を書き戻し、ほかの値は断る）。本機能は Chained 画面の固定の重なり（`fixedOverlapFrames`）をそのまま送ります。
+4. **アップロード済みの番号に期限は無い。** `uploads/` に TTL・自動削除は無く（[`STORAGE_POLICY.md`](STORAGE_POLICY.md)）、実行 1 回のあいだ番号を控えて使い回せます。実行中に `uploads/` を消すと、控えた番号が使えなくなります（同書）。
+5. **アップロードの番号は種類ごとに別の場所で管理される**（`services/upload_store.py`・`video_upload_store.py`・`audio_upload_store.py`）。同じ動画を Video と Audio の両方で使うときは 2 回アップロードします（控えの鍵に種類を入れた理由）。
+6. **操作パネルからプラグインへの呼び出しの待ち時間の上限は、既定で 10 秒**（`webui/src/bridge/types.ts` の `DEFAULT_TIMEOUT_MS`）。呼び出しごとに変えられるのは `backend.request` だけで、`backend.uploadFile`・`backend.downloadVideo` はこの上限のままです（既存の画面と同じ性質。本機能では変えていない）。
+7. **プラグインの `fs.listFiles` はサブフォルダを見ず、形式の一覧で絞る。** 存在しないフォルダは 0 件として返ります。拾う形式はサーバーの `config.upload` の一覧で、Reference のカードが受け付ける形式と中身が同じです。
+
+### 215.4 機械の門（2026-11-20）
+
+- **操作パネル**: `npm run typecheck` 合格。`npm run lint` はエラー 0（新しいファイルと変更したファイルへの警告も 0）。`npx vitest run --exclude "**/backend.integration.test.ts"` は 203 ファイル・3,984 件が全部合格。
+- **プラグイン**: `scripts/build.ps1 -RunTests` 成功。C++ のテスト 402 件合格（統合の組は除外）。
+- **配布用 aux2**: `AviUtl2-Plugin/NzVideomni.aux2` は 1,645,568 バイト、SHA-256 `C2A4EFEDFBB1A0D6A5A5B72609F1EA310E6AD2AB11131B8556AE8A3127401ABC`。埋め込みの確認として、文言「Batch v2v-ref-long」「別のバッチが実行中です」がファイルの中にあることをバイト列の検索で確かめました。
+- **実機への配置**（`scripts/deploy.ps1`）は行っていません（AviUtl2 を閉じてから、オーナーの実機確認の前に行う）。
+
+### 215.5 機械では確かめられず、実機確認に回した点
+
+項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288 のチェックリストです（本節には写しません）。
+
+- mp3・m4a などの音声と、動画ファイルの音声の長さを、プラグインの関数（`fs.probeMediaInfo`）で測れるか。
+- 215.3 の 1 の保存の呼び方（つないだ動画を出力フォルダへ名前を付けて保存する）が実物で動くか。
+- 215.3 の 2 の併用（冒頭動画とクリップの参照）で、生成が最後まで走るか。
+- 215.3 の 6 の待ち時間の上限が、大きい冒頭動画のアップロードで問題にならないか。
+- 行を開いたときのクリップカードの横スクロールと、表を縦にスクロールしたときの列見出しの重なり。
+- 3 つのバッチの排他、停止、Chained 画面の作り直しのあとに状態が残ることを、実物の画面で確かめる。
+
+### 215.6 終了処理
+
+- **コミット**: dev の `2ac5787`（第 1 弾）・`d0eb33c`（第 2・3 弾）・`4ed56fe`（配布用 aux2）。本節を含む文書は、第 4 弾として別のコミットで入れました。
+- **文書の更新箇所**: フロントエンド `Docs/BATCH_V2V_REF_LONG.md` の新設・同 `Docs/DEVLOG.md` §173・同 `Docs/BATCH_I2V_WORKORDER.md` の改訂履歴の注記・同 `README.md` の Chained の説明・同 `webui/README.md` の概要とフォルダ構成。設計正本の裁定 104 の新設と、裁定 87 の更新注記・§3.3 の「操作パネル」。台帳 §1-288 の起票（「2. 実装済み・ユーザーのテスト待ち」の節を立て直した）。README §7.6。

@@ -62,7 +62,7 @@ export interface UseBatchI2vLongRunnerResult {
   outDir: string | null;
   /** The outcome of the most recently attempted `run()` — in particular the
    * `{started:false}` cases (nothing runnable, already running, or the run lock
-   * held by Batch A2V), which produce no row updates at all. `null` before the
+   * held by another batch), which produce no row updates at all. `null` before the
    * first attempt. */
   lastStartResult: I2vLongRunnerStartResult | null;
   /** Fires the run. `onRowsChanged` is an OPTIONAL extra sink — the primary

@@ -286,8 +286,8 @@ export interface UseBatchFormResult {
    * readout (task brief: "進捗表示（現在行 queue…）"). */
   currentRow: BatchRow | null;
   canStart: boolean;
-  /** §1-7 相互ロック: true while the OTHER batch feature (Batch i2v-long, on
-   * the Chain screen) holds the shared run lock — `shell/runLock.ts`. Blocks
+  /** §1-7 相互ロック: true while another batch holds the shared run lock —
+   * `shell/runLock.ts`. Blocks
    * `canStart` and is surfaced standalone so `BatchSection` can explain WHY
    * Start is disabled rather than just greying it out. False while this panel
    * holds the lock itself (that case is already covered by `runnerState`). */
@@ -831,11 +831,11 @@ export function useBatchForm(
 
   // --- §1-7 相互ロック（shell/runLock.ts） ---------------------------------
   //
-  // Batch A2V and Batch i2v-long may never run at the same time (both drive the
-  // backend's single job slot). The lock is owner-token based BECAUSE both
-  // panels are permanently mounted: a plain "release when my runner is idle"
-  // effect would fire on this panel's very first mount and free a lock the
-  // OTHER panel is holding.
+  // Only one batch may run at a time (each drives the backend's single job
+  // slot). The lock is owner-token based BECAUSE a panel can mount while
+  // another batch runs: a plain "release when my runner is idle"
+  // effect would fire on this panel's very first mount and free a lock
+  // another panel is holding.
   //
   // 取得も返却もこのフックではなく`runtime.ts`（モジュールレベル・シングルトン）
   // の責務: 取得は`start()`の前、返却は実行Promiseの`.then`。Reactのeffectでは
@@ -974,7 +974,7 @@ export function useBatchForm(
     // §1-7 相互ロック: the shared lock is taken inside `runtime.run()` (before
     // the runner's `start()`) and handed back from the run promise, so a
     // remount in between cannot strand it. A refusal (`{started:false}`,
-    // including "the other batch holds the lock") is visible through the
+    // including "another batch holds the lock") is visible through the
     // runtime's `lastStartResult`; nothing is submitted in that case.
     //
     // `setRows` is passed as an EXTRA sink on top of the runtime snapshot: the

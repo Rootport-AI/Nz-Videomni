@@ -2,9 +2,9 @@
  * バッチA2V（Create画面）・バッチi2v-long・バッチv2v-ref-long（どちらもChain
  * 画面）の3者の相互排除ロック。
  *
- * 所有者トークン方式なのは、各パネルが常時マウント（`AppShell`は全タブを同時に
- * マウントする）で、マウント直後の初期idle遷移により他者のロックを誤解放する
- * 事故を防ぐため。素朴な「runner.state が idle になったら解放する」監視だと、
+ * 所有者トークン方式なのは、走行はモジュールに置かれてパネルより長く生き、
+ * パネルは他者の走行中にもマウントされうるので、マウント直後の初期idle遷移に
+ * より他者のロックを誤解放する事故を防ぐため。素朴な「runner.state が idle になったら解放する」監視だと、
  * 後から生えたパネルがマウントされた瞬間（state は当然 idle）に走行中の他者の
  * ロックを解放してしまう。解放は `acquireRunLock` が返したトークンと現在の
  * 保持者が同一のときだけ通る。
@@ -13,7 +13,8 @@
  * panels: Batch A2V, Batch i2v-long and Batch v2v-ref-long. It is an
  * OWNER-TOKEN lock (acquire hands back an opaque token; release only succeeds
  * when that exact token is still the holder) rather than a plain boolean flag,
- * because every panel's owner outlives its first idle render: a naive "release
+ * because a run lives in a module and outlives its panel, so a panel can mount
+ * while another batch runs: a naive "release
  * when my runner goes idle" effect would fire on ANOTHER panel's very first
  * mount — its runner is idle at that moment — and free a lock it never took.
  *
@@ -70,7 +71,7 @@ export function acquireRunLock(ownerLabel: string): RunLockToken | null {
  * tell a genuine release apart from a no-op (a stale token from a previous run,
  * a `null` token, or an already-free lock). Notifies subscribers only on a real
  * release; a rejected release is completely inert, which is exactly what makes
- * the "other panel's first idle" case harmless.
+ * the "another panel's first idle" case harmless.
  */
 export function releaseRunLock(token: RunLockToken | null | undefined): boolean {
   if (!token || holder === null || holder !== token) return false;
@@ -94,7 +95,7 @@ export function getRunLockOwner(): string | null {
 /**
  * Subscribes to lock changes and returns the unsubscribe — the
  * `useSyncExternalStore(subscribeRunLock, getRunLockOwner)` pair is how a React
- * panel watches the OTHER panel's lock. Same listener-set shape as
+ * panel watches another panel's lock. Same listener-set shape as
  * `provisionalReservation.ts`'s `subscribeInserted`.
  */
 export function subscribeRunLock(listener: () => void): () => void {

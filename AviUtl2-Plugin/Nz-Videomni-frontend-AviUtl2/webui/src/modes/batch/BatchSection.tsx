@@ -44,7 +44,7 @@ export interface BatchSectionProps {
    * acceleration UI of its own, same as `nag` above. */
   acceleration?: AccelerationSettings | undefined;
   /** §1-7 相互ロック 第2段 (2026-07-31): `JobsContext.serverBusy` — the backend
-   * is occupied by a generation (single or from the other batch) or by a model
+   * is occupied by a generation (single or from another batch) or by a model
    * load, so this batch may not start. The exact counterpart of
    * `BatchI2vLongSection`'s prop of the same name; see
    * `UseBatchFormDeps.serverBusy` for why the shared run lock alone was not
@@ -258,8 +258,8 @@ export function BatchSection({
             Blocks Start — shown as its own line (the sentence the three batch
             panels share) so the disabled button is explained. */}
         {form.lockedByOther && <p className="warning-banner">{t.lockedByOther}</p>}
-        {/* §1-7 相互ロック 第2段: the backend's single job slot is busy (the
-            other batch, a single generation, or a job that outlived a reload).
+        {/* §1-7 相互ロック 第2段: the backend's single job slot is busy (another
+            batch, a single generation, or a job that outlived a reload).
             Only shown while THIS panel is idle — during its own run the Start
             button already reads "Running…", and repeating it here would just be
             noise. Kept a separate line from `lockedByOther` because the two say

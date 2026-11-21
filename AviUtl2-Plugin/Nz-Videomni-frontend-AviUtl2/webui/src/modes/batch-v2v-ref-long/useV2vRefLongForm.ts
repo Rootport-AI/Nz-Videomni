@@ -2,8 +2,8 @@
  * Batch v2v-ref-long: what the panel reads and calls. Every value lives in
  * `v2vRefLongStore` (and the run in `runtime.ts`), so the panel may unmount at
  * any time — a scan or a run in flight keeps going and lands in the store, and
- * a remount reads it back. The derived values are the first-stage pure
- * functions, memoised.
+ * a remount reads it back. The derived values are the pure functions of
+ * folderRules/rowModel/startGuards, memoised.
  */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { ApiClient } from "../../api/client";

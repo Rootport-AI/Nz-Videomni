@@ -1227,7 +1227,7 @@ DiT に入る列は `[text | cond | ref_video | ref_audio | audio | video]` で�
 
 **結論を先に。** MiniMax H3 の Chained の各クリップの境界は、Single と同じ段にありました。**線は Single と共用します**（第17.5節の (a) の S の線 219,516。較正のプロンプト 30 を含む値で、操作パネルの値は 219,486）。記述子の `comfort.single_rows_budget` は変えません。連結が Single と違う 2 点（固定行のマスクを GPU に持ち続けること・クリップ 1 以降が常駐経路で走ること）は、境界を動かしませんでした。線を当てる単位は「固定行を持つクリップかどうか」でしたが、どちらにも同じ値が当たるので区別は消えます。Single・K=3 の点も線のすぐ下で 2 回快適で、印は K≥2 でも安全です。
 
-**数値の正本は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §199 です**（全点の表・r1080_362 との比較・結論の導出・門・留保）。本節には線の判断に要る値と規則の形だけを置きます。一次記録は `outputs/comfort-calib-h3-chain-2026-11-08/RESULTS.md`（複写は [`Outputs-archive/comfort-calib-h3-chain-2026-11-08/`](Outputs-archive/comfort-calib-h3-chain-2026-11-08/)。範囲は記録簿 §199.9）、計画の正本は `C:\Users\phenotype nezu\.claude\plans\cozy-gliding-pudding.md` です。
+**数値の正本は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §199 です**（全点の表・r1080_362 との比較・結論の導出・門・留保）。本節には線の判断に要る値と規則の形だけを置きます。一次記録は `outputs/comfort-calib-h3-chain-2026-11-08/RESULTS.md`（複写は [`Outputs-archive/comfort-calib-h3-chain-2026-11-08/`](Outputs-archive/comfort-calib-h3-chain-2026-11-08/)。範囲は記録簿 §199.9）、計画の正本は監督の計画ファイル `cozy-gliding-pudding` です。
 
 ### 19.1 条件
 
@@ -1288,7 +1288,7 @@ DiT に入る列は `[text | cond | ref_video | ref_audio | audio | video]` で�
 
 **結論を先に。** MiniMax H3 の Outpainting の境界も、Single と同じ線の上にありました。**線は Single と共用します**（第17.5節の (a) の S の線 219,516）。S が線と同じ値になる 1920×1088×362 は快適で、1 段上の 379 はノイズ除去の段の上限での OOM（GPU メモリ不足）でした。退避も先読みの降格も出ていません。**配信値は変えていません**——H3 の Outpainting は `outpaint_budget`（第9節）を持たず、操作パネルはキャンバスの寸法とフレーム数から S を数えて、Single の線で印を出します（第1.1節）。印の意味は第17節と同じ「超えると失敗する」です。
 
-**数値の正本は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.19 です**（条件・全点の値・379 の OOM の文言と場所・較正との比較・留保）。本節には線の判断に要る点と規則の形だけを置きます。一次記録は `outputs\h3-outpaint-gates-2026-11-10\`（写しは [`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/) の `summary_api.json` と `runs_api/`）、計画の正本は `C:\Users\phenotype nezu\.claude\plans\rosy-jingling-stonebraker.md` の §2.6・§7 です。
+**数値の正本は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205.19 です**（条件・全点の値・379 の OOM の文言と場所・較正との比較・留保）。本節には線の判断に要る点と規則の形だけを置きます。一次記録は `outputs\h3-outpaint-gates-2026-11-10\`（写しは [`Outputs-archive/h3-outpaint-2026-11-10/`](Outputs-archive/h3-outpaint-2026-11-10/) の `summary_api.json` と `runs_api/`）、計画の正本は監督の計画ファイル `rosy-jingling-stonebraker` の §2.6・§7 です。
 
 ### 20.1 条件
 

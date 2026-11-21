@@ -224,7 +224,7 @@
 ## 8. 敵対的レビューの採否（2026-10-19・Opus・C2/M5/m13）
 
 - 全採用。C1（`GenerationForm.tsx:280` と `featureScope.ts:108-111` の削除漏れ）・C2（fixture 4 ファイルは置き換え）・M1（進捗の分母）・M2（constraints の完全一致テスト）・M3（`images_used` は改名しない＝引き算）・M4（1-G3 の J1 の条件と基準の無い 2 つ）・M5（1-G2 は書き直し・正解側の置き場所・試験画像）・m1〜m13（監査テスト不変・Gradio バッチは届かない・Gradio の制約の写しに足さない・現行化の一覧・422 の順序 2 点・画面の挙動 3 点の事前共有・行番号・鍵を外す書き方・0.8 の写しの一本化・式の書き方・CLI の重複・任意のテストは足さない）。
-- レビューの正本は `C:\Users\phenotype nezu\.claude\plans\scalable-floating-thimble-agent-aae12c0a332568922.md`（実装後に保管庫 `Docs/Outputs-archive/h3-keyframes-2026-10-19/` へ写す）。
+- レビューの正本は監督の計画ファイル `scalable-floating-thimble-agent-aae12c0a332568922`（実装後に保管庫 `Docs/Outputs-archive/h3-keyframes-2026-10-19/` へ写す）。
 
 ### 実装の中心になるファイル
 - `Nz-Videomni/services/engines/ltx/request_rules.py`

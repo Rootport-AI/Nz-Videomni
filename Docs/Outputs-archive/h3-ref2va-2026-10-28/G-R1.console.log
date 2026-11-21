@@ -1,6 +1,6 @@
 ﻿python.exe : [h3_worker] load: transformer_path OK (20970379616 bytes) models\MiniMaxH3\Weights\minimax_h3_ref2va_prune
 d_int8_convrot.safetensors
-At C:\Users\phenotype nezu\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\10f3a842-2a5e-48b4-8a07-419f00
+At %LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\10f3a842-2a5e-48b4-8a07-419f00
 20a740\scratchpad\ref2va\run_ref.ps1:15 char:1
 + & .venv-engine-h3\Scripts\python.exe @a *> "$o\$Name.console.log"
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

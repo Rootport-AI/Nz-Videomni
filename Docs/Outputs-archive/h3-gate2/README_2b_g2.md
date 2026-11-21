@@ -45,7 +45,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "S:\OriginalApps\12_Nz-LTX23
 ## 2. 台本の実行（1 コマンド）
 
 ```powershell
-& "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Scripts\python.exe" "C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\93b90569-6ea3-4591-8f76-72824574064d\scratchpad\h3\g2b\run_2b_g2.py"
+& "S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni\.venv\Scripts\python.exe" "%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\93b90569-6ea3-4591-8f76-72824574064d\scratchpad\h3\g2b\run_2b_g2.py"
 ```
 
 台本がやること（MCP サーバーを stdio の子プロセスとして起動し、`mcp` パッケージのクライアントで叩く。VERIFICATION_LOG §39.5／§39.6 と同じ経路）:

@@ -2,7 +2,7 @@
 
 # 台帳 §1-275 の門（TE の注意の塊の等分）の作業場所
 
-計画の正本は `C:\Users\phenotype nezu\.claude\plans\smooth-watching-lobster.md` の §5（合否は §5.4、止める条件は §9）。この README は台本の使い方だけを書く。
+計画の正本は監督の計画ファイル `smooth-watching-lobster` の §5（合否は §5.4、止める条件は §9）。この README は台本の使い方だけを書く。
 
 ## 第 2 版（塊の境目は変えず、最も高い塊を最初に計算）の流れ（計画 §5.0。2026-11-04 夜）
 

@@ -102,7 +102,7 @@ PowerShell（1行。実際は改行なしで実行した）:
 最終行の `args` の扱いのみ）。
 
 置き場所:
-`C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\fbc2fa77-1012-4a5e-9383-9efc3f240f9b\scratchpad\implA\run_ltx25_pytest.py`
+`%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\fbc2fa77-1012-4a5e-9383-9efc3f240f9b\scratchpad\implA\run_ltx25_pytest.py`
 
 ```python
 """§3-90 implementer A: run tests inside .venv-engine-ltx25.
@@ -129,7 +129,7 @@ raise SystemExit(pytest.main(args + ["--noconftest", "-p", "no:cacheprovider"]))
 実行（PowerShell。1行）:
 
 ```powershell
-.\.venv-engine-ltx25\Scripts\python.exe "C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\fbc2fa77-1012-4a5e-9383-9efc3f240f9b\scratchpad\implA\run_ltx25_pytest.py" tests\test_ltx25_band.py tests\test_ltx25_outpaint.py tests\test_ltx25_reference_encode.py tests\test_ltx25_keep_resident_registry.py tests\test_retake_math.py tests\test_outpaint_canvas.py tests\test_outpaint_pyramid_blend.py
+.\.venv-engine-ltx25\Scripts\python.exe "%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\fbc2fa77-1012-4a5e-9383-9efc3f240f9b\scratchpad\implA\run_ltx25_pytest.py" tests\test_ltx25_band.py tests\test_ltx25_outpaint.py tests\test_ltx25_reference_encode.py tests\test_ltx25_keep_resident_registry.py tests\test_retake_math.py tests\test_outpaint_canvas.py tests\test_outpaint_pyramid_blend.py
 ```
 
 **scratchpad はセッション限りの領域なので、再走するならランナーを恒久的な場所へ移すこと。**
@@ -187,7 +187,7 @@ PowerShell:
 
 ```powershell
 $env:LTX_MCP_BASE_URL = "http://127.0.0.1:18999"
-.\.venv\Scripts\python.exe -m pytest --junitxml="C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\fbc2fa77-1012-4a5e-9383-9efc3f240f9b\scratchpad\implA\pytest_after.xml" -p no:cacheprovider
+.\.venv\Scripts\python.exe -m pytest --junitxml="%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\fbc2fa77-1012-4a5e-9383-9efc3f240f9b\scratchpad\implA\pytest_after.xml" -p no:cacheprovider
 ```
 
 **結果: 2,235 passed / 25 skipped / 0 failed**（216秒）。

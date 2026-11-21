@@ -1,6 +1,6 @@
 """MiniMax H3 の Retake（入力動画の指定区間だけを描き直す）の GPU の門を、MCP サーバー経由で回す台本。
 
-計画の正本: ``C:/Users/phenotype nezu/.claude/plans/foamy-napping-kettle.md`` の §7「検証の門」の 3。
+計画の正本: 監督の計画ファイル ``foamy-napping-kettle`` の §7「検証の門」の 3。
 製品コードは import しない。MCP サーバー（``.venv\\Scripts\\python.exe -m mcp_server``）を stdio の子プロセスとして
 起こし、``initialize → tools/list → tools/call`` の実プロトコルで道具を呼ぶ（記録簿 VERIFICATION_LOG §39.6 と同じ経路）。
 

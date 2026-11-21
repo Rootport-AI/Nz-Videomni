@@ -46,7 +46,7 @@
 - `test_gradio_handlers.py`: :359-363 の期待値を変えました。0.8 のスロットには `strength` の鍵が無く、0.6 と 0.4 のスロットにはある、という形です。既存の 1 件で両方を確かめられるので、新しいテストは足していません（計画の m13「任意のテストは足さない」に従いました）。
 - `test_mcp_tools_generate.py`: submit_generate と submit_chain の既存のテストに、strength を省略した画像を 1 枚ずつ足しました。省略した画像は `"strength": None`、明示した画像はその値（0.9）で送られることを確かめています。古い H3 の文言を固定しているテストはありませんでした（grep で確認）。
 - `test_gradio_batch_runner.py` は変える必要がありませんでした（全件合格）。
-- 実行方法は `.venv\Scripts\python -m pytest tests -rs` です。結果は「3449 passed, 65 skipped, 63 warnings in 319.54s」。全文は `C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\6080e139-5d66-42d3-a48f-feb0e61dd152\scratchpad\kf197\1c\pytest_full_1c.txt` にあります。
+- 実行方法は `.venv\Scripts\python -m pytest tests -rs` です。結果は「3449 passed, 65 skipped, 63 warnings in 319.54s」。全文は `%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\6080e139-5d66-42d3-a48f-feb0e61dd152\scratchpad\kf197\1c\pytest_full_1c.txt` にあります。
   - 補足: pyproject の addopts が `-q` なので、`-q` を重ねると最後の件数の行が出ません。今回は `-q` を付けずに実行しました。
 
 ## エスカレーションと未対応

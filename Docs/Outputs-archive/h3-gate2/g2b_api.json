@@ -10,7 +10,7 @@
     "shift_video": 12.0,
     "shift_audio": 3.0,
     "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
-    "image": "C:\\Users\\phenotype nezu\\AppData\\Local\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-AviUtl2\\93b90569-6ea3-4591-8f76-72824574064d\\scratchpad\\h3\\g2b\\i2v_input_square.png"
+    "image": "%LOCALAPPDATA%\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-AviUtl2\\93b90569-6ea3-4591-8f76-72824574064d\\scratchpad\\h3\\g2b\\i2v_input_square.png"
   },
   "backend_status_before": {
     "reachable": true,

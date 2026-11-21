@@ -33,7 +33,7 @@
 
 1. **関数の追加は要らない。** `Ensure-EngineVenv`（`install_ltx.ps1:1396`）に `-IndexUrl https://download.pytorch.org/whl/cu130`・`-DirectPins`（torch／torchvision／sageattention）・`-DirectPinArgs`（`--index cu130`＋`--index-strategy unsafe-best-match`）・`-IgnoreSkipVenv` を渡せば、LTX 2.5 と UETrack の前例の組み合わせで作れる。freeze の冒頭も、この形で使われることをすでに予告している（`engine_h3/venv-engine-h3.freeze.txt:35-38`）。
 2. **SageAttention（cu130 版）の wheel URL は、まだインストーラに無い。** 書かれているのは仕様書と freeze のコメントだけ（`engine_h3/engine_h3-venv-pyproject.toml:72`、`venv-engine-h3.freeze.txt:34`）。LTX の 2 系統は `install_ltx.ps1` の配列に直に書いている（`:1200`、`:1240`）。
-3. **開発機の `.venv-engine-h3` には完了の印（`.nz-engine-state`）が無い。** 手で作った環境なので、初回の実行は「印が無い→freeze を当て直す」の分岐に入る（`install_ltx.ps1:1435-1448`）。さらにこの環境の torch は、別セッションの一時フォルダの wheel から入れたもの（`direct_url.json` が `file:///C:/Users/PHENOT~1/AppData/Local/Temp/claude/.../h3/wheels/torch-2.13.0+cu130-...whl`）。当て直しで torch が取り直しになるかは未確認（⑧）。
+3. **開発機の `.venv-engine-h3` には完了の印（`.nz-engine-state`）が無い。** 手で作った環境なので、初回の実行は「印が無い→freeze を当て直す」の分岐に入る（`install_ltx.ps1:1435-1448`）。さらにこの環境の torch は、別セッションの一時フォルダの wheel から入れたもの（`direct_url.json` が `file:///%LOCALAPPDATA%/Temp/claude/.../h3/wheels/torch-2.13.0+cu130-...whl`）。当て直しで torch が取り直しになるかは未確認（⑧）。
 4. **第 1 弾の uv は `tools\uv` の 0.11.32 ではなく、システムの chocolatey の uv 0.6.4 だった**（`.venv-engine-h3/pyvenv.cfg` の `uv = 0.6.4`、`which uv` は `/c/ProgramData/chocolatey/bin/uv`）。インストーラは `tools\uv` を PATH の先頭に置く（`install_model.ps1:353`）ので、第 3 弾の構築は 0.11.32 で走る。freeze の取り直し（設計 §11 の第 3 弾の範囲）は、この差を吸収する意味がある。
 5. **空き容量の見積り（`NeedGB`）は 56GB になるが、実物の合計（重み 約 50.2GiB＋仮想環境 約 3.4GB）に対して余裕は約 2GB しかない。** 見積りは `files[].min` だけから作られ、仮想環境の分は入らない（⑤）。
 

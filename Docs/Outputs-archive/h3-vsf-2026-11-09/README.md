@@ -1,6 +1,6 @@
 # MiniMax H3 のネガティブプロンプト（VSF）の門と目視の実験
 
-MiniMax H3 にネガティブプロンプトを VSF（Value Sign Flip。負のプロンプトの行の値の符号を反転し、1 回の注意の計算で負の要素を遠ざける方式）で載せた最小実装について、機械で確かめる門 4 つと、オーナーが目で見て効き目を判断する 10 本の動画を作るための台本と記録の置き場です（台帳 `PENDING_TASKS.md` §1-127）。計画の正本は `C:\Users\phenotype nezu\.claude\plans\agile-dazzling-catmull.md` の §4（機械の門）と §5（目視の実験）です。結果の数値はこの説明書には書かず、各フォルダの `result.json`・`summary.json`・`VISUAL_TABLE.md` に残します。
+MiniMax H3 にネガティブプロンプトを VSF（Value Sign Flip。負のプロンプトの行の値の符号を反転し、1 回の注意の計算で負の要素を遠ざける方式）で載せた最小実装について、機械で確かめる門 4 つと、オーナーが目で見て効き目を判断する 10 本の動画を作るための台本と記録の置き場です（台帳 `PENDING_TASKS.md` §1-127）。計画の正本は監督の計画ファイル `agile-dazzling-catmull` の §4（機械の門）と §5（目視の実験）です。結果の数値はこの説明書には書かず、各フォルダの `result.json`・`summary.json`・`VISUAL_TABLE.md` に残します。
 
 ## フォルダの中身
 

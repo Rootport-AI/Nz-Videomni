@@ -3,7 +3,7 @@
 # RESULTS — 台帳 §1-276 MiniMax H3 の Chained（連結生成）の快適上限の較正（2026-11-08）
 
 - この文書は、2026-11-08 01:41〜09:15 に測った 18 点（自動復帰の 1 点を含む）の集計です。数値はすべて `runs/<label>/run.json` から台本 `analysis/collect.py`（出力 `analysis/collect_output.txt`・`points.json`・`points_table.md`）で抜き出しました。`make_results.py --h3`・`calib.py report`（`report.md`）・`digest.py`・`commit_table.py` の出力も `analysis/` にあり、値は同じです。推測には「推測」と書きます。
-- 計画の正本: `C:\Users\phenotype nezu\.claude\plans\cozy-gliding-pudding.md`（以下「計画」）。11-04 の値は `Docs/Outputs-archive/comfort-calib-h3-2026-11-04/`（RESULTS.md・analysis/points.json）から引きました。
+- 計画の正本: 監督の計画ファイル `cozy-gliding-pudding`（以下「計画」）。11-04 の値は `Docs/Outputs-archive/comfort-calib-h3-2026-11-04/`（RESULTS.md・analysis/points.json）から引きました。
 - **本書は材料であって決定ではありません。** 快適上限表・記録簿・台帳への反映は計画 §7 の工程で行います。本書の作成では GPU もサーバーも使っておらず、`runs/` は変えていません。
 
 ## 用語

@@ -1,6 +1,6 @@
 # 台帳 §1-97 第 1 弾 GPU の門（1-G2・1-G3・1-G4）の実行手順
 
-作成 2026-10-19（準備担当。GPU は一度も使っていない）。計画は `C:\Users\phenotype nezu\.claude\plans\scalable-floating-thimble.md` の §2.3・§2.4・§5。
+作成 2026-10-19（準備担当。GPU は一度も使っていない）。計画は監督の計画ファイル `scalable-floating-thimble` の §2.3・§2.4・§5。
 
 ## 結論（先に）
 

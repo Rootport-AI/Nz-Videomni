@@ -150,7 +150,7 @@ Copy-Item outputs\h3-keyframes-2026-10-19\g3_api\state.json.before state.json   
   - `i2v_canvas_reference.png`・`i2v_first_frame.png`
   - `server.log.part`・`h3_worker.log.part`・`state.json.before`
 
-scratchpad（`C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\6080e139-5d66-42d3-a48f-feb0e61dd152\scratchpad\kf197\gates\`）:
+scratchpad（`%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\6080e139-5d66-42d3-a48f-feb0e61dd152\scratchpad\kf197\gates\`）:
 
 - `run_one.ps1`・`summ.py`
 - `backend_console.log`

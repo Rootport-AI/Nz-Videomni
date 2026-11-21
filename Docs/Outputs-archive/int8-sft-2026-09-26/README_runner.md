@@ -11,7 +11,7 @@
 `results/` と `RESULTS.md` を解決する）。
 
 ```
-cd "C:\Users\PHENOT~1\AppData\Local\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\4f4f90b0-d37e-4ed8-b2f7-5ad52bc95cee\scratchpad\int8"
+cd "%LOCALAPPDATA%\Temp\claude\s--OriginalApps-12-Nz-LTX23-AviUtl2\4f4f90b0-d37e-4ed8-b2f7-5ad52bc95cee\scratchpad\int8"
 python runner.py <subcommand> ...
 ```
 

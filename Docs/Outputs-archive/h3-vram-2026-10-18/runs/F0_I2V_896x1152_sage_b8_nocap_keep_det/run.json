@@ -16,7 +16,7 @@
     "seed": 42,
     "idle_seconds": 10.0,
     "image": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\71c540dc-970b-470e-aa0e-856dce76dfdc\\input.png",
-    "prompt_file": "C:\\Users\\phenotype nezu\\AppData\\Local\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-AviUtl2\\32e87660-be21-4f8e-8e1f-2f58a84eeeb9\\scratchpad\\h3vram\\owner_i2v_prompt.txt",
+    "prompt_file": "%LOCALAPPDATA%\\Temp\\claude\\s--OriginalApps-12-Nz-LTX23-AviUtl2\\32e87660-be21-4f8e-8e1f-2f58a84eeeb9\\scratchpad\\h3vram\\owner_i2v_prompt.txt",
     "keep_resident": true,
     "deterministic": true,
     "dry_run": false,

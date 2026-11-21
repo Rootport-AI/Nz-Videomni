@@ -60,7 +60,7 @@ PROMPT = (
     "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in "
     "puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>"
 )
-UPLOADS = Path(r"C:\Users\phenotype nezu\.claude\uploads\10f3a842-2a5e-48b4-8a07-419f0020a740")
+UPLOADS = Path.home() / ".claude" / "uploads" / "10f3a842-2a5e-48b4-8a07-419f0020a740"
 PICTURES = [UPLOADS / "17fde0c1-image.png", UPLOADS / "d80320dd-image.png", UPLOADS / "31d79f30-image.png"]
 VIDEO = ROOT / "outputs/03cffa21-eba7-4950-9229-746601284a28/output.mp4"
 OUT_DIR = ROOT / "outputs/h3-te-vram-2026-10-29"

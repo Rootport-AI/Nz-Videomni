@@ -29,13 +29,13 @@
 - `mem_history/analysis/i1080_243_p9_oom.md`（約 3.5MB。再現しなかった参考の 1 本の全セグメントの集計。要点は `mem_history/MEM_HISTORY_REPORT.md` §4）と `mem_history/analysis/*.json`。
 - `mem_history/README_archive.md` と `mem_history/measure_h3_vram.orig.py`（git 管理の [`../h3-vram16-2026-10-18/`](../h3-vram16-2026-10-18/) の `README.md`・`measure_h3_vram.py` と同じ中身）、計測台の写し `mem_history/measure_h3_vram.py`（原本との差は上の `harness_copy.diff`）、`mem_history/` の集計の台本と前後の確認の記録。
 - 較正台のコード（`calib.py` ほか）・素材 `materials/`・ログ（`drive2_*.log`・`commit_log.csv`・`preflight_*`・`rp_*`・`run_p_*`・`cool_*` ほか）・`plans/`・`RESULTS_template.md`・`make_results_ref.py`・`check_results.py`。
-- 計画の正本はセッションの計画ファイル `C:\Users\phenotype nezu\.claude\plans\delegated-marinating-patterson.md`（git 管理外）です。
+- 計画の正本はセッションの計画ファイル `delegated-marinating-patterson`（git 管理外）です。
 
 ---
 
 # comfort-calib-h3-ref-2026-11-03（台帳 §1-122・MiniMax H3 の参照つきの快適上限）較正台
 
-- 計画の正本は `C:\Users\phenotype nezu\.claude\plans\delegated-marinating-patterson.md`（§1 参照が足す行・§2.2 判定規則 v3″・§2.3 点と予測・§2.5 較正台の拡張・§2.6 開始の門）。この README は較正台の使い方だけを書く。
+- 計画の正本は監督の計画ファイル `delegated-marinating-patterson`（§1 参照が足す行・§2.2 判定規則 v3″・§2.3 点と予測・§2.5 較正台の拡張・§2.6 開始の門）。この README は較正台の使い方だけを書く。
 - 結果は `RESULTS.md`、点ごとの記録は `progress.md`（どちらも計測が始まってから作る）。
 - 準備した日は 2026-11-03。この時点で計測は 0 本（GPU は使っていない）。
 

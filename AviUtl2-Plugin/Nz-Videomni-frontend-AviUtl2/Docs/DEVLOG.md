@@ -6812,3 +6812,4 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 176.5 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）と確認は、オーナーの実機確認で行います。項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-288 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288）。
+- （その後、2026-11-22 に実機へ配置して確認し、合格。台帳は閉じた。記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §218.9）

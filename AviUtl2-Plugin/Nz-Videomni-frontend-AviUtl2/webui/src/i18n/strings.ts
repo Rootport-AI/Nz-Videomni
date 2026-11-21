@@ -1086,9 +1086,10 @@ export const en = {
     },
     /** W7: Chain-only Generate-disabled reasons (`GenerateReasonsNote`, below the
      * button). `promptEmpty`/`dimensionsOffGrid`/`cropInvalid` reuse Create's
-     * `create.generateReasons`; the count/total-frames/source-not-ready reasons
-     * reuse the existing field-adjacent banners (`minClipsError`/
-     * `totalFramesExceeded`/`sourceVideo.contextFramesError`). `uploadInFlight`
+     * `create.generateReasons`; the total-frames/source-not-ready reasons
+     * reuse the existing field-adjacent banners (`totalFramesExceeded`/
+     * `sourceVideo.contextFramesError`), and the count reason uses
+     * `minClipsError`, which only this list shows. `uploadInFlight`
      * is the single reason the three overlapping source gates normalize to
      * (R3). §1-15's reference lines that Create words identically
      * (`referenceNeedsLoras`/`attachReferenceVideo`/`referenceUploading`) are

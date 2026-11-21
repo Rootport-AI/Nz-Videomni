@@ -1956,9 +1956,6 @@ function ChainedScreenBody({
         </>
         )}
 
-        {!form.isClipCountValid && (
-          <p className="warning-banner">{strings.chained.minClipsError(form.minClips)}</p>
-        )}
         {!form.isTotalFramesValid && (
           <p className="warning-banner">{strings.chained.totalFramesExceeded(MAX_CHAIN_TOTAL_FRAMES)}</p>
         )}

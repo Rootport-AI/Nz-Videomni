@@ -378,9 +378,10 @@ export type ChainMode = "v2v" | "scratch";
  * failing gate — the structured form of `isValid` (`isValid ===
  * (validityReasons.length === 0)`). Each code has an imperative instruction in
  * the UI: `promptEmpty`/`dimensionsOffGrid`/`cropInvalid` reuse Create's
- * `strings.single.generateReasons`; `minClips`/`totalFramesExceeded`/
- * `sourceNotReady` reuse Chain's existing field-adjacent
- * banners; `clipFramesOffGrid`/`sourceUploading` are new
+ * `strings.single.generateReasons`; `totalFramesExceeded`/`sourceNotReady` use
+ * the same sentences as the existing field-adjacent banners; `minClips` uses
+ * `strings.chained.minClipsError` (shown only in this list);
+ * `clipFramesOffGrid`/`sourceUploading` are new
  * `strings.chained.generateReasons` lines. R3: the three overlapping source gates
  * (`sourceReady`/`noUploadInFlight`/`sourceNotBusy`) are normalized to a SINGLE
  * source code — `sourceUploading` while an upload is in flight, else

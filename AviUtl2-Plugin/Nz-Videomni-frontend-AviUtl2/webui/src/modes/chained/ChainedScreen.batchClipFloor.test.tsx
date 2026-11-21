@@ -148,10 +148,15 @@ describe("ChainedScreen — Batch v2v-ref-long relaxes the clip removal floor", 
 
     expect(clipCount(container)).toBe(1);
     expect(removeButtons(container)).toHaveLength(0);
-    // The settings-column banner and the reason list under Generate (Batch
-    // i2v-long's own list, outside the layout, keeps blocking too).
+    // The sentence appears once inside the layout: in the reason list under
+    // Generate (`warning-banner-mild`), not as a red settings-column banner
+    // (Batch i2v-long's own list, outside the layout, keeps blocking too).
     const layout = container.querySelector(".single-layout") as HTMLElement;
-    expect(within(layout).getAllByText(en.chained.minClipsError(2))).toHaveLength(2);
+    const sentences = within(layout).getAllByText(en.chained.minClipsError(2));
+    expect(sentences).toHaveLength(1);
+    expect(sentences[0]!.closest(".warning-banner-mild")).not.toBeNull();
+    const redBanners = Array.from(layout.querySelectorAll(".warning-banner:not(.warning-banner-mild)"));
+    expect(redBanners.some((banner) => banner.textContent === en.chained.minClipsError(2))).toBe(false);
     expect(screen.getByRole("button", { name: /^generate$/i })).toBeDisabled();
   });
 

@@ -24616,7 +24616,7 @@ GPU は使っていません。材料はコード読みと記録（`run.json`・
 
 ### 216.6 実機確認のやり直しへ回した点
 
-項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288 のチェックリストです（本節には写しません）。
+項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288 のチェックリストです（本節には写しません。その後の扱いは §217.8）。
 
 - 216.2 の 1 の動画で、行が完了して出力フォルダに保存されるか。手動の Chained で同じ動画を素材（冒頭）に入れたとき、時間切れにならずに生成が始まるか。
 - 216.2 の 2 で確かめられなかった、冒頭動画の無い行が混ざったバッチで、その行も生成されるか。
@@ -24668,9 +24668,37 @@ GPU は使っていません。材料はコード読みと記録（`run.json`・
 
 ### 217.6 実機確認へ回した点
 
-項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288 のチェックリストです（本節には写しません）。素材（冒頭）が空のまま冒頭動画つきのスキャンでクリップを 1 つまで減らせること、そのあいだの手動の「生成」の止まり方、きっかけが無くなったとき・LTX に切り替えたとき・素材（冒頭）を入れて外したとき・右クリックで Chained 画面が作り直されたときのクリップの数です。
+項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288 のチェックリストです（本節には写しません。その後の扱いは §217.8）。素材（冒頭）が空のまま冒頭動画つきのスキャンでクリップを 1 つまで減らせること、そのあいだの手動の「生成」の止まり方、きっかけが無くなったとき・LTX に切り替えたとき・素材（冒頭）を入れて外したとき・右クリックで Chained 画面が作り直されたときのクリップの数です。
 
 ### 217.7 終了処理
 
 - **コミット**: dev の `4e78c1d`（コードとテスト）・`981e600`（配布用 aux2）。本節を含む文書は、別のコミットで入れました。
 - **文書の更新箇所**: フロントエンド `Docs/BATCH_V2V_REF_LONG.md` の冒頭の参照の行と関連文書の表・§4.2・§13・§15 と §21 の新設（§20 の手当てを含む）・同 `Docs/DEVLOG.md` §175。台帳 §1-288 のチェックリストの書き直し。README §7.6。
+
+### 217.8 実機確認のチェックリストを絞った（2026-11-21）
+
+- **結論を先に**: オーナーの指摘（項目が多すぎる）を受けて、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-288 のチェックリストを、まだ確かめていない点と仕様を変えた点だけに絞りました。216.6・217.6 に挙げた点のうち、下に挙げるものは台帳の項目から外しています。項目の正本は台帳のままで、本節には写しません。
+- **1 回目の実機確認で合格済みの動きの確かめ直し**（216.2）:
+  - Joined でつないだ動画の中身（冒頭動画の末尾のあとに続きがつながること）と、同じ名前があるときの `_2` の付番。保存の呼び方もあわせて、操作パネルの `modes/batch-v2v-ref-long/runner.test.ts` の「Joined on with an opening video: joins, then saves the joined video」「records the name actually written (noClobber's _2)」でも固定してあります。
+  - 出力フォルダに保存される動画の名前（基準フォルダのファイルと同じ名前で、拡張子は `.mp4`）。
+  - Chained 画面が作り直されたあとも、区画の入力とスキャンの結果と行の編集が残ること（216.2 の「状態の保持」）。`modes/batch-v2v-ref-long/BatchV2vRefLongSection.test.tsx` の「keeps the inputs, the scan and the row edits across a close/reopen and a remount」と `useV2vRefLongForm.test.ts` の「keeps everything across an unmount and a remount」でも固定してあります。右クリックの操作から作り直しが起きる経路そのものを通すテストはありません。
+  - 表全体の縦のスクロールと、列見出しが表の上端に残ること。スクロールを 2 段にしたあとも外側の作り（高さの上限 720px）は変えていません。CSS だけで決まる動きなので、自動テストでは固定していません。
+- **自動テストで固定してある分岐**（テストのファイルはどれも操作パネルの `webui/src/` の下）:
+
+| 外した分岐 | 固定しているテスト |
+|---|---|
+| 空欄の既定の欄の ❌ を押しても何も起きない | `modes/batch-v2v-ref-long/store.test.ts`「removeField on a default field clears its path; an empty one is left as it is」 |
+| ❌ にマウスを載せたときの文、`<Video 1>` の ❌ はパスだけを消す、`<Video 2>` の ❌ は欄ごと消す | `modes/batch-v2v-ref-long/FolderInputs.test.tsx`「❌ after each field's 📁: a default field's clears the path, an added field's removes it」、`store.test.ts`「removeField on an added field removes it; the later ones move up and the kind can be added again」、`folderRules.test.ts`「isDefaultField: Picture 1–2, Video 1, Audio 1 by position, whatever the id」 |
+| 実行中は ❌ が押せない | `FolderInputs.test.tsx`「inputsLocked disables every input and button」、`useV2vRefLongForm.test.ts`「while running, the clip count stays the one frozen at Start and inputs are locked」 |
+| スキャンの後で ❌ で消すと「もう一度スキャンしてください」で開始が止まる | `store.test.ts`「removing a filled field or moving one up after a scan makes the scan stale」、`startGuards.test.ts`「the folders changed after the scan: scanStale, and the row checks are skipped」、`useV2vRefLongForm.test.ts`「blocks Start before a scan and after the folders change, until restored」 |
+| 素材（冒頭）を入れて外しても、クリップが増えない（右クリックで作り直したあとに外した場合も同じ処理） | `modes/chained/useChainForm.batchFloor.test.ts`「while relaxed, attaching then clearing a source video does not pad the clips back to 2」 |
+| LTX に切り替えてもクリップの数は変わらず、手動の「生成」は止まる。LTX では 2 つのクリップに ❌ が出ない。H3 に戻すと ❌ が出る | `useChainForm.batchFloor.test.ts`「turning the flag off with a single clip leaves the clip count alone」、`modes/chained/ChainedScreen.batchClipFloor.test.tsx`「LTX (no constraints) ignores a scanned opening video: two clips show no remove button」「H3 with a scanned opening video: the remove button trims to one clip; the manual Generate stays blocked」 |
+| きっかけが無くなったあとクリップを 2 つに足すと、行が「⚪ 待機中」に戻り、❌ は出ない | `modes/batch-v2v-ref-long/rowModel.test.ts`「noSourceSingleClip: one clip and no opening video」、`ChainedScreen.batchClipFloor.test.tsx`「H3 with %s: two clips show no remove button」（スキャンに冒頭動画が無い場合） |
+| 「クリップ 1、2 に使われない参照ファイルがあります。」（当たるクリップが複数のとき） | `i18n/strings.test.ts`「batchV2vRefLong: the owner-specified Japanese copy」、`V2vRefLongTable.test.tsx`「⚠ Waiting with the clip display numbers in the tooltip」 |
+
+- **自動テストでは固定しておらず、台帳の項目からも外したもの**:
+  - 出力フォルダの欄に手でパスを入れると欄の下の「自動: 」が消えること。手で決めた扱いに変わることは `store.test.ts` の「setVideoDir / setJoined / setFillFollowing / setOutDir」と「a hand-set output folder is kept by a scan」で固定してありますが、自動の扱いでないときに表示を出さない分岐（`FolderInputs.tsx`）を描いて確かめるテストはありません。
+  - 操作パネルのウィンドウの横幅を変えても、Reference の中のカード 1 枚の横幅が変わらないこと。幅は CSS の固定値（`BatchV2vRefLongSection.css`）で決まるので、台帳では 1 つのウィンドウの幅で Chained のカードと同じくらいに見えるかだけを確かめます。
+- **実機でしか見えないが、独立の項目にはしなかった 2 点**（台帳の「クリップカードの表示の枠」の項目の中で、違う動きに気づいたら報告する扱い）:
+  - クリップカードの表示の枠を端までスクロールしても、外側の表が続けて動かないこと。CSS だけで決まる動きで、自動テストでは固定していません。
+  - 開くカードを切り替えたときに、枠のスクロールが先頭に戻ること。先頭へ戻す処理そのものは `RowClipCards.test.tsx` の「switching the open card scrolls the cards box back to the top」で固定してあり、実機で見えるのは画面上の見え方です。

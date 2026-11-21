@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../bridge/mockBridge";
 import type { NativeBridge } from "../bridge";
 import { BackendApiError, createApiClient } from "./client";
-import type { GenerateRequest } from "./types";
+import type { GenerateChainRequest, GenerateRequest } from "./types";
 
 const BASE_REQUEST: GenerateRequest = {
   prompt: "a cat riding a skateboard",
@@ -141,6 +141,19 @@ describe("api/client", () => {
     expect(requestSpy).toHaveBeenCalledWith(
       "backend.request",
       expect.objectContaining({ method: "POST", path: "/api/v1/jobs/job-1/join", timeoutMs: 120_000 }),
+    );
+  });
+
+  it("generateChain() forwards timeoutMs: 120_000 to backend.request", async () => {
+    const requestSpy = vi.fn(() => Promise.resolve({ status: 202, body: { job_id: "job-1", status: "queued" } }));
+    const spyBridge = { request: requestSpy, on: () => () => {} } as unknown as NativeBridge;
+    const client = createApiClient(spyBridge);
+
+    await client.generateChain({} as GenerateChainRequest);
+
+    expect(requestSpy).toHaveBeenCalledWith(
+      "backend.request",
+      expect.objectContaining({ method: "POST", path: "/api/v1/generate/chain", timeoutMs: 120_000 }),
     );
   });
 

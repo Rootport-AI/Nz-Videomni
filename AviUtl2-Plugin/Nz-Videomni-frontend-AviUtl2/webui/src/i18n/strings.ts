@@ -1471,6 +1471,10 @@ export const en = {
       addAudio: "Add audio folder",
       addFrame: "Add clip",
       removeFrame: "Remove this clip's folders",
+      /** ❌ of a default field (`name` = its `clipFieldLabel`). */
+      clearField: (name: string): string => `Clear the path of ${name}`,
+      /** ❌ of an added field. */
+      removeField: (name: string): string => `Remove the field ${name}`,
       fillFollowing: "Use the same reference files for the following clips",
       unusedFrames: (clipNo: number): string =>
         `The folders for clip ${clipNo} and later are not used (they still count toward the number of rows).`,
@@ -1479,7 +1483,7 @@ export const en = {
       label: "Output folder",
       button: "Choose output folder…",
       auto: (path: string): string => `Auto: ${path}`,
-      none: "No output folder yet — scanning sets it automatically, next to the folder with the most files.",
+      none: "No output folder set yet. (Note: if you scan with this field left empty, it is filled in automatically.)",
     },
     scanButton: "Scan folders",
     scanningButton: (done: number, total: number): string => `Scanning… ${done}/${total}`,
@@ -1528,10 +1532,11 @@ export const en = {
       skip: "Skip",
     },
     ignoredClips: (clipNos: readonly number[]): string =>
-      `${clipNos.length > 1 ? "Clips" : "Clip"} ${clipNos.join(", ")}: the Reference has cards that are not used (greyed out).`,
+      clipNos.length > 1
+        ? `Clips ${clipNos.join(", ")} have reference files that are not used.`
+        : `Clip ${clipNos.join(", ")} has reference files that are not used.`,
     rowBlockReasons: {
-      noSourceSingleClip:
-        "This row has no opening video and the chain has 1 clip. Without an opening video, at least 2 clips are needed.",
+      noSourceSingleClip: "Without an opening video, 2 or more clips are needed.",
       sourceTooShort: (frames: number): string => `The opening video is shorter than ${frames} frames.`,
       clip0TooShort: (minFrames: number): string =>
         `With an opening video, clip 1 needs at least ${minFrames} frames.`,
@@ -1544,8 +1549,7 @@ export const en = {
       outDirMissing: "Choose an output folder.",
       noRunnableRows:
         "There are no rows to run. 🚫 rows are skipped. Press 🔁 on a finished row to put it back to Waiting.",
-      fl2vaLoaded:
-        "An FL2VA model is loaded. To run a batch that uses reference material, load a Ref2VA model or a Hybrid model before starting.",
+      fl2vaLoaded: "Load a Ref2VA model or a Hybrid model. The FL2VA model loaded now cannot use Reference.",
       sourceAudioAttached: "An audio file is attached to the Clip Chain form. This batch does not use it — remove it.",
       promptEmpty: "Write a prompt — either on the Clip Chain form or in a row's Main prompt edit column.",
       unknownLoraTag: "The prompt has a LoRA name that does not exist. Fix or remove the tag.",
@@ -3483,6 +3487,8 @@ export const ja: Strings = {
       addAudio: "音声フォルダを追加",
       addFrame: "クリップを追加",
       removeFrame: "このクリップの枠を消す",
+      clearField: (name: string): string => `${name} のパスを消す`,
+      removeField: (name: string): string => `${name} の欄を消す`,
       fillFollowing: "後続クリップにも同じ参照ファイルを入力",
       unusedFrames: (clipNo: number): string => `クリップ ${clipNo} 以降の枠は使われません（行数の決定には入ります）。`,
     },
@@ -3490,7 +3496,7 @@ export const ja: Strings = {
       label: "出力フォルダ",
       button: "出力フォルダを選択…",
       auto: (path: string): string => `自動: ${path}`,
-      none: "出力フォルダは未設定です — スキャンすると、ファイルが最も多いフォルダの隣に自動で決まります。",
+      none: "出力フォルダは未設定です（※空欄のままスキャンすると、自動入力されます）",
     },
     scanButton: "フォルダをスキャン",
     scanningButton: (done: number, total: number): string => `スキャン中… ${done}/${total}`,
@@ -3536,13 +3542,12 @@ export const ja: Strings = {
       generating: "生成中",
       done: "完了",
       failed: "失敗",
-      skip: "対象外",
+      skip: "Skip",
     },
     ignoredClips: (clipNos: readonly number[]): string =>
-      `クリップ ${clipNos.join("、")} の Reference に、使われない（灰色の）カードがあります。`,
+      `クリップ ${clipNos.join("、")} に使われない参照ファイルがあります。`,
     rowBlockReasons: {
-      noSourceSingleClip:
-        "この行には冒頭動画が無く、連結クリップ数が 1 です。冒頭動画が無いときはクリップが 2 つ以上要ります。",
+      noSourceSingleClip: "冒頭動画がない場合、2つ以上のクリップが必要です。",
       sourceTooShort: (frames: number): string => `冒頭動画が ${frames} フレームに足りません。`,
       clip0TooShort: (minFrames: number): string => `冒頭動画があるとき、クリップ 1 は ${minFrames} フレーム以上要ります。`,
       fileTooLarge: (name: string, limitMb: number): string => `${name} が上限の ${limitMb} MB を超えています。`,
@@ -3554,7 +3559,7 @@ export const ja: Strings = {
       outDirMissing: "出力フォルダを指定してください。",
       noRunnableRows: "実行できる行がありません。🚫 の行は飛ばします。終わった行は 🔁 で待機中に戻せます。",
       fl2vaLoaded:
-        "FL2VA モデルがロードされています。参照素材を使うバッチは、Ref2VA モデルまたは Hybrid モデルをロードしてから開始してください。",
+        "Ref2VA モデルまたは Hybrid モデルをロードしてください。現在ロードされているFL2VA モデルでは、Referenceは使えません。",
       sourceAudioAttached: "クリップチェーンに音声が設定されています。このバッチでは使わないので外してください。",
       promptEmpty: "プロンプトを入力してください（クリップチェーンのプロンプトか、行ごとのメインプロンプトの編集欄のどちらかで）。",
       unknownLoraTag: "プロンプトに存在しないLoRA名が含まれています。タグを修正するか削除してください。",

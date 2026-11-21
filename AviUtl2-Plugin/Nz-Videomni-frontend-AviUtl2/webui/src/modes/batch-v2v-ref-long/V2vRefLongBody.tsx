@@ -59,11 +59,9 @@ export function V2vRefLongBody({ form, nativeBridge }: V2vRefLongBodyProps) {
       <FolderInputs form={form} />
 
       <div className="field">
-        <div>
-          <button type="button" className="secondary-button" disabled={!form.canScan} onClick={() => void form.scan()}>
-            {state.scanning ? t.scanningButton(progress?.done ?? 0, progress?.total ?? 0) : t.scanButton}
-          </button>
-        </div>
+        <button type="button" className="secondary-button" disabled={!form.canScan} onClick={() => void form.scan()}>
+          {state.scanning ? t.scanningButton(progress?.done ?? 0, progress?.total ?? 0) : t.scanButton}
+        </button>
         {state.scanError && <p className="warning-banner">{t.scanError(state.scanError)}</p>}
         {form.emptyFields.map((field) => {
           const label = emptyFieldLabel(t, field);

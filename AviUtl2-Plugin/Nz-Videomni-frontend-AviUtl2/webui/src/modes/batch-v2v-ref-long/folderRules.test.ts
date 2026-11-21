@@ -11,6 +11,7 @@ import {
   filledFolderCount,
   frameCounts,
   frameIndexForClip,
+  isDefaultField,
   outFileNameOf,
   pickBaseField,
   rowCountOf,
@@ -66,6 +67,28 @@ describe("folderRules: frames and fields", () => {
     expect(frame.fields.map((f) => f.kind)).toEqual(["picture", "picture", "picture", "video", "video", "audio"]);
     const added = frame.fields[2];
     expect(added && fieldSlot(frame, added.id)).toBe(3);
+  });
+
+  it("isDefaultField: Picture 1–2, Video 1, Audio 1 by position, whatever the id", () => {
+    const frame = withAddedField(withAddedField(withAddedField(createDefaultFrame(1), "picture"), "video"), "audio");
+    const byTag = frame.fields.map((f) => `${f.kind}${fieldSlot(frame, f.id)}:${isDefaultField(frame, f.id)}`);
+    expect(byTag).toEqual([
+      "picture1:true",
+      "picture2:true",
+      "picture3:false",
+      "video1:true",
+      "video2:false",
+      "audio1:true",
+      "audio2:false",
+    ]);
+    expect(isDefaultField(frame, 99)).toBe(false);
+    // Removing an added field (Picture 3) moves the later ones up: Picture 4
+    // becomes Picture 3 and is still an added field; the defaults stay default.
+    const four = withAddedField(frame, "picture");
+    const after: FolderFrame = { ...four, fields: four.fields.filter((f) => f.id !== 5) };
+    expect(fieldSlot(after, 8)).toBe(3);
+    expect(isDefaultField(after, 8)).toBe(false);
+    expect([1, 2, 3, 4].map((id) => isDefaultField(after, id))).toEqual([true, true, true, true]);
   });
 
   it("frameCounts counts only fields with a path", () => {

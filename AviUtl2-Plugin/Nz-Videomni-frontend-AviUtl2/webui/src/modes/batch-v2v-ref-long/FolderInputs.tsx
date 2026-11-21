@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useStrings } from "../../i18n/LanguageContext";
 import { REFERENCE_KINDS, referenceTag } from "../single/referenceRules";
 import type { ReferenceKind } from "../single/referenceRules";
-import { canAddField, fieldSlot, frameCounts, maxOfKind } from "./folderRules";
+import { canAddField, fieldSlot, filledPath, frameCounts, isDefaultField, maxOfKind } from "./folderRules";
 import type { FolderFrame, UseV2vRefLongFormResult } from "./types";
 
 export interface FolderInputsProps {
@@ -76,7 +76,13 @@ export function FolderInputs({ form }: FolderInputsProps) {
           pickTitle={t.outDir.button}
           onPick={() => void form.pickOutDir(t.outDir.button)}
           onCommit={(value) => form.setOutDir(value)}
-          hint={inputs.outDir ? (inputs.outDirIsAuto ? t.outDir.auto(inputs.outDir) : null) : t.outDir.none}
+          hint={
+            filledPath(inputs.outDir) === ""
+              ? t.outDir.none
+              : inputs.outDirIsAuto
+                ? t.outDir.auto(inputs.outDir)
+                : null
+          }
         />
       </div>
     </>
@@ -136,6 +142,7 @@ function FrameBox({
             .map((field) => {
               const tag = referenceTag(kind, fieldSlot(frame, field.id) ?? 0);
               const name = all.table.clipFieldLabel(index + 1, tag);
+              const removeName = isDefaultField(frame, field.id) ? t.clearField(name) : t.removeField(name);
               return (
                 <PathRow
                   key={field.id}
@@ -147,6 +154,8 @@ function FrameBox({
                   pickName={`${name} ${t.fieldButton}`}
                   onPick={() => void form.pickFieldDir(index, field.id, t.fieldButton)}
                   onCommit={(value) => form.setFieldPath(index, field.id, value)}
+                  removeName={removeName}
+                  onRemove={() => form.removeField(index, field.id)}
                   inline
                 />
               );
@@ -193,6 +202,10 @@ interface PathRowProps {
    * `label` and `pickTitle`. */
   inputName?: string;
   pickName?: string;
+  /** ❌ after 📁 (the reference fields); `removeName` is its title and
+   * accessible name. */
+  onRemove?: () => void;
+  removeName?: string;
 }
 
 /** "label + hand-typable path + 📁", committed on blur — the same shape as
@@ -208,6 +221,8 @@ function PathRow({
   inline = false,
   inputName = label,
   pickName = pickTitle,
+  onRemove,
+  removeName,
 }: PathRowProps) {
   const [draft, setDraft] = useState(value);
   useEffect(() => {
@@ -238,6 +253,18 @@ function PathRow({
       >
         📁
       </button>
+      {onRemove && (
+        <button
+          type="button"
+          className="icon-action-button clip-remove"
+          disabled={disabled}
+          title={removeName}
+          aria-label={removeName}
+          onClick={onRemove}
+        >
+          <span aria-hidden="true">❌</span>
+        </button>
+      )}
     </div>
   );
   if (inline) return input;

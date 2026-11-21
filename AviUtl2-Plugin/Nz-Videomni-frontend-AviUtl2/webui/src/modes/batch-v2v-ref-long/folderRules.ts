@@ -39,6 +39,18 @@ export function fieldSlot(frame: FolderFrame, fieldId: number): number | null {
   return null;
 }
 
+/** Fields per kind a new frame starts with ({@link createDefaultFrame}). */
+const DEFAULT_FIELDS_OF_KIND: Record<ReferenceKind, number> = { picture: 2, video: 1, audio: 1 };
+
+/** Whether the field is one a new frame starts with, by its position among
+ * the frame's fields of its kind (Picture 1–2, Video 1, Audio 1). Its ❌ clears
+ * the path; an added field's ❌ removes the field. */
+export function isDefaultField(frame: FolderFrame, fieldId: number): boolean {
+  const field = frame.fields.find((f) => f.id === fieldId);
+  const slot = fieldSlot(frame, fieldId);
+  return field !== undefined && slot !== null && slot <= DEFAULT_FIELDS_OF_KIND[field.kind];
+}
+
 export interface FrameCounts {
   picture: number;
   video: number;

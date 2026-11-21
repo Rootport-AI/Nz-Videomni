@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { en } from "../../i18n/strings";
 import { V2vRefLongBody } from "./V2vRefLongBody";
 import { makeForm, makeRow, makeView } from "./fakeForm.testSupport";
 import { createInitialV2vRefLongState } from "./store";
@@ -46,7 +47,10 @@ describe("V2vRefLongBody", () => {
   it("Scan calls the form; while scanning it shows the progress and is disabled", () => {
     const form = makeForm();
     const idle = renderBody(form);
-    fireEvent.click(screen.getByRole("button", { name: "Scan folders" }));
+    const scanButton = screen.getByRole("button", { name: "Scan folders" });
+    // Straight under `.field` (full width, as Batch i2v-long's).
+    expect(scanButton.parentElement).toHaveClass("field");
+    fireEvent.click(scanButton);
     expect(form.scan).toHaveBeenCalled();
     idle.unmount();
 
@@ -116,9 +120,7 @@ describe("V2vRefLongBody", () => {
       }),
     );
     const lines = reasonLines();
-    expect(lines).toContain(
-      "An FL2VA model is loaded. To run a batch that uses reference material, load a Ref2VA model or a Hybrid model before starting.",
-    );
+    expect(lines).toContain(en.batchV2vRefLong.blockReasons.fl2vaLoaded);
     expect(lines).toContain(
       "These rows would be sent with an empty prompt: 1, 5. Write a prompt on the Clip Chain form, or in each row's Main prompt edit column.",
     );

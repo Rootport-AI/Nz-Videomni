@@ -239,6 +239,9 @@ export interface UseV2vRefLongFormResult {
   addField(frame: number, kind: ReferenceKind): void;
   setFieldPath(frame: number, fieldId: number, path: string): void;
   pickFieldDir(frame: number, fieldId: number, title?: string): Promise<void>;
+  /** ❌: clears a default field's path (`isDefaultField`), removes an added
+   * field (the later fields of its kind move up a tag number). */
+  removeField(frame: number, fieldId: number): void;
   addFrame(): void;
   removeLastFrame(): void;
   setFillFollowing(value: boolean): void;

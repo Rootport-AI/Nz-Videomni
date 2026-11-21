@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { en } from "../../i18n/strings";
 import { FolderInputs } from "./FolderInputs";
 import { createDefaultFrame, withAddedField } from "./folderRules";
 import { RULES, makeForm } from "./fakeForm.testSupport";
@@ -169,10 +170,16 @@ describe("FolderInputs", () => {
     expect(screen.getByText("No folder of opening videos selected.")).toBeInTheDocument();
   });
 
-  it("the output folder shows the automatic path, or the not-set line", () => {
+  it("the output folder shows the automatic path, or the not-set line (a blank value too)", () => {
     const unset = renderInputs(makeForm());
-    expect(screen.getByText(/No output folder yet/)).toBeInTheDocument();
+    expect(screen.getByText(en.batchV2vRefLong.outDir.none)).toBeInTheDocument();
     unset.unmount();
+    const blank = renderInputs(
+      makeForm({ state: { ...createInitialV2vRefLongState(), inputs: inputsWith({ outDir: "   ", outDirIsAuto: true }) } }),
+    );
+    expect(screen.getByText(en.batchV2vRefLong.outDir.none)).toBeInTheDocument();
+    expect(screen.queryByText(/^Auto:/)).toBeNull();
+    blank.unmount();
     const state = {
       ...createInitialV2vRefLongState(),
       inputs: inputsWith({ outDir: "C:\\clips_out", outDirIsAuto: true }),
@@ -185,11 +192,48 @@ describe("FolderInputs", () => {
   it("inputsLocked disables every input and button", () => {
     const state = {
       ...createInitialV2vRefLongState(),
-      inputs: inputsWith({ frames: [createDefaultFrame(1), createDefaultFrame(2)] }),
+      inputs: inputsWith({ frames: [createDefaultFrame(1), withAddedField(createDefaultFrame(2), "picture")] }),
     };
     const { container } = renderInputs(makeForm({ state, inputsLocked: true }));
     const controls = container.querySelectorAll("input, button");
     expect(controls.length).toBeGreaterThan(10);
     controls.forEach((el) => expect(el).toBeDisabled());
+    // The fields' ❌ too.
+    const t = en.batchV2vRefLong;
+    expect(screen.getByRole("button", { name: t.refFolders.clearField("Clip 1 <Picture 1>") })).toBeDisabled();
+    expect(screen.getByRole("button", { name: t.refFolders.removeField("Clip 2 <Picture 3>") })).toBeDisabled();
+  });
+
+  it("❌ after each field's 📁: a default field's clears the path, an added field's removes it", () => {
+    let frame = withAddedField(withAddedField(frameWith(1, { 1: "C:\\p1" }), "picture"), "video");
+    frame = withAddedField(frame, "audio");
+    const state = { ...createInitialV2vRefLongState(), inputs: inputsWith({ frames: [frame] }) };
+    const form = makeForm({ state });
+    renderInputs(form);
+    const t = en.batchV2vRefLong.refFolders;
+    const box = within(screen.getByTestId("v2v-frame-0"));
+
+    // Right after 📁, on the same row.
+    const pick = box.getByRole("button", { name: "Clip 1 <Picture 1> Choose folder…" });
+    const clear = box.getByRole("button", { name: t.clearField("Clip 1 <Picture 1>") });
+    expect(pick.nextElementSibling).toBe(clear);
+    expect(clear).toHaveAttribute("title", t.clearField("Clip 1 <Picture 1>"));
+    expect(clear.textContent).toBe("❌");
+
+    for (const tag of ["<Picture 1>", "<Picture 2>", "<Video 1>", "<Audio 1>"]) {
+      expect(box.getByRole("button", { name: t.clearField(`Clip 1 ${tag}`) })).toBeEnabled();
+      expect(box.queryByRole("button", { name: t.removeField(`Clip 1 ${tag}`) })).toBeNull();
+    }
+    for (const tag of ["<Picture 3>", "<Video 2>", "<Audio 2>"]) {
+      expect(box.getByRole("button", { name: t.removeField(`Clip 1 ${tag}`) })).toBeEnabled();
+      expect(box.queryByRole("button", { name: t.clearField(`Clip 1 ${tag}`) })).toBeNull();
+    }
+    expect(t.clearField("x")).not.toBe(t.removeFrame);
+    expect(t.removeField("x")).not.toBe(t.removeFrame);
+
+    fireEvent.click(box.getByRole("button", { name: t.clearField("Clip 1 <Picture 1>") }));
+    expect(form.removeField).toHaveBeenLastCalledWith(0, 1);
+    fireEvent.click(box.getByRole("button", { name: t.removeField("Clip 1 <Video 2>") }));
+    expect(form.removeField).toHaveBeenLastCalledWith(0, 6);
   });
 });

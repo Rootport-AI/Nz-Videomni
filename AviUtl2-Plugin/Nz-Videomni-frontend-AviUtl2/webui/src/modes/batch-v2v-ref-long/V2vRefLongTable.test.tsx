@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { en } from "../../i18n/strings";
 import { V2vRefLongTable } from "./V2vRefLongTable";
 import { makeForm, makeRow, makeView } from "./fakeForm.testSupport";
 import type { UseV2vRefLongFormResult } from "./types";
+
+const t = en.batchV2vRefLong;
+const SKIP = `🚫 ${t.stat.skip}`;
 
 function renderTable(form: UseV2vRefLongFormResult) {
   return render(
@@ -66,15 +70,15 @@ describe("V2vRefLongTable", () => {
       makeView(makeRow(2, { stat: "Done" }), { blockReasons }),
     ];
     renderTable(makeForm({ rowViews }));
-    const skip = within(screen.getByTestId("v2v-row-0")).getByText("🚫 Skip");
+    const skip = within(screen.getByTestId("v2v-row-0")).getByText(SKIP);
     expect(skip).toHaveAttribute(
       "title",
-      "This row has no opening video and the chain has 1 clip. Without an opening video, at least 2 clips are needed.\nbig.mp4 is over the 200 MB limit.",
+      `${t.rowBlockReasons.noSourceSingleClip}\nbig.mp4 is over the 200 MB limit.`,
     );
     // A failed row keeps its failure reason after the 🚫 reasons.
-    expect(within(screen.getByTestId("v2v-row-1")).getByText("🚫 Skip")).toHaveAttribute(
+    expect(within(screen.getByTestId("v2v-row-1")).getByText(SKIP)).toHaveAttribute(
       "title",
-      "This row has no opening video and the chain has 1 clip. Without an opening video, at least 2 clips are needed.\nbig.mp4 is over the 200 MB limit.\nboom",
+      `${t.rowBlockReasons.noSourceSingleClip}\nbig.mp4 is over the 200 MB limit.\nboom`,
     );
     // A finished row keeps its own status.
     expect(within(screen.getByTestId("v2v-row-2")).getByText("✅ Done")).toBeInTheDocument();
@@ -88,11 +92,11 @@ describe("V2vRefLongTable", () => {
     ];
     renderTable(makeForm({ rowViews }));
     const noMaterial = "This row has no material (neither an opening video nor any reference is assigned).";
-    expect(within(screen.getByTestId("v2v-row-0")).getByText("🚫 Skip")).toHaveAttribute(
+    expect(within(screen.getByTestId("v2v-row-0")).getByText(SKIP)).toHaveAttribute(
       "title",
       `${noMaterial}\nJoin failed: x`,
     );
-    expect(within(screen.getByTestId("v2v-row-1")).getByText("🚫 Skip")).toHaveAttribute("title", noMaterial);
+    expect(within(screen.getByTestId("v2v-row-1")).getByText(SKIP)).toHaveAttribute("title", noMaterial);
   });
 
   it("⚠ Waiting with the clip display numbers in the tooltip", () => {
@@ -102,7 +106,7 @@ describe("V2vRefLongTable", () => {
     ];
     renderTable(makeForm({ rowViews }));
     const warn = within(screen.getByTestId("v2v-row-0")).getByText("⚠ Waiting");
-    expect(warn).toHaveAttribute("title", "Clips 1, 3: the Reference has cards that are not used (greyed out).");
+    expect(warn).toHaveAttribute("title", t.ignoredClips([1, 3]));
     expect(within(screen.getByTestId("v2v-row-1")).getByText("⏳ Generating")).toBeInTheDocument();
   });
 

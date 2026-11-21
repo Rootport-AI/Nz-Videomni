@@ -6,11 +6,21 @@
  */
 import { REFERENCE_KINDS, emptySlot } from "../single/referenceRules";
 import type { ReferenceKind, ReferenceSlot, ReferenceState } from "../single/referenceRules";
-import { canAddField, createDefaultFrame, deriveV2vRefLongOutDir, baseFolderPath, rowCountOf, withAddedField } from "./folderRules";
+import {
+  canAddField,
+  createDefaultFrame,
+  deriveV2vRefLongOutDir,
+  baseFolderPath,
+  filledPath,
+  isDefaultField,
+  rowCountOf,
+  withAddedField,
+} from "./folderRules";
 import { effectiveClip } from "./rowModel";
 import type {
   ClipEdit,
   ClipSlotFile,
+  FolderField,
   PromptMode,
   ScanResult,
   V2vRefLongState,
@@ -26,6 +36,8 @@ export type V2vRefLongAction =
   | { type: "setJoined"; joined: boolean }
   | { type: "addField"; frame: number; kind: ReferenceKind; rules: ReferenceRules }
   | { type: "setFieldPath"; frame: number; fieldId: number; path: string }
+  /** ❌: a default field's path is cleared, an added field is removed. */
+  | { type: "removeField"; frame: number; fieldId: number }
   | { type: "addFrame" }
   | { type: "removeLastFrame" }
   | { type: "setFillFollowing"; value: boolean }
@@ -143,6 +155,21 @@ export function reduceV2vRefLong(state: V2vRefLongState, action: V2vRefLongActio
       };
       return withInputs(state, { frames: state.inputs.frames.map((f) => (f === frame ? next : f)) });
     }
+    case "removeField": {
+      const frame = state.inputs.frames[action.frame];
+      const field = frame?.fields.find((f) => f.id === action.fieldId);
+      if (!frame || !field) return state;
+      let fields: FolderField[];
+      if (isDefaultField(frame, field.id)) {
+        if (field.path === "") return state;
+        fields = frame.fields.map((f) => (f === field ? { ...f, path: "" } : f));
+      } else {
+        // The later fields of the kind move up a tag number.
+        fields = frame.fields.filter((f) => f !== field);
+      }
+      const next = { ...frame, fields };
+      return withInputs(state, { frames: state.inputs.frames.map((f) => (f === frame ? next : f)) });
+    }
     case "addFrame": {
       const id = state.inputs.frames.reduce((max, f) => Math.max(max, f.id), 0) + 1;
       return withInputs(state, { frames: [...state.inputs.frames, createDefaultFrame(id)] });
@@ -153,7 +180,8 @@ export function reduceV2vRefLong(state: V2vRefLongState, action: V2vRefLongActio
     case "setFillFollowing":
       return withInputs(state, { fillFollowing: action.value });
     case "setOutDir":
-      return withInputs(state, { outDir: action.path, outDirIsAuto: false });
+      // Emptied (blank) = back to auto: the next scan fills it in again.
+      return withInputs(state, { outDir: action.path, outDirIsAuto: filledPath(action.path) === "" });
 
     case "scanStarted":
       return { ...state, scanning: true, scanProgress: null, scanError: null };

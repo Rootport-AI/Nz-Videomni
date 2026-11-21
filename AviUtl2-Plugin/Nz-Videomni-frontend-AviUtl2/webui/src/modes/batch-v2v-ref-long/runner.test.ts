@@ -211,6 +211,9 @@ describe("V2vRefLongRunner", () => {
     await runAll(h, [plan(0)]);
     expect(chainBodies(h.calls)).toHaveLength(3);
     expect(h.rows.get(0)).toMatchObject({ stat: "Done" });
+    // Every attempt waits up to 120 s (the server checks the opening video first).
+    const submits = h.calls.filter((c) => isRequest(c, "POST", /\/generate\/chain$/));
+    expect(submits.map((c) => c.params.timeoutMs)).toEqual([120_000, 120_000, 120_000]);
   });
 
   it("fails the row after three 409s", async () => {

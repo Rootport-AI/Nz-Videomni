@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReferenceRules } from "../single/referenceRules";
+import { fieldSlot, isDefaultField, sameScanInputs } from "./folderRules";
 import {
   __resetV2vRefLongStoreForTests,
   createInitialV2vRefLongState,
@@ -79,6 +80,76 @@ describe("reduceV2vRefLong: inputs", () => {
     expect(s.inputs.frames[0]?.fields.map((x) => x.path)).toEqual(["", "", "D:\\vid", ""]);
   });
 
+  it("removeField on a default field clears its path; an empty one is left as it is", () => {
+    const s = reduce(createInitialV2vRefLongState(), { type: "setFieldPath", frame: 0, fieldId: 2, path: "D:\\p2" });
+    const cleared = reduce(s, { type: "removeField", frame: 0, fieldId: 2 });
+    expect(cleared.inputs.frames[0]?.fields.map((x) => [x.id, x.path])).toEqual([
+      [1, ""],
+      [2, ""],
+      [3, ""],
+      [4, ""],
+    ]);
+    // Picture 1, Video 1, Audio 1 already empty: the same state.
+    for (const fieldId of [1, 3, 4]) expect(reduce(cleared, { type: "removeField", frame: 0, fieldId })).toBe(cleared);
+    // Unknown frame or field.
+    expect(reduce(cleared, { type: "removeField", frame: 3, fieldId: 1 })).toBe(cleared);
+    expect(reduce(cleared, { type: "removeField", frame: 0, fieldId: 99 })).toBe(cleared);
+  });
+
+  it("removeField on an added field removes it; the later ones move up and the kind can be added again", () => {
+    let s = reduce(
+      createInitialV2vRefLongState(),
+      { type: "addField", frame: 0, kind: "picture", rules: RULES },
+      { type: "addField", frame: 0, kind: "picture", rules: RULES },
+      { type: "setFieldPath", frame: 0, fieldId: 5, path: "D:\\p3" },
+      { type: "setFieldPath", frame: 0, fieldId: 6, path: "D:\\p4" },
+    );
+    s = reduce(s, { type: "removeField", frame: 0, fieldId: 5 });
+    const frame = s.inputs.frames[0];
+    if (!frame) throw new Error("no frame");
+    expect(frame.fields.map((x) => x.id)).toEqual([1, 2, 6, 3, 4]);
+    // Picture 4 is Picture 3 now, and is an added field still.
+    expect(fieldSlot(frame, 6)).toBe(3);
+    expect(isDefaultField(frame, 6)).toBe(false);
+    expect(frame.fields.find((x) => x.id === 6)?.path).toBe("D:\\p4");
+
+    s = reduce(s, { type: "addField", frame: 0, kind: "picture", rules: RULES });
+    expect(s.inputs.frames[0]?.fields.filter((x) => x.kind === "picture")).toHaveLength(4);
+
+    // Video 2 / Audio 2 are added fields too.
+    const v = reduce(createInitialV2vRefLongState(), { type: "addField", frame: 0, kind: "video", rules: RULES });
+    const removed = reduce(v, { type: "removeField", frame: 0, fieldId: 5 });
+    expect(removed.inputs.frames[0]?.fields.map((x) => x.kind)).toEqual(["picture", "picture", "video", "audio"]);
+  });
+
+  it("removing a filled field or moving one up after a scan makes the scan stale", () => {
+    let s = reduce(
+      createInitialV2vRefLongState(),
+      { type: "addField", frame: 0, kind: "picture", rules: RULES },
+      { type: "addField", frame: 0, kind: "picture", rules: RULES },
+      { type: "setFieldPath", frame: 0, fieldId: 6, path: "D:\\p4" },
+    );
+    s = reduce(s, { type: "scanSucceeded", result: scanResult(s) });
+    const scanInputs = s.scan?.inputs;
+    if (!scanInputs) throw new Error("no scan");
+    // Removing the empty Picture 3 moves the filled Picture 4 up.
+    const movedUp = reduce(s, { type: "removeField", frame: 0, fieldId: 5 });
+    expect(sameScanInputs(scanInputs, movedUp.inputs)).toBe(false);
+    const removedFilled = reduce(s, { type: "removeField", frame: 0, fieldId: 6 });
+    expect(sameScanInputs(scanInputs, removedFilled.inputs)).toBe(false);
+    // A default field's path cleared.
+    const withPic1 = reduce(s, { type: "setFieldPath", frame: 0, fieldId: 1, path: "D:\\p1" });
+    const rescanned = reduce(withPic1, { type: "scanSucceeded", result: scanResult(withPic1) });
+    const pic1Cleared = reduce(rescanned, { type: "removeField", frame: 0, fieldId: 1 });
+    expect(sameScanInputs(rescanned.scan?.inputs ?? scanInputs, pic1Cleared.inputs)).toBe(false);
+    // An empty field after the filled ones: still the same folders.
+    const tail = reduce(
+      reduce(s, { type: "addField", frame: 0, kind: "picture", rules: RULES }),
+      { type: "removeField", frame: 0, fieldId: 7 },
+    );
+    expect(sameScanInputs(scanInputs, tail.inputs)).toBe(true);
+  });
+
   it("addFrame / removeLastFrame (never below one frame)", () => {
     let s = reduce(createInitialV2vRefLongState(), { type: "addFrame" }, { type: "addFrame" });
     expect(s.inputs.frames.map((x) => x.id)).toEqual([1, 2, 3]);
@@ -108,6 +179,20 @@ describe("reduceV2vRefLong: scan", () => {
     const s = reduce(createInitialV2vRefLongState(), { type: "setOutDir", path: "D:\\mine" });
     const after = reduce(s, { type: "scanSucceeded", result: scanResult(s) });
     expect(after.inputs.outDir).toBe("D:\\mine");
+    expect(after.inputs.outDirIsAuto).toBe(false);
+  });
+
+  it("an output folder emptied (blank too) goes back to auto: the next scan fills it in", () => {
+    for (const blank of ["", "   "]) {
+      const s = reduce(
+        createInitialV2vRefLongState(),
+        { type: "setOutDir", path: "D:\\mine" },
+        { type: "setOutDir", path: blank },
+      );
+      expect(s.inputs.outDirIsAuto).toBe(true);
+      const after = reduce(s, { type: "scanSucceeded", result: scanResult(s) });
+      expect(after.inputs).toMatchObject({ outDir: "D:\\work\\pics_out", outDirIsAuto: true });
+    }
   });
 
   it("a re-scan drops the row edits", () => {
@@ -207,6 +292,8 @@ describe("reduceV2vRefLong: purity", () => {
       { type: "setJoined", joined: false },
       { type: "addField", frame: 0, kind: "video", rules: RULES },
       { type: "setFieldPath", frame: 0, fieldId: 2, path: "D:\\x" },
+      { type: "removeField", frame: 0, fieldId: 1 },
+      { type: "removeField", frame: 0, fieldId: 3 },
       { type: "addFrame" },
       { type: "removeLastFrame" },
       { type: "setFillFollowing", value: false },
@@ -249,6 +336,9 @@ describe("v2vRefLongStore", () => {
     expect(listener).toHaveBeenCalledTimes(1);
 
     v2vRefLongStore.dispatch({ type: "removeLastFrame" });
+    expect(listener).toHaveBeenCalledTimes(1);
+    // ❌ on an empty default field.
+    v2vRefLongStore.dispatch({ type: "removeField", frame: 0, fieldId: 1 });
     expect(listener).toHaveBeenCalledTimes(1);
 
     unsubscribe();

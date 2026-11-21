@@ -67,13 +67,24 @@
 /* --- an opened row's clip cards --- */
 
 /* `width: 0; min-width: 100%` keeps the strip from widening the table: it
- * takes the cell's width and scrolls inside it. */
+ * takes the cell's width and scrolls inside it. The inner scroll level: it
+ * scrolls on its own under the table's headers and condition rows, and an end
+ * reached here does not carry on into the table. */
 .v2v-row-cards {
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: 0;
   min-width: 100%;
+  max-height: 480px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Overflow scrolls `.v2v-row-cards`; without this the strip (a horizontal
+ * scroller, so `min-height: auto` is 0) would shrink and scroll vertically. */
+.v2v-row-cards > * {
+  flex-shrink: 0;
 }
 
 .v2v-row-cards-strip {
@@ -96,6 +107,12 @@
 /* The card whose Reference is open: the top line, full width. */
 .v2v-clip-card-expanded {
   border-color: var(--accent-border);
+}
+
+/* One Reference card at Chain's width (~218px), whatever the row's width.
+ * Three classes: wins over the shared `.ref-row-scroll > .ref-slot` (66%). */
+.v2v-clip-card-expanded .ref-row-scroll > .ref-slot {
+  flex: 0 0 218px;
 }
 
 .v2v-reference-button {

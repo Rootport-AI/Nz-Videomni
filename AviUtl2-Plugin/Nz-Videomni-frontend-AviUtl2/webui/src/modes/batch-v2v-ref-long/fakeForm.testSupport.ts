@@ -92,6 +92,7 @@ export function makeForm(options: FakeFormOptions = {}): UseV2vRefLongFormResult
     addField: vi.fn(),
     setFieldPath: vi.fn(),
     pickFieldDir: vi.fn().mockResolvedValue(undefined),
+    removeField: vi.fn(),
     addFrame: vi.fn(),
     removeLastFrame: vi.fn(),
     setFillFollowing: vi.fn(),

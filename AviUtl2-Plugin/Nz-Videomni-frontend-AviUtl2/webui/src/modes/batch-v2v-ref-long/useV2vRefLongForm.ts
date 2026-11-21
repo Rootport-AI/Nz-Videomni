@@ -229,6 +229,10 @@ export function useV2vRefLongForm(deps: UseV2vRefLongFormDeps): UseV2vRefLongFor
     },
     [pickFolder, dispatch],
   );
+  const removeField = useCallback(
+    (frame: number, fieldId: number) => dispatch({ type: "removeField", frame, fieldId }),
+    [dispatch],
+  );
   const addFrame = useCallback(() => dispatch({ type: "addFrame" }), [dispatch]);
   const removeLastFrame = useCallback(() => dispatch({ type: "removeLastFrame" }), [dispatch]);
   const setFillFollowing = useCallback((value: boolean) => dispatch({ type: "setFillFollowing", value }), [dispatch]);
@@ -389,6 +393,7 @@ export function useV2vRefLongForm(deps: UseV2vRefLongFormDeps): UseV2vRefLongFor
     addField,
     setFieldPath,
     pickFieldDir,
+    removeField,
     addFrame,
     removeLastFrame,
     setFillFollowing,

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { en } from "../../i18n/strings";
 import { RowClipCards } from "./RowClipCards";
 import { emptyRefs, makeForm, makeRow, makeView, withCard } from "./fakeForm.testSupport";
 import type { UseV2vRefLongFormResult } from "./types";
@@ -56,7 +57,23 @@ describe("RowClipCards", () => {
     expect(within(card(0)).queryByText("⚠", { exact: false })).toBeNull();
     const second = within(card(1)).getByRole("button", { name: /Reference 0\/12/ });
     expect(second).toHaveTextContent("⚠");
-    expect(within(second).getByTitle("Clip 2: the Reference has cards that are not used (greyed out).")).toBeInTheDocument();
+    expect(within(second).getByTitle(en.batchV2vRefLong.ignoredClips([2]))).toBeInTheDocument();
+  });
+
+  it("switching the open card scrolls the cards box back to the top", () => {
+    const { container } = renderCards(makeForm({ clipCount: 3 }));
+    const box = container.querySelector(".v2v-row-cards") as HTMLElement;
+    fireEvent.click(within(card(1)).getByRole("button", { name: /Reference/ }));
+    box.scrollTop = 300;
+    expect(box.scrollTop).toBe(300);
+    fireEvent.click(within(card(2)).getByRole("button", { name: /Reference/ }));
+    expect(box.scrollTop).toBe(0);
+
+    // Typing into the open card's prompt is not a switch: the position stays.
+    box.scrollTop = 300;
+    const top = topRow(container) as HTMLElement;
+    fireEvent.change(within(top).getByRole("textbox", { name: "Clip prompt" }), { target: { value: "rain" } });
+    expect(box.scrollTop).toBe(300);
   });
 
   it("opens one Reference at a time: the open card goes to the top, the other one back to the strip", () => {

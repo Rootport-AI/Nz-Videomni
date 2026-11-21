@@ -87,8 +87,9 @@ interface CallOptions {
   query?: Record<string, string>;
   body?: object;
   /** v4.1: forwarded as `backend.request`'s `timeoutMs` param (see
-   * `bridge/types.ts`) — used by `joinJob` below, whose backend-side
-   * processing can legitimately outlast native's default WinHTTP timeout. */
+   * `bridge/types.ts`) — used by the calls below whose backend-side
+   * processing can legitimately outlast native's default WinHTTP timeout
+   * (`generateChain`, `joinJob`, the Alpha Gen exports, `loadPipeline`). */
   timeoutMs?: number;
 }
 
@@ -97,7 +98,10 @@ export interface ApiClient {
   getConfig(): Promise<AppConfig>;
   generate(request: GenerateRequest): Promise<GenerateAcceptedResponse>;
   /** M6: `POST /generate/chain` — clip chaining / V2V continuation / A2V
-   * (Docs/API_REFERENCE.md §3.13/§5.2). */
+   * (Docs/API_REFERENCE.md §3.13/§5.2). Sent with `timeoutMs: 120_000`: the
+   * server checks an opening video's frames before it creates the job, which
+   * for a long video outlasts native's default WinHTTP timeout. Used by
+   * Chained, Retake and Single's A2V alike. */
   generateChain(request: GenerateChainRequest): Promise<GenerateChainAcceptedResponse>;
   /** Alpha Gen 第 2 弾: `POST /generate/alpha` — a matte from a video
    * (Docs/API_REFERENCE.md §5.5). LTX 2.5 only; LTX 2.3 answers 422
@@ -198,7 +202,8 @@ export function createApiClient(nativeBridge: NativeBridge): ApiClient {
     getStatus: () => call<StatusResponse>("GET", "/status"),
     getConfig: () => call<AppConfig>("GET", "/config"),
     generate: (request) => call<GenerateAcceptedResponse>("POST", "/generate", { body: request }),
-    generateChain: (request) => call<GenerateChainAcceptedResponse>("POST", "/generate/chain", { body: request }),
+    generateChain: (request) =>
+      call<GenerateChainAcceptedResponse>("POST", "/generate/chain", { body: request, timeoutMs: 120_000 }),
     generateAlpha: (request) => call<GenerateAcceptedResponse>("POST", "/generate/alpha", { body: request }),
     getJob: (jobId) => call<JobResponse>("GET", `/jobs/${encodeURIComponent(jobId)}`),
     listJobs: () => call<JobResponse[]>("GET", "/jobs"),

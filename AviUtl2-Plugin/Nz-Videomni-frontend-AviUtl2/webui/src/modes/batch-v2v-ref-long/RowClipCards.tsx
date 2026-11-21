@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { NativeBridge } from "../../bridge";
 import { useStrings } from "../../i18n/LanguageContext";
 import { ReferenceAccordion } from "../single/ReferenceAccordion";
@@ -23,8 +23,15 @@ export function RowClipCards({ form, rowIndex, nativeBridge }: RowClipCardsProps
   // A clip count that dropped below the open card closes it.
   const open = openClip !== null && openClip < form.clipCount ? openClip : null;
 
+  // The opened card shows at the top: a switch scrolls the box back up to it
+  // (before paint, so the old position is never drawn).
+  const boxRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (boxRef.current) boxRef.current.scrollTop = 0;
+  }, [open]);
+
   return (
-    <div className="v2v-row-cards">
+    <div className="v2v-row-cards" ref={boxRef}>
       {open !== null && (
         <div className="v2v-row-cards-top">
           <ClipCardBox

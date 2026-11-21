@@ -21,6 +21,9 @@ import type { RowPlan, V2vRowStat } from "./types";
 const JOB_BUSY_MAX_ATTEMPTS = 3;
 const DEFAULT_JOB_BUSY_BACKOFF_MS = 3_000;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+/** `POST /generate/chain` checks the opening video's frames before it creates
+ * the job (≈13 s for a 2-minute 1080p video), past the 10 s default. */
+const SUBMIT_TIMEOUT_MS = 120_000;
 
 /** The join settings of the Jobs panel's JOIN button (`jobs/JoinControls.tsx`
  * defaults). */
@@ -206,6 +209,7 @@ export class V2vRefLongRunner {
         method: "POST",
         path: "/api/v1/generate/chain",
         body: body as unknown as object,
+        timeoutMs: SUBMIT_TIMEOUT_MS,
       });
       if (resp.status === 409) {
         if (attempt < JOB_BUSY_MAX_ATTEMPTS - 1) await sleep(backoffMs);

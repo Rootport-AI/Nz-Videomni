@@ -6779,3 +6779,36 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 175.6 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）と確認は、オーナーの実機確認で行います。項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-288 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288）。
+
+## 176. Chained 画面の設定の列から、クリップ数の赤い警告「最低 2 本のクリップが必要です」を消す — 同じ文は「生成」ボタンの下の理由の一覧にだけ出す（台帳 1-288。2026-11-22）
+
+### 176.1 結論
+
+- **Chained 画面の左の設定の列の末尾に出ていたクリップ数の赤い警告を消しました。** 同じ文は「生成」ボタンの下の理由の一覧に出たままで、「生成」が押せない条件も変わりません。オーナーの指示（2026-11-21）です。
+- 仕様の正本は [`BATCH_V2V_REF_LONG.md`](BATCH_V2V_REF_LONG.md) §4.2（既存の画面への影響は同 §13、何をなぜ変えたかは同 §22）で、本節には写しません。オーナーの指示・調査で確かめた事実・機械の門の数値は、記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §218 にだけ書きます。
+- 変えたのは操作パネルだけです（サーバー・ネイティブ・文言は変えていない）。配布用の aux2 は再ビルドしました。
+
+### 176.2 進め方
+
+計画は監督の計画ファイル `adaptive-growing-stonebraker` の「第 4 次計画」（オーナー了承）です。計画と差分を、それぞれ別のサブエージェントが点検しました。コミットは dev の `d7b1900`（コードとテスト）・`57d4d45`（配布用 aux2）で、本節を含む文書は別のコミットで入れました。
+
+### 176.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `modes/chained/ChainedScreen.tsx` | 設定の列の末尾の 3 行（`!form.isClipCountValid` のとき `strings.chained.minClipsError` を `warning-banner` で描く）を削除。足したコードは無い |
+| `modes/chained/ChainedScreen.batchClipFloor.test.tsx` | 「この文が 2 個ある」という期待を、「理由の一覧に 1 個だけあり、赤い警告としては出ない」に直した |
+| `modes/chained/generateReasonMessages.ts`・`modes/chained/useChainForm.ts`・`i18n/strings.ts` | 注釈だけ。クリップ数の文は理由の一覧だけに出る、と今の事実に合わせた |
+
+- **変えていないもの**: 文言そのもの、「生成」の条件、バッチの判定、フォームの戻り値 `isClipCountValid`（画面からは使われなくなったが、テストが参照しているので残した）、設定の列にある同じ形の赤い警告のあと 2 つ（合計フレーム数の上限・冒頭動画が重なりのフレーム数に足りない）。
+
+### 176.4 テスト
+
+- 固定したのは、素材（冒頭）が空でクリップ 1 つのとき、文が理由の一覧に 1 個だけあり、赤い警告としては出ないことです。
+- 門の結果（型検査・lint・vitest の件数と、途中で落ちた試験、C++ のテスト、aux2 の大きさと SHA-256）は記録簿 §218.6 です。
+
+### 176.5 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）と確認は、オーナーの実機確認で行います。項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-288 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288）。

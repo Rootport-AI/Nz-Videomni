@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   AppConfig,
   GenerateChainRequest,
@@ -71,6 +71,7 @@ import {
 } from "../single/referenceRules";
 import { BatchI2vLongSection } from "../batch-i2v-long/BatchI2vLongSection";
 import { BatchV2vRefLongSection } from "../batch-v2v-ref-long/BatchV2vRefLongSection";
+import { v2vRefLongStore } from "../batch-v2v-ref-long/store";
 import { ChainAudioPanel } from "./ChainAudioPanel";
 import { ChainEndSourcePanel } from "./ChainEndSourcePanel";
 import { ChainReferencePanel } from "./ChainReferencePanel";
@@ -574,6 +575,17 @@ function ChainedScreenBody({
     };
   }, [initialIntent, seed, h3LongA2vAssign]);
 
+  // Batch v2v-ref-long: a scanned opening video lets the clip cards go down to
+  // one clip, on MiniMax H3 only (the section's own condition, read from the
+  // live constraints since the form is not built yet). Subscribed as a boolean
+  // so scan progress and row edits do not re-render the screen.
+  const batchHasOpeningVideo = useSyncExternalStore(
+    v2vRefLongStore.subscribe,
+    () => (v2vRefLongStore.getSnapshot().scan?.source.length ?? 0) > 0,
+  );
+  const batchClipFloorRelaxed =
+    constraints?.reference != null && constraints?.chain?.overlapFrames != null && batchHasOpeningVideo;
+
   const form = useChainForm(
     config,
     prompt,
@@ -600,6 +612,7 @@ function ChainedScreenBody({
         reference: referenceHidden,
         startImageStrength: startImageStrengthHidden,
       },
+      batchClipFloorRelaxed,
     },
     initialCommon,
   );
@@ -2114,7 +2127,7 @@ function ClipsSection({
             index={index}
             frameRate={form.common.frameRate}
             disabled={disabled}
-            canRemove={form.clips.length > form.minClips}
+            canRemove={form.clips.length > form.clipRemovalFloor}
             audioWindow={form.audioSegmentWindowsForClips?.[index] ?? null}
             tokenCount={tokenCounts?.[index]}
             tokenLimit={tokenLimit}

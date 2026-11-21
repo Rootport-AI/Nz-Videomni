@@ -199,6 +199,11 @@ export interface UseChainFormDeps {
    * leftover would raise `materialInClosedPanel` with its clear button hidden
    * along with the panel. Omitted = nothing hidden. */
   hiddenPanels?: ChainHiddenPanels | undefined;
+  /** Batch v2v-ref-long: a scanned row carries an opening video, so the clip
+   * list may be trimmed to one clip (see
+   * {@link UseChainFormResult.clipRemovalFloor}). It never relaxes the manual
+   * Generate's own clip-count check (`minClips`). Omitted = false. */
+  batchClipFloorRelaxed?: boolean | undefined;
 }
 
 /** §1-106: see {@link UseChainFormDeps.unavailablePanels}. Each flag closes
@@ -640,6 +645,9 @@ export interface UseChainFormResult {
 
   clips: ChainClipInput[];
   minClips: number;
+  /** The floor the clip cards' remove button honours: `minClips`, relaxed to
+   * one clip as well by {@link UseChainFormDeps.batchClipFloorRelaxed}. */
+  clipRemovalFloor: number;
   maxClips: number;
   canAddClip: boolean;
   addClip: () => void;
@@ -1273,6 +1281,7 @@ export function useChainForm(
   const endSourceHidden = deps.hiddenPanels?.endSource ?? false;
   const referenceHidden = deps.hiddenPanels?.reference ?? false;
   const omitStartImageStrength = deps.hiddenPanels?.startImageStrength ?? false;
+  const batchClipFloorRelaxed = deps.batchClipFloorRelaxed ?? false;
 
   // ── §1-15 参照動画: declared FIRST because the width/height grid depends on
   // it. A reference video (or a control LoRA, which mandates one) puts the
@@ -2469,11 +2478,16 @@ export function useChainForm(
       });
     } else if (sourceStatus === "idle" && prev !== "idle") {
       setClips((prevClips) =>
-        fitClipsToBounds(prevClips, minClipsForChain(hasEndSource), MAX_CLIPS, defaultClipNumFrames),
+        fitClipsToBounds(
+          prevClips,
+          minClipsForChain(hasEndSource || batchClipFloorRelaxed),
+          MAX_CLIPS,
+          defaultClipNumFrames,
+        ),
       );
     }
     // `uploading`/`error` transitions intentionally do nothing here.
-  }, [sourceStatus, contextFrames, defaultClipNumFrames, hasEndSource, clipGrid, clipMax, clipMin]);
+  }, [sourceStatus, contextFrames, defaultClipNumFrames, hasEndSource, batchClipFloorRelaxed, clipGrid, clipMax, clipMin]);
 
   // Clip re-fit on the end slot's CLEAR transition only.
   //
@@ -2498,11 +2512,16 @@ export function useChainForm(
 
     if (endSourceAttachStatus === "idle" && prev !== "idle") {
       setClips((prevClips) =>
-        fitClipsToBounds(prevClips, minClipsForChain(hasSourceVideo), MAX_CLIPS, defaultClipNumFrames),
+        fitClipsToBounds(
+          prevClips,
+          minClipsForChain(hasSourceVideo || batchClipFloorRelaxed),
+          MAX_CLIPS,
+          defaultClipNumFrames,
+        ),
       );
     }
     // `ready`/`uploading`/`error` transitions intentionally do nothing here.
-  }, [endSourceAttachStatus, hasSourceVideo, defaultClipNumFrames]);
+  }, [endSourceAttachStatus, hasSourceVideo, batchClipFloorRelaxed, defaultClipNumFrames]);
 
   /** §3-90: the REVERSE-order chain — end material, 2+ clips, and NO start
    * source. Mirrors the server's own mode decision (`chain_math.py`'s "THE ONE
@@ -2571,6 +2590,9 @@ export function useChainForm(
   const chainFloorRelaxed = hasSourceVideo || hasEndSource;
   const minClips = minClipsForChain(chainFloorRelaxed);
   const clipCountValid = isClipCountValid(chainFloorRelaxed, clips.length);
+  // Batch v2v-ref-long relaxes only the remove button's floor, never the
+  // manual Generate's count check above.
+  const clipRemovalFloor = minClipsForChain(chainFloorRelaxed || batchClipFloorRelaxed);
 
   // 逆順Chained (2026-08-18, second stage): an end source no longer closes the
   // ceiling — 2+ clips is the `reverse` mode the server accepts, so the only
@@ -3255,6 +3277,7 @@ export function useChainForm(
     applyPreset,
     clips,
     minClips,
+    clipRemovalFloor,
     maxClips,
     canAddClip,
     addClip,

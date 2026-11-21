@@ -785,6 +785,7 @@ Inpainting(マスクによる部分再生成。部分フィルタの枠の内側
 | `backend.uploadFile`のアップロードタイムアウト | **120,000ms**(`kUploadTimeoutMs`) | 無し | `http_client.h` |
 | `timeline.captureFrame`のレンダリングコールバック待機 | **10秒**(ハードコード、`std::chrono::seconds(10)`) | 無し | `bridge.cpp::CaptureFrameWorker` |
 | `POST /jobs/{id}/join`呼び出し時のWebUI側`timeoutMs`指定例 | **120,000ms**(`joinJob()`が`backend.request`へ明示的に渡す) | — | `webui/src/api/client.ts`(`bridge/types.ts`のJSDocに記載) |
+| `POST /generate/chain`(連結の要求の投入)呼び出し時のWebUI側`timeoutMs`指定例 | **120,000ms**(`generateChain()`——Chained・Retake・SingleのA2Vが使う——と、バッチ v2v-ref-longの実行の部品が`backend.request`へ明示的に渡す) | — | `webui/src/api/client.ts`、`webui/src/modes/batch-v2v-ref-long/runner.ts`(`bridge/types.ts`のJSDocに記載)。サーバーがジョブを作る前に入力動画のフレームを数える検査をするため、長い動画では既定の10秒を超える(理由と副作用は[`BATCH_V2V_REF_LONG.md`](BATCH_V2V_REF_LONG.md) §9・§14) |
 | `ui.resolveDroppedFiles`のWebUI側ローカル待機上限(**contract v7**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
 | `fs.probeMediaInfo`のWebUI側ローカル待機上限(**contract v9**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |
 | `timeline.cutoutRange`のWebUI側ローカル待機上限(**contract v5**) | **10,000ms**(既定の`DEFAULT_TIMEOUT_MS`のまま。`NO_LOCAL_TIMEOUT_METHODS`には含めない) | 無し | `webui/src/bridge/types.ts`, `requestDispatcher.ts` |

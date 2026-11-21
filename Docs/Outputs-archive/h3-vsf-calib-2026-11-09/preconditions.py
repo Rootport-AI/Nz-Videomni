@@ -1,6 +1,6 @@
 """MiniMax H3 の VSF の実用域の較正（18 本）の、前後の点検（台帳 §3-278・記録簿 §203）。
 
-計画の正本: ``C:/Users/phenotype nezu/.claude/plans/agile-dazzling-catmull.md`` の §3・§4（2026-11-09 の較正の計画）。
+計画の正本: 監督の計画ファイル ``agile-dazzling-catmull`` の §3・§4（2026-11-09 の較正の計画）。
 様式は ``Docs/Outputs-archive/h3-frag-fix-2026-11-04/preconditions.txt`` に倣う
 （git・nvidia-smi・python のプロセス・``engine.worker``／``engine_h3.worker`` の孤児・AviUtl2）。
 

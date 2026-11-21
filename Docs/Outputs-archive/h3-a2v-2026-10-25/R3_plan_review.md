@@ -1,6 +1,6 @@
 # R3 計画の事実確認レビュー（H3 の A2V・§1-103）
 
-- 対象: `C:\Users\phenotype nezu\.claude\plans\cosmic-giggling-bubble.md`（以下「計画」）。補助: R1・R2。
+- 対象: 監督の計画ファイル `cosmic-giggling-bubble`（以下「計画」）。補助: R1・R2。
 - 方法: 読み取りのみ。GPU・インストール・状態を変える git 操作はしていない。行番号はすべて実物で確かめた。
 - 注記: 依頼の保存先（scratchpad の `h3a2v\R3_plan_review.md`）は、このセッションがプランモードで書き込み先がこのファイルに限られたため、ここに保存した。
 

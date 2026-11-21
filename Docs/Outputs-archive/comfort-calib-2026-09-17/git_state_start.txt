@@ -21,28 +21,28 @@ $ git diff --stat 5c5ebe7..HEAD -- engine services api config.py chain_math.py
 === 3. mtime of the measuring surface (top level only) ===
 $ ls -l --time-style=long-iso engine/
   total 141
-  -rw-r--r-- 1 phenotype nezu 197609  2793 2026-07-01 14:16 VENDOR_NOTICE.md
-  -rw-r--r-- 1 phenotype nezu 197609     0 2026-07-01 14:16 __init__.py
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 09:37 __pycache__
-  -rw-r--r-- 1 phenotype nezu 197609 17137 2026-08-15 18:14 api_types.py
-  -rw-r--r-- 1 phenotype nezu 197609  4274 2026-09-02 10:53 engine-venv-pyproject.toml
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-08-02 21:13 gemma
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-02 08:25 gguf
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 21:21 inpaint
-  -rw-r--r-- 1 phenotype nezu 197609   496 2026-07-01 14:16 lora_types.py
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 00:57 outpaint
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-15 21:21 pipeline
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-08-19 22:24 preprocess
-  -rw-r--r-- 1 phenotype nezu 197609  6557 2026-07-05 20:28 progress_shim.py
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-09-05 13:17 transformer
-  drwxr-xr-x 1 phenotype nezu 197609     0 2026-08-19 22:25 vae
-  -rw-r--r-- 1 phenotype nezu 197609  4922 2026-08-30 22:33 venv-engine.freeze.txt
-  -rw-r--r-- 1 phenotype nezu 197609 66703 2026-09-15 00:57 worker.py
+  -rw-r--r-- 1 (redacted) 197609  2793 2026-07-01 14:16 VENDOR_NOTICE.md
+  -rw-r--r-- 1 (redacted) 197609     0 2026-07-01 14:16 __init__.py
+  drwxr-xr-x 1 (redacted) 197609     0 2026-09-15 09:37 __pycache__
+  -rw-r--r-- 1 (redacted) 197609 17137 2026-08-15 18:14 api_types.py
+  -rw-r--r-- 1 (redacted) 197609  4274 2026-09-02 10:53 engine-venv-pyproject.toml
+  drwxr-xr-x 1 (redacted) 197609     0 2026-08-02 21:13 gemma
+  drwxr-xr-x 1 (redacted) 197609     0 2026-09-02 08:25 gguf
+  drwxr-xr-x 1 (redacted) 197609     0 2026-09-15 21:21 inpaint
+  -rw-r--r-- 1 (redacted) 197609   496 2026-07-01 14:16 lora_types.py
+  drwxr-xr-x 1 (redacted) 197609     0 2026-09-15 00:57 outpaint
+  drwxr-xr-x 1 (redacted) 197609     0 2026-09-15 21:21 pipeline
+  drwxr-xr-x 1 (redacted) 197609     0 2026-08-19 22:24 preprocess
+  -rw-r--r-- 1 (redacted) 197609  6557 2026-07-05 20:28 progress_shim.py
+  drwxr-xr-x 1 (redacted) 197609     0 2026-09-05 13:17 transformer
+  drwxr-xr-x 1 (redacted) 197609     0 2026-08-19 22:25 vae
+  -rw-r--r-- 1 (redacted) 197609  4922 2026-08-30 22:33 venv-engine.freeze.txt
+  -rw-r--r-- 1 (redacted) 197609 66703 2026-09-15 00:57 worker.py
 $ ls -l --time-style=long-iso services/engines/ltx/
   total 133
-  -rw-r--r-- 1 phenotype nezu 197609     46 2026-08-20 13:45 __init__.py
-  drwxr-xr-x 1 phenotype nezu 197609      0 2026-09-15 01:10 __pycache__
-  -rw-r--r-- 1 phenotype nezu 197609 135111 2026-09-15 00:57 adapter.py
+  -rw-r--r-- 1 (redacted) 197609     46 2026-08-20 13:45 __init__.py
+  drwxr-xr-x 1 (redacted) 197609      0 2026-09-15 01:10 __pycache__
+  -rw-r--r-- 1 (redacted) 197609 135111 2026-09-15 00:57 adapter.py
 
 === 4. GPU (nvidia-smi) ===
 Thu Sep 17 16:29:47 2026       

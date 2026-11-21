@@ -1,6 +1,6 @@
 """MiniMax H3 の VSF の門と目視の実験の、前後の点検（台帳 §1-127）。
 
-計画の正本: ``C:/Users/phenotype nezu/.claude/plans/agile-dazzling-catmull.md`` の §4。
+計画の正本: 監督の計画ファイル ``agile-dazzling-catmull`` の §4。
 様式は ``Docs/Outputs-archive/h3-frag-fix-2026-11-04/preconditions.txt`` に倣う
 （git・nvidia-smi・python のプロセス・``engine.worker``／``engine_h3.worker`` の孤児・AviUtl2）。
 

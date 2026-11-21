@@ -1,6 +1,6 @@
 """MiniMax H3 のネガティブプロンプト（VSF）の機械の門 G2・G3 と目視の実験を、MCP サーバー経由で回す台本（台帳 §1-127）。
 
-計画の正本: ``C:/Users/phenotype nezu/.claude/plans/agile-dazzling-catmull.md`` の §4（機械の門）と §5（目視の実験）。
+計画の正本: 監督の計画ファイル ``agile-dazzling-catmull`` の §4（機械の門）と §5（目視の実験）。
 製品コードは import しない。部品は次の 2 つの雛形から写した。
 
 - ``Docs/Outputs-archive/h3-retake-2026-11-08/h3_retake_gate.py``: MCP の stdio クライアント（``Mcp``・

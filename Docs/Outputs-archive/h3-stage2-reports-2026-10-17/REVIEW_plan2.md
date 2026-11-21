@@ -1,6 +1,6 @@
 # REVIEW_plan2 — MiniMax H3 第 2 弾の計画の事実確認レビュー
 
-対象: `C:\Users\phenotype nezu\.claude\plans\shimmering-twirling-octopus.md`（以下「計画」）。読むだけで実施。GPU・テスト・インストールは使っていない。
+対象: 監督の計画ファイル `shimmering-twirling-octopus`（以下「計画」）。読むだけで実施。GPU・テスト・インストールは使っていない。
 根拠の行番号は 2026-10-17 時点の作業ツリー（`S:\OriginalApps\12_Nz-LTX23-AviUtl2\Nz-Videomni`）。「事実」はコードで確かめたこと、「推測」はそうでないこと、「未確認」は確かめられなかったこと。
 
 置き場についての注記: 依頼の置き場（scratchpad の `h3\REVIEW_plan2.md`）は、このセッションの計画モードの制約（書けるのはこのファイルだけ）により書けなかった。本ファイルを写して使ってほしい。

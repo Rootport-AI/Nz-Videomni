@@ -1,6 +1,6 @@
 {
   "date": "2026-10-19",
-  "plan": "C:/Users/phenotype nezu/.claude/plans/scalable-floating-thimble.md §5",
+  "plan": "%USERPROFILE%/.claude/plans/scalable-floating-thimble.md §5",
   "gpu": "NVIDIA GeForce RTX 4070 Ti S/UPER 16376 MiB",
   "overall": {
     "pass_fail_gates_all_pass": true,

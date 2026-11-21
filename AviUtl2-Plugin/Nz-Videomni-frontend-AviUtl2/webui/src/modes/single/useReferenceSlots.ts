@@ -41,7 +41,7 @@ const UPLOAD_KIND: Record<ReferenceKind, "image" | "video" | "audio"> = {
  * Audios cards also take a video file (only its sound is used), so their
  * dialog offers both — but native's `backend.uploadFile` only knows
  * `image|video|audio`, and the file still goes to `/upload/audio`. */
-const PICK_KIND: Record<ReferenceKind, "image" | "video" | "audioOrVideo"> = {
+export const PICK_KIND: Record<ReferenceKind, "image" | "video" | "audioOrVideo"> = {
   picture: "image",
   video: "video",
   audio: "audioOrVideo",
@@ -69,7 +69,7 @@ function sizeKey(rules: ReferenceRules): string {
 /** The clip's length: the caller's known value, else `fs.probeMediaInfo`, else
  * (audio only) the wav header. `null` for a picture or an unmeasurable file.
  * Never rejects. */
-async function measureDuration(
+export async function measureDuration(
   nativeBridge: NativeBridge,
   kind: ReferenceKind,
   filePath: string,
@@ -95,7 +95,7 @@ async function measureDuration(
 
 /** Best-effort thumbnail for a picture/video card; `null` on failure (the card
  * then shows its fixed placeholder). Audio cards never ask. */
-async function makeThumbnail(nativeBridge: NativeBridge, kind: ReferenceKind, filePath: string): Promise<string | null> {
+export async function makeThumbnail(nativeBridge: NativeBridge, kind: ReferenceKind, filePath: string): Promise<string | null> {
   if (kind === "audio") return null;
   try {
     const result = await nativeBridge.request("ui.makeThumbnail", { filePath });

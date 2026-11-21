@@ -253,17 +253,18 @@ export function BatchSection({
         {form.promptEmptyQueues.length > 0 && form.runnerState === "idle" && (
           <p className="warning-banner">{t.promptEmptyRows(formatQueues(form.promptEmptyQueues))}</p>
         )}
-        {/* §1-7 相互ロック: the Chain screen's Batch i2v-long is running, so the
-            shared run lock (`shell/runLock.ts`) is held by it. Blocks Start —
-            shown as its own line so the disabled button is explained. */}
+        {/* §1-7 相互ロック: another batch panel (one of the Chain screen's) is
+            running, so the shared run lock (`shell/runLock.ts`) is held by it.
+            Blocks Start — shown as its own line (the sentence the three batch
+            panels share) so the disabled button is explained. */}
         {form.lockedByOther && <p className="warning-banner">{t.lockedByOther}</p>}
         {/* §1-7 相互ロック 第2段: the backend's single job slot is busy (the
             other batch, a single generation, or a job that outlived a reload).
             Only shown while THIS panel is idle — during its own run the Start
             button already reads "Running…", and repeating it here would just be
             noise. Kept a separate line from `lockedByOther` because the two say
-            different things: that one names the other batch panel, this one
-            covers every other way the slot can be occupied. */}
+            different things: that one says another batch holds the run lock,
+            this one covers every other way the slot can be occupied. */}
         {form.jobActive && form.runnerState === "idle" && !form.lockedByOther && (
           <p className="warning-banner">{t.jobActive}</p>
         )}

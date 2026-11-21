@@ -63,9 +63,11 @@ export interface ChainReasonMessageParams {
  *
  * `promptEmpty`/`dimensionsOffGrid`/`cropInvalid`/`nagNegativeEmpty` and (§1-15)
  * the three reference lines Create words identically reuse Create's shared
- * copy; `minClips`/`totalFramesExceeded`/`sourceNotReady` reuse Chain's
- * existing field-adjacent banner copy (those banners stay where they are — this
- * note is an additional at-a-glance summary next to the button); the rest have
+ * copy; `totalFramesExceeded`/`sourceNotReady` use the same sentences as the
+ * existing banners in the settings column (those banners stay where they are;
+ * this note is an at-a-glance summary next to the button). `minClips` has no
+ * banner in the settings column: the `strings.chained.minClipsError` sentence
+ * appears only in this note. The rest have
  * Chain-specific `generateReasons` copy of their own.
  *
  * The return type is the loose `Record<string, string>` `GenerateReasonsNote`

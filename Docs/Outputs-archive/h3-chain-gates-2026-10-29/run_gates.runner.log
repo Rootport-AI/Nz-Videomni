@@ -1,10 +1,10 @@
 ﻿**********************
 Windows PowerShell transcript start
 Start time: 20261029215613
-Username: DESKTOP-1I1LT65\phenotype nezu
-RunAs User: DESKTOP-1I1LT65\phenotype nezu
+Username: (redacted)
+RunAs User: (redacted)
 Configuration Name: 
-Machine: DESKTOP-1I1LT65 (Microsoft Windows NT 10.0.26200.0)
+Machine: (redacted) (Microsoft Windows NT 10.0.26200.0)
 Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File Docs\Outputs-archive\h3-chain-gates-2026-10-29\run_gates.ps1 -SkipHarness
 Process ID: 32180
 PSVersion: 5.1.26100.9711

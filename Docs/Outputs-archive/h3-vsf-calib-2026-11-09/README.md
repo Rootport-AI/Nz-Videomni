@@ -1,6 +1,6 @@
 # MiniMax H3 の VSF の実用域の較正（18 本）
 
-MiniMax H3 のネガティブプロンプトの強さ（scale）の既定値と、操作パネルのスライダーの最大値を決めるために、条件を変えた 18 本の動画を作ってオーナーが目で見るための、台本と記録の置き場です。ネガティブプロンプトの方式は VSF（Value Sign Flip。負のプロンプトの行の値の符号を反転し、1 回の注意の計算で負に挙げた要素を遠ざける方式）です。台帳 `PENDING_TASKS.md` §3-278、記録簿 `VERIFICATION_LOG.md` §203。計画の正本は `C:\Users\phenotype nezu\.claude\plans\agile-dazzling-catmull.md` の §3（18 本の表・見るもの・決め方）と §4（作り方）です。
+MiniMax H3 のネガティブプロンプトの強さ（scale）の既定値と、操作パネルのスライダーの最大値を決めるために、条件を変えた 18 本の動画を作ってオーナーが目で見るための、台本と記録の置き場です。ネガティブプロンプトの方式は VSF（Value Sign Flip。負のプロンプトの行の値の符号を反転し、1 回の注意の計算で負に挙げた要素を遠ざける方式）です。台帳 `PENDING_TASKS.md` §3-278、記録簿 `VERIFICATION_LOG.md` §203。計画の正本は監督の計画ファイル `agile-dazzling-catmull` の §3（18 本の表・見るもの・決め方）と §4（作り方）です。
 
 18 本の条件の正本は `calib_plan.json` で、この説明書の表はその写しです。結果の数値はこの説明書には書かず、`summary.json`・`jobs\<名前>\metadata.json`・`VISUAL_TABLE.md` に残します。
 

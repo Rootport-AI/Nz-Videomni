@@ -49,7 +49,8 @@ cannot run is greyed out. One line per screen here — the details are in
   from a start source and arriving at an end source
   ([`Docs/API_REFERENCE.md`](Docs/API_REFERENCE.md) §5.2), its own A2V and
   IC-LoRA reference video (long A2V and long IC-LoRA across the clips), plus
-  the batch i2v-long panel.
+  the batch i2v-long panel and, on MiniMax H3, the batch v2v-ref-long panel
+  ([`Docs/BATCH_V2V_REF_LONG.md`](Docs/BATCH_V2V_REF_LONG.md)).
 - **Edit** — reworks a finished video, in four sub-tabs: **Retake** (regenerates
   a selected span), **Outpainting** (widens the frame), **Inpainting** (repaints
   only the inside of a partial filter's box; design canon

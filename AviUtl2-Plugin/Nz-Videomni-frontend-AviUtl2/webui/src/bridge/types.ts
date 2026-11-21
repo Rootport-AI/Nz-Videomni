@@ -31,7 +31,9 @@
  * gives `backend.request` an optional per-call `timeoutMs`, for requests
  * whose backend-side processing can legitimately run longer than native's
  * default WinHTTP timeout (e.g. `POST /jobs/{id}/join`, which `joinJob()`
- * calls with `timeoutMs: 120_000` — see `api/client.ts`). `RequestDispatcher`
+ * calls with `timeoutMs: 120_000`, and `POST /generate/chain`, which
+ * `generateChain()` and Batch v2v-ref-long's runner send with the same value
+ * — see `api/client.ts`). `RequestDispatcher`
  * also honors this as its own local wait ceiling for that specific call (see
  * `bridge/requestDispatcher.ts`), so the WebUI doesn't give up on the
  * WebView2 round trip before native's own (longer) timeout has a chance to

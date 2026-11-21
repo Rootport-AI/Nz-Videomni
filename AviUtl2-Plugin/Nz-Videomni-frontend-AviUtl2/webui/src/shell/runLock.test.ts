@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   RUN_LOCK_OWNER_BATCH_A2V,
   RUN_LOCK_OWNER_BATCH_I2V_LONG,
+  RUN_LOCK_OWNER_BATCH_V2V_REF_LONG,
   __resetRunLockForTests,
   acquireRunLock,
   getRunLockOwner,
@@ -47,6 +48,21 @@ describe("runLock", () => {
     const second = acquireRunLock(RUN_LOCK_OWNER_BATCH_I2V_LONG);
     expect(second).not.toBeNull();
     expect(getRunLockOwner()).toBe("batch-i2v-long");
+  });
+
+  it("3つ目の所有者（バッチv2v-ref-long）も同じ1本のロックを取り合う", () => {
+    const v2v = acquireRunLock(RUN_LOCK_OWNER_BATCH_V2V_REF_LONG);
+    expect(v2v?.owner).toBe("batch-v2v-ref-long");
+    expect(getRunLockOwner()).toBe("batch-v2v-ref-long");
+    expect(acquireRunLock(RUN_LOCK_OWNER_BATCH_A2V)).toBeNull();
+    expect(acquireRunLock(RUN_LOCK_OWNER_BATCH_I2V_LONG)).toBeNull();
+
+    expect(releaseRunLock(v2v)).toBe(true);
+    const a2v = acquireRunLock(RUN_LOCK_OWNER_BATCH_A2V);
+    expect(acquireRunLock(RUN_LOCK_OWNER_BATCH_V2V_REF_LONG)).toBeNull();
+    expect(releaseRunLock(v2v)).toBe(false);
+    expect(getRunLockOwner()).toBe("batch-a2v");
+    expect(releaseRunLock(a2v)).toBe(true);
   });
 
   // 本方式の存在理由そのもの: 常時マウントの反対側が「自分はidleだから解放」と

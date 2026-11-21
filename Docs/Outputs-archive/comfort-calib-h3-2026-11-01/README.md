@@ -2,7 +2,7 @@
 
 # comfort-calib-h3-2026-11-01（台帳 §1-95・MiniMax H3 の快適上限）較正台
 
-- 計画の正本は `C:\Users\phenotype nezu\.claude\plans\snug-booping-sphinx.md`（§2.2 判定規則 v3″・§2.4 較正台の拡張・§2.5 腕と順序）。この README は較正台の使い方だけを書く。
+- 計画の正本は監督の計画ファイル `snug-booping-sphinx`（§2.2 判定規則 v3″・§2.4 較正台の拡張・§2.5 腕と順序）。この README は較正台の使い方だけを書く。
 - 結果は `RESULTS.md`、点ごとの記録は `progress.md`（どちらも計測が始まってから作る）。
 - 準備した日は 2026-11-01。この時点で計測は 0 本。
 

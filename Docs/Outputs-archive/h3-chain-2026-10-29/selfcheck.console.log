@@ -31,7 +31,7 @@ PASS  9 fake run s=0.5 inject clean: writes ['once.mp4', 'perclip.mp4', 'xfade.m
 [c_chain] clip 2: seed 44, fix none
 {"name": "fake3", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.3}
 PASS  9 fake run s=0: no fix on any clip, one per-clip mp4 of 219 frames
-[c_chain] clip 0 reused from C:\Users\phenotype nezu\AppData\Local\Temp\tmpkfuxye0d\fake1\clip0.pt
+[c_chain] clip 0 reused from %LOCALAPPDATA%\Temp\tmpkfuxye0d\fake1\clip0.pt
 [c_chain] clip 1: seed 43, fix k=7 ka=37
 [c_chain] clip 2: seed 44, fix k=7 ka=37
 {"name": "fake4", "ok": true, "error": null, "mismatch": [], "seconds_total": 0.19}

@@ -1,0 +1,126 @@
+/* Batch v2v-ref-long — reuses `modes/batch/BatchSection.css` (`.batch-section*`,
+ * `.folder-row`, `.batch-table*`), `styles/formAccordion.css` and Chain's
+ * `.source-section`/`.clip-card`; only the new structure is here. */
+
+/* Same rhythm as `.batch-section-body`. */
+.v2v-ref-long-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* --- folder inputs --- */
+
+/* One clip's folder fields inside the reference-folders accordion. */
+.v2v-frame {
+  gap: 10px;
+}
+
+.v2v-count {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.v2v-kind-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.v2v-kind-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* `<Picture 1>` on the left of its path field. */
+.v2v-field-label {
+  flex: 0 0 84px;
+  white-space: nowrap;
+}
+
+/* --- table --- */
+
+/* An opened row holds a strip of cards (and an expanded Reference), so this
+ * table may grow taller than the other batches' 360px. Two classes: wins over
+ * `.batch-table-scroll` whatever the bundle order. */
+.batch-table-scroll.v2v-table-scroll {
+  max-height: 720px;
+}
+
+/* The opened row's cards hold positioned elements (the card buttons); keep
+ * the sticky headers above them while scrolling. */
+.v2v-table-scroll thead th {
+  z-index: 1;
+}
+
+.v2v-expand-button {
+  font-size: 11px;
+}
+
+/* The full-width row under an opened row. */
+.batch-table .v2v-row-detail > td {
+  white-space: normal;
+  background: var(--bg-raised);
+}
+
+/* --- an opened row's clip cards --- */
+
+/* `width: 0; min-width: 100%` keeps the strip from widening the table: it
+ * takes the cell's width and scrolls inside it. The inner scroll level: it
+ * scrolls on its own under the table's headers and condition rows, and an end
+ * reached here does not carry on into the table. */
+.v2v-row-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 0;
+  min-width: 100%;
+  max-height: 480px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Overflow scrolls `.v2v-row-cards`; without this the strip (a horizontal
+ * scroller, so `min-height: auto` is 0) would shrink and scroll vertically. */
+.v2v-row-cards > * {
+  flex-shrink: 0;
+}
+
+.v2v-row-cards-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.v2v-row-cards-strip > .v2v-clip-card {
+  flex: 0 0 240px;
+  box-sizing: border-box;
+}
+
+.v2v-clip-card {
+  gap: 6px;
+  font-size: 12px;
+}
+
+/* The card whose Reference is open: the top line, full width. */
+.v2v-clip-card-expanded {
+  border-color: var(--accent-border);
+}
+
+/* One Reference card at Chain's width (~218px), whatever the row's width.
+ * Three classes: wins over the shared `.ref-row-scroll > .ref-slot` (66%). */
+.v2v-clip-card-expanded .ref-row-scroll > .ref-slot {
+  flex: 0 0 218px;
+}
+
+.v2v-reference-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.v2v-ignored-mark {
+  color: var(--warning);
+}

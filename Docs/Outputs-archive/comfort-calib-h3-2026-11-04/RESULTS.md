@@ -3,7 +3,7 @@
 # RESULTS — 台帳 §1-274 MiniMax H3 の快適上限の再較正（2026-11-04 の断片化の修正の後）
 
 - この文書は、2026-11-04（10:13〜18:24。弾 E の 20 ステップの確認を含む）に測った数値の集計と、仕組みの考察です。数値はすべて `runs/<label>/run.json` から台本（`analysis/collect.py`）で抜き出し、`progress.md`（計測担当の記録）の表と突き合わせました（§4。差 0）。推測には「推測」、結果を見てから値を合わせた記述には「当てはめ」と書きます。記録に無い値は「記録なし」と書きます。
-- 計画の正本: `C:\Users\phenotype nezu\.claude\plans\smooth-watching-lobster.md`（以下「計画」）。修正の記録: 記録簿 `Docs/VERIFICATION_LOG.md` §195、設計正本 `Docs/MINIMAX_H3_DESIGN.md` §6.5。修正前の値: 記録簿 §192（快適上限表 §17 の較正）・§194（§18 の較正）、一次記録 `outputs/comfort-calib-h3-2026-11-01/`・`outputs/comfort-calib-h3-ref-2026-11-03/`（以下「11-03 の考察」は後者の `MECHANISM_ANALYSIS.md`）。
+- 計画の正本: 監督の計画ファイル `smooth-watching-lobster`（以下「計画」）。修正の記録: 記録簿 `Docs/VERIFICATION_LOG.md` §195、設計正本 `Docs/MINIMAX_H3_DESIGN.md` §6.5。修正前の値: 記録簿 §192（快適上限表 §17 の較正）・§194（§18 の較正）、一次記録 `outputs/comfort-calib-h3-2026-11-01/`・`outputs/comfort-calib-h3-ref-2026-11-03/`（以下「11-03 の考察」は後者の `MECHANISM_ANALYSIS.md`）。
 - **本書は材料であって決定ではありません。** 快適上限表 §17・§18・記録簿・台帳への反映は、オーナーの了承の後に行います。本書の作成では GPU もサーバーも使っておらず、製品コード・Docs・計画・`progress.md`・`runs/` は変えていません。
 
 ## 用語（初出の略語の説明）

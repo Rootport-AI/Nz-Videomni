@@ -6,7 +6,7 @@
 - **更新 2（2026-11-03 12:37）**: メモリ確保の履歴の測定（`mem_history/MEM_HISTORY_REPORT.md`）で仮説 C が支持されたので、§1・§8′・§9 の保留を判定に置き換え、§8′ の参照なしの境界の値を `MECHANISM_ANALYSIS.md` の訂正値に合わせた。
 - **更新 1（2026-11-03 12:13。オーナーの了承による）**: §4.1 種類ごとの帯を足し、§8′ 仕組みの考察を新設し、2 つの誤りを直した（訂正 1: §1 と §9 の 6 の「Ref2VA・K=0 の帯は FL2VA より低い。違いは重みか K」→ 映像の行で数えると同じ境界。訂正 2: §5 ほかの OOM の場所 `torch/cuda/__init__.py:2190` → comfy-kitchen の `comfy_kitchen/backends/cuda/__init__.py:2190`）。最初の版は 09:33 に作った。
 - **結論の採否と文書への反映（快適上限表 §18・記録簿 §194・台帳 §1-122・設計正本 §3.2）はオーナーの了承待ちです。** 本書は材料であって決定ではありません。
-- 計画の正本: `C:\Users\phenotype nezu\.claude\plans\delegated-marinating-patterson.md`（以下「計画」）。較正台の使い方: 本フォルダの `README.md`。点ごとの時系列: `progress.md`。前回の較正（FL2VA）: `outputs/comfort-calib-h3-2026-11-01/RESULTS.md`（以下「前回 RESULTS」）と `Docs/COMFORT_LIMIT_TABLE.md` §17。
+- 計画の正本: 監督の計画ファイル `delegated-marinating-patterson`（以下「計画」）。較正台の使い方: 本フォルダの `README.md`。点ごとの時系列: `progress.md`。前回の較正（FL2VA）: `outputs/comfort-calib-h3-2026-11-01/RESULTS.md`（以下「前回 RESULTS」）と `Docs/COMFORT_LIMIT_TABLE.md` §17。
 
 ## 用語（初出の略語の説明）
 

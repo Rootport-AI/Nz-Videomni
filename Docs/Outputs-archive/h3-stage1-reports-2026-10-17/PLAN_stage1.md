@@ -152,7 +152,7 @@ qkv は `[q;k;v]` 積み重ね／fc1 は `[gate;value]` で SiLU は前半／枝
 
 **敵対的レビュー**
 
-Opus による事実確認レビュー（`C:\Users\phenotype nezu\.claude\plans\cached-doodling-hare-agent-a7460a6c4904ab860.md`）。Critical 1・Major 6・Minor 14。監督が現物で裏取り（こだまの値・親の段階名・移植元の import・comfy-kitchen の落ち先）したうえで、**全件採用**。ただし 2 点は部分採用:
+Opus による事実確認レビュー（監督の計画ファイル `cached-doodling-hare-agent-a7460a6c4904ab860`）。Critical 1・Major 6・Minor 14。監督が現物で裏取り（こだまの値・親の段階名・移植元の import・comfy-kitchen の落ち先）したうえで、**全件採用**。ただし 2 点は部分採用:
 
 - M-4「正解側の shim は約 1,100 行」: 正解側を量子化テンソル経路で作る場合の見積もりで、ダミーの `core` 2 モジュール＋`dequant.py` で bf16 に戻す案なら小さい。**提案された作り方（dequant 版の `nn.Linear` を正解に・許容 1e-2 級）は採用**し、見積もりだけ訂正。
 - m-9 の `av` の版: 提案は「18.1.0 か 19.0.1 のどちらか」。LTX 2.5 の venv で実績のある **18.1.0** を採る。

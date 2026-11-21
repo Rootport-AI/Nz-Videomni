@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-19
+- 作成: 2026-07-15／最終更新: 2026-11-22
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -57,6 +57,7 @@
 - **既知の不安定なテスト（追記）**: `webui/src/shell/AppShell.minimaxH3.test.tsx` の「code review m-8 (reversed by §1-127): NAG on with an EMPTY body blocks Generate on MiniMax H3 too」が全件実行で 1 回落ち（Generate ボタンが見つからない）、単体と全件の再実行では合格（2026-10-23。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §173.2）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「✒ … right-clicked video opens the accordion」（2026-10-31 に 9 回中 2 回・変更前の HEAD でも 8 回中 1 回。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §187.7・§188.4）と、`AlphaControls.test.tsx` の「from the matte, with no MOV yet …」（全件実行で 1 回。単独では通る。同 §188.4）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」が全件実行で 1 回、5 秒の時限切れで落ちた（負荷による）。単独（4 件）と 2 回目の全件実行では合格（2026-11-02。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193）。
+- **既知の不安定なテスト（追記）**: `webui/src/modes/chained/ChainEndSourcePanel.test.tsx` の「📁 attaches whatever the native dialog returned」が全件実行で 1 回落ち（`getByAltText(t.videoPlaceholderAlt)` が要素を見つけられない）、単独（32 件）と最後の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §218.6）。同じ日のもう 1 回の全件実行でも 1 件落ちたが、落ちたテストの名前は控えていない。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
@@ -709,7 +710,7 @@
 
 - **概要**: H3 の Chained の快適上限マーカーはクリップごとの総行数だけを見る（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-276。快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §19）。これとは別に、連結の全長（総フレーム数）に比例する要求がある。音声の復号は全長を一括で行い（1 潜在あたり約 0.51MB。調査時の見積もり〔計画 §1〕で、実測はない）、主メモリは復号したフレームを uint8 で持つので総長に比例する。クリップ数は DiT〔ノイズ除去の本体〕の山には効かない。どちらも較正していない。
 - **前提（何が塞いでいるか）**: 長い動画を作る利用者は珍しく、較正の労力に見合わない（オーナー裁定 2026-11-07）。
-- **出典**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §199.6・計画 `C:\Users\phenotype nezu\.claude\plans\cozy-gliding-pudding.md` §2 の 1（オーナー裁定 2026-11-07。範囲外として起票）。
+- **出典**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §199.6・監督の計画ファイル `cozy-gliding-pudding` §2 の 1（オーナー裁定 2026-11-07。範囲外として起票）。
 
 ---
 

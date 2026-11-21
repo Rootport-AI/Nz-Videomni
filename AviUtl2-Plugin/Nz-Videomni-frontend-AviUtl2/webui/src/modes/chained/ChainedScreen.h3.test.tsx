@@ -130,7 +130,7 @@ describe("ChainedScreen — fixed-overlap mode (§1-106)", () => {
     expect(within(source).getByRole("button", { name: en.chained.sourceInput.chooseButton })).toBeEnabled();
     expect(within(source).queryByText(en.chained.sourceInput.strengthLabel)).not.toBeInTheDocument();
     expect(source.querySelector("input[type='range']")).toBeNull();
-    expect(container.querySelector("details.batch-section")).not.toBeNull();
+    expect(screen.getByText(en.batchI2vLong.heading)).toBeInTheDocument();
     // Hidden, not greyed: no accordion, no reason line.
     expect(screen.queryByText(en.chained.endSource.heading)).not.toBeInTheDocument();
     expect(screen.queryByText(en.chained.referenceVideo.heading)).not.toBeInTheDocument();

@@ -89,7 +89,7 @@ describe("FolderInputs", () => {
     expect(form.pickFieldDir).toHaveBeenCalledWith(0, 3, "Choose folder…");
   });
 
-  it("❌ only on the last frame and only with two or more frames", () => {
+  it("the frame's ❌ only on the last frame and only with two or more frames", () => {
     const one = renderInputs(makeForm());
     expect(screen.queryByRole("button", { name: "Remove this clip's folders" })).toBeNull();
     one.unmount();

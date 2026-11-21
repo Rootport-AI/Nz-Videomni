@@ -127,7 +127,7 @@ describe("i18n dictionaries (en/ja)", () => {
     expect(ja.repeatRun.stopButton(3)).not.toBe(en.repeatRun.stopButton(3));
   });
 
-  // バッチ v2v-ref-long 第 2 次計画 B-3 の 5: the owner's Japanese copy, verbatim.
+  // Docs/BATCH_V2V_REF_LONG.md §20: the owner's Japanese copy, verbatim.
   it("batchV2vRefLong: the owner-specified Japanese copy", () => {
     const t = ja.batchV2vRefLong;
     expect(t.outDir.none).toBe("出力フォルダは未設定です（※空欄のままスキャンすると、自動入力されます）");

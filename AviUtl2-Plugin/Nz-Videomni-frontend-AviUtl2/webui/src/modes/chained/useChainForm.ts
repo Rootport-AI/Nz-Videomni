@@ -2455,8 +2455,8 @@ export function useChainForm(
   //  - 未添付→ready: relax the floor to 1 clip and bump clip 0 up just enough
   //    that the configured default `context_frames` (e.g. 73) stays below it
   //    (default num_frames is only 49), so V2V isn't invalid out of the box.
-  //  - 添付→idle (cleared): pad back up to the floor the OTHER slot leaves in
-  //    force. With no end source that is exactly `MIN_CLIPS_NO_SOURCE`; with one
+  //  - 添付→idle (cleared): pad back up to the floor the OTHER slot (or
+  //    batchClipFloorRelaxed) leaves in force. With no end source that is exactly `MIN_CLIPS_NO_SOURCE`; with one
   //    attached it stays 1, which stops a V2V detach from silently padding a
   //    stray clip back in while the end slot's own floor still wants 1.
   const prevSourceStatus = useRef<SourceUploadStatus>(sourceStatus);
@@ -2499,7 +2499,8 @@ export function useChainForm(
   // would be a change nobody asked for.
   //
   //  - 添付→idle (cleared): re-fit to the current floor, which pads a
-  //    single-clip chain back up to the from-scratch 2-clip minimum. The mirror
+  //    single-clip chain back up to the from-scratch 2-clip minimum (not
+  //    while the other slot or batchClipFloorRelaxed relaxes it). The mirror
   //    of the source effect's own cleared arm above.
   //
   // 台帳 §1-121: keyed on the slot's OWN status, not the hidden-panel fold —

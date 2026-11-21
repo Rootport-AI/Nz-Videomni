@@ -103,8 +103,8 @@ export type I2vLongBlockReason =
   | "promptEmpty"
   | "unknownLoraTag"
   | "jobActive"
-  /** The shared run lock (`shell/runLock.ts`) is currently held by the OTHER
-   * batch — Batch A2V on the Create screen. Without this line the Start button
+  /** The shared run lock (`shell/runLock.ts`) is currently held by another
+   * batch. Without this line the Start button
    * would simply do nothing: `runtime.run()` fails to acquire the lock, records
    * a `{started:false}` result and never leaves `idle`, which from the panel is
    * indistinguishable from a dead button. */
@@ -460,7 +460,7 @@ export function useBatchI2vLongForm(
   const endSourceAttached = chain.hasEndSource === true;
 
   // The shared run lock's current holder. `useSyncExternalStore` (rather than a
-  // subscribe effect) so the very first render already sees a lock Batch A2V
+  // subscribe effect) so the very first render already sees a lock another batch
   // took before this panel mounted — the snapshot is a primitive that changes
   // only when the lock does. Our OWN hold is not a block: while this batch runs
   // the Start button is already disabled by `runner.state !== "idle"`, and

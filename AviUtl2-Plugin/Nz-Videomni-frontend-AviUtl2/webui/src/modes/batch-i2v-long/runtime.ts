@@ -58,7 +58,7 @@ export interface I2vLongRuntimeSnapshot {
   outDir: string | null;
   /** Outcome of the most recently ATTEMPTED run — notably the
    * `{started:false}` cases (nothing runnable, already running, lock held by
-   * Batch A2V), which produce no row updates at all and would otherwise be
+   * another batch), which produce no row updates at all and would otherwise be
    * invisible. `null` before the first attempt. */
   lastStartResult: I2vLongRunnerStartResult | null;
 }

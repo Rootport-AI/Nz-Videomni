@@ -109,7 +109,7 @@ export function frameIndexForClip(frameCount: number, fillFollowing: boolean, cl
   return null;
 }
 
-/** The scanned field of a base field (`null` for the opening video). */
+/** The scanned field at (frame, kind, slot), or null when the frame has none. */
 export function scannedFieldOf(scan: ScanResult, frame: number, kind: ReferenceKind, slot: number): ScannedField | null {
   return scan.frames[frame]?.find((f) => f.kind === kind && f.slot === slot) ?? null;
 }

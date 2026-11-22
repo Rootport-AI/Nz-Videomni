@@ -48,7 +48,9 @@ than the largest split chunk goes through in one pass.
 Memory: per chunk, only that chunk's hidden rows go to the device (freed once
 normalized); the normalized features live until ``feature_expand`` has
 consumed them (``refine`` has no ``no_grad`` decorator, which would hold its
-arguments to the end of the call; ``decode`` runs it inside its own); each
+arguments to the end of the call; ``decode`` runs it inside its own); after each
+chunk the CUDA cache is emptied (chunks differ in size, and the cache would
+otherwise pile up their freed blocks: reserved far above allocated); each
 layer computes q, k and v for one batch of windows (or one block's global
 attention) at a time and writes the residual of those rows at once (every
 operation is per row -- the int8 layers quantize their input per row -- so the
@@ -89,14 +91,18 @@ COLOR_STD = (0.458, 0.448, 0.45)
 #: (research notes §18.7). Fixed: fewer changes the pixels (VERIFICATION_LOG §223.8).
 MARGIN_BLOCKS = 4
 #: The largest chunk, in DiT rows (latents x (H/32) x (W/32)) including its
-#: context. Basis: the experiment's head measured about 0.102 MiB per DiT row
-#: plus about 1,100 MiB (VERIFICATION_LOG §223.8, before this module's
-#: window-by-window attention, which drops the all-rows q / k / v / output --
-#: the larger part of that per-row figure); 65,536 rows was about 7.8 GiB there.
-#: A clip of up to 13 native blocks at 1280 x 768 (960 rows per latent) is one
-#: chunk. To be revisited after the GPU measurement of this form. A chunk never
-#: keeps less than one native block (so 9 blocks with its context).
-CHUNK_MAX_ROWS = 65536
+#: context. Set from the GPU measurement of this module on the product's path
+#: (pi-H3 stage 1; the record of the measurement is the verification log's):
+#: the decode phase (DWD plus the audio VAE) peaked at 2,108 MiB allocated for
+#: 21,120 rows (1280 x 768), 4,268 MiB for 75,480 rows (1920 x 1088) and
+#: 6,319 MiB for 80,960 rows (2560 x 1472, the highest per row: one block's
+#: pixel temporaries grow with the resolution) -- about 0.040 MiB per row,
+#: against the experiment's 0.102 MiB before the window-by-window attention.
+#: 131,072 rows, scaled from the 2560 x 1472 figure, comes to about 10 GB. The
+#: former 65,536 split a 1920 x 1088, 158-frame clip into 10 chunks and made
+#: the head about 7 times slower. A chunk never keeps less than one native
+#: block (so up to 9 blocks with its context, which may exceed this cap).
+CHUNK_MAX_ROWS = 131072
 #: Rows per piece of the per-row steps (norms, projections, residuals) and
 #: windows per attention call: the experiment's values.
 ROW_CHUNK = 8192
@@ -552,8 +558,13 @@ def decode(head: DWDHead, feats_in: DWDFeatures, device, *, row_chunk: int = ROW
         # once feature_expand has read them (refine drops its own reference).
         refine(head, normalize_features(head, box.pop(), feats_in.t_emb, tidx[l0 * hw:l1 * hw], row_chunk=row_chunk),
                (l1 - l0, gh, gw), sink, keep_blocks=(k0 - c0, k1 - c0), row_chunk=row_chunk, win_batch=win_batch)
+        del box, sink   # refine has returned: nothing of this chunk is left on the device
         if dev.type == "cuda":
             torch.cuda.synchronize(dev)
+            # Chunks differ in size, so the caching allocator would keep the previous
+            # chunk's freed blocks and take new ones beside them: on the GPU, 10 chunks
+            # of 2560 x 1472 reserved 16.9 GB for 7.7 GB allocated. Each chunk starts empty.
+            torch.cuda.empty_cache()
         records.append({"keep_blocks": [k0, k1], "context_blocks": [c0, c1], "latents": [l0, l1],
                         "frames": sum(frames[k0:k1]), "seconds": round(time.perf_counter() - started, 3)})
     return out, records

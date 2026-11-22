@@ -631,10 +631,15 @@ def test_plan_chunks_comes_from_the_shape_alone():
     from engine_h3 import dwd
 
     assert dwd.MARGIN_BLOCKS == 4
-    # 1280 x 768 (960 DiT rows per latent): 13 native blocks are one chunk, 14 are not
-    assert dwd.CHUNK_MAX_ROWS // (5 * 960) == 13
-    assert dwd.plan_chunks(5 * 12 + 2, 24, 40) == [{"keep": (0, 13), "context": (0, 13)}]
-    assert len(dwd.plan_chunks(5 * 13 + 2, 24, 40)) > 1
+    # 1280 x 768, 1920 x 1088, 2560 x 1472: the longest one-pass clip and the split, from the constant
+    for gh, gw in ((24, 40), (34, 60), (46, 80)):
+        max_blocks = max(1, dwd.CHUNK_MAX_ROWS // (5 * gh * gw))
+        content = max(1, max_blocks - 2 * dwd.MARGIN_BLOCKS)
+        one = max(max_blocks, content + 2 * dwd.MARGIN_BLOCKS)
+        assert dwd.plan_chunks(5 * one - 3, gh, gw) == [{"keep": (0, one), "context": (0, one)}], (gh, gw)
+        plan = dwd.plan_chunks(5 * (one + 1) - 3, gh, gw)
+        assert len(plan) > 1 and all(c["keep"][1] - c["keep"][0] == content for c in plan[:-1]), (gh, gw)
+        assert max(c["context"][1] - c["context"][0] for c in plan) <= one
     assert len(dwd.plan_chunks(22, 24, 40)) == 1
     for t, gh, gw in ((67, 34, 60), (172, 24, 40), (377, 46, 80)):
         plan = dwd.plan_chunks(t, gh, gw)
@@ -647,14 +652,14 @@ def test_plan_chunks_comes_from_the_shape_alone():
             assert k1 - k0 >= 1 and c0 == max(0, k0 - 4) and c1 == min(nb, k1 + 4)
 
 
-def test_plan_chunks_does_not_split_a_clip_no_longer_than_a_split_chunk():
-    """1920 x 1088 (34 x 60 = 2,040 DiT rows per latent): 6 native blocks fit the row cap, a
-    split chunk keeps 1 and holds up to 1 + 2 x 4 = 9; so 8 and 9 blocks are one pass, 10 and
+def test_plan_chunks_does_not_split_a_clip_no_longer_than_a_split_chunk(monkeypatch):
+    """The rule on a cap of 6 native blocks at 1920 x 1088 (34 x 60 = 2,040 DiT rows per latent):
+    a split chunk keeps 1 and holds up to 1 + 2 x 4 = 9; so 8 and 9 blocks are one pass, 10 and
     more are split into chunks of 1 kept block (each at most 9 blocks with its context)."""
     from engine_h3 import dwd
 
     gh, gw = 34, 60
-    assert dwd.CHUNK_MAX_ROWS // (5 * gh * gw) == 6
+    monkeypatch.setattr(dwd, "CHUNK_MAX_ROWS", 6 * 5 * gh * gw + 1)
     for nb in (1, 6, 8, 9):
         assert dwd.plan_chunks(5 * nb - 3 if nb > 1 else 2, gh, gw) == [{"keep": (0, nb), "context": (0, nb)}], nb
     for nb in (10, 14):

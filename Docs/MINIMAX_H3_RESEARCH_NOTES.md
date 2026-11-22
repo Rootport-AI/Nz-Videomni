@@ -1350,7 +1350,9 @@ URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。調査�
 出典は論文 "Decoding Without a Decoder: Direct Pixel Prediction from Diffusion Transformers"（https://arxiv.org/abs/2611.22287 ）と、実装の ComfyUI-piFlow（https://github.com/Lakonik/ComfyUI-piFlow 、コミット `e0ca46f7`〔v1.4.2〕）、LakonLab（https://github.com/Lakonik/LakonLab 、コミット `2ee2b334`。Apache-2.0）、ComfyUI 本体 v0.46.0。
 
 - **入力**: 最後のモデル評価で、50 ブロックを通したあと・最終の正規化の前の隠れ状態のうち、生成対象の映像の行だけを取り出してヘッドに通す。エンジンでは `H3DiT.forward` の最後の `final_rows` の直前に当たる。条件の行（先頭フレームなど）や参照の行はヘッドに渡さない。
+  - Retake・Inpainting・Outpainting で固定する行（マスクで元の潜在に保つ行）は、生成対象の映像の行の中にあるので、ヘッドに渡る。これらの行は雑音の無い入力で、DWD の論文がヘッドの品質が落ちるとしている領域にあたる。本製品の追試の結果は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §223.12。
 - **正規化**: アフィン（学習する倍率と偏り）なしの LayerNorm（eps 1e-5）に、時刻の埋め込み（刈り込み版の 8 次元）に silu を掛けて線形層に通した (scale, shift) を掛ける。
+  - 時刻の埋め込みは行ごとに引く。作者の参照実装 LakonLab は行ごとである。ComfyUI のノードも、マスクがあるときは行ごとに引く（マスクが無いときは、映像の区画全体で 1 行になる）。
 - **ヘッド**:
   - 本体の 1 トークンを 2×2 個のトークンに広げる。
   - そのあと、「潜在 5 個 × 16×16 トークン」の窓の中の attention を 8 層通す。奇数番目の層は、窓を時間で 2・空間で 8 ずらす。
@@ -1402,7 +1404,7 @@ URL の書式は `https://github.com/<repo>/blob/<commit>/<path>#L<n>`。調査�
 ### 18.10 未確認
 
 1. Ref2VA（参照素材からの生成）で pi-H3 が働くか。配布元は言及していない。
-2. Retake・Inpainting・Outpainting のように、固定した行と生成する行が混ざる機能で DWD がどう働くか（本製品の追試は未実施。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §223.10）。
+2. 同じフレームの中で固定する部分と生成する部分が混ざるとき（Inpainting・Outpainting）に、DWD の絵の固定する部分の一部が壊れる理由。Retake・Inpainting・Outpainting の追試の結果と、まだ確かめていない点は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §223.12。
 3. 時間方向に分割する先行事例（ComfyUI・LakonLab・H3cApp の範囲では見つからなかった）。
 
 ### 18.11 出典の一覧

@@ -1,6 +1,6 @@
 {
   "script": "outputs\\h3-pih3-spike-2026-11-22\\h3_pih3_spike.py",
-  "started_at": "2026-11-22T22:01:49+09:00",
+  "started_at": "2026-11-22T22:40:01+09:00",
   "versions": {
     "torch": "2.13.0+cu130",
     "comfy-kitchen": "0.2.37",
@@ -9,7 +9,7 @@
   "cuda_visible_devices": "-1",
   "cuda_available": false,
   "git": {
-    "head": "a7c539e1253d89093f035c3c4cc6a2acb6591552",
+    "head": "43331ea0b1086ba8457ba04f48f65979b2202863",
     "status_short": [],
     "clean": true
   },
@@ -38,7 +38,8 @@
             ],
             "dtype": "float32",
             "masked": false,
-            "mask_values": null
+            "mask_values": null,
+            "mask_rows": null
           },
           "video": {
             "value": 0.993766725063324,
@@ -52,7 +53,8 @@
             ],
             "dtype": "float32",
             "masked": false,
-            "mask_values": null
+            "mask_values": null,
+            "mask_rows": null
           }
         }
       },
@@ -1166,7 +1168,7 @@
       ],
       "frames": 226,
       "frames_expected": 226,
-      "whole_seconds": 0.43,
+      "whole_seconds": 0.44,
       "variants": {
         "content5_margin4": {
           "chunks": 3,
@@ -1253,14 +1255,577 @@
         "load: tokenizer_dir OK S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\TextEncoder\\qwen3vl_tokenizer"
       ],
       "passed": true
+    },
+    "10_edit_requests": {
+      "R1": {
+        "request_check": {
+          "validate": "passed (chain _check_spec + validate_request)",
+          "clip_requests": 1,
+          "seeds": [
+            1234
+          ],
+          "total_frames": 124,
+          "total_latent_frames": 37,
+          "retake": {
+            "window_px": 124,
+            "head_px": 22,
+            "tail_px": 22,
+            "n_head_v": 7,
+            "n_tail_v": 7,
+            "n_head_a": 36,
+            "n_tail_a": 36,
+            "free_middle_px": [
+              22,
+              102
+            ]
+          }
+        },
+        "reads": {
+          "function": "chain_h3._read_retake_window",
+          "frames": [
+            124,
+            768,
+            1280,
+            3
+          ],
+          "info": {
+            "source_size": [
+              1920,
+              1080
+            ],
+            "frames_read": 124
+          },
+          "wave": [
+            2,
+            165333
+          ],
+          "required_samples": 165333,
+          "expected_rows": {
+            "latent_frames": 37,
+            "audio_latents": 207,
+            "grid": [
+              24,
+              40
+            ],
+            "fixed_latents": [
+              7,
+              7
+            ],
+            "video_values": [
+              0.0,
+              1.0
+            ],
+            "audio_values": [
+              0.0
+            ],
+            "fixed": 13440,
+            "generated": 22080,
+            "only_0_and_1": true
+          },
+          "passed": true
+        },
+        "lora": [
+          "pi_h3_4step_dwd_adapter_int8_convrot.safetensors"
+        ],
+        "lora_strength": [
+          1.0
+        ],
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "steps": 4,
+        "frames": 124,
+        "canvas": [
+          1280,
+          768
+        ],
+        "passed": true
+      },
+      "R1c": {
+        "request_check": {
+          "validate": "passed (chain _check_spec + validate_request)",
+          "clip_requests": 1,
+          "seeds": [
+            1234
+          ],
+          "total_frames": 124,
+          "total_latent_frames": 37,
+          "retake": {
+            "window_px": 124,
+            "head_px": 22,
+            "tail_px": 22,
+            "n_head_v": 7,
+            "n_tail_v": 7,
+            "n_head_a": 36,
+            "n_tail_a": 36,
+            "free_middle_px": [
+              22,
+              102
+            ]
+          }
+        },
+        "reads": {
+          "function": "chain_h3._read_retake_window",
+          "frames": [
+            124,
+            768,
+            1280,
+            3
+          ],
+          "info": {
+            "source_size": [
+              1920,
+              1080
+            ],
+            "frames_read": 124
+          },
+          "wave": [
+            2,
+            165333
+          ],
+          "required_samples": 165333,
+          "expected_rows": {
+            "latent_frames": 37,
+            "audio_latents": 207,
+            "grid": [
+              24,
+              40
+            ],
+            "fixed_latents": [
+              7,
+              7
+            ],
+            "video_values": [
+              0.0,
+              1.0
+            ],
+            "audio_values": [
+              0.0
+            ],
+            "fixed": 13440,
+            "generated": 22080,
+            "only_0_and_1": true
+          },
+          "passed": true
+        },
+        "lora": [
+          "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors"
+        ],
+        "lora_strength": [
+          0.8
+        ],
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "steps": 4,
+        "frames": 124,
+        "canvas": [
+          1280,
+          768
+        ],
+        "passed": true
+      },
+      "I1": {
+        "request_check": {
+          "validate": "passed (validate_request)"
+        },
+        "reads": {
+          "function": "outpaint_h3.read_outpaint_source",
+          "frames": [
+            73,
+            768,
+            1280,
+            3
+          ],
+          "info": {
+            "source_size": [
+              1280,
+              768
+            ],
+            "frames_read": 73,
+            "source_had_audio": true,
+            "required_samples": 97333,
+            "read_samples": 97333
+          },
+          "wave": [
+            2,
+            97333
+          ],
+          "required_samples": 97333,
+          "expected_rows": {
+            "latent_frames": 22,
+            "audio_latents": 122,
+            "grid": [
+              24,
+              40
+            ],
+            "mask_proof": {
+              "decoded_frames": 73,
+              "white_ratio": 0.07038918412439354,
+              "token_ratio": 0.10823863744735718
+            },
+            "source": [
+              1280,
+              768
+            ],
+            "canvas": [
+              1280,
+              768
+            ],
+            "geometry_fixed_tokens": 960,
+            "geometry_generated_tokens": 0,
+            "video_values": [
+              0.0,
+              1.0
+            ],
+            "audio_values": [
+              0.0
+            ],
+            "fixed": 18834,
+            "generated": 2286,
+            "only_0_and_1": true
+          },
+          "passed": true
+        },
+        "lora": [
+          "pi_h3_4step_dwd_adapter_int8_convrot.safetensors"
+        ],
+        "lora_strength": [
+          1.0
+        ],
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "steps": 4,
+        "frames": 73,
+        "canvas": [
+          1280,
+          768
+        ],
+        "feather_px": 20,
+        "audio_strength": 1.0,
+        "passed": true
+      },
+      "I1c": {
+        "request_check": {
+          "validate": "passed (validate_request)"
+        },
+        "reads": {
+          "function": "outpaint_h3.read_outpaint_source",
+          "frames": [
+            73,
+            768,
+            1280,
+            3
+          ],
+          "info": {
+            "source_size": [
+              1280,
+              768
+            ],
+            "frames_read": 73,
+            "source_had_audio": true,
+            "required_samples": 97333,
+            "read_samples": 97333
+          },
+          "wave": [
+            2,
+            97333
+          ],
+          "required_samples": 97333,
+          "expected_rows": {
+            "latent_frames": 22,
+            "audio_latents": 122,
+            "grid": [
+              24,
+              40
+            ],
+            "mask_proof": {
+              "decoded_frames": 73,
+              "white_ratio": 0.07038918412439354,
+              "token_ratio": 0.10823863744735718
+            },
+            "source": [
+              1280,
+              768
+            ],
+            "canvas": [
+              1280,
+              768
+            ],
+            "geometry_fixed_tokens": 960,
+            "geometry_generated_tokens": 0,
+            "video_values": [
+              0.0,
+              1.0
+            ],
+            "audio_values": [
+              0.0
+            ],
+            "fixed": 18834,
+            "generated": 2286,
+            "only_0_and_1": true
+          },
+          "passed": true
+        },
+        "lora": [
+          "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors"
+        ],
+        "lora_strength": [
+          0.8
+        ],
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "steps": 4,
+        "frames": 73,
+        "canvas": [
+          1280,
+          768
+        ],
+        "feather_px": 20,
+        "audio_strength": 1.0,
+        "passed": true
+      },
+      "O1": {
+        "request_check": {
+          "validate": "passed (validate_request)"
+        },
+        "reads": {
+          "function": "outpaint_h3.read_outpaint_source",
+          "frames": [
+            124,
+            576,
+            1024,
+            3
+          ],
+          "info": {
+            "source_size": [
+              1024,
+              576
+            ],
+            "frames_read": 124,
+            "source_had_audio": true,
+            "required_samples": 165333,
+            "read_samples": 165333
+          },
+          "wave": [
+            2,
+            165333
+          ],
+          "required_samples": 165333,
+          "expected_rows": {
+            "latent_frames": 37,
+            "audio_latents": 207,
+            "grid": [
+              24,
+              40
+            ],
+            "source": [
+              1024,
+              576
+            ],
+            "canvas": [
+              1280,
+              768
+            ],
+            "geometry_fixed_tokens": 576,
+            "geometry_generated_tokens": 384,
+            "video_values": [
+              0.0,
+              1.0
+            ],
+            "audio_values": [
+              0.0
+            ],
+            "fixed": 21312,
+            "generated": 14208,
+            "only_0_and_1": true
+          },
+          "passed": true
+        },
+        "lora": [
+          "pi_h3_4step_dwd_adapter_int8_convrot.safetensors"
+        ],
+        "lora_strength": [
+          1.0
+        ],
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "steps": 4,
+        "frames": 124,
+        "canvas": [
+          1280,
+          768
+        ],
+        "feather_px": 20,
+        "audio_strength": 1.0,
+        "passed": true
+      },
+      "O1c": {
+        "request_check": {
+          "validate": "passed (validate_request)"
+        },
+        "reads": {
+          "function": "outpaint_h3.read_outpaint_source",
+          "frames": [
+            124,
+            576,
+            1024,
+            3
+          ],
+          "info": {
+            "source_size": [
+              1024,
+              576
+            ],
+            "frames_read": 124,
+            "source_had_audio": true,
+            "required_samples": 165333,
+            "read_samples": 165333
+          },
+          "wave": [
+            2,
+            165333
+          ],
+          "required_samples": 165333,
+          "expected_rows": {
+            "latent_frames": 37,
+            "audio_latents": 207,
+            "grid": [
+              24,
+              40
+            ],
+            "source": [
+              1024,
+              576
+            ],
+            "canvas": [
+              1280,
+              768
+            ],
+            "geometry_fixed_tokens": 576,
+            "geometry_generated_tokens": 384,
+            "video_values": [
+              0.0,
+              1.0
+            ],
+            "audio_values": [
+              0.0
+            ],
+            "fixed": 21312,
+            "generated": 14208,
+            "only_0_and_1": true
+          },
+          "passed": true
+        },
+        "lora": [
+          "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors"
+        ],
+        "lora_strength": [
+          0.8
+        ],
+        "shift": [
+          12.0,
+          3.0
+        ],
+        "steps": 4,
+        "frames": 124,
+        "canvas": [
+          1280,
+          768
+        ],
+        "feather_px": 20,
+        "audio_strength": 1.0,
+        "passed": true
+      },
+      "passed": true
+    },
+    "11_edit_dwd_grid": {
+      "retake": {
+        "latents": 37,
+        "frames": 124,
+        "expected_frames": 124,
+        "sol_grid": [
+          37,
+          48,
+          80
+        ],
+        "native_blocks": 8,
+        "windows": {
+          "false": 120,
+          "true": 192
+        },
+        "is_5n_plus_2": true
+      },
+      "inpaint": {
+        "latents": 22,
+        "frames": 73,
+        "expected_frames": 73,
+        "sol_grid": [
+          22,
+          48,
+          80
+        ],
+        "native_blocks": 5,
+        "windows": {
+          "false": 75,
+          "true": 120
+        },
+        "is_5n_plus_2": true
+      },
+      "outpaint": {
+        "latents": 37,
+        "frames": 124,
+        "expected_frames": 124,
+        "sol_grid": [
+          37,
+          48,
+          80
+        ],
+        "native_blocks": 8,
+        "windows": {
+          "false": 120,
+          "true": 192
+        },
+        "is_5n_plus_2": true
+      },
+      "one_denoise_drops_nothing": "DWDDecoderStandIn.decode drops k * hw head rows only for denoise i > 0; an edit item has one denoise (retake: run_chain_h3 with one clip; inpaint / outpaint: generate), so nothing is dropped",
+      "passed": true
+    },
+    "12_paste_wrap": {
+      "inpaint": {
+        "function": "engine_h3.inpaint_geometry.compose_inpaint",
+        "wrapped_while_active": true,
+        "calls": 1,
+        "same_result_as_original": true,
+        "restored": true,
+        "passed": true
+      },
+      "outpaint": {
+        "function": "engine_h3.outpaint_geometry.composite",
+        "wrapped_while_active": true,
+        "calls": 1,
+        "same_result_as_original": true,
+        "restored": true,
+        "passed": true
+      },
+      "product_patches_untouched": true,
+      "passed": true
     }
   },
   "all_passed": true,
   "git_after": {
-    "head": "a7c539e1253d89093f035c3c4cc6a2acb6591552",
+    "head": "43331ea0b1086ba8457ba04f48f65979b2202863",
     "status_short": [],
     "clean": true
   },
   "status": "done",
-  "finished_at": "2026-11-22T22:01:56+09:00"
+  "finished_at": "2026-11-22T22:40:15+09:00"
 }

@@ -1,0 +1,103 @@
+{
+  "R1": {
+    "rows": [
+      "original window",
+      "pi-H3 R1",
+      "control R1c"
+    ],
+    "sheets": {
+      "R1_boundary_head_f019-025": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\R1_boundary_head_f019-025.png",
+      "R1_boundary_tail_f099-105": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\R1_boundary_tail_f099-105.png",
+      "R1_fixed_head_f000_f011_f021": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\R1_fixed_head_f000_f011_f021.png"
+    },
+    "psnr_vs_original_window_db": {
+      "R1": {
+        "head_f000-021": {
+          "mean": 27.925,
+          "min": 27.228
+        },
+        "tail_f102-123": {
+          "mean": 28.389,
+          "min": 27.453
+        }
+      },
+      "R1c": {
+        "head_f000-021": {
+          "mean": 32.312,
+          "min": 31.43
+        },
+        "tail_f102-123": {
+          "mean": 32.596,
+          "min": 31.64
+        }
+      }
+    },
+    "signalstats_csv": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\R1_signalstats.csv",
+    "signalstats_note": "window = the cut mp4 itself (1920x1080, before the engine's cover crop); R1 / R1c = the outputs (1280x768)",
+    "signalstats_mean": {
+      "window": {
+        "yavg": 136.752,
+        "satavg": 13.865
+      },
+      "R1": {
+        "yavg": 134.504,
+        "satavg": 15.458
+      },
+      "R1c": {
+        "yavg": 135.603,
+        "satavg": 14.001
+      }
+    },
+    "made_at": "2026-11-22T23:02:58+09:00"
+  },
+  "I1": {
+    "rows": [
+      "original",
+      "pi-H3 I1",
+      "control I1c"
+    ],
+    "sheets": {
+      "frames": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\I1_frames_f000_f036_f072.png",
+      "mask_zoom": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\I1_mask_zoom_f000_f036_f072.png",
+      "raw": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\I1_raw_before_paste_f036.png"
+    },
+    "mask_zoom_box_xyxy": [
+      640,
+      150,
+      1007,
+      768
+    ],
+    "made_at": "2026-11-22T23:03:02+09:00"
+  },
+  "O1": {
+    "rows": [
+      "source on canvas",
+      "pi-H3 O1",
+      "control O1c"
+    ],
+    "sheets": {
+      "frames": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\O1_frames_f000_f061_f123.png",
+      "seams": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\O1_seams_f061.png",
+      "raw": "outputs\\h3-pih3-spike-2026-11-22\\runs\\_compare\\O1_raw_before_paste_f061.png"
+    },
+    "seam_centres_xy": {
+      "left": [
+        128,
+        384
+      ],
+      "right": [
+        1152,
+        384
+      ],
+      "top": [
+        640,
+        96
+      ],
+      "bottom": [
+        640,
+        672
+      ]
+    },
+    "made_at": "2026-11-22T23:03:05+09:00"
+  }
+}

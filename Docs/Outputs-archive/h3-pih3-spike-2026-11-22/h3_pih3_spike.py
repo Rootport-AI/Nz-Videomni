@@ -22,6 +22,12 @@ From the repository root (Git Bash):
     PYTHONPATH=$PWD PYTHONUTF8=1 $PY $S --chain C3_4step       # GPU: 2 clips of 124 frames (640x384)
     PYTHONPATH=$PWD PYTHONUTF8=1 $PY $S --split C3_4step       # GPU: form 4 on C3's saved hidden states
 
+The edit items (the supervisor's plan file, the follow-up for Retake / Inpainting / Outpainting):
+
+    PYTHONPATH=$PWD PYTHONUTF8=1 $PY $S --prepare              # CPU: cut the material into _material/
+    PYTHONPATH=$PWD PYTHONUTF8=1 $PY $S --edit R1              # GPU: R1 R1c I1 I1c O1 O1c (c = control)
+    PYTHONPATH=$PWD PYTHONUTF8=1 $PY $S --post R1 I1 O1        # CPU: comparison sheets into runs/_compare/
+
 Exit codes: 0 = passed / done, 1 = failed (recorded in the JSON), 2 = refused by the gate / bad environment.
 """
 
@@ -33,7 +39,7 @@ import sys
 sys.dont_write_bytecode = True
 
 os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
-CPU_ONLY = "--dry-run" in sys.argv
+CPU_ONLY = any(a in sys.argv for a in ("--dry-run", "--prepare", "--post"))
 if CPU_ONLY:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -68,7 +74,7 @@ from engine_h3 import denoise_mask as DM  # noqa: E402
 from engine_h3 import dit as D  # noqa: E402
 from engine_h3 import pipeline_h3 as P  # noqa: E402
 from engine_h3 import video_vae as VV  # noqa: E402
-from engine_h3.constants import DEFAULT_SHIFT_AUDIO, DEFAULT_SHIFT_VIDEO, latent_frames  # noqa: E402
+from engine_h3.constants import DEFAULT_SHIFT_AUDIO, DEFAULT_SHIFT_VIDEO, audio_latents, latent_frames  # noqa: E402
 from engine_h3.scheduler import euler_step  # noqa: E402
 
 import pih3_adapter as PA  # noqa: E402
@@ -467,18 +473,20 @@ def _dit_input_patch(x: torch.Tensor, mask):
         return _ORIG_DIT_INPUT(x, mask)
     sess["dit_input_calls"][kind] += 1
     if kind not in sess["noise_scale"]:
-        mask_values = None
+        mask_values = mask_rows = None
         if mask is not None:
-            mask_values = sorted({float(v) for v in torch.unique(mask.rows.float().cpu())})
+            rows = mask.rows.float().cpu()
+            mask_values = sorted({float(v) for v in torch.unique(rows)})
             if not set(mask_values) <= {0.0, 1.0}:
                 raise RuntimeError(f"pi-H3 noise scale: {kind} mask has values {mask_values[:8]} other than 0 / 1; "
                                    "scaling the whole state would change the partly kept rows")
+            mask_rows = {"zero": int((rows == 0).sum()), "one": int((rows == 1).sum())}
         sigma0 = float(sess[kind]["sigmas"][0])
         with torch.no_grad():
             x.mul_(sigma0)           # the denoise's own state tensor: ComfyUI's noise * sigma_0
         sess["noise_scale"][kind] = {"value": sigma0, "times": 1, "shape": list(x.shape),
                                      "dtype": str(x.dtype).replace("torch.", ""),
-                                     "masked": mask is not None, "mask_values": mask_values}
+                                     "masked": mask is not None, "mask_values": mask_values, "mask_rows": mask_rows}
     return _ORIG_DIT_INPUT(x, mask)
 
 
@@ -548,10 +556,12 @@ class DWDDecoderStandIn:
             hs.append(h[drop:])
             idxs.append(ti[drop:].long() + off)
             embs.append(te)
+            nums, cnts = torch.unique(ti, return_counts=True)
             clips.append({"denoise": i, "latents": h.shape[0] // hw, "dropped_head_latents": drop // hw,
                           "final_rows_call": cap["call"], "t_emb_rows": int(te.shape[0]),
                           "video_time_numbers": sorted({int(v) for v in torch.unique(ti)}),
-                          "video_time_numbers_count": int(torch.unique(ti).numel())})
+                          "video_time_numbers_count": int(torch.unique(ti).numel()),
+                          "video_time_number_rows": {int(n): int(c) for n, c in zip(nums, cnts)}})
             off += int(te.shape[0])
         hidden, tidx, temb = torch.cat(hs), torch.cat(idxs), torch.cat(embs)
         del hs, idxs
@@ -687,7 +697,8 @@ def check_chain_spec(spec) -> dict:
     from h3_chain_math import compute_h3_chain_layout  # noqa: PLC0415
 
     _check_spec(spec)
-    layout = compute_h3_chain_layout([c.num_frames for c in spec.clips])
+    # as run_chain_h3 436-438 (retake=False for every chain item: unchanged)
+    layout = compute_h3_chain_layout([c.num_frames for c in spec.clips], retake=spec.retake is not None)
     reqs = clip_requests(spec)
     for r in reqs:
         P.validate_request(r)
@@ -728,32 +739,66 @@ def sessions_record(sessions: list[dict]) -> list[dict]:
              "captured": s["capture"] is not None} for s in sessions]
 
 
-def self_check(rec: dict, *, steps: int, n_sessions: int, frames: int) -> dict:
+def time_rows_check(expected: dict) -> dict:
+    """The one denoise's last captured video rows, counted per time number, against the expected fixed /
+    generated rows. The numbers are torch.unique's ascending order of the row times, so with two of them
+    the larger is the fixed rows' 0.999 (denoise_mask.masked_row_times, cap) and the smaller the
+    generated rows' 1 - sigma of the last step (0.304 at 4 steps). Cross-checked with the product's own
+    video mask rows (0 / 1) recorded by the noise-scale replacement."""
+    clips = STATE.decoder.get("clips") or []
+    rows = (clips[0].get("video_time_number_rows") if clips else None) or {}
+    nums = sorted(rows)
+    want = {"fixed": int(expected["fixed"]), "generated": int(expected["generated"])}
+    got = {"fixed": rows[nums[-1]], "generated": rows[nums[0]]} if len(nums) == 2 else None
+    sess = STATE.sessions[0] if STATE.sessions else {}
+    mask = ((sess.get("noise_scale") or {}).get("video") or {}).get("mask_rows")
+    mask_ok = mask == {"zero": want["fixed"], "one": want["generated"]}
+    return {"expected": want, "time_number_rows": rows, "got": got, "product_video_mask_rows": mask,
+            "dropped_head_latents": [c.get("dropped_head_latents") for c in clips],
+            "passed": got == want and mask_ok and [c.get("dropped_head_latents") for c in clips] == [0]}
+
+
+def self_check(rec: dict, *, steps: int, n_sessions: int, frames: int, pi: bool = True,
+               lora_pairs: int | None = None, rows: dict | None = None, out_frames: int | None = None) -> dict:
+    """``pi`` False (a control): the pi-H3 checks (adapter, sigmas, sessions, DWD) are left out and the
+    LoRA is the Turbo one (``lora_pairs``). ``rows``: the expected fixed / generated video rows
+    (:func:`time_rows_check`). ``out_frames``: the output mp4's frame count (ffprobe)."""
     bad = []
-    reps = STATE.adapter_reports
-    if len(reps) != 1:
-        bad.append(f"adapter applied {len(reps)} times (1 expected)")
-    for rep in reps:
-        for key, want in (("quant_layers", 12), ("adaln_weights", 50), ("adaln_biases", 4), ("final_tensors", 7)):
-            if rep["counts"][key] != want:
-                bad.append(f"adapter {key} {rep['counts'][key]} != {want}")
     loras = (((rec.get("engine") or {}).get("full") or {}).get("h3") or {}).get("loras") or []
-    if not loras or loras[0].get("pairs_applied") != PA.EXPECTED["lora_pairs"]:
-        bad.append(f"LoRA pairs applied {[r.get('pairs_applied') for r in loras]} != 138")
-    if len(STATE.sessions) != n_sessions:
-        bad.append(f"denoise sessions {len(STATE.sessions)} != {n_sessions}")
-    if not rec["sigmas"]["passed"]:
-        bad.append("sigmas differ from the expected values")
-    for s in STATE.sessions:
-        if set(s["noise_scale"]) != {"video", "audio"}:
-            bad.append(f"session {s['index']}: noise scaled for {sorted(s['noise_scale'])}")
-        if s["final_rows_calls"] != steps or s["capture"] is None:
-            bad.append(f"session {s['index']}: final_rows {s['final_rows_calls']} calls, {steps} expected")
-    if STATE.hits["decoder_decode"] != 1:
-        bad.append(f"DWD decode called {STATE.hits['decoder_decode']} times")
-    px = STATE.decoder.get("pixels") or {}
-    if px.get("frames") != frames:
-        bad.append(f"DWD frames {px.get('frames')} != {frames}")
+    want_pairs = PA.EXPECTED["lora_pairs"] if lora_pairs is None else int(lora_pairs)
+    if not loras or loras[0].get("pairs_applied") != want_pairs:
+        bad.append(f"LoRA pairs applied {[r.get('pairs_applied') for r in loras]} != {want_pairs}")
+    if pi:
+        reps = STATE.adapter_reports
+        if len(reps) != 1:
+            bad.append(f"adapter applied {len(reps)} times (1 expected)")
+        for rep in reps:
+            for key, want in (("quant_layers", 12), ("adaln_weights", 50), ("adaln_biases", 4), ("final_tensors", 7)):
+                if rep["counts"][key] != want:
+                    bad.append(f"adapter {key} {rep['counts'][key]} != {want}")
+        if len(STATE.sessions) != n_sessions:
+            bad.append(f"denoise sessions {len(STATE.sessions)} != {n_sessions}")
+        if not rec["sigmas"]["passed"]:
+            bad.append("sigmas differ from the expected values")
+        for s in STATE.sessions:
+            if set(s["noise_scale"]) != {"video", "audio"}:
+                bad.append(f"session {s['index']}: noise scaled for {sorted(s['noise_scale'])}")
+            if s["final_rows_calls"] != steps or s["capture"] is None:
+                bad.append(f"session {s['index']}: final_rows {s['final_rows_calls']} calls, {steps} expected")
+        if STATE.hits["decoder_decode"] != 1:
+            bad.append(f"DWD decode called {STATE.hits['decoder_decode']} times")
+        px = STATE.decoder.get("pixels") or {}
+        if px.get("frames") != frames:
+            bad.append(f"DWD frames {px.get('frames')} != {frames}")
+        if rows is not None:
+            rec["time_rows"] = time_rows_check(rows)
+            if not rec["time_rows"]["passed"]:
+                bad.append(f"time-number rows {rec['time_rows']['got']} / mask {rec['time_rows']['product_video_mask_rows']}"
+                           f" != expected {rec['time_rows']['expected']}")
+    if out_frames is not None:
+        got = ((((rec.get("outputs") or {}).get("probe") or {}).get("video")) or {}).get("nb_read_frames")
+        if str(got) != str(out_frames):          # ffprobe's JSON gives the count as a string
+            bad.append(f"output mp4 frames {got} != {out_frames}")
     if not rec.get("restored"):
         bad.append("patches not restored")
     return {"passed": not bad, "failures": bad}
@@ -798,16 +843,18 @@ def _pipeline(base: str, clock: StepClock):
     return P.H3Pipeline(paths, options, device=torch.device("cuda"), progress=clock, log=LOG)
 
 
-def _finish_run(rec: dict, out_dir: Path, clock: StepClock, *, steps: int, n_sessions: int, frames: int) -> bool:
-    rec["sigmas"] = sigma_check(steps, STATE.sessions)
-    rec["sessions"] = sessions_record(STATE.sessions)
-    rec["adapter"] = STATE.adapter_reports
-    rec["dwd"] = STATE.decoder
+def _finish_run(rec: dict, out_dir: Path, clock: StepClock, *, steps: int, n_sessions: int, frames: int,
+                **check_kw) -> bool:
+    if check_kw.get("pi", True):
+        rec["sigmas"] = sigma_check(steps, STATE.sessions)
+        rec["sessions"] = sessions_record(STATE.sessions)
+        rec["adapter"] = STATE.adapter_reports
+        rec["dwd"] = STATE.decoder
     rec["hits"] = dict(STATE.hits)
     rec["per_step"] = clock.per_step()
     out_mp4 = out_dir / "output.mp4"
     rec["outputs"] = {"mp4": rel(out_mp4), "exists": out_mp4.is_file(), "probe": ffprobe(out_mp4) if out_mp4.is_file() else None}
-    rec["self_check"] = self_check(rec, steps=steps, n_sessions=n_sessions, frames=frames)
+    rec["self_check"] = self_check(rec, steps=steps, n_sessions=n_sessions, frames=frames, **check_kw)
     rec["status"] = "done"
     return bool(rec["self_check"]["passed"] and out_mp4.is_file())
 
@@ -903,6 +950,298 @@ def run_chain(item: str) -> int:
     except BaseException as exc:  # noqa: BLE001
         failure(rec, exc)
         rec["restored"] = patches_restored()
+        rec["sessions"] = sessions_record(STATE.sessions)
+        rec["adapter"] = STATE.adapter_reports
+        rec["dwd"] = STATE.decoder
+        rec["hits"] = dict(STATE.hits)
+    finally:
+        rec["finished_at"] = now()
+        write_json(result_path, rec)
+        LOG.close()
+    return 0 if ok else 1
+
+
+# --------------------------------------------------------------------------- #
+# Edit items: Retake / Inpainting / Outpainting (the supervisor's plan file)
+# --------------------------------------------------------------------------- #
+
+MATERIAL_DIR = OUT_ROOT / "_material"
+COMPARE = RUNS / "_compare"
+FPS = 24
+EDIT_STEPS = 4
+EDIT_AUDIO_STRENGTH = 1.0        # plan: the source audio's Strength 1.0 (masks of 0 / 1 only)
+# The control: the existing Turbo LoRA at 0.8, 4 steps, the product's sigmas and video VAE. Its shift is
+# the 2026-11-10 Outpainting gate's with Turbo (VERIFICATION_LOG §205.7; h3_outpaint_gate.py 96-99): 12 / 3.
+TURBO_LORA_FILE = "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors"
+TURBO_LORA_STRENGTH = 0.8
+TURBO_LORA_PAIRS = 208           # §205.7: pairs_applied 208 on all 6 runs
+CONTROL_SHIFT_VIDEO, CONTROL_SHIFT_AUDIO = 12.0, 3.0
+
+
+def feather_px_of(r: int, width: int, height: int) -> int:
+    """services/engines/h3/adapter.py ``_feather_px`` (758-765): floor(r * max(W, H) / 64 + 0.5)."""
+    return int(math.floor(int(r) * max(int(width), int(height)) / 64 + 0.5))
+
+
+FEATHER_STEPS = 1                # the product's default blend_dilation (adapter.py 217 / 223)
+FEATHER_PX = feather_px_of(FEATHER_STEPS, WIDTH, HEIGHT)   # 20 at the 1280 canvas
+OUTPAINT_SOURCE = (1024, 576)
+OUTPAINT_PADS = {"pad_left": 128, "pad_right": 128, "pad_top": 96, "pad_bottom": 96}
+REF_VIDEO = "uploads/h3-ref-calibration/H3-Ref-1080p-15s.mp4"
+INPAINT_DIR = "uploads/h3-inpaint-development/"
+#: Cut as services/video_io.py cut_window_mp4 (select window, atrim, crf 12, yuv420p, CFR 24, PCM audio
+#: else AAC 192k); the Outpainting source also scaled (h3_outpaint_gate.py _prepare_main, 401-455).
+MATERIALS = {
+    "R1_window": {"src": REF_VIDEO, "start_sec": 4.0, "frames": 124, "scale": None,
+                  "file": "R1_window_1920x1080_124f.mp4"},
+    "O1_source": {"src": REF_VIDEO, "start_sec": 2.0, "frames": 124, "scale": OUTPAINT_SOURCE,
+                  "file": "O1_source_1024x576_124f.mp4"},
+    "I1_source": {"src": INPAINT_DIR + "inpaint-base.mp4", "start_sec": 0.0, "frames": 73, "scale": None,
+                  "file": "I1_source_1280x768_73f.mp4"},
+    "I1_mask": {"src": INPAINT_DIR + "mask-768p.mp4", "start_sec": 0.0, "frames": 73, "scale": None,
+                "file": "I1_mask_1280x768_73f.mp4"},
+}
+KIND_MATERIALS = {"retake": ("R1_window",), "inpaint": ("I1_source", "I1_mask"), "outpaint": ("O1_source",)}
+EDIT_FRAMES = {"retake": 124, "inpaint": 73, "outpaint": 124}
+EDIT_PROMPTS = {
+    # VERIFICATION_LOG §200 main condition: Docs/Outputs-archive/h3-retake-2026-11-08/s1.0/request.json
+    "retake": ("A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room "
+               "decorated with sweets and flowers; natural head and hand movement, steady camera."),
+    # §208 I1 (= §207.5): Docs/Outputs-archive/h3-inpaint-2026-11-11/h3_inpaint_gate_api.py DEFAULT_PROMPT
+    "inpaint": ("Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair "
+                "and wears a red dress, red outfit. Steady camera."),
+    # §205: Docs/Outputs-archive/h3-outpaint-2026-11-10/h3_outpaint_gate.py DEFAULT_PROMPT
+    "outpaint": ("A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a "
+                 "spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera."),
+}
+EDIT = {"R1": ("retake", True), "R1c": ("retake", False), "I1": ("inpaint", True), "I1c": ("inpaint", False),
+        "O1": ("outpaint", True), "O1c": ("outpaint", False)}
+RAW_FRAMES = {"inpaint": (0, 36, 72), "outpaint": (0, 61, 123)}
+
+
+def material_path(key: str) -> Path:
+    return MATERIAL_DIR / MATERIALS[key]["file"]
+
+
+def missing_material(kind: str) -> list[str]:
+    return [rel(material_path(k)) for k in KIND_MATERIALS[kind] if not material_path(k).is_file()]
+
+
+def edit_request(item: str, out_dir: Path):
+    """R*: the chain's retake spec (worker._do_generate_chain's shape, one clip); I* / O*: a single request."""
+    kind, pi = EDIT[item]
+    mats = {k: str(material_path(k)) for k in KIND_MATERIALS[kind]}
+    loras = lora_for(EDIT_STEPS) if pi else (P.H3LoraInput(path=str(ROOT / TURBO_LORA_FILE), strength=TURBO_LORA_STRENGTH),)
+    base = P.H3GenerateRequest(
+        prompt=EDIT_PROMPTS[kind], seed=DEFAULT_SEED, width=WIDTH, height=HEIGHT, num_frames=EDIT_FRAMES[kind],
+        output_path=str(out_dir / "output.mp4"), num_inference_steps=EDIT_STEPS,
+        shift_video=SHIFT_VIDEO if pi else CONTROL_SHIFT_VIDEO, shift_audio=SHIFT_AUDIO if pi else CONTROL_SHIFT_AUDIO,
+        keep_resident=KEEP_RESIDENT, attention_backend=ATTENTION, block_swap_prefetch=PREFETCH, vram16_mode=VRAM16,
+        loras=loras,
+    )
+    if kind == "retake":
+        from engine_h3.chain_h3 import H3ChainClipSpec, H3ChainRetake, H3ChainSpec  # noqa: PLC0415
+
+        return H3ChainSpec(base=base, clips=(H3ChainClipSpec(prompt=base.prompt, num_frames=base.num_frames),),
+                           seed=DEFAULT_SEED,
+                           retake=H3ChainRetake(path=mats["R1_window"], audio_strength=EDIT_AUDIO_STRENGTH))
+    if kind == "outpaint":
+        return dataclasses.replace(base, outpaint=P.H3OutpaintInput(
+            path=mats["O1_source"], audio_strength=EDIT_AUDIO_STRENGTH, feather_px=FEATHER_PX, **OUTPAINT_PADS))
+    return dataclasses.replace(base, inpaint=P.H3InpaintInput(
+        path=mats["I1_source"], mask_path=mats["I1_mask"], audio_strength=EDIT_AUDIO_STRENGTH, feather_px=FEATHER_PX))
+
+
+def check_edit_request(item: str, req) -> dict:
+    if EDIT[item][0] == "retake":
+        chk = check_chain_spec(req)
+        lay = chk["layout"]
+        return {"validate": "passed (chain _check_spec + validate_request)", "clip_requests": chk["clip_requests"],
+                "seeds": chk["seeds"], "total_frames": lay.total_frames, "total_latent_frames": lay.total_latent_frames,
+                "retake": lay.to_dict().get("retake")}
+    P.validate_request(req)
+    return {"validate": "passed (validate_request)"}
+
+
+def _source_size(path: Path) -> tuple[int, int]:
+    v = ffprobe(path)["video"]
+    return int(v["width"]), int(v["height"])
+
+
+def expected_rows(kind: str) -> dict:
+    """CPU: the fixed / generated video rows and the 0 / 1 mask values the product builds, through the
+    product's own functions on zero latents (retake_fix / outpaint_fix / apply_inpaint_tokens; the
+    Inpainting mask read with read_inpaint_mask from the cut mask). Audio: every read latent assumed
+    (te_a = A), the widest fixed range."""
+    frames = EDIT_FRAMES[kind]
+    t, a = latent_frames(frames), audio_latents(frames)
+    gh, gw = HEIGHT // 32, WIDTH // 32
+    out: dict = {"latent_frames": t, "audio_latents": a, "grid": [gh, gw]}
+    if kind == "retake":
+        from engine_h3.chain_h3 import retake_fix  # noqa: PLC0415
+        from h3_chain_math import compute_h3_chain_layout  # noqa: PLC0415
+
+        layout = compute_h3_chain_layout([frames], retake=True)
+        vfix, afix = retake_fix(torch.zeros((1, 1, t, 2 * gh, 2 * gw)), torch.zeros((2, 1, a)), layout,
+                                EDIT_AUDIO_STRENGTH)
+        values_v = torch.tensor(vfix[1], dtype=torch.float32).repeat_interleave(gh * gw)
+        out["fixed_latents"] = [int(layout.retake_n_head_v), int(layout.retake_n_tail_v)]
+    else:
+        from engine_h3 import outpaint_h3 as OH  # noqa: PLC0415
+        from engine_h3.outpaint_geometry import LATENT_PX, compute_outpaint_geometry  # noqa: PLC0415
+
+        if kind == "outpaint":
+            sw, sh = _source_size(material_path("O1_source"))
+            p = OUTPAINT_PADS
+            geom = compute_outpaint_geometry(sw, sh, WIDTH, HEIGHT, p["pad_left"], p["pad_right"], p["pad_top"],
+                                             p["pad_bottom"])
+        else:
+            from engine_h3.inpaint_geometry import compute_inpaint_geometry  # noqa: PLC0415
+
+            sw, sh = _source_size(material_path("I1_source"))
+            geom = compute_inpaint_geometry(sw, sh, WIDTH, HEIGHT)
+        vfix, afix = OH.outpaint_fix(torch.zeros((1, 1, t, geom.aligned_h // LATENT_PX, geom.aligned_w // LATENT_PX)),
+                                     torch.zeros((2, 1, a)), geom, EDIT_AUDIO_STRENGTH, t, a)
+        if kind == "inpaint":
+            from engine_h3 import inpaint_h3 as IH  # noqa: PLC0415
+            from engine_h3.inpaint_geometry import chunk_block_masks, token_values_from_chunks  # noqa: PLC0415
+
+            blocks, proof = IH.read_inpaint_mask(str(material_path("I1_mask")), frames, (sw, sh), geom)
+            vfix = IH.apply_inpaint_tokens(vfix, token_values_from_chunks(chunk_block_masks(blocks, frames), t))
+            out["mask_proof"] = proof
+        values_v = vfix[1].reshape(-1)
+        out.update(source=[sw, sh], canvas=[geom.canvas_w, geom.canvas_h], geometry_fixed_tokens=int(geom.fixed_count),
+                   geometry_generated_tokens=int(geom.generated_count))
+    out["video_values"] = sorted({float(v) for v in torch.unique(values_v)})
+    out["audio_values"] = sorted({float(v) for v in afix[1]}) if afix is not None else None
+    out["fixed"], out["generated"] = int((values_v == 0).sum()), int((values_v == 1).sum())
+    out["only_0_and_1"] = set(out["video_values"]) <= {0.0, 1.0} and set(out["audio_values"] or []) <= {0.0, 1.0}
+    return out
+
+
+PASTE: dict = {}
+
+
+def _paste_owner(kind: str):
+    from engine_h3 import inpaint_geometry as IG  # noqa: PLC0415
+    from engine_h3 import outpaint_geometry as OG  # noqa: PLC0415
+
+    # generate() imports both at call time (pipeline_h3.py 1131 / 1141), so the module attribute is what it gets
+    return (IG, "compose_inpaint") if kind == "inpaint" else (OG, "composite")
+
+
+@contextlib.contextmanager
+def paste_wrap(kind: str, raw_dir: Path | None):
+    """The product's paste-back function wrapped: it saves frames ``RAW_FRAMES[kind]`` of the decoded canvas
+    (before the paste-back) as PNG into ``raw_dir`` (None = save nothing), then calls the original."""
+    from PIL import Image  # noqa: PLC0415
+
+    owner, attr = _paste_owner(kind)
+    orig = getattr(owner, attr)
+    if getattr(orig, "_spike_wrap", False):
+        raise RuntimeError(f"{attr} is already wrapped")
+    PASTE.clear()
+    PASTE.update(kind=kind, function=f"{owner.__name__}.{attr}", calls=0, saved=[])
+
+    def wrapped(decoded, *args, **kwargs):
+        PASTE["calls"] += 1
+        PASTE["decoded"] = {"shape": list(decoded.shape), "dtype": str(decoded.dtype)}
+        if raw_dir is not None:
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            for f in RAW_FRAMES[kind]:
+                if f < decoded.shape[0]:
+                    path = raw_dir / f"f{f:03d}.png"
+                    Image.fromarray(decoded[f].copy()).save(path)
+                    PASTE["saved"].append(rel(path))
+        return orig(decoded, *args, **kwargs)
+
+    wrapped._spike_wrap = True
+    setattr(owner, attr, wrapped)
+    try:
+        yield wrapped
+    finally:
+        setattr(owner, attr, orig)
+        PASTE["restored"] = getattr(owner, attr) is orig
+
+
+def edit_conditions(item: str) -> dict:
+    kind, pi = EDIT[item]
+    rec = conditions_record(EDIT_STEPS, "fl2va", WIDTH, HEIGHT, EDIT_FRAMES[kind], [EDIT_PROMPTS[kind]])
+    rec.update(kind=kind, pi_h3_on=pi, audio_strength=EDIT_AUDIO_STRENGTH,
+               materials={k: rel(material_path(k)) for k in KIND_MATERIALS[kind]})
+    if kind != "retake":
+        rec.update(feather_px=FEATHER_PX, feather_steps=FEATHER_STEPS, raw_frames=list(RAW_FRAMES[kind]))
+    if kind == "outpaint":
+        rec["outpaint"] = {"source": list(OUTPAINT_SOURCE), **OUTPAINT_PADS}
+    if not pi:
+        rec.update(shift_video=CONTROL_SHIFT_VIDEO, shift_audio=CONTROL_SHIFT_AUDIO, pi_h3=None, pi_flow=None,
+                   lora={"file": Path(TURBO_LORA_FILE).name, "strength": TURBO_LORA_STRENGTH},
+                   sigmas="the product's sigma_schedule", decoder="the product's H3VideoDecoder")
+    return rec
+
+
+def run_edit(item: str) -> int:
+    from engine_h3.chain_h3 import run_chain_h3  # noqa: PLC0415
+
+    kind, pi = EDIT[item]
+    frames = EDIT_FRAMES[kind]
+    out_dir, rec = _begin(item)
+    result_path = out_dir / "result.json"
+    rec["conditions"] = edit_conditions(item)
+    missing = missing_material(kind)
+    if missing:
+        rec.update(status="refused", material_missing=missing, finished_at=now())
+        write_json(result_path, rec)
+        LOG(f"素材なし: {missing}（先に --prepare）")
+        LOG.close()
+        return 2
+    if not _gate_or_refuse(rec, result_path):
+        return 2
+    ok = False
+    try:
+        req = edit_request(item, out_dir)
+        rec["request_check"] = check_edit_request(item, req)
+        rec["request"] = dataclasses.asdict(req)
+        rec["expected_rows"] = expected_rows(kind)
+        STATE.reset(steps=EDIT_STEPS, pi_path=PA.PI_FILES[EDIT_STEPS] if pi else None, out_dir=out_dir)
+        PASTE.clear()
+        write_json(result_path, rec)
+        clock = StepClock()
+        with contextlib.ExitStack() as stack:
+            if pi:
+                stack.enter_context(spike_patches())
+                rec["patches_in"] = patches_in()
+            if kind != "retake":
+                w = stack.enter_context(paste_wrap(kind, out_dir / "raw"))
+                owner, attr = _paste_owner(kind)
+                rec["paste_in"] = getattr(owner, attr) is w
+            pipe = _pipeline("fl2va", clock)
+            try:
+                t0 = time.perf_counter()
+                rec["build_report"] = pipe.load()
+                rec["load_seconds"] = round(time.perf_counter() - t0, 2)
+                write_json(result_path, rec)
+                result = run_chain_h3(pipe, req, clock, LOG) if kind == "retake" else pipe.generate(req)
+                rec["engine"] = {"seconds": result.get("seconds"), "peak_vram_mb": result.get("peak_vram_mb"),
+                                 "peak_vram_reserved_mb": result.get("peak_vram_reserved_mb"), "full": result}
+            finally:
+                try:
+                    pipe.close()
+                except Exception as exc:  # noqa: BLE001
+                    LOG(f"pipe.close failed (ignored): {exc!r}")
+        rec["paste"] = dict(PASTE) if kind != "retake" else None
+        rec["restored"] = patches_restored() and (kind == "retake" or bool(PASTE.get("restored")))
+        ok = _finish_run(rec, out_dir, clock, steps=EDIT_STEPS, n_sessions=1, frames=frames, pi=pi,
+                         lora_pairs=None if pi else TURBO_LORA_PAIRS, rows=rec["expected_rows"], out_frames=frames)
+        if kind != "retake" and (PASTE.get("calls") != 1 or len(PASTE.get("saved") or []) != len(RAW_FRAMES[kind])):
+            rec["self_check"]["failures"].append(f"paste-back wrapper: {PASTE.get('calls')} calls, "
+                                                 f"{len(PASTE.get('saved') or [])} raw frames saved")
+            rec["self_check"]["passed"] = ok = False
+        LOG(f"{item}: done; self_check={rec['self_check']}")
+    except BaseException as exc:  # noqa: BLE001
+        failure(rec, exc)
+        rec["restored"] = patches_restored() and (kind == "retake" or PASTE.get("restored", True))
+        rec["paste"] = dict(PASTE) if kind != "retake" else None
         rec["sessions"] = sessions_record(STATE.sessions)
         rec["adapter"] = STATE.adapter_reports
         rec["dwd"] = STATE.decoder
@@ -1242,6 +1581,121 @@ def dry_run(args) -> int:
         out["passed"] = out["comfy_kitchen_version"] == "0.2.37" and all(out["functions"].values())
         return out
 
+    reads: dict = {}
+
+    def product_reads(kind: str) -> dict:
+        """The product's own CPU reads of the cut material (once per kind, shared by the control)."""
+        if kind in reads:
+            return reads[kind]
+        frames = EDIT_FRAMES[kind]
+        if kind == "retake":
+            from engine_h3.chain_h3 import H3ChainRetake, _read_retake_window  # noqa: PLC0415
+            from h3_chain_math import compute_h3_chain_layout  # noqa: PLC0415
+
+            spec = edit_request("R1", RUNS / "R1")
+            layout = compute_h3_chain_layout([frames], retake=True)
+            px, wave, info = _read_retake_window(
+                H3ChainRetake(path=str(material_path("R1_window")), audio_strength=EDIT_AUDIO_STRENGTH), spec.base,
+                layout, LOG)
+            r = {"function": "chain_h3._read_retake_window", "frames": list(px.shape), "info": info,
+                 "wave": None if wave is None else list(wave.shape),
+                 "required_samples": int(round(frames * 4000 / 3))}
+        else:
+            from engine_h3 import outpaint_h3 as OH  # noqa: PLC0415
+
+            path = material_path("O1_source" if kind == "outpaint" else "I1_source")
+            px, wave, info = OH.read_outpaint_source(str(path), frames, FPS, EDIT_AUDIO_STRENGTH, log=LOG)
+            r = {"function": "outpaint_h3.read_outpaint_source", "frames": list(px.shape), "info": info,
+                 "wave": None if wave is None else list(wave.shape),
+                 "required_samples": int(info["required_samples"])}
+        del px, wave
+        r["expected_rows"] = expected_rows(kind)
+        r["passed"] = (r["frames"][0] == frames and r["wave"] is not None and r["wave"][-1] == r["required_samples"]
+                       and r["expected_rows"]["only_0_and_1"])
+        reads[kind] = r
+        return r
+
+    def it10():
+        out = {}
+        for name, (kind, pi) in EDIT.items():
+            missing = missing_material(kind)
+            if missing:
+                out[name] = {"passed": False, "material": "素材なし", "missing": missing}
+                continue
+            try:
+                req = edit_request(name, RUNS / name)
+                base = req.base if kind == "retake" else req
+                r = {"request_check": check_edit_request(name, req), "reads": product_reads(kind),
+                     "lora": [Path(lo.path).name for lo in base.loras], "lora_strength": [lo.strength for lo in base.loras],
+                     "shift": [base.shift_video, base.shift_audio], "steps": base.num_inference_steps,
+                     "frames": base.num_frames, "canvas": [base.width, base.height]}
+                if kind != "retake":
+                    blk = base.outpaint or base.inpaint
+                    r["feather_px"] = blk.feather_px
+                    r["audio_strength"] = blk.audio_strength
+                want_lora = Path(PA.PI_FILES[EDIT_STEPS] if pi else TURBO_LORA_FILE).name
+                r["passed"] = (r["reads"]["passed"] and r["lora"] == [want_lora] and r["steps"] == EDIT_STEPS
+                               and r.get("feather_px", FEATHER_PX) == 20 and FEATHER_PX == 20)
+                out[name] = r
+            except BaseException as exc:  # noqa: BLE001
+                out[name] = {"passed": False}
+                failure(out[name], exc)
+        out["passed"] = all(v["passed"] for v in out.values() if isinstance(v, dict))
+        return out
+
+    def it11():
+        cfg = PD.HeadConfig()
+        out = {}
+        for kind in ("retake", "inpaint", "outpaint"):
+            t = latent_frames(EDIT_FRAMES[kind])
+            g = PD.build_geometry(t, HEIGHT // 32 * cfg.expansion[0], WIDTH // 32 * cfg.expansion[1], cfg.rope_dim)
+            out[kind] = {"latents": t, "frames": PD.frames_for_latents(t), "expected_frames": EDIT_FRAMES[kind],
+                         "sol_grid": [g.T, g.H, g.W], "native_blocks": g.nb, "windows": g.window_count,
+                         "is_5n_plus_2": (t - 2) % 5 == 0}
+        out["one_denoise_drops_nothing"] = ("DWDDecoderStandIn.decode drops k * hw head rows only for denoise "
+                                            "i > 0; an edit item has one denoise (retake: run_chain_h3 with one "
+                                            "clip; inpaint / outpaint: generate), so nothing is dropped")
+        out["passed"] = (out["retake"]["latents"] == 37 and out["retake"]["frames"] == 124
+                         and out["inpaint"]["latents"] == 22 and out["inpaint"]["frames"] == 73
+                         and out["outpaint"]["frames"] == 124)
+        return out
+
+    def it12():
+        import numpy as np  # noqa: PLC0415
+
+        from engine_h3.inpaint_geometry import compute_inpaint_geometry  # noqa: PLC0415
+        from engine_h3.outpaint_geometry import compute_outpaint_geometry, feather_weights  # noqa: PLC0415
+
+        out = {}
+        rng = np.random.default_rng(5)
+        for kind in ("inpaint", "outpaint"):
+            owner, attr = _paste_owner(kind)
+            orig = getattr(owner, attr)
+            if kind == "outpaint":
+                geom = compute_outpaint_geometry(64, 64, 128, 128, 32, 32, 32, 32)
+                extra = (feather_weights(geom, 8), geom)
+            else:
+                geom = compute_inpaint_geometry(64, 64, 64, 64)
+                blocks = np.zeros((1, geom.grid_h, geom.grid_w), dtype=bool)
+                blocks[0, 0, 0] = True
+                extra = (blocks, geom, 8)
+            decoded = rng.integers(0, 256, (3, geom.canvas_h, geom.canvas_w, 3), dtype=np.uint8)
+            source = rng.integers(0, 256, (3, geom.source_h, geom.source_w, 3), dtype=np.uint8)
+            a = orig(decoded.copy(), source, *extra)
+            with paste_wrap(kind, None) as w:
+                mod = __import__(owner.__name__, fromlist=[attr])
+                late = getattr(mod, attr) is w            # as generate()'s import at call time
+                b = getattr(owner, attr)(decoded.copy(), source, *extra)
+                calls = PASTE["calls"]
+            out[kind] = {"function": f"{owner.__name__}.{attr}", "wrapped_while_active": late, "calls": calls,
+                         "same_result_as_original": bool(np.array_equal(a, b)),
+                         "restored": getattr(owner, attr) is orig and PASTE.get("restored") is True}
+            out[kind]["passed"] = all(out[kind][k] for k in ("wrapped_while_active", "same_result_as_original",
+                                                              "restored")) and calls == 1
+        out["product_patches_untouched"] = patches_restored()
+        out["passed"] = all(out[k]["passed"] for k in ("inpaint", "outpaint")) and out["product_patches_untouched"]
+        return out
+
     item("1_imports_and_patches", it1)
     item("2_key_match_and_dtypes", it2)
     item("3_lora_pairs", it3)
@@ -1251,6 +1705,9 @@ def dry_run(args) -> int:
     item("7_frame_counts", it7)
     item("8_chunked_decode_logic", it8)
     item("9_kitchen_and_requests", it9)
+    item("10_edit_requests", it10)
+    item("11_edit_dwd_grid", it11)
+    item("12_paste_wrap", it12)
     rec["all_passed"] = all(v.get("passed") for v in items.values())
     rec["git_after"] = git_state()
     rec["status"] = "done"
@@ -1259,6 +1716,273 @@ def dry_run(args) -> int:
     LOG(f"dry-run: all_passed={rec['all_passed']} -> {rel(OUT_ROOT / 'dry_run.json')}")
     LOG.close()
     return 0 if rec["all_passed"] else 1
+
+
+# --------------------------------------------------------------------------- #
+# --prepare / --post (CPU only, edit items)
+# --------------------------------------------------------------------------- #
+
+def cut_material(key: str) -> dict:
+    """One material: the services/video_io.py cut_window_mp4 command (no fps conversion: the sources are
+    24 fps, refused otherwise) with the Outpainting source's scale added (h3_outpaint_gate.py 413-415)."""
+    m = MATERIALS[key]
+    src, out = ROOT / m["src"], material_path(key)
+    if not src.is_file():
+        raise FileNotFoundError(f"元の素材がありません: {rel(src)}")
+    sp = ffprobe(src)
+    if sp["video"].get("r_frame_rate") != f"{FPS}/1":
+        raise RuntimeError(f"元の素材が {FPS}fps ではありません（{sp['video'].get('r_frame_rate')}）: {rel(src)}")
+    start = round(float(m["start_sec"]) * FPS)
+    end = start + int(m["frames"]) - 1
+    if end > int(sp["video"]["nb_read_frames"]) - 1:
+        raise RuntimeError(f"窓 [{start}, {end}] が元の素材（{sp['video']['nb_read_frames']} 枚）を越えます")
+    scale = f",scale={m['scale'][0]}:{m['scale'][1]}:flags=lanczos" if m["scale"] else ""
+    parts = [f"[0:v]select='between(n\\,{start}\\,{end})',setpts=PTS-STARTPTS{scale}[v]"]
+    has_audio = sp["audio"] is not None
+    if has_audio:
+        parts.append(f"[0:a]atrim=start={start / FPS}:end={(end + 1) / FPS},asetpts=PTS-STARTPTS[a]")
+
+    def cut(audio_args):
+        cmd = [tool("ffmpeg"), "-y", "-v", "error", "-i", str(src), "-filter_complex", ";".join(parts), "-map", "[v]"]
+        if has_audio:
+            cmd += ["-map", "[a]", *audio_args]
+        cmd += ["-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", "-fps_mode", "cfr", "-r", str(FPS), str(out)]
+        return cmd, run_cmd(cmd)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd, proc = cut(["-c:a", "pcm_s16le"])
+    codec = "pcm_s16le" if has_audio else None
+    if proc.returncode != 0 and has_audio:
+        cmd, proc = cut(["-c:a", "aac", "-b:a", "192k"])
+        codec = "aac 192k"
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg の切り出しに失敗しました（{proc.returncode}）: {proc.stderr[-2000:]}")
+    probe = ffprobe(out)
+    vid = probe["video"]
+    want = tuple(m["scale"]) if m["scale"] else (int(sp["video"]["width"]), int(sp["video"]["height"]))
+    if int(vid.get("nb_read_frames") or -1) != m["frames"] or (vid.get("width"), vid.get("height")) != want:
+        raise RuntimeError(f"切り出しの枚数か寸法が合いません（{vid.get('nb_read_frames')} 枚・"
+                           f"{vid.get('width')}x{vid.get('height')}。{m['frames']} 枚・{want[0]}x{want[1]} が必要）")
+    LOG(f"prepare: {key} -> {rel(out)} {vid.get('width')}x{vid.get('height')} {vid.get('nb_read_frames')} frames "
+        f"audio={probe['audio']}")
+    return {"source": rel(src), "source_probe": sp, "cut": rel(out), "ffmpeg_cmd": cmd, "audio_codec": codec,
+            "start_sec": float(m["start_sec"]), "start_frame": start, "end_frame": end,
+            "scale": list(m["scale"]) if m["scale"] else None, "probe": probe}
+
+
+def prepare() -> int:
+    """Cut every material that is not there yet (an existing one is kept, as h3_outpaint_gate.py's prepare)."""
+    MATERIAL_DIR.mkdir(parents=True, exist_ok=True)
+    LOG.open(MATERIAL_DIR / "prepare.log", mode="a")
+    pj = MATERIAL_DIR / "prepare.json"
+    data = json.loads(pj.read_text(encoding="utf-8")) if pj.is_file() else {}
+    ok = True
+    for key in MATERIALS:
+        if material_path(key).is_file() and (data.get(key) or {}).get("probe"):
+            LOG(f"prepare: 既存の {rel(material_path(key))} を使う（作り直さない）")
+            continue
+        try:
+            data[key] = {**cut_material(key), "prepared_at": now()}
+        except Exception as exc:  # noqa: BLE001
+            data[key] = {"status": "failed"}
+            failure(data[key], exc)
+            ok = False
+        write_json(pj, data)
+    LOG(f"prepare: {'done' if ok else 'FAILED'} -> {rel(pj)}")
+    LOG.close()
+    return 0 if ok else 1
+
+
+def _read_mp4(path: Path, n: int):
+    from engine_h3.source_tail import read_source_frames  # noqa: PLC0415
+
+    return read_source_frames(str(path), n) if path.is_file() else None
+
+
+def _psnr(a, b) -> float:
+    import numpy as np  # noqa: PLC0415
+
+    mse = float(np.mean((a.astype(np.float64) - b.astype(np.float64)) ** 2))
+    return 100.0 if mse == 0 else 10.0 * math.log10(255.0 ** 2 / mse)
+
+
+def save_sheet(path: Path, rows: list, col_labels: list, max_w: int = 4000, upscale: int = 1) -> str:
+    """``rows``: [(label, [uint8 [H, W, 3], ...])], every tile the same size; scaled down to ``max_w``."""
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+
+    h, w = rows[0][1][0].shape[:2]
+    n = len(col_labels)
+    s = min(float(upscale), max_w / float(n * w))
+    tw, th = int(w * s), int(h * s)
+    sheet = Image.new("RGB", (n * tw, len(rows) * th), (0, 0, 0))
+    draw = ImageDraw.Draw(sheet)
+    for r, (label, tiles) in enumerate(rows):
+        for c, tile in enumerate(tiles):
+            im = Image.fromarray(tile)
+            if (tw, th) != (w, h):
+                im = im.resize((tw, th), Image.LANCZOS)
+            sheet.paste(im, (c * tw, r * th))
+            text = f"{label} | {col_labels[c]}"
+            draw.rectangle([c * tw, r * th, c * tw + 7 * len(text) + 8, r * th + 14], fill=(0, 0, 0))
+            draw.text((c * tw + 4, r * th + 2), text, fill=(255, 255, 255))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(path)
+    LOG(f"post: {rel(path)} {sheet.size[0]}x{sheet.size[1]}")
+    return rel(path)
+
+
+def signalstats(path: Path) -> list[tuple[float, float]]:
+    """Per frame (YAVG, SATAVG) of ffmpeg's signalstats (parsed from metadata=mode=print on the log)."""
+    proc = run_cmd([tool("ffmpeg"), "-hide_banner", "-nostats", "-v", "info", "-i", str(path), "-an",
+                    "-vf", "signalstats,metadata=mode=print", "-f", "null", "-"])
+    y = [float(v) for v in re.findall(r"lavfi\.signalstats\.YAVG=([0-9.]+)", proc.stderr)]
+    s = [float(v) for v in re.findall(r"lavfi\.signalstats\.SATAVG=([0-9.]+)", proc.stderr)]
+    if proc.returncode != 0 or len(y) != len(s):
+        raise RuntimeError(f"signalstats failed for {rel(path)}: {proc.stderr[-500:]}")
+    return list(zip(y, s))
+
+
+def _rows(pairs) -> list:
+    """[(label, frames or None)] -> the labels and frame arrays that exist."""
+    return [(label, f) for label, f in pairs if f is not None]
+
+
+def post_retake() -> dict:
+    from engine_h3.source_tail import read_source_tail  # noqa: PLC0415
+
+    n = EDIT_FRAMES["retake"]
+    window = material_path("R1_window")
+    orig, _info = read_source_tail(str(window), WIDTH, HEIGHT, n)     # the canvas the engine encodes (cover crop)
+    outs = {k: _read_mp4(RUNS / k / "output.mp4", n) for k in ("R1", "R1c")}
+    rows = _rows([("original window", orig), ("pi-H3 R1", outs["R1"]), ("control R1c", outs["R1c"])])
+    rec: dict = {"rows": [r[0] for r in rows], "sheets": {}}
+
+    def sheet(name: str, idx):
+        rec["sheets"][name] = save_sheet(COMPARE / f"{name}.png", [(lab, [f[i] for i in idx]) for lab, f in rows],
+                                         [f"f{i}" for i in idx])
+
+    sheet("R1_boundary_head_f019-025", range(19, 26))
+    sheet("R1_boundary_tail_f099-105", range(99, 106))
+    sheet("R1_fixed_head_f000_f011_f021", (0, 11, 21))
+    head, tail = range(0, 22), range(n - 22, n)
+    rec["psnr_vs_original_window_db"] = {}
+    for k, f in outs.items():
+        if f is None:
+            continue
+        ph = [_psnr(f[i], orig[i]) for i in head]
+        pt = [_psnr(f[i], orig[i]) for i in tail]
+        rec["psnr_vs_original_window_db"][k] = {
+            "head_f000-021": {"mean": round(statistics.mean(ph), 3), "min": round(min(ph), 3)},
+            "tail_f102-123": {"mean": round(statistics.mean(pt), 3), "min": round(min(pt), 3)}}
+    stats = {"window": signalstats(window)}
+    for k in outs:
+        if outs[k] is not None:
+            stats[k] = signalstats(RUNS / k / "output.mp4")
+    csv = COMPARE / "R1_signalstats.csv"
+    cols = list(stats)
+    lines = ["frame," + ",".join(f"{c}_yavg,{c}_satavg" for c in cols)]
+    for i in range(n):
+        lines.append(f"{i}," + ",".join(f"{stats[c][i][0]},{stats[c][i][1]}" if i < len(stats[c]) else ","
+                                         for c in cols))
+    csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    rec["signalstats_csv"] = rel(csv)
+    rec["signalstats_note"] = ("window = the cut mp4 itself (1920x1080, before the engine's cover crop); "
+                               "R1 / R1c = the outputs (1280x768)")
+    rec["signalstats_mean"] = {c: {"yavg": round(statistics.mean(v[0] for v in stats[c]), 3),
+                                   "satavg": round(statistics.mean(v[1] for v in stats[c]), 3)} for c in cols}
+    return rec
+
+
+def _raw_sheet(kind: str, items: tuple, frame: int) -> str | None:
+    from PIL import Image  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    tiles, labels = [], []
+    for k, lab in zip(items, ("pi-H3 (DWD) raw", "control (VAE) raw")):
+        p = RUNS / k / "raw" / f"f{frame:03d}.png"
+        if p.is_file():
+            tiles.append(np.asarray(Image.open(p).convert("RGB")))
+            labels.append(f"{k} {lab}")
+    if not tiles:
+        return None
+    pre = "I1" if kind == "inpaint" else "O1"
+    return save_sheet(COMPARE / f"{pre}_raw_before_paste_f{frame:03d}.png", [(f"f{frame}", tiles)], labels)
+
+
+def post_inpaint() -> dict:
+    import numpy as np  # noqa: PLC0415
+
+    n = EDIT_FRAMES["inpaint"]
+    orig = _read_mp4(material_path("I1_source"), n)
+    mask = _read_mp4(material_path("I1_mask"), n)
+    outs = {k: _read_mp4(RUNS / k / "output.mp4", n) for k in ("I1", "I1c")}
+    rows = _rows([("original", orig), ("pi-H3 I1", outs["I1"]), ("control I1c", outs["I1c"])])
+    idx = RAW_FRAMES["inpaint"]
+    rec: dict = {"rows": [r[0] for r in rows], "sheets": {}}
+    rec["sheets"]["frames"] = save_sheet(COMPARE / "I1_frames_f000_f036_f072.png",
+                                         [(lab, [f[i] for i in idx]) for lab, f in rows], [f"f{i}" for i in idx])
+    white = np.zeros(mask.shape[1:3], dtype=bool)
+    for i in idx:
+        white |= mask[i][..., 0] >= 128        # inpaint_h3.read_inpaint_mask's rule (red >= 128)
+    ys, xs = np.nonzero(white)
+    m = 48
+    y0, y1 = max(0, int(ys.min()) - m), min(white.shape[0], int(ys.max()) + 1 + m)
+    x0, x1 = max(0, int(xs.min()) - m), min(white.shape[1], int(xs.max()) + 1 + m)
+    rec["mask_zoom_box_xyxy"] = [x0, y0, x1, y1]
+    rec["sheets"]["mask_zoom"] = save_sheet(
+        COMPARE / "I1_mask_zoom_f000_f036_f072.png",
+        [(lab, [np.ascontiguousarray(f[i, y0:y1, x0:x1]) for i in idx]) for lab, f in rows],
+        [f"f{i} x{x0}-{x1} y{y0}-{y1}" for i in idx], upscale=4)
+    rec["sheets"]["raw"] = _raw_sheet("inpaint", ("I1", "I1c"), 36)
+    return rec
+
+
+def post_outpaint() -> dict:
+    import numpy as np  # noqa: PLC0415
+
+    n = EDIT_FRAMES["outpaint"]
+    src = _read_mp4(material_path("O1_source"), n)
+    p = OUTPAINT_PADS
+    canvas = np.full((n, HEIGHT, WIDTH, 3), 128, dtype=np.uint8)     # the pads shown grey
+    canvas[:, p["pad_top"]:p["pad_top"] + src.shape[1], p["pad_left"]:p["pad_left"] + src.shape[2]] = src
+    outs = {k: _read_mp4(RUNS / k / "output.mp4", n) for k in ("O1", "O1c")}
+    rows = _rows([("source on canvas", canvas), ("pi-H3 O1", outs["O1"]), ("control O1c", outs["O1c"])])
+    idx = RAW_FRAMES["outpaint"]
+    rec: dict = {"rows": [r[0] for r in rows], "sheets": {}}
+    rec["sheets"]["frames"] = save_sheet(COMPARE / "O1_frames_f000_f061_f123.png",
+                                         [(lab, [f[i] for i in idx]) for lab, f in rows], [f"f{i}" for i in idx])
+    half, f = 96, 61
+    cx, cy = WIDTH // 2, HEIGHT // 2
+    seams = {"left": (p["pad_left"], cy), "right": (WIDTH - p["pad_right"], cy),
+             "top": (cx, p["pad_top"]), "bottom": (cx, HEIGHT - p["pad_bottom"])}
+    rec["seam_centres_xy"] = {k: list(v) for k, v in seams.items()}
+    rec["sheets"]["seams"] = save_sheet(
+        COMPARE / "O1_seams_f061.png",
+        [(lab, [np.ascontiguousarray(fr[f, y - half:y + half, x - half:x + half]) for x, y in seams.values()])
+         for lab, fr in rows], [f"f{f} {k} seam" for k in seams], upscale=2)
+    rec["sheets"]["raw"] = _raw_sheet("outpaint", ("O1", "O1c"), 61)
+    return rec
+
+
+POST = {"R1": post_retake, "I1": post_inpaint, "O1": post_outpaint}
+
+
+def post(items: list[str]) -> int:
+    COMPARE.mkdir(parents=True, exist_ok=True)
+    LOG.open(COMPARE / "post.log", mode="a")
+    path = COMPARE / "post.json"
+    data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    ok = True
+    for it in items:
+        try:
+            data[it] = {**POST[it](), "made_at": now()}
+        except Exception as exc:  # noqa: BLE001
+            data[it] = {"status": "failed"}
+            failure(data[it], exc)
+            ok = False
+        write_json(path, data)
+    LOG.close()
+    return 0 if ok else 1
 
 
 # --------------------------------------------------------------------------- #
@@ -1341,6 +2065,9 @@ def parse_args(argv=None):
     g.add_argument("--chain", choices=sorted(CHAIN), help="GPU: form 3 (2 clips, one DWD pass)")
     g.add_argument("--split", choices=sorted(CHAIN), help="GPU: form 4 on that C3 item's saved hidden states")
     g.add_argument("--vae-decode", choices=sorted(CHAIN), help="GPU: decode that item's last_latent with the product's video VAE")
+    g.add_argument("--prepare", action="store_true", help="CPU only: cut the edit items' material into _material/")
+    g.add_argument("--edit", choices=list(EDIT), help="GPU: one edit item (R1 / I1 / O1 pi-H3, R1c / I1c / O1c control)")
+    g.add_argument("--post", choices=list(POST), nargs="+", help="CPU only: comparison sheets into runs/_compare/")
     ap.add_argument("--split-content", type=int, nargs="+", default=list(SPLIT_CONTENT),
                     help="native blocks kept per chunk (default 5 1)")
     ap.add_argument("--split-margins", type=int, nargs="+", default=list(SPLIT_MARGINS),
@@ -1352,6 +2079,12 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     if args.dry_run:
         return dry_run(args)
+    if args.prepare:
+        return prepare()
+    if args.edit:
+        return run_edit(args.edit)
+    if args.post:
+        return post(args.post)
     if args.single:
         return run_single(args.single)
     if args.vae_decode:

@@ -418,6 +418,11 @@ def latents(f: int) -> int:
     return (int(f) - 5) // 17 * 5 + 2
 
 
+def body_frames(b: dict) -> int:
+    """A single request's frames, or a chain's longest clip (the per-clip rows line, COMFORT_LIMIT_TABLE §17)."""
+    return int(b["num_frames"]) if "num_frames" in b else max(int(c["num_frames"]) for c in b["clips"])
+
+
 def rows_estimate(width: int, height: int, frames: int, *, text_tokens: int, keyframes=(), refs_rows: int = 0) -> dict:
     gh, gw = height // 32, width // 32
     video = gh * gw * latents(frames)
@@ -484,9 +489,15 @@ def turbo(**kw) -> dict:
 
 
 def job(name: str, file: str, body: dict, *, uploads: dict | None = None, lora=None, compare_to=None,
-        timeout: int = DEFAULT_JOB_TIMEOUT, fallback: dict | None = None) -> dict:
+        timeout: int = DEFAULT_JOB_TIMEOUT, fallback: dict | None = None, endpoint: str = "/generate",
+        expect: dict | None = None) -> dict:
+    """``body`` may hold "@image:<path>" / "@video:<path>" / "@audio:<path>" strings anywhere: each is
+    uploaded once and replaced by its id (the chain's source_video / retake / clips[].source_audio, the
+    outpaint / inpaint sources). ``expect``: {"width", "height", "frames"} of the output when it is not
+    the body's own (a chain)."""
     return {"name": name, "file": file, "body": body, "uploads": uploads or {}, "lora": lora,
-            "compare_to": compare_to, "timeout": timeout, "fallback": fallback}
+            "compare_to": compare_to, "timeout": timeout, "fallback": fallback, "endpoint": endpoint,
+            "expect": expect}
 
 
 def r1_record() -> dict | None:
@@ -656,7 +667,138 @@ def items() -> dict[str, dict]:
                  "title": f"{src} の回し直し（照合のモジュールを移したあと）",
                  "rule": f"ストリームの MD5 が実験の {src} と一致",
                  "jobs": [job(it, file, pi(choice), compare_to=ref_spike(src))]}
+    I.update(stage2_items())
     return I
+
+
+# ---------------------------------------------------------------------------------------------
+# Stage 2 (chain / V2V / Retake / Inpainting / Outpainting). Run with --stage2 (or --only).
+# ---------------------------------------------------------------------------------------------
+
+GA0_DIR = REPO / "Docs" / "Outputs-archive" / "h3-chain-a2v-2026-11-09" / "ga0"
+G_C0_SHA256 = "4a98be0884ae7129e34f58578a3fe7ca3117ca5a764545cbac404e12a70cbec5"
+CHAIN_SAME_PROMPT = (
+    "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny "
+    "day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft "
+    "on the wet sand. Steady tracking camera.")      # the spike's C3b prompt (both clips)
+MAID = ("A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated "
+        "with sweets and flowers; natural head and hand movement, steady camera.")      # the spike's R1
+MAID_WIDE = ("A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a "
+             "spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.")
+GIRLS = ("Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair and "
+         "wears a red dress, red outfit. Steady camera.")      # the spike's I1 (= the 2026-11-11 gate's)
+COSPLAY = "コスプレイヤーの日本人女性が、こちらに向かって歩き続ける。彼女は片手を伸ばしたまま、こちらに微笑みかける。"
+RETAKE_SRC = REPO / "uploads" / "h3-ref-calibration" / "H3-Ref-1080p-15s.mp4"
+INPAINT_SRC = REPO / "uploads" / "h3-inpaint-development" / "inpaint-base.mp4"
+INPAINT_MASK = REPO / "uploads" / "h3-inpaint-development" / "mask-768p.mp4"
+OUTPAINT_SRC = SPIKE / "_material" / "O1_source_1024x576_124f.mp4"
+V2V_SRC = REPO / "outputs" / "0b57ea7d-b494-43ea-a504-2a5637380581" / "output.mp4"
+CLIP_AUDIO = REPO / "uploads" / "h3-a2v-development" / "ref-voice-patra001.wav"
+LONG_SEAMS = (124, 226, 328, 430)
+
+
+def gc0_record() -> dict:
+    """The 2026-11-09 GA0 run of the 2026-10-29 G-C0 chain: its sent body, mp4 sha256 and clip latent hashes."""
+    rq = read_json(GA0_DIR / "request.json").get("body") or {}
+    res = read_json(GA0_DIR / "result.json")
+    lat = [c.get("latents_sha256") for c in get(res, "metadata_excerpt", "h3_clips", default=[]) or []]
+    return {"body": rq, "sha256": res.get("sha256") or G_C0_SHA256, "latents": lat}
+
+
+def chain_job(name, body, *, frames, width, height, **kw):
+    return job(name, FL2VA, body, endpoint="/generate/chain", expect={"frames": frames, "width": width,
+                                                                       "height": height}, **kw)
+
+
+def stage2_items() -> dict[str, dict]:
+    I: dict[str, dict] = {}
+    gc0 = gc0_record()
+    I["C0"] = {"group": 1, "kind": "api", "default": False, "stage": 2, "gc0": True,
+               "title": "段 2: off の連結（2026-10-29 の G-C0。2026-11-09 の GA0 と同じ本文）",
+               "rule": f"完了し、mp4 の sha256 が G-C0 の {G_C0_SHA256[:8]}… と一致し、3 クリップの潜在の照合値が GA0 の記録と一致",
+               "jobs": [chain_job("C0", dict(gc0["body"]), frames=328, width=640, height=384)]}
+    I["M3"] = {"group": 1, "kind": "engine_direct", "default": False, "stage": 2, "source": "R1c",
+               "title": "段 2: off の Retake（昨日の R1c をエンジン直呼びで回し直す）",
+               "rule": "完了し、映像と音声のストリームの MD5 が昨日の R1c の output.mp4 と一致"}
+    for it, src in (("E3b4", "C3b_4step"), ("E3b2", "C3b_2step"), ("ER1", "R1"), ("EI1", "I1"), ("EO1", "O1")):
+        I[it] = {"group": 2, "kind": "engine_direct", "default": False, "stage": 2, "source": src, "pi": True,
+                 "title": f"段 2: 実験の {src} の再現（エンジン直呼び・製品の pi-H3 の経路）",
+                 "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。"
+                         f"破綻＝フレームの PSNR の最小が {BROKEN_PSNR_DB:g} dB 未満か、フレーム数が違う"}
+    common = {"attention_backend": "sage", "vram16_mode": True, "block_swap_prefetch": True, "keep_resident": False}
+    I["ACH"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps",
+                "title": "段 2: API の連結（実験の C3b と同じ条件・4steps）",
+                "rule": "完了し、226 フレームと音声。記録（pi_h3_used・h3.pi_h3・クリップごとの pi_h3・DWD の塊）",
+                "jobs": [chain_job("ACH", {"prompt": CHAIN_SAME_PROMPT, "width": 640, "height": 384, "seed": 1234,
+                                           "clips": [{"num_frames": 124}, {"num_frames": 124}], "pi_h3": "4steps",
+                                           **common}, frames=226, width=640, height=384)]}
+    I["AV2V"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps",
+                 "title": "段 2: API の V2V（2026-11-02 の門 ① の素材と文・56＋39・4steps）",
+                 "rule": "完了し、51 フレームと音声。記録が揃う",
+                 "jobs": [chain_job("AV2V", {"prompt": COSPLAY, "width": 640, "height": 384, "seed": 1234,
+                                             "clips": [{"num_frames": 56}, {"num_frames": 39}],
+                                             "source_video": {"video_id": f"@video:{V2V_SRC}"}, "pi_h3": "4steps",
+                                             **common}, frames=51, width=640, height=384)]}
+    rt = lambda s, **kw: {"prompt": MAID, "width": 1280, "height": 768, "seed": 1234,  # noqa: E731
+                          "clips": [{"num_frames": 124}], **common, **kw,
+                          "retake": {"video_id": f"@video:{RETAKE_SRC}", "window_start_sec": 4.0, "audio_strength": s}}
+    I["ART"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps",
+                "title": "段 2: API の Retake（実験の R1 と同じ素材・文・窓・Strength 1.0・4steps）",
+                "rule": "完了し、124 フレームと音声。記録が揃う",
+                "jobs": [chain_job("ART", rt(1.0, pi_h3="4steps"), frames=124, width=1280, height=768)]}
+    I["AIN"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps",
+                "title": "段 2: API の Inpainting（実験の I1 と同じ素材・文・Strength 1.0・4steps）",
+                "rule": "完了し、73 フレームと音声。h3.inpaint と pi-H3 の記録が揃う",
+                "jobs": [job("AIN", FL2VA, pi("4steps", prompt=GIRLS, inpaint={
+                    "source_video_id": f"@video:{INPAINT_SRC}", "mask_video_id": f"@video:{INPAINT_MASK}",
+                    "window_start_sec": 0.0, "audio_strength": 1.0}))]}
+    I["AOUT"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps",
+                 "title": "段 2: API の Outpainting（実験の O1 の切り出し・文・左右 128／上下 96・Strength 1.0・4steps）",
+                 "rule": "完了し、124 フレームと音声。h3.outpaint と pi-H3 の記録が揃う",
+                 "jobs": [job("AOUT", FL2VA, pi("4steps", prompt=MAID_WIDE, num_frames=124, outpaint={
+                     "source_video_id": f"@video:{OUTPAINT_SRC}", "pad_left": 128, "pad_right": 128,
+                     "pad_top": 96, "pad_bottom": 96, "audio_strength": 1.0}))]}
+    au = f"@audio:{CLIP_AUDIO}"
+    I["AAUD"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps",
+                 "title": "段 2: API のクリップごとに音声を指定した連結（2026-11-09 の GA2 の本文・4steps）",
+                 "rule": "完了し、345 フレームと音声。クリップごとの a2v と pi-H3 の記録",
+                 "jobs": [chain_job("AAUD", {
+                     "prompt": RAINCOAT, "width": 640, "height": 384, "seed": 42, "pi_h3": "4steps", **common,
+                     "clips": [{"num_frames": 124, "source_audio": {"audio_id": au, "strength": 1.0, "offset_frames": 0}},
+                               {"num_frames": 141, "prompt": "She turns and walks slowly along the street, humming a tune.",
+                                "source_audio": {"audio_id": au, "strength": 1.0, "offset_frames": 102}},
+                               {"num_frames": 124, "prompt": "She stops under a shop awning, looks up and says <d>[English] "
+                                "Maybe I should go home now.</d>",
+                                "source_audio": {"audio_id": au, "strength": 1.0, "offset_frames": 221}}]},
+                     frames=345, width=640, height=384)]}
+    I["R05"] = {"group": 8, "kind": "api", "default": False, "stage": 2,
+                "title": "段 2: 音声の Strength 0.5 の Retake（R1 の条件・pi-H3 4steps と Turbo LoRA 0.8 の 4 ステップ）",
+                "rule": "2 本とも完了し、124 フレームと音声（目と耳の確認はオーナー）",
+                "jobs": [chain_job("R05_pi", rt(0.5, pi_h3="4steps"), frames=124, width=1280, height=768),
+                         chain_job("R05_turbo", rt(0.5, num_inference_steps=4, shift_video=12.0, shift_audio=3.0),
+                                   frames=124, width=1280, height=768, lora=(TURBO_LORA, 0.8))]}
+    I["LONG"] = {"group": 8, "kind": "api", "default": False, "stage": 2, "pi": "4steps", "large": True,
+                 "title": "段 2: 長い連結（5 本×124 フレーム・1280×768・全クリップ同じ文・4steps）",
+                 "rule": "完了し、532 フレームと音声。主記憶と VRAM の山、復号の段、DWD の塊、クリップごとの行数を記録",
+                 "jobs": [chain_job("LONG", {"prompt": CHAIN_SAME_PROMPT, "width": 1280, "height": 768, "seed": 1234,
+                                             "clips": [{"num_frames": 124} for _ in range(5)], "pi_h3": "4steps",
+                                             **common}, frames=532, width=1280, height=768, timeout=3600)]}
+    return I
+
+
+STAGE2_ORDER = ["C0", "M3", "E3b4", "E3b2", "ER1", "EI1", "EO1", "ACH", "AV2V", "ART", "AIN", "AOUT", "AAUD",
+                "R05", "LONG"]
+
+
+def gc0_compare(mp4: Path, p: dict) -> dict:
+    rec = gc0_record()
+    got = [c.get("latents_sha256") for c in p.get("chain_clips") or []]
+    out = {"label": "2026-10-29 G-C0 / 2026-11-09 GA0 (record)", "sha256": sha256(mp4), "expect_sha256": rec["sha256"],
+           "latents": got, "expect_latents": rec["latents"]}
+    out["sha256_equal"] = out["sha256"] == rec["sha256"]
+    out["latents_equal"] = bool(rec["latents"]) and got == rec["latents"]
+    out["equal"] = out["video_equal"] = out["audio_equal"] = out["sha256_equal"] and out["latents_equal"]
+    return out
 
 
 ITEMS = items()
@@ -979,7 +1121,32 @@ def build_body(port: int, jb: dict, body: dict, cache: dict) -> dict:
         b["references"] = [{"kind": k, "id": once(p, *endpoint[k]), "slot": s} for k, p, s in up["references"]]
     if jb["lora"]:
         b["loras"] = [{"name": Path(jb["lora"][0]).stem, "strength": jb["lora"][1]}]
-    return b
+    stores = {"@image:": ("/upload/image", "image_id"), "@video:": ("/upload/video", "video_id"),
+              "@audio:": ("/upload/audio", "audio_id")}
+
+    def sub(o):
+        if isinstance(o, str):
+            for pre, (ep, key) in stores.items():
+                if o.startswith(pre):
+                    return once(Path(o[len(pre):]), ep, key)
+            return o
+        if isinstance(o, dict):
+            return {k: sub(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [sub(v) for v in o]
+        return o
+
+    return sub(b)
+
+
+def placeholder_paths(o) -> list[Path]:
+    if isinstance(o, str):
+        return [Path(o.split(":", 1)[1])] if o.startswith(("@image:", "@video:", "@audio:")) else []
+    if isinstance(o, dict):
+        return [p for v in o.values() for p in placeholder_paths(v)]
+    if isinstance(o, list):
+        return [p for v in o for p in placeholder_paths(v)]
+    return []
 
 
 def run_api_job(port: int, item: str, jb: dict, cache: dict, out_dir: Path, body: dict | None = None) -> dict:
@@ -989,7 +1156,7 @@ def run_api_job(port: int, item: str, jb: dict, cache: dict, out_dir: Path, body
     wk_log, srv_log = RT / "logs" / "h3_worker.log", RT / "logs" / "server.log"
     wk_off, srv_off = file_offset(wk_log), file_offset(srv_log)
     t0 = time.monotonic()
-    st, resp = http(port, "POST", "/generate", body, timeout=300)
+    st, resp = http(port, "POST", jb.get("endpoint") or "/generate", body, timeout=300)
     rec["submit_http"] = st
     if st != 202:
         rec.update(status="refused", error=resp, finished_at=now_iso())
@@ -1047,6 +1214,16 @@ def picks(meta: dict) -> dict:
     h3 = meta.get("h3") or {}
     ph = h3.get("phases") or {}
     den, dec = ph.get("denoise") or {}, ph.get("decode") or {}
+    clip_phases = ph.get("clips") or []
+    if clip_phases and not den:
+        # a chain: phases = {clips: [{encode, denoise, ...}], decode}; the denoise peak is the clips' largest
+        dens = [c.get("denoise") or {} for c in clip_phases]
+        den = {"seconds": round(sum(d.get("seconds") or 0 for d in dens), 2),
+               "peak_vram_mb": max((d.get("peak_vram_mb") or 0) for d in dens),
+               "peak_vram_reserved_mb": max((d.get("peak_vram_reserved_mb") or 0) for d in dens),
+               "vram16": dens[0].get("vram16") or {}, "sequence": dens[0].get("sequence"),
+               "per_clip_seconds": [d.get("seconds") for d in dens]}
+    clips_rec = h3.get("clips") or (meta.get("chain") or {}).get("clips") or []
     dwd = dec.get("dwd") or {}
     return {
         "transformer": get(meta, "models", "selection", "transformer", "file"),
@@ -1068,6 +1245,12 @@ def picks(meta: dict) -> dict:
         "dwd_head": dwd.get("head"),
         "pi_h3": h3.get("pi_h3"), "a2v": h3.get("a2v") or meta.get("a2v"), "vsf": h3.get("vsf"),
         "loras": h3.get("loras"),
+        "per_clip_denoise_seconds": den.get("per_clip_seconds"),
+        "chain_clips": [{"latents_sha256": c.get("latents_sha256"), "head_equals_prev_tail": c.get("head_equals_prev_tail"),
+                         "pi_h3": c.get("pi_h3"), "a2v": c.get("a2v")} for c in clips_rec],
+        "chain_total_frames": (meta.get("chain") or {}).get("total_frames"),
+        "retake": meta.get("retake") or h3.get("retake"), "v2v": meta.get("v2v") or h3.get("v2v"),
+        "inpaint": h3.get("inpaint"), "outpaint": h3.get("outpaint"),
     }
 
 
@@ -1101,14 +1284,15 @@ def pi_checks(p: dict, choice: str, spike_item: str | None = None) -> dict:
     return out
 
 
-def output_checks(rec: dict, body: dict) -> dict:
+def output_checks(rec: dict, body: dict, expect: dict | None = None) -> dict:
     mp4 = REPO / rec["mp4"] if rec.get("mp4") else None
     if mp4 is None or not mp4.is_file():
         return {"output": False}
     pr = ffprobe(mp4)
     v = pr["video"]
-    want_w, want_h = body["width"], body["height"]
-    return {"probe": pr, "frames_ok": v.get("nb_read_frames") == body["num_frames"],
+    e = expect or {}
+    want_w, want_h = e.get("width", body.get("width")), e.get("height", body.get("height"))
+    return {"probe": pr, "frames_ok": v.get("nb_read_frames") == e.get("frames", body.get("num_frames")),
             "size_ok": (v.get("width"), v.get("height")) == (want_w, want_h), "audio_ok": bool(pr.get("audio"))}
 
 
@@ -1178,12 +1362,29 @@ def run_engine_direct(item: str, out_dir: Path, dry: bool = False) -> dict:
     eng = res.get("engine") or {}
     rec["error"] = res.get("error")
     rec["engine"] = {k: eng.get(k) for k in ("seconds", "peak_vram_mb", "peak_vram_reserved_mb", "attention_used",
-                                             "vram16_mode_used", "keep_resident_used")}
+                                             "vram16_mode_used", "keep_resident_used", "rss_peak_gib",
+                                             "commit_peak_gib", "num_frames")}
+    dec = ((eng.get("h3") or {}).get("phases") or {}).get("decode") or {}
+    rec["engine"]["decode"] = {k: dec.get(k) for k in ("seconds", "peak_vram_mb", "peak_vram_reserved_mb", "vae_source")}
+    rec["engine"]["dwd_chunks"] = len((dec.get("dwd") or {}).get("chunks") or []) or None
     rec["pi_h3_keys"] = [k for k in ("pi_h3_used",) if k in eng] + (["h3.pi_h3"] if "pi_h3" in (eng.get("h3") or {}) else [])
     mp4 = out_dir / "output.mp4"
     if rec.get("exit_code") == 0 and mp4.is_file():
-        rec["compare"] = compare(mp4, ref_spike(ITEMS[item]["source"]))
-        rec["verdict"] = "pass" if rec["compare"].get("equal") and not rec["pi_h3_keys"] else "changed"
+        rec["compare"] = c = compare(mp4, ref_spike(ITEMS[item]["source"]))
+        rec["probe"] = ffprobe(mp4)
+        if not ITEMS[item].get("pi"):
+            rec["verdict"] = "pass" if c.get("equal") and not rec["pi_h3_keys"] else "changed"
+        else:
+            # the experiment's reproduction through the product's pi-H3 path (group 2's rule)
+            rec["pi_h3"] = {"pi_h3_used": eng.get("pi_h3_used"), "record": (eng.get("h3") or {}).get("pi_h3"),
+                            "clips": [cl.get("pi_h3") for cl in (eng.get("chain") or {}).get("clips") or []]}
+            fr = c.get("frames") or {}
+            if fr.get("frame_count_differs") or (fr.get("psnr_min_db") is not None and fr["psnr_min_db"] < BROKEN_PSNR_DB):
+                rec["verdict"] = "broken"
+            elif not eng.get("pi_h3_used"):
+                rec["verdict"] = "record_missing"
+            else:
+                rec["verdict"] = "equal" if c.get("equal") else "diff"
     else:
         rec["verdict"] = "fail"
     return rec
@@ -1198,6 +1399,8 @@ def judge_api(item: str, spec: dict, jobs: list[dict]) -> str:
     out_ok = all(all(j.get("checks", {}).get(k, False) for k in ("frames_ok", "size_ok", "audio_ok")) for j in jobs)
     rec_ok = all(all((j.get("pi_checks") or {}).values()) for j in jobs) and all(j.get("extra_ok", True) for j in jobs)
     cmps = [j["compare"] for j in jobs if j.get("compare")]
+    if spec["group"] == 1 and item != "F1":
+        return "pass" if out_ok and cmps and cmps[0].get("equal") and all(j.get("extra_ok", True) for j in jobs) else "changed"
     if item == "F1":
         return "pass" if out_ok and cmps and cmps[0].get("equal") and jobs[0].get("extra_ok") else "changed"
     if spec["group"] == 2:
@@ -1236,7 +1439,7 @@ def run_api_item(item: str, spec: dict, port: int, out_dir: Path) -> dict:
             b = jb["body"]
             ntok = prompt_tokens(b["prompt"])
             kf = [f for _p, f in jb["uploads"].get("images") or []]
-            est = rows_estimate(b["width"], b["height"], b["num_frames"], text_tokens=ntok or 512, keyframes=kf)
+            est = rows_estimate(b["width"], b["height"], body_frames(b), text_tokens=ntok or 512, keyframes=kf)
             budget = comfort_budget(qc, comfort or None)
             comfort_rec = {"quant_class": qc, "budget_rows": budget, "rows_estimate": est, "text_tokens": ntok,
                            "inside": budget is None or est["total"] <= budget}
@@ -1256,10 +1459,10 @@ def run_api_item(item: str, spec: dict, port: int, out_dir: Path) -> dict:
             meta = read_json(REPO / j["metadata_file"]) if j.get("metadata_file") else {}
             j["picks"] = p = picks(meta)
             if j.get("status") == "completed":
-                j["checks"] = output_checks(j, b)
+                j["checks"] = output_checks(j, b, jb.get("expect"))
                 choice = b.get("pi_h3")
                 if choice:
-                    j["pi_checks"] = pi_checks(p, choice, item if spec["group"] == 2 else None)
+                    j["pi_checks"] = pi_checks(p, choice, item if spec["group"] == 2 and spec["kind"] == "api" and item in ("P1", "P2", "P3", "P4") else None)
                 extra = {}
                 if not choice:
                     extra["no_pi_keys"] = p.get("pi_h3_used") is None and p.get("pi_h3") is None and \
@@ -1277,7 +1480,11 @@ def run_api_item(item: str, spec: dict, port: int, out_dir: Path) -> dict:
                 j["extra"] = extra
                 j["extra_ok"] = all(extra.values())
                 ct = jb.get("compare_to")
-                if ct:
+                if spec.get("gc0"):
+                    j["compare"] = gc0_compare(REPO / j["mp4"], p)
+                    log(f"  {jb['name']}: vs G-C0: sha256 {'=' if j['compare']['sha256_equal'] else '≠'} "
+                        f"latents {'=' if j['compare']['latents_equal'] else '≠'}")
+                elif ct:
                     ref = ref_f1() if ct == "F1" else ref_this_or_spike(ct) if isinstance(ct, str) else ct
                     j["compare"] = compare(REPO / j["mp4"], ref)
                     c = j["compare"]
@@ -1439,7 +1646,7 @@ def dry_run(order: list[str]) -> int:
     out["quant_class"] = {f: quant_class(f) for f in (FL2VA, SULPHUR, REF2VA, W4A8) if (WEIGHTS / f).is_file()}
     log(f"quant classes: {out['quant_class']}")
     # requests through the product's family rules (no backend; upload ids are placeholders)
-    from api.models import GenerateRequest  # noqa: PLC0415
+    from api.models import GenerateChainRequest, GenerateRequest  # noqa: PLC0415
     from services import engines  # noqa: PLC0415
 
     def assets(k: str) -> Path:
@@ -1474,12 +1681,33 @@ def dry_run(order: list[str]) -> int:
                         b["references"] = [{"kind": k, "id": "dry", "slot": s} for k, _p, s in jb["uploads"]["references"]]
                     if jb["lora"]:
                         b["loras"] = [{"name": Path(jb["lora"][0]).stem, "strength": jb["lora"][1]}]
+                    ph = placeholder_paths(b)
+                    missing_up = [rel(x) for x in ph if not x.is_file()]
+                    if missing_up:
+                        problems.append(f"{it}/{jb['name']}: upload material missing {missing_up}")
+
+                    def dry_ids(o):
+                        if isinstance(o, str):
+                            return "dry" if o.startswith(("@image:", "@video:", "@audio:")) else o
+                        if isinstance(o, dict):
+                            return {k: dry_ids(v) for k, v in o.items()}
+                        if isinstance(o, list):
+                            return [dry_ids(v) for v in o]
+                        return o
+
+                    b = dry_ids(b)
                     jr: dict[str, Any] = {"job": jb["name"] + (f" ({label})" if label else ""), "file": jb["file"],
-                                          "body": b}
+                                          "endpoint": jb.get("endpoint"), "body": b,
+                                          "uploads": [rel(x) for x in ph], "uploads_missing": missing_up}
                     try:
-                        req = GenerateRequest(**b)
-                        engines.reject_unsupported("h3", req)
-                        engines.validate_for_family("h3", req)
+                        if jb.get("endpoint") == "/generate/chain":
+                            req = GenerateChainRequest(**b)
+                            engines.reject_chain("h3", req)
+                            engines.validate_chain_for_family("h3", req)
+                        else:
+                            req = GenerateRequest(**b)
+                            engines.reject_unsupported("h3", req)
+                            engines.validate_for_family("h3", req)
                         if (WEIGHTS / jb["file"]).is_file():
                             engines.preflight_request("h3", req, assets=assets, transformer=lambda: WEIGHTS / jb["file"])
                         jr["family_rules"] = "passed"
@@ -1489,7 +1717,7 @@ def dry_run(order: list[str]) -> int:
                         jr["family_rules"] = f"{type(exc).__name__}: {getattr(exc, 'detail', None) or exc}"
                     ntok = prompt_tokens(b["prompt"])
                     kf = [f for _p, f in jb["uploads"].get("images") or []]
-                    est = rows_estimate(b["width"], b["height"], b["num_frames"], text_tokens=ntok or 512, keyframes=kf)
+                    est = rows_estimate(b["width"], b["height"], body_frames(b), text_tokens=ntok or 512, keyframes=kf)
                     budget = comfort_budget(out["quant_class"].get(jb["file"]))
                     jr["comfort"] = {"rows_estimate": est["total"], "text_tokens": ntok, "budget_rows": budget,
                                      "inside": budget is None or est["total"] <= budget}
@@ -1530,6 +1758,7 @@ def parse_args(argv=None):
     mode.add_argument("--live", action="store_true", help="run the items on the GPU")
     mode.add_argument("--post-only", action="store_true", help="rewrite summary.json / summary.md from runs/")
     ap.add_argument("--only", default=None, help=f"comma list of {','.join(ITEMS)} (default: {','.join(DEFAULT_ORDER)})")
+    ap.add_argument("--stage2", action="store_true", help=f"the stage-2 items in order: {','.join(STAGE2_ORDER)}")
     ap.add_argument("--redo", action="store_true", help="run an item again even if its result exists (old one moved aside)")
     ap.add_argument("--continue-after-halt", action="store_true", help="run although runs/_halt.json exists")
     ap.add_argument("--port", type=int, default=PORT_DEFAULT)
@@ -1540,6 +1769,8 @@ def parse_args(argv=None):
         if bad or not names:
             ap.error(f"--only: unknown item(s) {bad}; choose from {','.join(ITEMS)}")
         a.order = [k for k in ITEMS if k in names]
+    elif a.stage2:
+        a.order = list(STAGE2_ORDER)
     else:
         a.order = list(DEFAULT_ORDER)
     if a.port == OWNER_PORT:

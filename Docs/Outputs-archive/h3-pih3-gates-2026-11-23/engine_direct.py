@@ -52,21 +52,35 @@ def rebase(p, old_root: str | None) -> str:
 
 
 def build(source: Path, out_dir: Path):
+    """-> (record, paths, options, request or chain spec). Single requests (the spike's I1c / O1c / I1 / O1),
+    chains (C3b: ``request_base`` + the recorded prompts / frames) and retakes (``request.base`` / ``clips`` /
+    ``retake``). A pi-H3 item of the spike (``conditions.pi_h3`` set) carried the pi-H3 file as a LoRA of
+    strength 1.0 plus its own patches; here that LoRA is taken out and the product's ``pi_h3`` field is set
+    (the product's pi-H3 path: its internal LoRA, sigmas, initial state, adapter and DWD decode)."""
     from engine_h3 import pipeline_h3 as P  # noqa: PLC0415
 
     rec = json.loads(source.read_text(encoding="utf-8"))
-    cond, rq = rec["conditions"], dict(rec["request"])
-    # The spike ran from this same repo; its records hold absolute paths under it.
+    cond = rec["conditions"]
+    raw = rec.get("request") or {}
+    if "request_base" in rec:
+        kind, rq = "chain", dict(rec["request_base"])
+    elif "base" in raw:
+        kind, rq = "retake", dict(raw["base"])
+    else:
+        kind, rq = "single", dict(raw)
     old_root = None
     marker = "\\outputs\\h3-pih3-spike-2026-11-22\\"
-    for v in (rq.get("output_path"),):
-        if v and marker in v:
-            old_root = v.split(marker)[0]
+    if rq.get("output_path") and marker in rq["output_path"]:
+        old_root = rq["output_path"].split(marker)[0]
     paths = P.H3Paths(transformer=str(REPO / cond["base_weights"]["path"]),
                       **{k: str(REPO / v) for k, v in PATHS.items()})
     options = P.H3LoadOptions(blocks_on_gpu=int(cond["blocks_on_gpu"]), attention_backend=str(cond["attention"]),
                               block_swap_prefetch=bool(cond["block_swap_prefetch"]),
                               deterministic=bool(cond["deterministic"]))
+    pi_cond = cond.get("pi_h3")
+    if pi_cond:
+        pi_name = Path(pi_cond["path"]).name
+        rq["loras"] = [x for x in rq.get("loras") or () if Path(str(x["path"])).name != pi_name]
     rq["output_path"] = str(out_dir / "output.mp4")
     rq["images"] = tuple(P.H3ImageInput(path=rebase(i["path"], old_root), frame_idx=int(i["frame_idx"]))
                          for i in rq.get("images") or ())
@@ -86,8 +100,36 @@ def build(source: Path, out_dir: Path):
                     v[pk] = rebase(v[pk], old_root)
             rq[key] = cls(**v)
     rq.pop("pi_h3", None)   # the spike's request had no such field (= None, off)
+    if pi_cond:
+        rq["pi_h3"] = P.H3PiH3Input(steps=int(cond["steps"]), path=str(REPO / pi_cond["path"]))
     req = P.H3GenerateRequest(**rq)
-    return rec, paths, options, req
+    if kind == "single":
+        return rec, paths, options, req
+    from engine_h3.chain_h3 import H3ChainClipSpec, H3ChainRetake, H3ChainSpec  # noqa: PLC0415
+
+    if kind == "chain":   # the spike's chain_spec: clip i = (prompts[i], num_frames[i]), no source / retake
+        clips = tuple(H3ChainClipSpec(prompt=p, num_frames=int(f))
+                      for p, f in zip(cond["prompts"], cond["num_frames"]))
+        return rec, paths, options, H3ChainSpec(base=req, clips=clips, seed=int(cond["seed"]))
+    clips = tuple(H3ChainClipSpec(prompt=c["prompt"], num_frames=int(c["num_frames"])) for c in raw["clips"])
+    if any(c.get("references") or c.get("images") or c.get("source_audio") for c in raw["clips"]) or raw.get("source"):
+        raise SystemExit("clip references / images / source audio or a source in the retake record: not handled")
+    rt = raw["retake"]
+    return rec, paths, options, H3ChainSpec(base=req, clips=clips, seed=int(raw["seed"]),
+                                            retake=H3ChainRetake(path=rebase(rt["path"], old_root),
+                                                                 audio_strength=float(rt["audio_strength"])))
+
+
+def check(P, spec, dit_path: str) -> None:
+    """The product's own checks, before anything is loaded (no GPU)."""
+    if isinstance(spec, P.H3GenerateRequest):
+        P.validate_request(spec, dit_path=dit_path if spec.pi_h3 is not None else None)
+        return
+    from engine_h3.chain_h3 import _check_spec, clip_requests  # noqa: PLC0415
+
+    _check_spec(spec)
+    for r in clip_requests(spec):
+        P.validate_request(r, dit_path=dit_path if r.pi_h3 is not None else None)
 
 
 def main(argv=None) -> int:
@@ -116,12 +158,13 @@ def main(argv=None) -> int:
     from engine_h3 import pipeline_h3 as P  # noqa: PLC0415
 
     rec, paths, options, req = build(Path(args.source), out_dir)
+    is_chain = not isinstance(req, P.H3GenerateRequest)
     plan = {"source_item": rec.get("item"), "source_git": rec.get("git"), "paths": dataclasses.asdict(paths),
-            "options": dataclasses.asdict(options), "request": dataclasses.asdict(req),
-            "torch": torch.__version__}
+            "options": dataclasses.asdict(options), "kind": "chain" if is_chain else "single",
+            "request": dataclasses.asdict(req), "torch": torch.__version__}
     if args.dry_run:
         try:
-            P.validate_request(req)
+            check(P, req, paths.transformer)
             plan["validate_request"] = "passed"
         except Exception as exc:  # noqa: BLE001
             plan["validate_request"] = f"{type(exc).__name__}: {exc}"
@@ -145,7 +188,12 @@ def main(argv=None) -> int:
         t0 = time.perf_counter()
         result["build_report"] = pipe.load()
         result["load_seconds"] = round(time.perf_counter() - t0, 2)
-        result["engine"] = pipe.generate(req)
+        if is_chain:
+            from engine_h3.chain_h3 import run_chain_h3  # noqa: PLC0415
+
+            result["engine"] = run_chain_h3(pipe, req, lambda stage, i, n, **kw: log(f"progress {stage} {i}/{n}"), log)
+        else:
+            result["engine"] = pipe.generate(req)
         code = 0
     except BaseException as exc:  # noqa: BLE001
         result["error"] = f"{type(exc).__name__}: {exc}"

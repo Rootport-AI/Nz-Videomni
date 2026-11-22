@@ -613,18 +613,27 @@ def inspect_h3_dit(path: str) -> tuple[Header, H3DiTConfig]:
 
 #: The kinds :func:`quant_class` returns (the keys of the descriptor's
 #: ``comfort.single_rows_budget_by_quant_class``).
-H3_QUANT_CLASSES = ("int8", "fp8", "w4a8")
+H3_QUANT_CLASSES = ("int8", "fp8", "w4a8", "bf16_blocks")
+
+#: The large Linears of a body block (its required tensors minus the norms and
+#: the AdaLN projection).
+_BLOCK_LINEARS = tuple(r.removesuffix(".weight") for r in _REFINER_REQUIRED if "norm" not in r)
 
 
 def quant_class(cfg: H3DiTConfig) -> str:
     """The kind of a DiT's weights, for picking the comfort marker's line (台帳 §1-286).
 
-    ``"w4a8"`` when any layer is w4a8 (a mixed file runs out of memory like a
-    w4a8 one, so it takes that line), else ``"fp8"`` when any layer is fp8,
-    else ``"int8"``. ``"int8"`` means "neither w4a8 nor fp8": a DiT with no
-    quantized layer at all is ``"int8"`` too. ``inspect_h3_dit`` already
-    refuses formats outside :data:`DIT_FORMATS`, so no other branch exists.
+    Checked first: ``"bf16_blocks"`` when any body block's qkv / out_proj /
+    fc1 / fc2 has no quantization marker (a float layer: blocks kept in BF16,
+    or a DiT with no quantized layer at all). ``adaln_proj`` and the token
+    refiner are not counted (they are unquantized in the official files too).
+    Else ``"w4a8"`` when any layer is w4a8 (a mixed file runs out of memory
+    like a w4a8 one, so it takes that line), else ``"fp8"`` when any layer is
+    fp8, else ``"int8"``. ``inspect_h3_dit`` already refuses formats outside
+    :data:`DIT_FORMATS`, so no other branch exists.
     """
+    if any(f"blocks.{i}.{leaf}" not in cfg.quant for i in range(cfg.num_layers) for leaf in _BLOCK_LINEARS):
+        return "bf16_blocks"
     formats = {spec.format for spec in cfg.quant.values()}
     if W4A8 in formats:
         return "w4a8"

@@ -251,7 +251,7 @@ class PipelineManager:
         # GET /models (``transformer_role``).
         self.weight_identity = weight_identity or WeightIdentity.for_config(config)
         # The H3 transformer's weight kind (``h3_format.quant_class``: "int8" /
-        # "fp8" / "w4a8"), or None (LTX, no file, unreadable header). Written by
+        # "fp8" / "w4a8" / "bf16_blocks"), or None (LTX, no file, unreadable header). Written by
         # :meth:`identify_quant_class` when the selection changes (a successful
         # load/reload, and once at startup for the restored one); read by
         # GET /models (``transformer_quant_class``). An unload keeps it, like

@@ -79,10 +79,11 @@ def test_family_id_set_matches_engine_registry():
 def test_h3_profile_is_a_rows_line_only():
     """MiniMax H3: the S line 219,516 (Docs/COMFORT_LIMIT_TABLE.md §17 / §18),
     no token rows, no outpaint line. w4a8 weights take their own line
-    (S 203,092, §21); int8 / fp8 fall back to the default."""
+    (S 203,092, §21), and so do weights with BF16 blocks (S 160,472, a
+    provisional estimate); int8 / fp8 fall back to the default."""
     profile = _shipped()["h3"]
     assert profile.single_rows_budget == 219516
-    assert profile.single_rows_budget_by_quant_class == {"w4a8": 203092}
+    assert profile.single_rows_budget_by_quant_class == {"w4a8": 203092, "bf16_blocks": 160472}
     assert profile.rows == []
     assert profile.outpaint_budget is None
 
@@ -253,7 +254,7 @@ def test_rows_line_reaches_get_config(tmp_path: Path):
     """``single_rows_budget`` and ``single_rows_budget_by_quant_class`` are
     declared on the profile: without that, pydantic's ``extra='ignore'``
     would drop them before ``/config``."""
-    comfort = {"single_rows_budget": 219516, "single_rows_budget_by_quant_class": {"w4a8": 203092}}
+    comfort = {"single_rows_budget": 219516, "single_rows_budget_by_quant_class": {"w4a8": 203092, "bf16_blocks": 160472}}
     app = _boot(tmp_path, [_with_comfort(comfort)])
     with TestClient(app) as c:
         limits = c.get("/api/v1/config").json()["limits"]
@@ -264,7 +265,7 @@ def test_rows_line_reaches_get_config(tmp_path: Path):
             "rows": [],
             "outpaint_budget": None,
             "single_rows_budget": 219516,
-            "single_rows_budget_by_quant_class": {"w4a8": 203092},
+            "single_rows_budget_by_quant_class": {"w4a8": 203092, "bf16_blocks": 160472},
         }
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useStrings } from "../../i18n/LanguageContext";
 import { REFERENCE_KINDS, referenceTag } from "../single/referenceRules";
@@ -19,7 +19,19 @@ export function FolderInputs({ form }: FolderInputsProps) {
   const t = useStrings().batchV2vRefLong;
   const { inputs } = form.state;
   const disabled = form.inputsLocked;
-  const lastFrame = inputs.frames.length - 1;
+  const frameCount = inputs.frames.length;
+  const lastFrame = frameCount - 1;
+
+  // An added frame lands at the strip's right end: a rise in the count scrolls
+  // the strip there (before paint). A removal, the first render and a remount
+  // leave the position alone.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const prevFrameCount = useRef(frameCount);
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (strip && frameCount > prevFrameCount.current) strip.scrollLeft = strip.scrollWidth;
+    prevFrameCount.current = frameCount;
+  }, [frameCount]);
 
   return (
     <>
@@ -47,16 +59,18 @@ export function FolderInputs({ form }: FolderInputsProps) {
       <details className="form-accordion v2v-ref-folders">
         <summary className="form-accordion-summary">{t.refFolders.heading(form.filledFolderCount)}</summary>
         <div className="form-accordion-body">
-          {inputs.frames.map((frame, index) => (
-            <FrameBox
-              key={frame.id}
-              form={form}
-              frame={frame}
-              index={index}
-              isLast={index === lastFrame}
-              canRemove={index === lastFrame && inputs.frames.length >= 2}
-            />
-          ))}
+          <div className="v2v-frames-strip" ref={stripRef}>
+            {inputs.frames.map((frame, index) => (
+              <FrameBox
+                key={frame.id}
+                form={form}
+                frame={frame}
+                index={index}
+                isLast={index === lastFrame}
+                canRemove={index === lastFrame && frameCount >= 2}
+              />
+            ))}
+          </div>
           <div>
             <button type="button" className="secondary-button" disabled={disabled} onClick={() => form.addFrame()}>
               {t.refFolders.addFrame}

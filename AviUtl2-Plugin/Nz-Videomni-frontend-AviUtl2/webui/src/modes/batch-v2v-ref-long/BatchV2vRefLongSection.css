@@ -16,6 +16,20 @@
   gap: 10px;
 }
 
+/* The clip frames side by side, scrolling sideways. */
+.v2v-frames-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.v2v-frames-strip > .v2v-frame {
+  flex: 0 0 40%;
+  min-width: 280px;
+}
+
 .v2v-count {
   font-weight: 400;
   color: var(--text-muted);

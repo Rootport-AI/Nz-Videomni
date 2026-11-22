@@ -11,6 +11,24 @@
 
 ---
 
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
+
+### 1-289. バッチ v2v-ref-long: 参照素材フォルダのクリップの枠を横に並べる（起票：2026-11-22）
+
+- **概要**: 「バッチ v2v-ref-long」の「参照素材フォルダ」で、クリップの枠を縦ではなく横に並べた。枠 1 つの幅は並びの 2/5（下限 280px）で、入りきらない枠は横スクロールで見る。「クリップを追加」で枠が増えると、並びが右端まで自動で動く。
+- **出典**: 仕様の正本はフロントエンド `Docs/BATCH_V2V_REF_LONG.md` §2（変えた点は同 §23）、機械の門は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §220、実装の記録はフロントエンド `Docs/DEVLOG.md` §177、元の機能は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-288、監督の計画ファイル `adaptive-growing-stonebraker` の「第 5 次計画」。本節が実機確認の項目の正本。
+
+前提: AviUtl2 を閉じた状態で `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/scripts/deploy.ps1` で aux2 を実機へ置いてから、サーバーと AviUtl2 を起動する（aux2 は 2026-11-22 に配置済み）。Settings で読み込む重みは Ref2VA と FL2VA のどちらでもよい。フォルダの用意とスキャンは要らない。操作パネルの言語は日本語、画面上部のベースモデルの欄は MiniMax H3 にする。Chained タブで「バッチ v2v-ref-long」を開き、その中の「参照素材フォルダ」を開く。操作パネルのウィンドウは、枠が 2 つ横に収まる幅（目安は 800px 以上）にしておく。「（続き）」で始まる項目は、直前の項目の状態から続けて行う。
+
+#### 参照素材フォルダの枠の並び
+
+- [ ] 枠が「クリップ 1」だけの状態を見る（枠が 2 つ以上あれば、いちばん右の枠の ❌ で 1 つにする） → 枠の幅が区画の横幅の 2/5 くらいで、左に寄っている（右側は空いている）。
+- [ ] （続き）「参照素材フォルダ」の中の「クリップを追加」を 1 回押す → 「クリップ 2」の枠が「クリップ 1」の右に並び、2 つの枠の上端がそろっている。「クリップを追加」のボタンは、枠の並びの下にある。
+- [ ] （続き）「クリップを追加」をもう 1 回押す → 並びが自動で右へ動いて、「クリップ 3」の枠が見えている。並びの下の横スクロールバーを左へ動かすと「クリップ 1」が見える。操作パネルの画面全体は横にスクロールしない。
+- [ ] （続き）枠が 1 つしか入らない幅まで、操作パネルのウィンドウの横幅を狭める → 枠は細くならず、入りきらない枠は横スクロールで見える。各欄のパスの入力欄・📁・❌ が重ならずに押せる。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
@@ -58,6 +76,7 @@
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「✒ … right-clicked video opens the accordion」（2026-10-31 に 9 回中 2 回・変更前の HEAD でも 8 回中 1 回。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §187.7・§188.4）と、`AlphaControls.test.tsx` の「from the matte, with no MOV yet …」（全件実行で 1 回。単独では通る。同 §188.4）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」が全件実行で 1 回、5 秒の時限切れで落ちた（負荷による）。単独（4 件）と 2 回目の全件実行では合格（2026-11-02。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/chained/ChainEndSourcePanel.test.tsx` の「📁 attaches whatever the native dialog returned」が全件実行で 1 回落ち（`getByAltText(t.videoPlaceholderAlt)` が要素を見つけられない）、単独（32 件）と最後の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §218.6）。同じ日のもう 1 回の全件実行でも 1 件落ちたが、落ちたテストの名前は控えていない。
+- **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「a video truncated to the 15 s total carries max_sec; the shorter one before it does not」（上の「✒ … right-clicked video opens the accordion」とは別のテスト）と、`webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」（2026-11-02 の追記と同じテストの再発）が、同じ全件実行で 1 回ずつ約 5 秒の時限切れで落ちた（負荷による）。単独（2 ファイル・21 件）と 2 回目の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §220.5）。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。

@@ -1452,6 +1452,15 @@ class GenerateChainRequest(BaseModel):
     # vram16_mode: 詳細は GenerateRequest の同名フィールドを参照。
     # H3 の validate_chain が既定値を書き戻す。
     vram16_mode: bool | None = Field(None)
+    # pi_h3: 詳細は GenerateRequest の同名フィールドを参照（MiniMax H3 の
+    # 高速化 pi-H3。既定 "off" は今日の連結と一切変わらない）。連結・V2V・
+    # Retake の全クリップに 1 つの選択が効く。有効のとき、送られなかった
+    # num_inference_steps と、省略された shift_video / shift_audio は選択の値で
+    # 埋まり（H3 の validate_chain）、違う値を明示すると 422 で断る。ファイルの
+    # 有無と本体の重みとの照合も単発と同じく受付で行う。LTX 2.3／2.5 は "off"
+    # 以外を 422 FEATURE_UNSUPPORTED で断る（各アダプタの CHAIN_REJECT_TABLE）。
+    # 実際に効いたかどうかは metadata.json の pi_h3_used（pi-H3 のジョブだけ）。
+    pi_h3: Literal["off", "4steps", "2steps"] = "off"
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1908,7 +1917,8 @@ class GenerateChainRequest(BaseModel):
         this per-clip copy — this transcription only feeds the stored record.
         ``embed_mp4_metadata`` is transcribed for the same reason (the stored
         record would otherwise claim the default), and so are ``vram16_mode``,
-        ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX).
+        ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX) and
+        ``pi_h3`` (MiniMax H3's; ``"off"`` on LTX, which refuses any other).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -1955,6 +1965,7 @@ class GenerateChainRequest(BaseModel):
             vae_mode=self.vae_mode,
             embed_mp4_metadata=self.embed_mp4_metadata,
             vram16_mode=self.vram16_mode,
+            pi_h3=self.pi_h3,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

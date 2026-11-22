@@ -239,7 +239,7 @@ def test_lora_report_is_clip_0s(monkeypatch):
     rec = _Recorder()
     pipe, _original = _stub_pipe(monkeypatch, rec)
     spec = _spec(frames=(124, 39, 39), loras=(P.H3LoraInput(path="x.safetensors"),))
-    monkeypatch.setattr(P, "validate_request", lambda req: None)   # no LoRA file on disk here
+    monkeypatch.setattr(P, "validate_request", lambda req, **kw: None)   # no LoRA file on disk here
     done = CH.run_chain_h3(pipe, spec, _progress_into(rec), lambda m: None)
     assert done["h3"]["loras"] == [{"name": "x.safetensors"}]
     den = [c for c in rec.calls if c[0] == "denoise"]

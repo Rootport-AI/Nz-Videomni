@@ -18,7 +18,12 @@ Pinned here, none of it needing a GPU or a real pi-H3 file:
 5. the mock job runs to the end with ``pi_h3_used`` and ``h3.pi_h3``;
 6. LTX 2.3 / 2.5 refuse it with the H3-only sentence and publish it;
 7. the shipped descriptor: the two assets are downloads' files, under a map, and
-   the video / audio VAE scans do not list them.
+   the video / audio VAE scans do not list them;
+8. (段 2) the chain — Chained, V2V, Retake — by the same rules: the field, its
+   copy into the stored per-clip request, the steps / shifts (an unsent chain
+   step count is the choice's, not LTX's schema 8), the acceptance check, the
+   payloads (off = today's goldens), the mock run and its record, the LTX
+   chains' refusal; and the single path's Inpainting / Outpainting with pi-H3.
 """
 
 from __future__ import annotations
@@ -535,3 +540,446 @@ def test_shipped_assets_are_download_files_under_a_map():
     # every downloaded name is claimed by a map entry (top-level files)
     froms = {m["from"] for m in pi["map"]}
     assert set(pi["include"]) == froms
+
+
+# =========================================================================== #
+# 段 2: the chain (Chained / V2V / Retake) and the single path's
+# Inpainting / Outpainting together with pi-H3
+# =========================================================================== #
+
+from api.models import GenerateChainRequest  # noqa: E402
+from test_engine_h3_adapter import (  # noqa: E402
+    CHAIN_DONE_EVENT,
+    GOLDEN_CHAIN_KEYS_H3,
+    GOLDEN_CHAIN_KEYS_H3_RETAKE,
+    GOLDEN_CHAIN_KEYS_H3_V2V,
+    _chain,
+    _validated_chain,
+)
+
+CHAIN_BODY = {"prompt": PROMPT, "width": 640, "height": 384}
+
+
+def _pi_backend(captured: list[dict], event: dict, tmp_path):
+    """``_capturing_backend`` with the two pi-H3 assets resolved to tmp paths."""
+    files = {key: str(tmp_path / f"{key}.safetensors") for key in h3.PI_H3_ASSETS.values()}
+    be = _capturing_backend(captured, event)
+    be._require_asset = lambda key: files[key]  # type: ignore[attr-defined]
+    return be, files
+
+
+# ------------------------------------------------------------- the chain field
+
+
+def test_the_chain_field_defaults_to_off_and_is_honoured_on_h3():
+    assert GenerateChainRequest.model_fields["pi_h3"].default == "off"
+    assert set(GenerateChainRequest.model_fields["pi_h3"].annotation.__args__) == set(
+        GenerateRequest.model_fields["pi_h3"].annotation.__args__
+    )
+    assert "pi_h3" in h3.CHAIN_HONOURED_FIELDS
+    h3.reject_chain(_chain(pi_h3="4steps"))  # no raise
+
+
+@pytest.mark.parametrize("choice", ["off", "4steps", "2steps"])
+def test_to_clip_request_keeps_the_choice(choice):
+    chain = _validated_chain(pi_h3=choice)
+    clip = chain.to_clip_request(0)
+    assert clip.pi_h3 == choice
+    assert (clip.num_inference_steps, clip.shift_video, clip.shift_audio) == (
+        chain.num_inference_steps, chain.shift_video, chain.shift_audio,
+    )
+
+
+# ---------------------------------------------------- the chain steps / shifts
+
+
+@pytest.mark.parametrize("overrides", [{}, {"pi_h3": "off"}], ids=["omitted", "off"])
+def test_off_chain_keeps_the_plain_defaults(overrides):
+    chain = _validated_chain(**overrides)
+    assert (chain.num_inference_steps, chain.shift_video, chain.shift_audio) == (20, 12.0, 3.0)
+
+
+@pytest.mark.parametrize("choice, steps", [("4steps", 4), ("2steps", 2)])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        {},
+        {"source_video": {"video_id": "vid-1"}, "clips": [{"num_frames": 56}, {"num_frames": 39}]},
+        {"retake": {"video_id": "vid-1", "window_start_sec": 0.0}, "clips": [{"num_frames": 124}]},
+    ],
+    ids=["chain", "v2v", "retake"],
+)
+def test_a_chain_choice_fills_the_unsent_values(choice, steps, shape):
+    chain = _validated_chain(pi_h3=choice, **shape)
+    assert (chain.num_inference_steps, chain.shift_video, chain.shift_audio) == (steps, 12.0, 3.0)
+    assert isinstance(chain.num_inference_steps, int)
+
+
+def test_the_chain_schema_default_8_is_not_an_explicit_value():
+    # GenerateChainRequest's num_inference_steps defaults to LTX's 8; an
+    # unsent one must become the choice's 4, not be refused as "8".
+    chain = _chain(pi_h3="4steps")
+    assert chain.num_inference_steps == 8 and "num_inference_steps" not in chain.model_fields_set
+    engines.validate_chain_for_family("h3", chain)
+    assert chain.num_inference_steps == 4
+
+
+def test_chain_explicit_values_equal_to_the_choice_pass():
+    chain = _validated_chain(pi_h3="2steps", num_inference_steps=2, shift_video=12.0, shift_audio=3)
+    assert (chain.num_inference_steps, chain.shift_video, chain.shift_audio) == (2, 12.0, 3.0)
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        (
+            {"num_inference_steps": 8},
+            'num_inference_steps=8 differs from the value pi_h3="4steps" uses (num_inference_steps=4)',
+        ),
+        (
+            {"shift_video": 5.5},
+            'shift_video=5.5 differs from the value pi_h3="4steps" uses (shift_video=12)',
+        ),
+        (
+            {"shift_audio": 2.0},
+            'shift_audio=2 differs from the value pi_h3="4steps" uses (shift_audio=3)',
+        ),
+    ],
+)
+def test_chain_explicit_other_value_is_422_stating_the_fact(overrides, message):
+    with pytest.raises(APIError) as ei:
+        _validated_chain(pi_h3="4steps", **overrides)
+    err = ei.value
+    assert err.code == "VALIDATION_ERROR" and err.status_code == 422
+    assert err.detail == [{"loc": ["body"], "msg": f"Value error, {message}", "type": "value_error"}]
+
+
+# ------------------------------------------------------ the chain acceptance check
+
+
+def test_chain_preflight_looks_at_nothing_when_off():
+    h3.preflight_request(_validated_chain(), assets=_never, transformer=_never)
+
+
+def test_chain_preflight_missing_file_is_model_file_missing(tmp_path):
+    missing = tmp_path / "pi-H3" / "pi_h3_2step_dwd_adapter_int8_convrot.safetensors"
+    with pytest.raises(APIError) as ei:
+        h3.preflight_request(_validated_chain(pi_h3="2steps"), assets=lambda key: missing, transformer=_never)
+    assert ei.value.code == "MODEL_FILE_MISSING"
+    assert ei.value.detail == "pi-H3 のファイルがありません（pi-H3/pi_h3_2step_dwd_adapter_int8_convrot.safetensors）。"
+
+
+def test_chain_preflight_mismatch_is_model_incompatible(tmp_path, monkeypatch):
+    pi = tmp_path / "pi.safetensors"
+    _write(pi, {"x": ("F32", (1,))})
+    monkeypatch.setattr(h3.h3_pih3_format, "model_problems", lambda pi_path, dit_path: ["finding"])
+    with pytest.raises(APIError) as ei:
+        h3.preflight_request(
+            _validated_chain(pi_h3="4steps"), assets=lambda key: pi, transformer=lambda: tmp_path / "dit.safetensors"
+        )
+    assert ei.value.code == "MODEL_INCOMPATIBLE"
+    assert ei.value.detail == "pi-H3 のファイル（pi.safetensors）と本体の重み（dit.safetensors）を照合しました: finding"
+
+
+# ------------------------------------------------------------ the chain payloads
+
+
+@pytest.mark.parametrize("overrides", [{}, {"pi_h3": "off"}], ids=["omitted", "off"])
+def test_off_chain_payloads_are_todays_goldens(tmp_path, overrides):
+    captured: list[dict] = []
+    be = _capturing_backend(captured, CHAIN_DONE_EVENT)
+    outcome = be.generate_chain(_validated_chain(**overrides), tmp_path / "job", seed=42)
+    assert list(captured[-1]) == GOLDEN_CHAIN_KEYS_H3
+    assert outcome.pi_h3_used is None
+    tail = tmp_path / "job" / "_source_tail.mp4"
+    be.generate_chain(
+        _validated_chain(source_video={"video_id": "vid-1"}, clips=[{"num_frames": 56}, {"num_frames": 39}], **overrides),
+        tmp_path / "job", seed=42, source_tail_path=tail, source_context_frames=22,
+    )
+    assert list(captured[-1]) == GOLDEN_CHAIN_KEYS_H3_V2V
+    window = tmp_path / "job" / "_retake_window.mp4"
+    be.generate_chain(
+        _validated_chain(retake={"video_id": "vid-1", "window_start_sec": 0.0}, clips=[{"num_frames": 124}], **overrides),
+        tmp_path / "job", seed=42, retake_window_path=window,
+    )
+    assert list(captured[-1]) == GOLDEN_CHAIN_KEYS_H3_RETAKE
+
+
+@pytest.mark.parametrize("choice, steps", [("4steps", 4), ("2steps", 2)])
+def test_pi_h3_chain_payload_carries_steps_and_path(tmp_path, choice, steps):
+    captured: list[dict] = []
+    be, files = _pi_backend(captured, {**CHAIN_DONE_EVENT, "pi_h3_used": choice}, tmp_path)
+    outcome = be.generate_chain(
+        _validated_chain(pi_h3=choice, nag_enabled=True, negative_prompt="blurry", neg_method="vsf", keep_resident=True),
+        tmp_path / "job", seed=42,
+    )
+    (payload,) = captured
+    assert payload["pi_h3"] == {"steps": steps, "path": files[h3.PI_H3_ASSETS[choice]]}
+    assert (payload["num_inference_steps"], payload["shift_video"], payload["shift_audio"]) == (steps, 12.0, 3.0)
+    assert list(payload) == GOLDEN_CHAIN_KEYS_H3 + ["nag", "pi_h3", "keep_resident"]
+    assert outcome.pi_h3_used == choice
+
+
+def test_pi_h3_v2v_and_retake_payloads(tmp_path):
+    captured: list[dict] = []
+    be, files = _pi_backend(captured, {**CHAIN_DONE_EVENT, "pi_h3_used": "4steps"}, tmp_path)
+    expected = {"steps": 4, "path": files["pi_h3_4steps_path"]}
+    tail = tmp_path / "job" / "_source_tail.mp4"
+    be.generate_chain(
+        _validated_chain(pi_h3="4steps", source_video={"video_id": "vid-1"},
+                         clips=[{"num_frames": 56}, {"num_frames": 39}]),
+        tmp_path / "job", seed=42, source_tail_path=tail, source_context_frames=22,
+    )
+    assert list(captured[-1]) == GOLDEN_CHAIN_KEYS_H3_V2V + ["pi_h3"]
+    assert captured[-1]["pi_h3"] == expected and captured[-1]["num_inference_steps"] == 4
+    window = tmp_path / "job" / "_retake_window.mp4"
+    be.generate_chain(
+        _validated_chain(pi_h3="4steps", retake={"video_id": "vid-1", "window_start_sec": 0.0},
+                         clips=[{"num_frames": 124}]),
+        tmp_path / "job", seed=42, retake_window_path=window,
+    )
+    assert list(captured[-1]) == GOLDEN_CHAIN_KEYS_H3_RETAKE + ["pi_h3"]
+    assert captured[-1]["pi_h3"] == expected
+
+
+def test_the_chain_relays_the_engine_pi_h3_record(tmp_path):
+    record = {"choice": "4steps", "steps": 4, "file": "pi.safetensors"}
+    event = {
+        **CHAIN_DONE_EVENT,
+        "pi_h3_used": "4steps",
+        "h3": {**CHAIN_DONE_EVENT["h3"], "pi_h3": record},
+    }
+    captured: list[dict] = []
+    be, _files = _pi_backend(captured, event, tmp_path)
+    outcome = be.generate_chain(_validated_chain(pi_h3="4steps"), tmp_path / "job", seed=42)
+    assert outcome.chain_metadata["h3"]["pi_h3"] == record
+    assert outcome.pi_h3_used == "4steps"
+
+
+# ------------------------------------------------------------------ LTX chains
+
+
+@pytest.mark.parametrize("adapter", [ltx23, ltx25], ids=["ltx23", "ltx25"])
+@pytest.mark.parametrize("choice", ["4steps", "2steps"])
+def test_ltx_chains_refuse_with_the_h3_only_sentence(adapter, choice):
+    with pytest.raises(APIError) as ei:
+        adapter.reject_chain(_chain(pi_h3=choice))
+    assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
+    assert ei.value.detail == H3_ONLY_DETAIL
+    adapter.reject_chain(_chain(pi_h3="off"))  # no raise
+
+
+@pytest.mark.parametrize("base_model", ["LTX23", "LTX25"])
+def test_ltx_chains_refuse_over_http(three_family_client, base_model):
+    _activate(three_family_client, base_model)
+    before = _job_count(three_family_client)
+    r = three_family_client.post(
+        "/api/v1/generate/chain",
+        json={"prompt": PROMPT, "clips": [{"num_frames": 25}, {"num_frames": 25}], "pi_h3": "4steps"},
+    )
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "FEATURE_UNSUPPORTED"
+    assert error["detail"] == H3_ONLY_DETAIL
+    assert _job_count(three_family_client) == before
+
+
+# --------------------------------------------------------- HTTP: chains on mock
+
+
+def _stub_match(monkeypatch) -> list[tuple]:
+    seen: list[tuple] = []
+    monkeypatch.setattr(
+        h3.h3_pih3_format, "model_problems", lambda pi, dit: (seen.append((Path(pi), Path(dit))), [])[1]
+    )
+    return seen
+
+
+def _chain_completed(client, body: dict) -> str:
+    r = client.post("/api/v1/generate/chain", json=body)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    job = client.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["status"] == "completed", job
+    return job_id
+
+
+@pytest.mark.parametrize("choice, steps", [("4steps", 4), ("2steps", 2)])
+def test_mock_pi_h3_chain_runs_and_records(pih3_client, monkeypatch, choice, steps):
+    seen = _stub_match(monkeypatch)
+    _activate(pih3_client, "MiniMaxH3")
+    job_id = _chain_completed(
+        pih3_client, {**CHAIN_BODY, "clips": [{"num_frames": 124}, {"num_frames": 124}], "pi_h3": choice}
+    )
+    meta = _metadata(pih3_client, job_id)
+    assert meta["pi_h3_used"] == choice
+    assert meta["h3"]["pi_h3"] == {"choice": choice, "steps": steps, "mock": True}
+    assert meta["request"]["pi_h3"] == choice
+    assert (
+        meta["request"]["num_inference_steps"], meta["request"]["shift_video"], meta["request"]["shift_audio"]
+    ) == (steps, 12.0, 3.0)
+    # the stored per-clip record keeps the choice and its values
+    stored = pih3_client.app_context.job_store.get(job_id).request
+    assert (stored.pi_h3, stored.num_inference_steps) == (choice, steps)
+    ((pi, dit),) = seen
+    assert pi.name == Path(PI_FILES[choice]).name and dit.name == "minimax_h3_dit.safetensors"
+
+
+@pytest.mark.parametrize("overrides", [{}, {"pi_h3": "off"}], ids=["omitted", "off"])
+def test_mock_off_chain_record_is_unchanged(pih3_client, monkeypatch, overrides):
+    monkeypatch.setattr(h3.h3_pih3_format, "model_problems", _never)
+    _activate(pih3_client, "MiniMaxH3")
+    job_id = _chain_completed(
+        pih3_client, {**CHAIN_BODY, "clips": [{"num_frames": 124}, {"num_frames": 124}], **overrides}
+    )
+    meta = _metadata(pih3_client, job_id)
+    assert "pi_h3_used" not in meta
+    assert "pi_h3" not in meta["h3"]
+    assert meta["request"]["num_inference_steps"] == 20
+
+
+def test_http_chain_missing_file_is_422_and_no_job(pih3_client):
+    _activate(pih3_client, "MiniMaxH3")
+    (pih3_client.models_dir / PI_FILES["4steps"]).unlink()
+    before = _job_count(pih3_client)
+    r = pih3_client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BODY, "clips": [{"num_frames": 124}, {"num_frames": 124}], "pi_h3": "4steps"},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "MODEL_FILE_MISSING"
+    assert _job_count(pih3_client) == before
+
+
+def test_http_chain_header_mismatch_is_422_and_no_job(pih3_client):
+    """The real ``model_problems`` on the tiny stand-in file."""
+    _activate(pih3_client, "MiniMaxH3")
+    before = _job_count(pih3_client)
+    r = pih3_client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BODY, "clips": [{"num_frames": 124}, {"num_frames": 124}], "pi_h3": "2steps"},
+    )
+    assert r.status_code == 422, r.text
+    error = r.json()["error"]
+    assert error["code"] == "MODEL_INCOMPATIBLE"
+    assert error["detail"].startswith("pi-H3 のファイル（pi_h3_2step_dwd_adapter_int8_convrot.safetensors）と")
+    assert _job_count(pih3_client) == before
+
+
+def test_http_chain_explicit_other_steps_is_422(pih3_client, monkeypatch):
+    monkeypatch.setattr(h3.h3_pih3_format, "model_problems", _never)
+    _activate(pih3_client, "MiniMaxH3")
+    r = pih3_client.post(
+        "/api/v1/generate/chain",
+        json={**CHAIN_BODY, "clips": [{"num_frames": 124}], "pi_h3": "2steps", "num_inference_steps": 20,
+              "retake": {"video_id": "not-looked-up", "window_start_sec": 0.0}},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["detail"][0]["msg"] == (
+        'Value error, num_inference_steps=20 differs from the value pi_h3="2steps" uses (num_inference_steps=2)'
+    )
+
+
+# ---------------------------------- HTTP: Retake / V2V / Inpainting / Outpainting
+
+import shutil  # noqa: E402
+
+needs_ffmpeg = pytest.mark.skipif(
+    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg/ffprobe not on PATH"
+)
+
+
+@needs_ffmpeg
+def test_mock_pi_h3_retake_runs_and_records(pih3_client, monkeypatch, tmp_path):
+    from test_retake_api import _upload_window_source
+
+    _stub_match(monkeypatch)
+    _activate(pih3_client, "MiniMaxH3")
+    vid = _upload_window_source(pih3_client, tmp_path)
+    job_id = _chain_completed(pih3_client, {
+        "prompt": PROMPT, "width": 384, "height": 256, "frame_rate": 24.0, "seed": 123,
+        "clips": [{"num_frames": 124}], "pi_h3": "4steps",
+        "retake": {"video_id": vid, "window_start_sec": 2.0},
+    })
+    meta = _metadata(pih3_client, job_id)
+    assert meta["pi_h3_used"] == "4steps"
+    assert meta["h3"]["pi_h3"] == {"choice": "4steps", "steps": 4, "mock": True}
+    assert meta["retake"]["audio_strength"] == 0.5
+    assert meta["request"]["num_inference_steps"] == 4
+
+
+@needs_ffmpeg
+def test_mock_pi_h3_v2v_runs_and_records(pih3_client, monkeypatch, tmp_path):
+    from test_h3_chain_v2v_api import _upload_av_source
+
+    _stub_match(monkeypatch)
+    _activate(pih3_client, "MiniMaxH3")
+    vid = _upload_av_source(pih3_client, tmp_path)
+    job_id = _chain_completed(pih3_client, {
+        **CHAIN_BODY, "clips": [{"num_frames": 56}, {"num_frames": 39}],
+        "source_video": {"video_id": vid}, "pi_h3": "2steps",
+    })
+    meta = _metadata(pih3_client, job_id)
+    assert meta["pi_h3_used"] == "2steps"
+    assert meta["h3"]["pi_h3"] == {"choice": "2steps", "steps": 2, "mock": True}
+    assert "v2v" in meta
+
+
+@needs_ffmpeg
+def test_mock_pi_h3_outpaint_passes_and_records(pih3_client, monkeypatch, tmp_path):
+    from test_h3_outpaint_api import _body, _upload
+
+    _stub_match(monkeypatch)
+    _activate(pih3_client, "MiniMaxH3")
+    vid = _upload(pih3_client, tmp_path)
+    r = pih3_client.post("/api/v1/generate", json={**_body(vid), "pi_h3": "4steps"})
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert pih3_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    meta = _metadata(pih3_client, job_id)
+    assert meta["pi_h3_used"] == "4steps"
+    assert meta["h3"]["pi_h3"] == {"choice": "4steps", "steps": 4, "mock": True}
+    assert meta["h3"]["outpaint"]["mock"] is True
+    assert meta["request"]["num_inference_steps"] == 4
+
+
+@needs_ffmpeg
+def test_mock_pi_h3_inpaint_passes_and_records(pih3_client, monkeypatch, tmp_path):
+    from test_h3_inpaint_api import _body, _mask, _upload
+
+    _stub_match(monkeypatch)
+    _activate(pih3_client, "MiniMaxH3")
+    vid = _upload(pih3_client, tmp_path)
+    mask = _mask(pih3_client, tmp_path)
+    r = pih3_client.post("/api/v1/generate", json={**_body(vid, mask), "pi_h3": "2steps"})
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    assert pih3_client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    meta = _metadata(pih3_client, job_id)
+    assert meta["pi_h3_used"] == "2steps"
+    assert meta["h3"]["pi_h3"] == {"choice": "2steps", "steps": 2, "mock": True}
+    assert meta["inpaint"]["mock"] is True
+    assert meta["request"]["num_inference_steps"] == 2
+
+
+def test_outpaint_and_inpaint_payloads_with_pi_h3(tmp_path):
+    captured: list[dict] = []
+    be, files = _pi_backend(captured, {**DONE_EVENT, "pi_h3_used": "4steps"}, tmp_path)
+    src = tmp_path / "src.mp4"
+    op = _validated(
+        pi_h3="4steps", width=640, height=384, num_frames=39,
+        outpaint={"source_video_id": "vid", "pad_left": 64, "pad_right": 64, "pad_top": 64, "pad_bottom": 64},
+    )
+    be.generate(op, tmp_path / "job", seed=1, outpaint_source_path=src)
+    keys = list(captured[-1])
+    assert keys[-3:] == ["outpaint", "pi_h3", "output_path"]
+    assert captured[-1]["pi_h3"] == {"steps": 4, "path": files["pi_h3_4steps_path"]}
+    assert captured[-1]["num_inference_steps"] == 4
+    ip = _validated(
+        pi_h3="2steps", width=320, height=288, num_frames=39,
+        inpaint={"source_video_id": "vid", "mask_video_id": "mask"},
+    )
+    be.generate(ip, tmp_path / "job", seed=1, inpaint_source_path=src, inpaint_mask_path=src)
+    keys = list(captured[-1])
+    assert keys[-3:] == ["inpaint", "pi_h3", "output_path"]
+    assert captured[-1]["pi_h3"] == {"steps": 2, "path": files["pi_h3_2steps_path"]}

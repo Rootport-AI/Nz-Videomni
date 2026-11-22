@@ -474,6 +474,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "negative_prompt",
         "neg_method",
         "vsf_scale",
+        # pi-H3: the single path's ``pi_h3`` payload key ({steps, path}), only
+        # when it is not "off" (validate_chain fills the steps / shifts).
+        "pi_h3",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -600,7 +603,8 @@ class _ClipView:
 def validate_chain(request: GenerateChainRequest) -> None:
     """This family's numeric rules for a chain; raises ``ValueError``. Writes the
     defaults back (steps when omitted per ``model_fields_set``, shifts, VRAM 16GB
-    mode), checks the request-wide fields once, then each clip's ``num_frames``
+    mode; with ``pi_h3`` the choice's steps / shifts first, :func:`prefill_request`),
+    checks the request-wide fields once, then each clip's ``num_frames``
     and ``references`` counts / slots (``clips[i]: ``), then snaps each clip's
     key frames as the single path does (``clips[i]: ``; only clip 0 can carry
     any), then the input video's ``context_frames`` (22 written back when
@@ -612,6 +616,10 @@ def validate_chain(request: GenerateChainRequest) -> None:
     """
     if "num_inference_steps" not in request.model_fields_set:
         request.num_inference_steps = None
+    # pi-H3's step count and shifts, after an unsent step count became None
+    # and before the family defaults (the single path's order): an omitted
+    # value becomes the choice's, an explicit other one is refused.
+    prefill_request(request)
     REQUEST_RULES.fill_defaults(request)
     # The request-wide fields, checked once with a frame count on the grid, so
     # only they can fire and the message is the single path's.
@@ -820,13 +828,14 @@ _PI_H3_FINDINGS_SHOWN = 5
 
 
 def preflight_request(
-    request: GenerateRequest,
+    request: GenerateRequest | GenerateChainRequest,
     *,
     assets: Callable[[str], Path],
     transformer: Callable[[], Path | None],
 ) -> None:
     """pi-H3's file, checked before a job exists (``services.engines.preflight_request``,
-    from api/generate.py); raises 422.
+    from api/generate.py and api/generate_chain.py: a single request or a
+    chain — Chained, V2V, Retake — read through ``pi_h3`` only); raises 422.
 
     Nothing to do with ``pi_h3="off"``. With a choice: the descriptor's
     asset for it (:data:`PI_H3_ASSETS`) must be declared and be a file
@@ -1091,6 +1100,16 @@ class _RealBackendH3(_RealBackend):
 
     # -------------------------------------------------------------- generate
 
+    def _pi_h3_payload(self, choice: str) -> dict:
+        """The ``pi_h3`` payload key of a pi-H3 job (single or chain):
+        ``{"steps": the choice's step count, "path": the file's absolute
+        path}``. The path is the descriptor's asset (the PrunaVAED route) and
+        must exist: the API checked it, this is the backstop."""
+        return {
+            "steps": int(h3_pih3_format.PI_H3_CHOICES[choice]),
+            "path": self._require_asset(PI_H3_ASSETS[choice]),
+        }
+
     def generate(
         self,
         request: GenerateRequest,
@@ -1229,10 +1248,7 @@ class _RealBackendH3(_RealBackend):
         # the choice's in the request (prefill_request).
         pi_h3: dict | None = None
         if request.pi_h3 != "off":
-            pi_h3 = {
-                "steps": int(h3_pih3_format.PI_H3_CHOICES[request.pi_h3]),
-                "path": self._require_asset(PI_H3_ASSETS[request.pi_h3]),
-            }
+            pi_h3 = self._pi_h3_payload(request.pi_h3)
 
         if progress_callback:
             progress_callback(None, None, 0.05)
@@ -1502,6 +1518,11 @@ class _RealBackendH3(_RealBackend):
                 "method": chain.neg_method,
                 "vsf_scale": float(chain.vsf_scale),
             }
+        # pi_h3: only for a pi-H3 chain (an absent key = off), the single
+        # op's {steps, path}; the steps / shifts are already the choice's
+        # (validate_chain).
+        if chain.pi_h3 != "off":
+            payload["pi_h3"] = self._pi_h3_payload(chain.pi_h3)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
         if chain.keep_resident:
@@ -1544,6 +1565,8 @@ class _RealBackendH3(_RealBackend):
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
             vram16_mode_used=event.get("vram16_mode_used"),
+            # A pi-H3 chain only ("4steps" / "2steps"); absent otherwise -> None.
+            pi_h3_used=event.get("pi_h3_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=h3_facts,
         )
@@ -1708,10 +1731,11 @@ def _mock_inpaint_record(
     }
 
 
-def _mock_pi_h3_record(request: GenerateRequest) -> dict:
+def _mock_pi_h3_record(request) -> dict:
     """The mock's ``done.h3.pi_h3``: what the request decides (the choice and
     its step count) plus ``mock: true``. Nothing the engine alone can tell
-    (the delta's application, the DWD decode) is claimed."""
+    (the delta's application, the DWD decode) is claimed. ``request`` is a
+    single :class:`GenerateRequest` or a :class:`GenerateChainRequest`."""
     return {
         "choice": request.pi_h3,
         "steps": int(h3_pih3_format.PI_H3_CHOICES[request.pi_h3]),
@@ -2031,9 +2055,13 @@ class _MockBackendH3(_MockBackend):
                 "decoded_frames_px": int(layout.total_frames),
             }
         images_used = len(chain.clips[0].conditioning_images)
-        chain_metadata = _chain_metadata(
-            {"chain": done_chain}, {"mock": True, "images_used": images_used}
-        )
+        mock_facts: dict = {"mock": True, "images_used": images_used}
+        # A pi-H3 chain: the single mock's ``pi_h3`` record (the real worker's
+        # ``done.h3.pi_h3``, merged into ``chain.h3`` -> metadata["h3"]) and its
+        # ``pi_h3_used`` echo.
+        if chain.pi_h3 != "off":
+            mock_facts["pi_h3"] = _mock_pi_h3_record(chain)
+        chain_metadata = _chain_metadata({"chain": done_chain}, mock_facts)
         return GenerationOutcome(
             output_path=output_path,
             seed_used=seed,
@@ -2041,6 +2069,7 @@ class _MockBackendH3(_MockBackend):
             generation_mode="chain",
             backend=self.backend_label,
             chain_metadata=chain_metadata,
+            pi_h3_used=chain.pi_h3 if chain.pi_h3 != "off" else None,
         )
 
 

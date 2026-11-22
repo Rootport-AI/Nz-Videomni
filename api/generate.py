@@ -141,11 +141,13 @@ def _preflight_h3_inpaint(
         )
 
 
-def _preflight_engine_files(context: AppContext, request: GenerateRequest) -> None:
+def preflight_engine_files(context: AppContext, request) -> None:
     """``services.engines.preflight_request`` for the active base model, with
     the descriptor's assets and the selected transformer resolved through the
     model registry (``api/prompt_tokens.py``'s ``assets`` callable;
-    :func:`services.weight_identity.transformer_path`)."""
+    :func:`services.weight_identity.transformer_path`). ``request`` is a
+    :class:`GenerateRequest` or a ``GenerateChainRequest`` (shared with
+    /generate/chain: the adapters read only the fields both schemas have)."""
     registry = context.model_registry
     pipeline = context.pipeline_manager
     base_id = pipeline.active_base_model
@@ -250,7 +252,7 @@ def generate(
     # matches the selected transformer by name and shape). The transformer is
     # the one the pipeline holds (or will load): the same resolution
     # ``PipelineManager.identify_quant_class`` uses.
-    _preflight_engine_files(context, request)
+    preflight_engine_files(context, request)
 
     # Validate conditioning images exist up front.
     for ci in request.conditioning_images:

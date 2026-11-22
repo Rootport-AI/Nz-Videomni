@@ -917,6 +917,8 @@ CHAIN_OVERRIDES: dict[str, dict] = {
             {"num_frames": 25, "source_audio": {"audio_id": "aud-1", "offset_frames": 3}},
         ]
     },
+    # MiniMax H3 only (pi-H3), on the chain schema too.
+    "pi_h3": {"pi_h3": "4steps"},
 }
 
 
@@ -1223,8 +1225,9 @@ def test_no_chain_mode_is_refused_any_more():
     # left it with the NAG/VSF increment, which is asserted by its own
     # acceptance test below rather than only by this set shrinking.
     # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX, and
-    # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109).
-    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips"}
+    # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109), and so is
+    # ``pi_h3`` (MiniMax H3's pi-H3).
+    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3"}
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))

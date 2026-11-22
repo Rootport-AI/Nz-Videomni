@@ -92,8 +92,7 @@ Protocol (one JSON object per line; parent -> worker):
       ``pi_h3`` (VERIFICATION_LOG §223): absent / null = not a pi-H3 job, else
       ``{"steps", "path"}`` (``steps`` 4 or 2, equal to ``num_inference_steps``;
       ``path`` the pi-H3 file; ``engine_h3.pipeline_h3.H3PiH3Input``). Unknown
-      inner keys are logged once and ignored. A chain does not take it (logged
-      as ignored).
+      inner keys are logged once and ignored. A chain takes it too (every clip).
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
@@ -309,7 +308,7 @@ _NAG_FIELDS = frozenset({"negative_prompt", "method", "vsf_scale"})
 #: references are per clip; ``nag`` is read as the single job reads it), plus
 #: ``clips``, the input video ``source`` (台帳 §1-121) and ``retake`` (台帳 §1-123).
 _CHAIN_FIELDS = (
-    _GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "outpaint", "inpaint", "pi_h3"}
+    _GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "outpaint", "inpaint"}
 ) | {
     "clips", "source", "retake",
 }
@@ -939,11 +938,13 @@ def _do_generate_chain(msg: dict) -> None:
     loras, lora_ignored = _loras(msg)
     source, source_ignored = _chain_source(msg)
     retake, retake_ignored = _chain_retake(msg)
+    pi_h3, pi_h3_ignored = _pi_h3(msg)
     ignored = sorted(k for k in msg if k not in _CHAIN_FIELDS)
     ignored += [f"clips[].{k}" for k in clip_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
     ignored += [f"source.{k}" for k in source_ignored]
     ignored += [f"retake.{k}" for k in retake_ignored]
+    ignored += [f"pi_h3.{k}" for k in pi_h3_ignored]
     # The shared settings, read by the single job's rules. The prompt and the
     # frame count are each clip's; ``clips[0]``'s stand in for them here.
     base_msg = {k: v for k, v in msg.items() if k in _CHAIN_FIELDS}
@@ -955,7 +956,7 @@ def _do_generate_chain(msg: dict) -> None:
     ignored += [f"nag.{k}" for k in nag_ignored]
     base = _generate_request(
         base_msg, images=(), loras=loras, source_audio=None, references=(),
-        negative_prompt=negative_prompt, vsf_scale=vsf_scale,
+        negative_prompt=negative_prompt, vsf_scale=vsf_scale, pi_h3=pi_h3,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -971,6 +972,7 @@ def _do_generate_chain(msg: dict) -> None:
         + (f"a2v={_chain_a2v_summary(clips)} " if any(c.source_audio is not None for c in clips) else "")
         + (f"source={(Path(source.path).name, source.context_frames)} " if source is not None else "")
         + (f"retake={(Path(retake.path).name, retake.audio_strength)} " if retake is not None else "")
+        + (f"pi_h3=({base.pi_h3.steps}, {Path(base.pi_h3.path).name}) " if base.pi_h3 is not None else "")
         + (f"neg=vsf(scale={base.vsf_scale}) " if base.negative_prompt else "neg=off ")
         + f"-> {base.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")

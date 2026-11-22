@@ -1999,6 +1999,7 @@ class PipelineManager:
                     vae_mode_used=outcome.vae_mode_used,
                     vram16_mode_used=outcome.vram16_mode_used,
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
+                    pi_h3_used=getattr(outcome, "pi_h3_used", None),
                 )
 
             result = JobResult(
@@ -2065,6 +2066,7 @@ class PipelineManager:
         vram16_mode_used=None,
         peak_vram_reserved_mb=None,
         clip_a2v_provenance=None,
+        pi_h3_used=None,
     ) -> None:
         cm = chain_meta or {}
         # The overlap and the stage-2 window as the ENGINE ran them: the chain
@@ -2144,6 +2146,11 @@ class PipelineManager:
             "models": self._models_metadata_block(),
             "environment": self._environment_block(),
         }
+        # Acceleration, MiniMax H3 only: see the same key in
+        # :meth:`_write_metadata` — present on a pi-H3 chain only, so every
+        # other chain's metadata.json is unchanged.
+        if pi_h3_used is not None:
+            metadata["pi_h3_used"] = pi_h3_used
         # V2V continuation (additive): only present when a source_video was used,
         # so a chain without one carries no ``v2v`` key. The engine's (or mock's)
         # chain.v2v sub-dict + the app-side provenance (source_video_id,

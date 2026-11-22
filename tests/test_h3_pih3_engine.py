@@ -925,7 +925,7 @@ def test_worker_pi_h3_key(monkeypatch):
     for bad in ({"steps": "4", "path": "p"}, {"steps": True, "path": "p"}, {"steps": 4, "path": ""}, [4, "p"]):
         with pytest.raises(ValueError, match="pi_h3"):
             worker._pi_h3({"pi_h3": bad})
-    assert "pi_h3" in worker._GENERATE_FIELDS and "pi_h3" not in worker._CHAIN_FIELDS
+    assert "pi_h3" in worker._GENERATE_FIELDS and "pi_h3" in worker._CHAIN_FIELDS
 
     class FakePipe:
         seen = []
@@ -947,3 +947,270 @@ def test_worker_pi_h3_key(monkeypatch):
     assert events[0]["pi_h3_used"] == "4steps" and "pi_h3_used" not in events[1]
     assert "pi_h3=(4, pi4.safetensors)" in logs[0] and "ignored keys: pi_h3.x" in logs[0]
     assert "pi_h3" not in logs[1] and "ignored keys" not in logs[1]
+
+
+
+# --------------------------------------------------------------------------- #
+# stage 2: the chain (join of the clips' rows, V2V, retake, worker)
+# --------------------------------------------------------------------------- #
+
+def _synthetic_feats(clip: int, t: int, gh: int, gw: int, m: int):
+    """A clip's DWDFeatures whose values say where they come from (clip, row)."""
+    from engine_h3.dwd import DWDFeatures
+
+    rows = t * gh * gw
+    g = torch.Generator().manual_seed(100 + clip)
+    hidden = (clip * 1000 + torch.arange(rows, dtype=torch.float32))[:, None].repeat(1, 4).to(torch.bfloat16)
+    t_emb = torch.randn(m, 8, generator=g) + clip
+    time_index = torch.randint(0, m, (rows,), generator=g)
+    return DWDFeatures(hidden=hidden, t_emb=t_emb, time_index=time_index, grid=(t, gh, gw))
+
+
+def _experiment_join(caps, k: int, hw: int):
+    """The experiment's join (outputs/h3-pih3-spike-2026-11-22/h3_pih3_spike.py, the decoder stand-in)."""
+    hs, idxs, embs, off = [], [], [], 0
+    for i, cap in enumerate(caps):
+        h, ti, te = cap.hidden, cap.time_index, cap.t_emb
+        drop = k * hw if i > 0 else 0
+        hs.append(h[drop:])
+        idxs.append(ti[drop:].long() + off)
+        embs.append(te)
+        off += int(te.shape[0])
+    return torch.cat(hs), torch.cat(idxs), torch.cat(embs)
+
+
+@pytest.mark.parametrize("frames", [(124, 124), (56, 39, 124)])
+def test_join_dwd_features_is_the_experiments_join(frames):
+    from h3_chain_math import compute_h3_chain_layout
+
+    from engine_h3 import chain_h3 as CH
+    from engine_h3 import dwd
+
+    layout = compute_h3_chain_layout(list(frames))
+    k, gh, gw = layout.overlap_latents, 3, 5
+    hw = gh * gw
+    caps = [_synthetic_feats(i, t, gh, gw, m=3 + i) for i, t in enumerate(layout.clip_latent_frames)]
+    drop = [0] + [k] * (len(frames) - 1)
+    joined = CH.join_dwd_features(caps, drop)
+    h, ti, te = _experiment_join(caps, k, hw)
+    assert torch.equal(joined.hidden, h) and torch.equal(joined.time_index, ti) and torch.equal(joined.t_emb, te)
+    assert joined.grid == (layout.total_latent_frames, gh, gw) and (joined.grid[0] - 2) % 5 == 0
+    assert dwd.frames_for_latents(joined.grid[0]) == layout.total_frames
+    assert joined.hidden.shape[0] == sum(c.hidden.shape[0] for c in caps) - (len(caps) - 1) * k * hw
+    start = 0
+    for i, cap in enumerate(caps):        # every row still reads its own clip's time embedding
+        d = drop[i] * hw
+        n = cap.hidden.shape[0] - d
+        assert torch.equal(joined.t_emb[joined.time_index[start:start + n]], cap.t_emb[cap.time_index[d:]])
+        assert torch.equal(joined.hidden[start:start + n], cap.hidden[d:])
+        start += n
+    with pytest.raises(RuntimeError, match="drops"):
+        CH.join_dwd_features(caps[:1], [caps[0].grid[0]])
+
+
+def _replace(obj, **kw):
+    import dataclasses
+
+    return dataclasses.replace(obj, **kw)
+
+
+def _pi_stub_chain(monkeypatch, rec):
+    """test_h3_chain's stubbed pipeline, its denoise also handing over synthetic DWD rows."""
+    from test_h3_chain import _stub_pipe
+
+    from engine_h3 import pipeline_h3 as P
+
+    pipe, original = _stub_pipe(monkeypatch, rec)
+    stub_denoise = pipe._denoise
+    rec.caps = []
+
+    def denoise(req, hidden, tags, phases, entry, **kw):
+        out = stub_denoise(req, hidden, tags, phases, entry, **kw)
+        if "pi_capture" in kw:
+            cap = _synthetic_feats(len(rec.caps), P.latent_frames(req.num_frames), req.height // 32,
+                                   req.width // 32, 3)
+            rec.caps.append(cap)
+            kw["pi_capture"]["features"] = cap
+            kw["pi_record"].update({"choice": "4steps", "steps": 4, "file": "pi4.safetensors",
+                                    "dit_source": "file" if len(rec.caps) == 1 else "resident"})
+        return out
+
+    monkeypatch.setattr(pipe, "_denoise", denoise)
+    monkeypatch.setattr(PF, "model_problems", lambda pi, dit: [])
+    return pipe, original
+
+
+def _pi_spec(spec):
+    from engine_h3 import pipeline_h3 as P
+
+    spec.base = _replace(spec.base, pi_h3=P.H3PiH3Input(4, "m/pi4.safetensors"))
+    return spec
+
+
+@pytest.mark.parametrize("frames", [(124, 124), (124, 124, 124)])
+def test_pi_h3_chain_joins_the_clips_rows_for_one_dwd_decode(monkeypatch, frames):
+    from h3_chain_math import compute_h3_chain_layout
+    from test_h3_chain import _Recorder, _spec
+
+    from engine_h3 import chain_h3 as CH
+
+    rec = _Recorder()
+    pipe, _orig = _pi_stub_chain(monkeypatch, rec)
+    done = CH.run_chain_h3(pipe, _pi_spec(_spec(frames=frames)), lambda *a, **k: None, lambda m: None)
+    layout = compute_h3_chain_layout(list(frames))
+    k = layout.overlap_latents
+    denoises = [c for c in rec.calls if c[0] == "denoise"]
+    assert len(denoises) == len(frames) and all("pi_capture" in c[2] and "pi_record" in c[2] for c in denoises)
+    (decode,) = [c for c in rec.calls if c[0] == "decode"]
+    dwd_kw = decode[5]["dwd"]
+    assert dwd_kw["path"] == "m/pi4.safetensors"
+    h, ti, te = _experiment_join(rec.caps, k, 2 * 3)
+    feats = dwd_kw["features"]
+    assert torch.equal(feats.hidden, h) and torch.equal(feats.time_index, ti) and torch.equal(feats.t_emb, te)
+    assert feats.grid == (layout.total_latent_frames, 2, 3) == (decode[2].shape[2], 2, 3)
+    assert done["pi_h3_used"] == "4steps" and done["h3"]["pi_h3"]["choice"] == "4steps"
+    clips = done["chain"]["clips"]
+    assert [c["pi_h3"]["dropped_head_latents"] for c in clips] == [0] + [k] * (len(frames) - 1)
+    assert [c["pi_h3"]["dit_source"] for c in clips] == ["file"] + ["resident"] * (len(frames) - 1)
+    assert [c["pi_h3"]["hidden_rows"] for c in clips] == [t * 6 for t in layout.clip_latent_frames]
+    assert [c["head_equals_prev_tail"] for c in clips] == [None] + [True] * (len(frames) - 1)
+
+
+def test_pi_h3_v2v_keeps_clip_0s_head_and_the_trim(monkeypatch):
+    from h3_chain_math import compute_h3_chain_layout
+    from test_h3_chain import _Recorder, _source_stubs, _v2v_spec
+
+    from engine_h3 import chain_h3 as CH
+
+    rec = _Recorder()
+    pipe, _orig = _pi_stub_chain(monkeypatch, rec)
+    _source_stubs(monkeypatch, pipe, rec)
+    done = CH.run_chain_h3(pipe, _pi_spec(_v2v_spec(frames=(56, 39))), lambda *a, **k: None, lambda m: None)
+    layout = compute_h3_chain_layout([56, 39], source_video=True)
+    k = layout.overlap_latents
+    (decode,) = [c for c in rec.calls if c[0] == "decode"]
+    kw = decode[5]
+    assert kw["trim_head"] == layout.trim_px > 0 and "dwd" in kw
+    assert [c["pi_h3"]["dropped_head_latents"] for c in done["chain"]["clips"]] == [0, k]
+    h, _ti, _te = _experiment_join(rec.caps, k, 6)
+    assert torch.equal(kw["dwd"]["features"].hidden, h)
+    assert kw["dwd"]["features"].grid[0] == decode[2].shape[2] == layout.total_latent_frames
+
+
+def test_pi_h3_retake_passes_the_whole_window(monkeypatch):
+    from test_h3_chain import RT_F, _Recorder, _retake_spec, _retake_stubs
+
+    from engine_h3 import chain_h3 as CH
+    from engine_h3 import dwd
+
+    rec = _Recorder()
+    pipe, _orig = _pi_stub_chain(monkeypatch, rec)
+    _retake_stubs(monkeypatch, pipe, rec)
+    done = CH.run_chain_h3(pipe, _pi_spec(_retake_spec(s=0.5)), lambda *a, **k: None, lambda m: None)
+    (decode,) = [c for c in rec.calls if c[0] == "decode"]
+    kw = decode[5]
+    assert kw["trim_head"] == 0 and torch.equal(kw["dwd"]["features"].hidden, rec.caps[0].hidden)
+    assert done["chain"]["clips"][0]["pi_h3"]["dropped_head_latents"] == 0
+    assert dwd.frames_for_latents(kw["dwd"]["features"].grid[0]) == RT_F
+
+
+def test_off_chain_calls_as_before(monkeypatch):
+    from test_h3_chain import _Recorder, _spec
+
+    from engine_h3 import chain_h3 as CH
+    from engine_h3 import pipeline_h3 as P
+
+    rec = _Recorder()
+    pipe, _orig = _pi_stub_chain(monkeypatch, rec)
+    seen = []
+    real = P.validate_request
+    monkeypatch.setattr(P, "validate_request", lambda req, **kw: seen.append(kw) or real(req, **kw))
+    done = CH.run_chain_h3(pipe, _spec(frames=(124, 124)), lambda *a, **k: None, lambda m: None)
+    assert seen == [{"dit_path": pipe.paths.transformer}] * 2
+    assert all("pi_capture" not in c[2] and "pi_record" not in c[2] for c in rec.calls if c[0] == "denoise")
+    (decode,) = [c for c in rec.calls if c[0] == "decode"]
+    assert "dwd" not in decode[5] and rec.caps == []
+    assert "pi_h3_used" not in done and "pi_h3" not in done["h3"]
+    assert all("pi_h3" not in c for c in done["chain"]["clips"])
+
+
+def test_real_pi_h3_chain_never_touches_the_video_decoder(monkeypatch, tmp_path):
+    """Two clips (22 + 39 frames) through run_chain_h3 with the real denoise and the real DWD
+    decode on the tiny DiT and head: the 39 frames come from the head, the video decoder is never
+    built, clip 1 reuses the kept DiT; an off chain afterwards decodes through the video decoder."""
+    from engine_h3 import chain_h3 as CH
+    from engine_h3 import dwd
+    from engine_h3 import pipeline_h3 as P
+
+    pipe, rec, _job = _pi_job_pipe(monkeypatch, tmp_path)
+    seen = []
+    real_decode = dwd.DWDDecoder.decode
+
+    def spy(self, feats):
+        seen.append(feats)
+        return real_decode(self, feats)
+
+    monkeypatch.setattr(dwd.DWDDecoder, "decode", spy)
+
+    def spec(pi: bool):
+        base = P.H3GenerateRequest(
+            prompt="p", seed=0, width=64, height=64, num_frames=22, output_path="o.mp4",
+            num_inference_steps=4 if pi else 3, keep_resident=False, shift_video=12.0, shift_audio=3.0,
+            pi_h3=P.H3PiH3Input(4, str(tmp_path / "pi4.safetensors")) if pi else None)
+        return CH.H3ChainSpec(base=base, clips=(CH.H3ChainClipSpec("a", 22), CH.H3ChainClipSpec("b", 39)), seed=11)
+
+    done = CH.run_chain_h3(pipe, spec(True), lambda *a, **k: None, lambda m: None)
+    assert rec["decoders"] == 0 and rec["latents"] == [] and len(seen) == 1
+    assert seen[0].grid == (12, 2, 2) and tuple(seen[0].hidden.shape) == (48, HID)   # 7 + 12 - 7 latents
+    frames = rec["frames"][-1]
+    assert tuple(frames.shape) == (39, 8, 8, 3) and frames.dtype == torch.uint8
+    assert done["pi_h3_used"] == "4steps" and done["h3"]["phases"]["decode"]["vae_source"] == "dwd"
+    r = done["h3"]["pi_h3"]
+    assert r["dit_source"] == "file" and r["lora"]["pairs_applied"] == 138 and r["dwd"]["chunks"] == 1
+    clips = done["chain"]["clips"]
+    assert [c["pi_h3"]["dit_source"] for c in clips] == ["file", "resident"]
+    assert [c["head_equals_prev_tail"] for c in clips] == [None, True]
+    assert pipe._resident is None
+    # an off chain afterwards: the video decoder again, no DWD (a stand-in that gives the timeline's frames)
+    from engine_h3 import video_vae as VV
+
+    class TimelineDecoder(torch.nn.Module):
+        def decode(self, z, tiled=True):
+            rec["latents"].append(z.clone())
+            return torch.zeros((dwd.frames_for_latents(int(z.shape[2])), 64, 64, 3), dtype=torch.uint8)
+
+    def decoder(cls, *a, **k):
+        rec["decoders"] += 1
+        return TimelineDecoder()
+
+    monkeypatch.setattr(VV.H3VideoDecoder, "from_file", classmethod(decoder))
+    off = CH.run_chain_h3(pipe, spec(False), lambda *a, **k: None, lambda m: None)
+    assert rec["decoders"] == 1 and len(seen) == 1 and "pi_h3" not in off["h3"]
+    assert off["h3"]["phases"]["decode"]["vae_source"] == "file"
+
+
+def test_worker_chain_reads_pi_h3(monkeypatch):
+    from engine_h3 import chain_h3 as CH
+    from engine_h3 import worker
+    from engine_h3.pipeline_h3 import H3PiH3Input
+
+    assert "pi_h3" in worker._CHAIN_FIELDS
+    seen, events, logs = [], [], []
+
+    def run(pipe, spec, progress, log):
+        seen.append(spec)
+        return {"seed_used": 1, **({"pi_h3_used": "2steps"} if spec.base.pi_h3 is not None else {})}
+
+    monkeypatch.setattr(CH, "run_chain_h3", run)
+    monkeypatch.setattr(worker, "_PIPE", object())
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: events.append({"event": event, **f}))
+    monkeypatch.setattr(worker, "_log", logs.append)
+    msg = {"op": "generate_chain", "seed": 1, "width": 640, "height": 384, "output_path": "o.mp4",
+           "num_inference_steps": 2,
+           "clips": [{"prompt": "a", "num_frames": 124}, {"prompt": "b", "num_frames": 124}]}
+    worker._do_generate_chain({**msg, "pi_h3": {"steps": 2, "path": "C:/m/pi2.safetensors", "x": 1}})
+    worker._do_generate_chain(dict(msg))
+    assert seen[0].base.pi_h3 == H3PiH3Input(2, "C:/m/pi2.safetensors") and seen[1].base.pi_h3 is None
+    assert events[0]["pi_h3_used"] == "2steps" and "pi_h3_used" not in events[1]
+    assert "pi_h3=(2, pi2.safetensors)" in logs[0] and "ignored keys: pi_h3.x" in logs[0]
+    assert "pi_h3" not in logs[1]

@@ -26,6 +26,17 @@ fixed head is self-checked against the previous tail with ``torch.equal``.
 
 ``keep_resident`` means what it means for one job: kept after a successful
 job that asks for it, released otherwise (and after any failure).
+
+pi-H3 (``base.pi_h3``, VERIFICATION_LOG §223; Docs/MINIMAX_H3_DESIGN.md 裁定 107):
+every clip's denoise is the single job's pi-H3 denoise (its sigma lists,
+initial state, internal LoRA and resident tag) and hands over its last
+evaluation's video rows (``dwd.DWDFeatures``, CPU bf16). From clip 1 on, the
+fixed head's rows (overlap latents x grid) are dropped and the rest joined in
+time (:func:`join_dwd_features`; a V2V clip 0 keeps its head, which the decode
+trims; a retake is one clip, kept whole); the joined rows go to the single
+job's DWD decode once (``dwd.plan_chunks`` splits them). The video latents are
+still carried, joined and checked as before; they are not decoded. Without
+pi-H3 the chain is unchanged.
 """
 
 from __future__ import annotations
@@ -218,6 +229,41 @@ def clip_audio_a2v_fix(carried, clean_a2v: torch.Tensor, ka: int, s: float):
         ).contiguous()
     per_a = [0.0] * ka + [1.0 - float(s)] * (a_lat - ka)
     return clean, per_a
+
+
+def join_dwd_features(feats: list, drop_latents: list[int]):
+    """The clips' last-evaluation rows joined in time: one ``dwd.DWDFeatures``.
+
+    ``feats[i]``: clip i's ``DWDFeatures`` (grid ``(T'_i, gh, gw)``, rows
+    t -> h -> w); ``drop_latents[i]``: how many of its first latents to drop
+    (the fixed head of a clip that continues the previous one: the overlap
+    latents; 0 for clip 0). Clip i's time numbers index its own ``t_emb``; the
+    joined ``t_emb`` is every clip's stacked in order, so each clip's numbers
+    are moved by the rows of the ``t_emb`` before it (the experiment's join,
+    VERIFICATION_LOG §223.7). Every clip must share ``(gh, gw)``.
+    """
+    from engine_h3.dwd import DWDFeatures  # noqa: PLC0415
+
+    if not feats or len(feats) != len(drop_latents):
+        raise ValueError(f"DWD join: {len(feats)} clips, {len(drop_latents)} drop counts")
+    gh, gw = int(feats[0].grid[1]), int(feats[0].grid[2])
+    hw = gh * gw
+    hidden, index, emb = [], [], []
+    latents, offset = 0, 0
+    for i, (f, d) in enumerate(zip(feats, drop_latents)):
+        t_i, d = int(f.grid[0]), int(d)
+        if (int(f.grid[1]), int(f.grid[2])) != (gh, gw) or int(f.hidden.shape[0]) != t_i * hw:
+            raise RuntimeError(f"DWD join: clip {i + 1} rows {list(f.hidden.shape)} / grid {list(f.grid)}")
+        if not 0 <= d < t_i:
+            raise RuntimeError(f"DWD join: clip {i + 1} drops {d} of {t_i} latents")
+        rows = d * hw
+        hidden.append(f.hidden[rows:])
+        index.append(f.time_index[rows:].to(torch.long) + offset)
+        emb.append(f.t_emb)
+        latents += t_i - d
+        offset += int(f.t_emb.shape[0])
+    return DWDFeatures(hidden=torch.cat(hidden), t_emb=torch.cat(emb), time_index=torch.cat(index),
+                       grid=(latents, gh, gw))
 
 
 def clip_requests(spec: H3ChainSpec) -> list[P.H3GenerateRequest]:
@@ -437,8 +483,14 @@ def run_chain_h3(
             [c.num_frames for c in spec.clips], source_video=source is not None, retake=retake is not None,
         )
         requests = clip_requests(spec)
+        pi = base.pi_h3
+        # ``dit_path``: a pi-H3 chain's file is matched against this DiT's header
+        # (only such a chain reads it), as in a single job.
         for req in requests:
-            P.validate_request(req)
+            P.validate_request(req, dit_path=pipe.paths.transformer)
+        pi_feats: list = []         # pi-H3: each clip's last-evaluation rows (CPU)
+        pi_drop: list[int] = []     # pi-H3: how many of each clip's first latents are dropped
+        pi_clip_records: list[dict] = []
         # VSF (台帳 §1-127): every clip inherits the base's negative prompt; it is
         # encoded once, on clip 0, and its hidden states are reused by every clip.
         has_neg = bool(base.negative_prompt.strip())
@@ -635,6 +687,10 @@ def run_chain_h3(
                     wave = None
                     # The clip's own VSF report (the single job's ``h3.vsf``), only for a VSF chain.
                     clip_vsf: dict | None = {} if has_neg else None
+                    # Only a pi-H3 chain passes the keys: every other call is the same as before.
+                    pi_capture: dict = {}
+                    pi_record: dict = {}
+                    pi_den_kw = {"pi_capture": pi_capture, "pi_record": pi_record} if pi is not None else {}
                     with phases.phase("denoise") as entry:
                         video, audio, prefetch_used = pipe._denoise(
                             req, hidden, tags, phases, entry,
@@ -643,9 +699,15 @@ def run_chain_h3(
                             video_fix=video_fix, audio_fix=audio_fix, refs=ref_rows,
                             video_inject_clean=CHAIN_INJECT_CLEAN,
                             negative_hidden=negative_hidden if has_neg else None,
-                            vsf_scale=float(req.vsf_scale), vsf_report=clip_vsf,
+                            vsf_scale=float(req.vsf_scale), vsf_report=clip_vsf, **pi_den_kw,
                         )
                     video, audio = video.cpu(), audio.cpu()
+                    if pi is not None:
+                        pi_feats.append(pi_capture.pop("features"))
+                        # From clip 1 on the fixed head is the previous clip's tail: dropped.
+                        pi_drop.append(k if i else 0)
+                        pi_clip_records.append(pi_record)
+                    del pi_capture, pi_den_kw
             finally:
                 pipe._progress = original_progress
             del hidden, tags, video_fix, audio_fix, media, ref_rows, cond_clean
@@ -690,6 +752,15 @@ def run_chain_h3(
                 record["a2v"] = clip_a2v   # only for a clip with its own source audio (台帳 §1-120)
             if has_neg:
                 record["vsf"] = clip_vsf   # only for a VSF chain: the single job's h3.vsf
+            if pi is not None:
+                # Only for a pi-H3 chain: the clip's own part of the single job's h3.pi_h3.
+                pr = pi_clip_records[i]
+                record["pi_h3"] = {
+                    "dit_source": pr.get("dit_source"),
+                    "initial_state": pr.get("initial_state"),
+                    "hidden_rows": int(pi_feats[i].hidden.shape[0]),
+                    "dropped_head_latents": int(pi_drop[i]),
+                }
             clip_records.append(record)
             if i == 0:
                 video_cat, audio_cat = video, audio   # with a source: its head is already in it
@@ -703,6 +774,18 @@ def run_chain_h3(
                 f"chain: concatenated latents {list(video_cat.shape)} / {list(audio_cat.shape)}, expected "
                 f"{layout.total_latent_frames} video / {layout.total_audio_latents} audio latents"
             )
+        dwd_kw: dict = {}
+        if pi is not None:
+            # The clips' rows joined (heads dropped from clip 1 on), checked as the latents are.
+            joined = join_dwd_features(pi_feats, pi_drop)
+            pi_feats = None
+            t_join = int(joined.grid[0])
+            if t_join != layout.total_latent_frames or (t_join - 2) % 5:
+                raise RuntimeError(
+                    f"chain: joined DWD rows of {t_join} latents, expected {layout.total_latent_frames} (5n+2)"
+                )
+            dwd_kw = {"dwd": {"path": pi.path, "features": joined}}
+            del joined
         del prev_video, negative_hidden   # the negative's hidden states, reused by every clip
         if not keep:
             # As a single job without the key: its denoise drops the DiT before
@@ -719,11 +802,13 @@ def run_chain_h3(
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
                         source_wave=src_wave if retake_runtime["muxed_original_waveform"] else None, trim_head=0,
+                        **dwd_kw,
                     )
                     src_wave = None
                 elif source is None:
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
+                        **dwd_kw,
                     )
                 else:
                     # Video-to-video: the input video's context frames are cut off the
@@ -732,8 +817,9 @@ def run_chain_h3(
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
                         trim_head=int(layout.trim_px), handle_path=str(out.with_name(out.stem + "_audio_handle.wav")),
+                        **dwd_kw,
                     )
-        del video_cat, audio_cat
+        del video_cat, audio_cat, dwd_kw
         ok = True
     finally:
         if not (ok and keep):
@@ -747,6 +833,14 @@ def run_chain_h3(
     }
     if base.loras:
         h3["loras"] = lora_report   # clip 0's: every clip attaches the same files
+    extra: dict = {}
+    if base.pi_h3 is not None:
+        # Only for a pi-H3 chain: clip 0's h3.pi_h3 (every clip runs the same file;
+        # each clip's own part is in chain.clips[i].pi_h3) and the one decode's DWD.
+        dec_dwd = decode_phases.data.get("decode", {}).get("dwd", {})
+        h3["pi_h3"] = {**pi_clip_records[0],
+                       "dwd": {"chunks": len(dec_dwd.get("chunks", [])), "seconds": dec_dwd.get("seconds")}}
+        extra["pi_h3_used"] = pi_clip_records[0].get("choice")
     chain = layout.to_dict()
     v2v_layout = chain.pop("v2v", None)
     retake_layout = chain.pop("retake", None)
@@ -810,6 +904,7 @@ def run_chain_h3(
         "keep_resident_used": "on" if keep else "off",
         "vram16_mode_used": "on" if base.vram16_mode else "off",
         "images_used": sum(len(c.images) for c in spec.clips),
+        **extra,
         "h3": h3,
         "chain": chain,
     }

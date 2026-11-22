@@ -351,7 +351,9 @@ def preflight_request(
     transformer の絶対パス(解決できなければ None)を返す関数で、使う
     アダプタが呼んだときだけ解決される(:func:`count_prompt_tokens` と同じ形)。
 
-    呼ぶ場所は api/generate.py の :func:`validate_for_family` の後。
+    呼ぶ場所は api/generate.py の :func:`validate_for_family` の後と、
+    api/generate_chain.py の :func:`validate_chain_for_family` の後
+    (``request`` は単発か連結の要求。アダプタは両方にある欄だけを読む)。
     宣言していない系統は素通り(:func:`reject_unsupported` と同じ規約)。
     """
     check = getattr(_adapter(family), "preflight_request", None)

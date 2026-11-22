@@ -265,6 +265,9 @@ CHAIN_REJECT_TABLE: tuple[
     # ``source_audio`` (already published), the sentence the chain's
     # (:data:`H3_ONLY_CHAIN_REFUSALS`).
     ("clips", "source_audio", lambda r: any(clip.source_audio is not None for clip in r.clips)),
+    # MiniMax H3 only (the pi-H3 acceleration), the single path's row on the
+    # chain schema. The field's default is "off". LAST, for the same reason.
+    ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.

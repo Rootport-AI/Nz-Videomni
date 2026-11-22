@@ -45,6 +45,7 @@ from api.models import (
 )
 from services import engines, video_io
 from services.job_store import JobRecord, now_iso
+from services.weight_identity import transformer_path
 
 router = APIRouter()
 
@@ -140,6 +141,22 @@ def _preflight_h3_inpaint(
         )
 
 
+def _preflight_engine_files(context: AppContext, request: GenerateRequest) -> None:
+    """``services.engines.preflight_request`` for the active base model, with
+    the descriptor's assets and the selected transformer resolved through the
+    model registry (``api/prompt_tokens.py``'s ``assets`` callable;
+    :func:`services.weight_identity.transformer_path`)."""
+    registry = context.model_registry
+    pipeline = context.pipeline_manager
+    base_id = pipeline.active_base_model
+    engines.preflight_request(
+        pipeline.active_engine_family,
+        request,
+        assets=lambda key: registry.asset_path(key, base_model=base_id),
+        transformer=lambda: transformer_path(registry, base_id, pipeline.active_models),
+    )
+
+
 def spawn_job_thread(target, job: JobRecord) -> None:
     """Start the real-backend worker thread for ``job`` (shared with
     /generate/chain). If the thread cannot be started, the job must NOT stay
@@ -226,6 +243,14 @@ def generate(
     # answers FEATURE_UNSUPPORTED first.
     if request.alpha_gen is not None:
         raise alpha_gen_invalid("alpha_gen is set by POST /generate/alpha only")
+
+    # ── Engine-side files ───────────────────────────────────────────────────
+    # The server-side files a request needs, checked before a job exists (the
+    # adapter's ``preflight_request``; MiniMax H3's pi-H3: the file is there and
+    # matches the selected transformer by name and shape). The transformer is
+    # the one the pipeline holds (or will load): the same resolution
+    # ``PipelineManager.identify_quant_class`` uses.
+    _preflight_engine_files(context, request)
 
     # Validate conditioning images exist up front.
     for ci in request.conditioning_images:

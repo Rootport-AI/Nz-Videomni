@@ -125,7 +125,7 @@ from engine_h3.constants import (
     audio_latents,
     latent_frames,
 )
-from engine_h3.scheduler import euler_step, sigma_schedule
+from engine_h3.scheduler import euler_step, pi_h3_sigma_schedule, sigma_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +253,19 @@ class H3InpaintInput:
     feather_px: int = 0
 
 
+@dataclass(frozen=True)
+class H3PiH3Input:
+    """pi-H3 (VERIFICATION_LOG §223; ``engine_h3.pi_h3`` / ``engine_h3.dwd``): the step count and the file.
+
+    ``steps``: 4 or 2 (``h3_pih3_format.PI_H3_STEPS``); the job's
+    ``num_inference_steps`` must equal it. ``path``: the pi-H3 file of that
+    step count.
+    """
+
+    steps: int
+    path: str
+
+
 def ordered_references(refs) -> list:
     """The references in the order the engine uses everywhere: pictures, videos,
     then audios, each kind by ascending ``slot`` (stable)."""
@@ -295,14 +308,21 @@ class H3GenerateRequest:
     outpaint: H3OutpaintInput | None = None
     #: Inpainting (台帳 §1-124): the source and mask videos; ``None`` = as before.
     inpaint: H3InpaintInput | None = None
+    #: pi-H3 (VERIFICATION_LOG §223): ``None`` = as before (the sigma list, the
+    #: initial state, the DiT and the decode of every other job are unchanged).
+    pi_h3: H3PiH3Input | None = None
 
 
 # --------------------------------------------------------------------------- #
 # pure helpers (CPU-testable)
 # --------------------------------------------------------------------------- #
 
-def validate_request(req: H3GenerateRequest) -> None:
-    """The request's own constraints, refused in Japanese before anything is loaded."""
+def validate_request(req: H3GenerateRequest, *, dit_path: str | None = None) -> None:
+    """The request's own constraints, refused in Japanese before anything is loaded.
+
+    ``dit_path`` (a pi-H3 job only): the DiT file the pi-H3 file is matched
+    against by name and shape (``h3_pih3_format.model_problems``); None checks
+    the pi-H3 file alone."""
     if not str(req.prompt).strip():
         raise ValueError("プロンプトが空です（MiniMax H3 は文章の条件づけが必須です）")
     w, h = int(req.width), int(req.height)
@@ -349,6 +369,25 @@ def validate_request(req: H3GenerateRequest) -> None:
             # The header only: a missing or broken file is refused here, before
             # the text encoder runs (the keys themselves never refuse a job).
             inspect_lora_file(lora.path)
+    pi = req.pi_h3
+    if pi is not None:
+        from engine_h3 import h3_pih3_format as PF  # noqa: PLC0415
+
+        steps = pi.steps
+        choice = PF.choice_for_steps(steps)   # 4 or 2, else its ValueError
+        if int(req.num_inference_steps) != steps:
+            raise ValueError(
+                f"pi-H3 の {choice} の要求のステップ数が {req.num_inference_steps} です（{steps} のはず）"
+            )
+        # The headers only, still before the text encoder (as the LoRA above).
+        problems = PF.file_problems(pi.path) if dit_path is None else PF.model_problems(pi.path, dit_path)
+        if problems:
+            where = "" if dit_path is None else f"と本体の重み（{os.path.basename(str(dit_path))}）"
+            raise ValueError(
+                f"pi-H3 のファイル（{os.path.basename(str(pi.path))}）{where}の照合で、"
+                f"合わない所が {len(problems)} か所ありました: " + "；".join(problems[:5])
+                + (f"；ほか {len(problems) - 5} か所" if len(problems) > 5 else "")
+            )
     audio = req.source_audio
     if audio is not None:
         if not str(audio.path or "").strip():
@@ -881,11 +920,15 @@ class H3Pipeline:
         references_summary: dict | None = None
         outpaint_record: dict = {}
         inpaint_rec: dict = {}
+        pi = req.pi_h3
+        pi_record: dict = {}
         try:
             # Inside the try: a job refused here is a failed job and releases
             # what is kept, like any other. Still before the text encoder, so a
             # bad request or image never costs a text-encoder read.
-            validate_request(req)
+            # ``dit_path``: a pi-H3 job's file is matched against this DiT's header
+            # (only that job reads it).
+            validate_request(req, dit_path=self.paths.transformer)
             # Ascending frame order (stable): the condition rows and the vision
             # tower's pictures follow it (first frame then last frame, as in the
             # official FL2VA).
@@ -1114,13 +1157,16 @@ class H3Pipeline:
                     {"video_fix": video_fix, "video_inject_clean": float(OH.OUTPAINT_INJECT_CLEAN)}
                     if op is not None else {}
                 )
+                # Only a pi-H3 job passes the keys (the same way).
+                pi_capture: dict = {}
+                pi_kw = {"pi_capture": pi_capture, "pi_record": pi_record} if pi is not None else {}
                 with phases.phase("denoise") as entry:
                     video_lat, audio_lat, prefetch_used = self._denoise(
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
                         lora_report=lora_report, audio_fix=audio_fix, refs=ref_rows,
                         negative_hidden=negative_hidden, vsf_scale=float(req.vsf_scale), vsf_report=vsf_report,
-                        **op_kw,
+                        **op_kw, **pi_kw,
                     )
                 if op is not None:
                     OH.check_outpaint_fixed(video_lat, video_fix, audio_lat, audio_fix, op_strength, op_te_a)
@@ -1147,6 +1193,10 @@ class H3Pipeline:
                     if ip is not None:
                         # Inpainting: the canvas is cut back to the source size after the paste-back.
                         composite_kw["crop_to"] = (op_geom.source_h, op_geom.source_w)
+                if pi is not None:
+                    # pi-H3: the frames come from the DWD head (never the video decoder).
+                    composite_kw["dwd"] = {"path": pi.path, "features": pi_capture.pop("features")}
+                del pi_capture
                 with phases.phase("decode") as entry:
                     # Strength 1.0 keeps the audio latents as they are: the mp4
                     # gets the source waveform itself, not its decoded copy.
@@ -1179,6 +1229,11 @@ class H3Pipeline:
                                 mask_proof=ip_proof, cropped_to=entry.get("cropped_to"),
                             )
                     del source_wave
+                    if pi is not None:
+                        pi_record["dwd"] = {
+                            "chunks": len(entry.get("dwd", {}).get("chunks", [])),
+                            "seconds": entry.get("dwd", {}).get("seconds"),
+                        }
                 # The source pixels are held until the paste-back is done.
                 del video_lat, audio_lat, wave, op_frames, op_wave, composite_kw, ip_chunk_blocks, ip_values
             ok = True
@@ -1204,6 +1259,10 @@ class H3Pipeline:
             h3["outpaint"] = outpaint_record   # only for an Outpainting job, the same way
         if req.inpaint is not None:
             h3["inpaint"] = inpaint_rec        # only for an Inpainting job, the same way
+        extra: dict = {}
+        if pi is not None:
+            h3["pi_h3"] = pi_record             # only for a pi-H3 job, the same way
+            extra["pi_h3_used"] = pi_record.get("choice")
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -1226,6 +1285,7 @@ class H3Pipeline:
             "keep_resident_used": "on" if keep else "off",
             "vram16_mode_used": "on" if req.vram16_mode else "off",
             "images_used": len(req.images or ()),
+            **extra,
             "h3": h3,
         }
 
@@ -1752,6 +1812,7 @@ class H3Pipeline:
         cond_clean=None, cond_frame_idx=(), keep=False, lora_report=None,
         audio_fix=None, video_fix=None, refs=None, video_inject_clean: float | None = None,
         negative_hidden=None, vsf_scale: float = 1.5, vsf_report: dict | None = None,
+        pi_capture: dict | None = None, pi_record: dict | None = None,
     ):
         """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, mask
         values)`` for a stream whose rows are (partly) kept
@@ -1777,7 +1838,21 @@ class H3Pipeline:
         refined on their own and appended to the text rows, ``[positive (L_pos) |
         negative (n)]``, tagged as text; every block multiplies their V by
         ``-vsf_scale``. ``vsf_report``: filled with ``rows`` / ``scale`` and the
-        step-0 measurement ``m_neg`` / ``m_text`` (``engine_h3.vsf.H3VsfProbe``)."""
+        step-0 measurement ``m_neg`` / ``m_text`` (``engine_h3.vsf.H3VsfProbe``).
+
+        pi-H3 (``req.pi_h3``, VERIFICATION_LOG §223; None = none, and the job
+        is the same as before): a kept DiT is reused only when it carries the
+        same pi-H3 (``pi_h3.applied_tag``; otherwise it is dropped and the DiT
+        is built again -- there is no undo), a built one gets the file's
+        non-LoRA part (``pi_h3.apply_adapter``) right after ``_build_dit``; the
+        file's LoRA pairs go after the job's own LoRA as one more file at
+        strength 1.0 (``lora_report`` keeps the job's own only); the sigma
+        lists are ``pi_h3_sigma_schedule``'s; the initial state is
+        ``pi_h3.initial_state`` (after the masks); the last evaluation hands
+        the DWD head's inputs to ``pi_capture["features"]``
+        (``dwd.DWDFeatures``, on the CPU). ``pi_record``: filled with the
+        choice, the file, the adapter's record, the LoRA's and the initial
+        state's."""
         from engine_h3.denoise_mask import (  # noqa: PLC0415
             AUDIO_TIME_CAP,
             VIDEO_TIME_CAP,
@@ -1822,13 +1897,41 @@ class H3Pipeline:
         ref_video_n = sum(int(rows.shape[0]) for rows in ref_video_clean)
         ref_audio_n = sum(int(rows.shape[0]) for rows in ref_audio_clean)
 
+        pi = req.pi_h3
+        pi_choice = None
+        if pi is not None:
+            from engine_h3 import h3_pih3_format as _PF  # noqa: PLC0415
+            from engine_h3 import pi_h3 as _PI  # noqa: PLC0415
+
+            pi_choice = _PF.choice_for_steps(pi.steps)
         resident = self._resident
+        if resident is not None and "dit" in resident:
+            from engine_h3.pi_h3 import applied_tag  # noqa: PLC0415
+
+            kept_tag = applied_tag(resident["dit"])
+            if kept_tag != pi_choice:
+                # The kept DiT carries another pi-H3 (or none where one is asked,
+                # or one where none is): it is dropped and built again.
+                self._log(f"denoise: the kept DiT carries pi-H3 {kept_tag!r}, this job asks {pi_choice!r}; rebuilt")
+                self._resident.pop("dit", None)
+                self._resident.pop("cfg", None)
+                gc.collect()
+                resident = None
+                if pi_record is not None:
+                    pi_record["resident_dropped"] = kept_tag
         if resident is not None:
             dit, cfg = resident["dit"], resident["cfg"]
             entry["dit_source"] = "resident"
         else:
             dit, cfg = self._build_dit(entry)
             entry["dit_source"] = "file"
+            if pi is not None:
+                adapter = _PI.apply_adapter(dit, pi.path, pi_choice, log=self._log)
+                if pi_record is not None:
+                    pi_record["adapter"] = adapter
+        if pi is not None and pi_record is not None:
+            pi_record.update({"choice": pi_choice, "steps": int(pi.steps), "file": os.path.basename(str(pi.path)),
+                              "dit_source": entry["dit_source"]})
         phases.mark("denoise", "after_load")
         service = None
         prefetch_used = "off"
@@ -1851,6 +1954,19 @@ class H3Pipeline:
                 self._log("denoise: LoRA " + ", ".join(
                     f"{r['name']} x{r['strength']} ({r['pairs_applied']} pairs, {len(r['skipped'])} skipped)"
                     for r in report))
+            if pi is not None:
+                # pi-H3's blocks 0-45 pairs: the product's LoRA path, after the
+                # job's own LoRA, at strength 1.0 (its other keys are skipped by
+                # the LoRA reader as one record). Detached in the finally below
+                # with every other LoRA.
+                from engine_h3 import lora as _lora  # noqa: PLC0415
+
+                pi_lora = _lora.attach(dit, [(_lora.load_lora_file(pi.path), 1.0)])[0]
+                if pi_record is not None:
+                    pi_record["lora"] = {"pairs_applied": pi_lora["pairs_applied"], "dtype": pi_lora["dtype"],
+                                         "skipped": pi_lora["skipped"]}
+                self._log(f"denoise: pi-H3 LoRA {pi_lora['name']} x1.0 ({pi_lora['pairs_applied']} pairs, "
+                          f"{len(pi_lora['skipped'])} skipped)")
             if req.vram16_mode:
                 vram16, vram16_entry, counters0, cap_set, n_blocks = self._vram16_begin(dev, n_blocks, dit)
             service, prefetch_used = self._place_dit(dit, prefetch=self._prefetch_for(req), blocks_on_gpu=n_blocks)
@@ -1925,8 +2041,25 @@ class H3Pipeline:
                     clean_v.to(dev), video_fix[1], grid=gh * gw, noise=video, inject_clean=video_inject_clean,
                 )
 
-            sig_v = sigma_schedule(steps, float(req.shift_video))
-            sig_a = sigma_schedule(steps, float(req.shift_audio))
+            if pi is None:
+                sig_v = sigma_schedule(steps, float(req.shift_video))
+                sig_a = sigma_schedule(steps, float(req.shift_audio))
+            else:
+                # pi-H3: its own sigma lists, and the initial state scaled by
+                # the first sigma after the masks were built (no new draw).
+                sig_v = pi_h3_sigma_schedule(steps, float(req.shift_video))
+                sig_a = pi_h3_sigma_schedule(steps, float(req.shift_audio))
+                video = _PI.initial_state(video, vm, float(sig_v[0]))
+                audio = _PI.initial_state(audio, am, float(sig_a[0]))
+                if pi_record is not None:
+                    pi_record["initial_state"] = {
+                        "sigma0_video": float(sig_v[0]), "sigma0_audio": float(sig_a[0]),
+                        "partial_rows": {
+                            name: (0 if mask is None else int(((mask.rows > 0) & (mask.rows < 1)).sum()))
+                            for name, mask in (("video", vm), ("audio", am))
+                        },
+                    }
+                    pi_record["sigmas"] = {"video": [float(s) for s in sig_v], "audio": [float(s) for s in sig_a]}
             entry["sequence"] = {
                 "text": L, "cond": cond_rows_n, "audio": 2 * a_lat, "video": t_lat * gh * gw,
                 "total": layout.total, "latent_frames": t_lat, "audio_latents": a_lat, "grid": [gh, gw],
@@ -1963,6 +2096,8 @@ class H3Pipeline:
                 if vram16 is not None:
                     # Handed over in a box: no name here keeps the embedding alive.
                     box, tokens = [tokens], None
+                # pi-H3: the last evaluation hands over the DWD head's inputs (only then the key).
+                cap_kw = {"capture": {}} if (pi is not None and i == steps - 1) else {}
                 v_video_rows, v_audio_rows = dit(
                     tokens,
                     layout=layout,
@@ -1976,8 +2111,19 @@ class H3Pipeline:
                     tokens_box=box,
                     vsf=vsf,
                     vsf_probe=vsf_probe if i == 0 else None,
+                    **cap_kw,
                 )
                 del tokens
+                if cap_kw:
+                    from engine_h3.dwd import DWDFeatures  # noqa: PLC0415
+
+                    cap = cap_kw.pop("capture")
+                    if pi_capture is not None:
+                        pi_capture["features"] = DWDFeatures(
+                            hidden=cap["hidden"], t_emb=cap["t_emb"], time_index=cap["time_index"],
+                            grid=(t_lat, gh, gw),
+                        )
+                    del cap
                 if vsf_probe is not None and i == 0:
                     measured = vsf_probe.result()
                     vsf_probe = None
@@ -2058,7 +2204,7 @@ class H3Pipeline:
     def _decode(
         self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False, source_wave=None,
         *, trim_head: int = 0, handle_path: str | None = None, composite=None,
-        crop_to: tuple[int, int] | None = None,
+        crop_to: tuple[int, int] | None = None, dwd: dict | None = None,
     ) -> int:
         """Video decoder, audio VAE, mp4. ``source_wave`` (A2V at strength 1.0):
         the source waveform ``[2, N]`` float32 goes into the mp4 instead of the
@@ -2082,30 +2228,52 @@ class H3Pipeline:
         ``crop_to`` (Inpainting, 台帳 §1-124): ``(h, w)``; after ``composite``
         the frames are cut to their top-left ``h`` x ``w`` (the source size) before
         the audio and the mp4, and ``entry["cropped_to"]`` records ``[w, h]``.
-        None (the default) = as before."""
+        None (the default) = as before.
+
+        ``dwd`` (pi-H3, ``engine_h3.dwd``): ``{"path", "features"}`` -- the
+        frames come from the DWD head read from the pi-H3 file for this decode
+        only (``dwd.DWDDecoder``; the head is never kept), from the last
+        evaluation's ``dwd.DWDFeatures``; ``video_lat`` is not decoded and the
+        video decoder is neither built nor touched (a kept one stays as it is).
+        ``entry["dwd"]`` records the head's read and its chunks. Everything
+        after the frames is the same. None (the default) = as before."""
         from engine_h3.audio_vae import H3AudioVAE  # noqa: PLC0415
         from engine_h3.media_out import audio_keep_samples, write_mp4  # noqa: PLC0415
         from engine_h3.video_vae import H3VideoDecoder  # noqa: PLC0415
 
         resident = self._resident or {}
         self._progress("decode", 0, 3)
-        vae = resident.get("decoder")
-        entry["vae_source"] = "resident" if vae is not None else "file"
-        if vae is None:
-            vae = H3VideoDecoder.from_file(self.paths.video_vae, device=self.device, dtype=torch.bfloat16)
+        if dwd is not None:
+            from engine_h3.dwd import DWDDecoder  # noqa: PLC0415
+
+            entry["vae_source"] = "dwd"
+            started = time.perf_counter()
+            dec = DWDDecoder.from_file(dwd["path"], device=self.device)
+            try:
+                frames = dec.decode(dwd.pop("features"))
+                entry["dwd"] = {"head": dec.load_report, "chunks": dec.chunks,
+                                "seconds": round(time.perf_counter() - started, 2)}
+            finally:
+                del dec
+                _free_cuda()
         else:
-            vae.to(self.device)
-        try:
-            # CPU uint8 [F, H, W, 3], converted window by window (video_vae, "Decode output").
-            frames = vae.decode(video_lat, tiled=True)
-        finally:
-            if keep:
-                vae.to("cpu")
-                self._resident = {**(self._resident or {}), "decoder": vae}
-            elif self._resident is not None:
-                self._resident.pop("decoder", None)
-            del vae
-            _free_cuda()
+            vae = resident.get("decoder")
+            entry["vae_source"] = "resident" if vae is not None else "file"
+            if vae is None:
+                vae = H3VideoDecoder.from_file(self.paths.video_vae, device=self.device, dtype=torch.bfloat16)
+            else:
+                vae.to(self.device)
+            try:
+                # CPU uint8 [F, H, W, 3], converted window by window (video_vae, "Decode output").
+                frames = vae.decode(video_lat, tiled=True)
+            finally:
+                if keep:
+                    vae.to("cpu")
+                    self._resident = {**(self._resident or {}), "decoder": vae}
+                elif self._resident is not None:
+                    self._resident.pop("decoder", None)
+                del vae
+                _free_cuda()
         if int(frames.shape[0]) != int(req.num_frames):
             raise RuntimeError(f"decode: {frames.shape[0]} frames decoded, {req.num_frames} expected")
         if composite is not None:

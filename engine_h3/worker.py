@@ -43,7 +43,7 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint]}
+   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3]}
       One T2V, I2V, A2V, Outpainting or Inpainting job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -89,6 +89,11 @@ Protocol (one JSON object per line; parent -> worker):
       ``outpaint``'s; ``engine_h3.pipeline_h3.H3InpaintInput``). Not with
       ``outpaint`` / ``images`` / ``source_audio`` / ``references``. Unknown
       inner keys are logged once and ignored.
+      ``pi_h3`` (VERIFICATION_LOG §223): absent / null = not a pi-H3 job, else
+      ``{"steps", "path"}`` (``steps`` 4 or 2, equal to ``num_inference_steps``;
+      ``path`` the pi-H3 file; ``engine_h3.pipeline_h3.H3PiH3Input``). Unknown
+      inner keys are logged once and ignored. A chain does not take it (logged
+      as ignored).
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
@@ -143,7 +148,9 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, h3: {phases, quant_backends, [loras], [a2v], [references], [vsf], [outpaint], [inpaint]}}
+             images_used, [pi_h3_used], h3: {phases, quant_backends, [loras], [a2v], [references], [vsf], [outpaint],
+             [inpaint], [pi_h3]}}
+            (``pi_h3_used`` "4steps" / "2steps" and ``h3.pi_h3`` only for a pi-H3 job)
             (``h3.outpaint`` only for an Outpainting job, 台帳 §1-125: canvas
             [W_c, H_c], pads, source [W_s, H_s], aligned [x0, y0, x1, y1],
             fixed_tokens, generated_tokens, feather_px, audio_strength,
@@ -285,7 +292,7 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint",
+    "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint", "pi_h3",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -302,7 +309,7 @@ _NAG_FIELDS = frozenset({"negative_prompt", "method", "vsf_scale"})
 #: references are per clip; ``nag`` is read as the single job reads it), plus
 #: ``clips``, the input video ``source`` (台帳 §1-121) and ``retake`` (台帳 §1-123).
 _CHAIN_FIELDS = (
-    _GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "outpaint", "inpaint"}
+    _GENERATE_FIELDS - {"num_frames", "images", "source_audio", "references", "outpaint", "inpaint", "pi_h3"}
 ) | {
     "clips", "source", "retake",
 }
@@ -320,6 +327,8 @@ _OUTPAINT_FIELDS = frozenset({
 })
 #: The keys of ``inpaint`` this engine reads (台帳 §1-124; the canvas is the job's ``width`` / ``height``).
 _INPAINT_FIELDS = frozenset({"source_path", "mask_path", "audio_strength", "feather_px"})
+#: The keys of ``pi_h3`` this engine reads (VERIFICATION_LOG §223).
+_PI_H3_FIELDS = frozenset({"steps", "path"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -646,10 +655,32 @@ def _references(msg: dict) -> tuple[tuple, list[str]]:
     return tuple(out), sorted(ignored)
 
 
+def _pi_h3(msg: dict) -> tuple:
+    """``pi_h3`` -> ``(H3PiH3Input | None, ignored inner keys)``.
+
+    Absent / null = not a pi-H3 job. Else ``{"steps", "path"}``: ``steps`` an
+    integer (4 or 2 is the pipeline's ``validate_request``, with the match of
+    ``num_inference_steps`` and the file itself), ``path`` a non-empty string.
+    """
+    from engine_h3.pipeline_h3 import H3PiH3Input  # noqa: PLC0415
+
+    raw = msg.get("pi_h3")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"pi_h3 は steps と path を持つオブジェクトで渡してください（{type(raw).__name__}）")
+    steps, path = raw.get("steps"), raw.get("path")
+    if isinstance(steps, bool) or not isinstance(steps, int):
+        raise ValueError(f"pi_h3 の steps は整数で渡してください（{steps!r}）")
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError(f"pi_h3 の path は空でない文字列で渡してください（{path!r}）")
+    return H3PiH3Input(steps=steps, path=path), sorted(k for k in raw if k not in _PI_H3_FIELDS)
+
+
 def _generate_request(
     msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
     references: tuple | None = None, *, negative_prompt: str = "", vsf_scale: float = 1.5, outpaint=None,
-    inpaint=None,
+    inpaint=None, pi_h3=None,
 ):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
@@ -667,6 +698,8 @@ def _generate_request(
     parsing the message (a message without the key is not an Outpainting job).
     ``inpaint``: the same for ``H3InpaintInput``. Both ``outpaint`` and
     ``inpaint`` in one job are refused (``ValueError``).
+    ``pi_h3``: the already parsed ``H3PiH3Input``; ``None`` falls back to
+    parsing the message (a message without the key is not a pi-H3 job).
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -687,6 +720,8 @@ def _generate_request(
         inpaint, _ignored = _inpaint(msg)
     if outpaint is not None and inpaint is not None:
         raise ValueError("outpaint と inpaint は同じジョブで併用できません")
+    if pi_h3 is None:
+        pi_h3, _ignored = _pi_h3(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -710,6 +745,7 @@ def _generate_request(
         vsf_scale=vsf_scale,
         outpaint=outpaint,
         inpaint=inpaint,
+        pi_h3=pi_h3,
     )
 
 
@@ -724,6 +760,7 @@ def _do_generate(msg: dict) -> None:
     negative_prompt, vsf_scale, nag_ignored = _nag(msg)
     outpaint, outpaint_ignored = _outpaint(msg)
     inpaint, inpaint_ignored = _inpaint(msg)
+    pi_h3, pi_h3_ignored = _pi_h3(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
@@ -732,9 +769,11 @@ def _do_generate(msg: dict) -> None:
     ignored += [f"nag.{k}" for k in nag_ignored]
     ignored += [f"outpaint.{k}" for k in outpaint_ignored]
     ignored += [f"inpaint.{k}" for k in inpaint_ignored]
+    ignored += [f"pi_h3.{k}" for k in pi_h3_ignored]
     req = _generate_request(
         msg, images=images, loras=loras, source_audio=source_audio, references=references,
         negative_prompt=negative_prompt, vsf_scale=vsf_scale, outpaint=outpaint, inpaint=inpaint,
+        pi_h3=pi_h3,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -760,6 +799,10 @@ def _do_generate(msg: dict) -> None:
         + (
             f"inpaint={_inpaint_summary(req.inpaint)} "
             if req.inpaint is not None else ""
+        )
+        + (
+            f"pi_h3=({req.pi_h3.steps}, {Path(req.pi_h3.path).name}) "
+            if req.pi_h3 is not None else ""
         )
         + (f"neg=vsf(scale={req.vsf_scale}) " if req.negative_prompt else "neg=off ")
         + f"-> {req.output_path}"

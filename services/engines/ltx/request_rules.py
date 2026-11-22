@@ -174,6 +174,14 @@ class RequestRules:
     published together as ``constraints["inpaint"]`` by the same rule (LTX:
     ``None``, its Inpainting has no audio Strength and keeps the 5 / 2 pair;
     the key's presence is the operation panel's signal for the H3 form).
+    ``pi_h3`` is, per choice of a single ``POST /generate``'s ``pi_h3`` other
+    than "off", the sampling values that choice runs with
+    (``{"num_inference_steps", "shift_video", "shift_audio"}``; MiniMax H3's
+    pi-H3), published as ``constraints["pi_h3"]`` so the screens show and send
+    nothing of their own. It is not applied here: the family's adapter fills
+    and checks the three values before :meth:`fill_defaults` runs. ``None`` for
+    a family without pi-H3 (LTX refuses the field), and then the key is left
+    out entirely.
     """
 
     frames_step: int
@@ -200,6 +208,7 @@ class RequestRules:
     outpaint_blend_dilation: SamplingRange | None = None
     inpaint_audio_strength: SamplingRange | None = None
     inpaint_blend_dilation: SamplingRange | None = None
+    pi_h3: dict[str, dict[str, float]] | None = None
 
     # ------------------------------------------------------------ publishing
 
@@ -256,6 +265,10 @@ class RequestRules:
                 "audio_strength": self.inpaint_audio_strength.as_dict(),
                 "blend_dilation_stage1": self.inpaint_blend_dilation.as_dict(),
             }
+        # Only a family with pi-H3 (MiniMax H3) publishes the key, so LTX
+        # publishes the same block as before.
+        if self.pi_h3 is not None:
+            published["pi_h3"] = {choice: dict(values) for choice, values in self.pi_h3.items()}
         return published
 
     # ------------------------------------------------------------ enforcing

@@ -2431,6 +2431,14 @@ class PipelineManager:
             "models": self._models_metadata_block(),
             "environment": self._environment_block(),
         }
+        # Acceleration, MiniMax H3 only: which pi-H3 actually ran ("4steps" |
+        # "2steps"), the worker's ``done`` echo (the mock's echo of the
+        # request). Unlike the unconditional ``*_used`` keys above it is present
+        # on a pi-H3 job only, so every other job's metadata.json is unchanged.
+        # The engine's own record rides ``metadata["h3"]["pi_h3"]``.
+        pi_h3_used = getattr(outcome, "pi_h3_used", None)
+        if pi_h3_used is not None:
+            metadata["pi_h3_used"] = pi_h3_used
         # IC-LoRA: additive block, only present for lora jobs, so non-lora
         # metadata carries no ``ic_lora`` key. (``loras``/``reference_video_id``
         # also appear inside the frozen-additive ``request`` dump.)

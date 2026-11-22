@@ -292,6 +292,10 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
     ``LoraSpec.audio_strength`` を ``None`` に書き戻す(422 にはしない。
     metadata.json にも無視した値が残らない)。
 
+    ``fill_defaults`` の前に、アダプタが ``prefill_request`` を宣言していれば
+    それを呼ぶ(MiniMax H3 の pi-H3: 省略されたステップ数と shift を選択の値で
+    埋め、違う値の明示を断る)。違反は同じ形の 422 にする。
+
     最後に、アダプタが ``validate_request`` を宣言していればそれを呼ぶ
     (MiniMax H3 の Outpainting の規則と既定値の書き戻し。台帳 §1-125)。
     アダプタは違反を ``ValueError`` で上げ、ここで同じ形の 422 にする
@@ -307,6 +311,16 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
     rules = request_rules(family)
     if rules is None:
         return
+    # The adapter's own presets come BEFORE the family defaults: MiniMax H3's
+    # pi-H3 fills an omitted step count / shift with the choice's value (and
+    # refuses an explicit other one) where fill_defaults would otherwise
+    # write the plain defaults. A family that declares none passes.
+    prefill = getattr(_adapter(family), "prefill_request", None)
+    if prefill is not None:
+        try:
+            prefill(request)
+        except ValueError as exc:
+            raise request_validation_failed(str(exc)) from exc
     rules.fill_defaults(request)
     message = rules.violation(request)
     if message is None:
@@ -320,6 +334,29 @@ def validate_for_family(family: str, request: GenerateRequest) -> None:
         check(request)
     except ValueError as exc:
         raise request_validation_failed(str(exc)) from exc
+
+
+def preflight_request(
+    family: str,
+    request: GenerateRequest,
+    *,
+    assets: Callable[[str], Path],
+    transformer: Callable[[], Path | None],
+) -> None:
+    """要求が使うサーバー側のファイルを、ジョブを作る前に確かめる(422)。
+
+    **判断はアダプタの ``preflight_request`` が持ち、ここは取り次ぐだけ**
+    (MiniMax H3 の pi-H3: ファイルの有無と、読み込み中の本体の重みとの照合)。
+    ``assets`` は記述子の資産キー→絶対パス、``transformer`` は選択中の
+    transformer の絶対パス(解決できなければ None)を返す関数で、使う
+    アダプタが呼んだときだけ解決される(:func:`count_prompt_tokens` と同じ形)。
+
+    呼ぶ場所は api/generate.py の :func:`validate_for_family` の後。
+    宣言していない系統は素通り(:func:`reject_unsupported` と同じ規約)。
+    """
+    check = getattr(_adapter(family), "preflight_request", None)
+    if check is not None:
+        check(request, assets=assets, transformer=transformer)
 
 
 def reject_chain(family: str, request: GenerateChainRequest) -> None:

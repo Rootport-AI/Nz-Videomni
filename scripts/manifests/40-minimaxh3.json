@@ -33,7 +33,9 @@
   },
 
   "assets": {
-    "tokenizer_dir": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer"
+    "tokenizer_dir": "MiniMaxH3/TextEncoder/qwen3vl_tokenizer",
+    "pi_h3_4steps_path": "MiniMaxH3/VAE/pi-H3/pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+    "pi_h3_2steps_path": "MiniMaxH3/VAE/pi-H3/pi_h3_2step_dwd_adapter_int8_convrot.safetensors"
   },
 
   "default_selection": {
@@ -158,6 +160,34 @@
           "label": "h3_transformer_ref2va",
           "key": "h3_transformer_ref2va",
           "_min": "取得元の実物 20,970,379,616B の1ファイル(約4%下)"
+        }
+      ]
+    },
+    {
+      "name": "MiniMax H3 pi-H3 (2 files)",
+      "repo": "Lakonik/pi-H3",
+      "include": [
+        "pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+        "pi_h3_2step_dwd_adapter_int8_convrot.safetensors"
+      ],
+      "map": [
+        { "from": "pi_h3_4step_dwd_adapter_int8_convrot.safetensors", "to": "MiniMaxH3/VAE/pi-H3/pi_h3_4step_dwd_adapter_int8_convrot.safetensors" },
+        { "from": "pi_h3_2step_dwd_adapter_int8_convrot.safetensors", "to": "MiniMaxH3/VAE/pi-H3/pi_h3_2step_dwd_adapter_int8_convrot.safetensors" }
+      ],
+      "files": [
+        {
+          "path": "MiniMaxH3/VAE/pi-H3/pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+          "min": 2100000000,
+          "label": "pi_h3_4steps",
+          "key": "pi_h3_4steps",
+          "_min": "取得元の実物 2,192,176,240B の1ファイル(約4%下)。pi-H3 の 4 ステップ用で、pi_h3=4steps のジョブだけが読む。動画VAE の一覧の走査は下のフォルダーまで探さないので一覧には出ない"
+        },
+        {
+          "path": "MiniMaxH3/VAE/pi-H3/pi_h3_2step_dwd_adapter_int8_convrot.safetensors",
+          "min": 2100000000,
+          "label": "pi_h3_2steps",
+          "key": "pi_h3_2steps",
+          "_min": "取得元の実物 2,192,176,240B の1ファイル(約4%下)。pi-H3 の 2 ステップ用で、pi_h3=2steps のジョブだけが読む"
         }
       ]
     }

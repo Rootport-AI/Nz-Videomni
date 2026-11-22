@@ -723,6 +723,26 @@ class GenerateRequest(BaseModel):
     # 同じ形で置く（H3 の連結で効く。LTX の連結は true を断る）。
     vram16_mode: bool | None = Field(None)
 
+    # pi_h3: MiniMax H3 の高速化 pi-H3（少ないステップで仕上がるように蒸留した
+    # 差分を本体の重みに当て、動画VAE の復号器を使わずに隠れ状態から画素を出す
+    # DWD〔Decoding Without a Decoder〕で復号する）。"4steps" / "2steps" は
+    # ステップ数の選択で、既定は "off"（今日の生成と一切変わらない）。
+    # 【重要】pi-H3 は**生成結果が変わる**（別の重みと別の復号器で作るため）。
+    # 有効のときのステップ数と shift は選択で決まる: 省略された
+    # num_inference_steps / shift_video / shift_audio は選択の値で埋まり
+    # （値の正本は GET /models の constraints.pi_h3）、違う値を明示すると 422
+    # で断る。重みのファイルは記述子の assets（models/MiniMaxH3/VAE/pi-H3/）で、
+    # 無いとき・読み込み中の本体の重みと名前や形が合わないときも受付で断る
+    # （services/engines/h3/adapter.py の preflight_request）。標準の動画VAE への
+    # 格下げはしない。既定と違うときだけワーカーへ送る加算的コントラクトで、
+    # 実際に効いたかどうかは metadata.json の pi_h3_used で確認できる
+    # （pi-H3 のジョブだけに入る。off のジョブには無い）。
+    # 【エンジン差】H3 専用の機能で、LTX 2.3／2.5 は "off" 以外を 422
+    # FEATURE_UNSUPPORTED で断る（各アダプタの REJECT_TABLE）。
+    # 連結スキーマにはまだ置かない（単発だけ）。GET /status には載せない
+    # （vae_mode と同じ規律——重みの有無は「環境の能力」とは性質が違う）。
+    pi_h3: Literal["off", "4steps", "2steps"] = "off"
+
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)

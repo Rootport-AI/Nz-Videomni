@@ -38,7 +38,8 @@ worker's own default is off, the app's is on), ``source_audio``
 (``{path, strength}``; single-generate A2V only — an absent key is "no source
 audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
 absent key is "no references"), ``nag`` (``{negative_prompt, method,
-vsf_scale}``; VSF only) and ``keep_resident`` (only when asked for — an
+vsf_scale}``; VSF only), ``pi_h3`` (``{steps, path}``; a pi-H3 job only —
+an absent key is off) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
@@ -56,7 +57,9 @@ clip) to ``encode`` and ``stage1_denoise``, read as the one-band chain
 (``_read_chain_events(one_stage=True)``).
 
 LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
-``.venv-engine-h3``; the app venv has none of it.
+``.venv-engine-h3``; the app venv has none of it. The one ``engine_h3`` module
+imported here is ``engine_h3.h3_pih3_format`` (torch-free by contract, the
+numbers and the file checks of pi-H3 shared with the worker).
 """
 
 from __future__ import annotations
@@ -73,7 +76,7 @@ from PIL import Image
 
 import h3_chain_math
 import h3_lora_format
-from api.errors import feature_unsupported
+from api.errors import feature_unsupported, model_file_missing, model_incompatible
 from api.models import (
     GenerateChainRequest,
     GenerateRequest,
@@ -82,6 +85,7 @@ from api.models import (
     VRAM16_MODE_DEFAULT_H3,
 )
 from config import AppConfig
+from engine_h3 import h3_pih3_format
 from services import gpu_info, prompt_tokens, video_io
 from services.engines.ltx.adapter import (
     GenerationOutcome,
@@ -149,6 +153,29 @@ H3_FRAME_RATE = 24.0
 H3_DEFAULT_STEPS = 20
 #: The largest 17n+5 count the schema ceiling allows (481 = 17*28+5).
 H3_FRAMES_MAX = (NUM_FRAMES_MAX - H3_FRAMES_OFFSET) // H3_FRAMES_STEP * H3_FRAMES_STEP + H3_FRAMES_OFFSET
+
+#: pi-H3 (``request.pi_h3``): each choice other than "off" -> the descriptor
+#: ``assets`` key of its file (``models/MiniMaxH3/VAE/pi-H3/``, one file per
+#: step count). Resolved like 2.3's PrunaVAED (``assets``, not a category: the
+#: video VAE scan does not walk into the sub-folder).
+PI_H3_ASSETS: dict[str, str] = {
+    "4steps": "pi_h3_4steps_path",
+    "2steps": "pi_h3_2steps_path",
+}
+
+
+def pi_h3_sampling(choice: str) -> dict[str, float]:
+    """The sampling values a pi-H3 choice runs with: its step count and the
+    two shifts. The numbers' source of truth is ``engine_h3.h3_pih3_format``
+    (torch-free, shared with the worker); published per choice as
+    ``constraints["pi_h3"]`` and written into the request by
+    :func:`prefill_request`."""
+    return {
+        "num_inference_steps": int(h3_pih3_format.PI_H3_CHOICES[choice]),
+        "shift_video": float(h3_pih3_format.PI_H3_SHIFT_VIDEO),
+        "shift_audio": float(h3_pih3_format.PI_H3_SHIFT_AUDIO),
+    }
+
 
 #: This family's numeric rules (Docs/MINIMAX_H3_DESIGN.md §9). The sampling
 #: defaults are the engine's own (engine_h3/constants.py: 20 Euler steps,
@@ -221,6 +248,9 @@ REQUEST_RULES = RequestRules(
     # (``inpaint.blend_dilation_stage1`` as a step count, :func:`_feather_px`).
     inpaint_audio_strength=SamplingRange(min=0.0, max=1.0, step=0.05, default=0.5),
     inpaint_blend_dilation=SamplingRange(min=0, max=15, step=1, default=1),
+    # pi-H3's sampling values per choice, published as constraints["pi_h3"]
+    # so the screens hold no number of their own (:func:`pi_h3_sampling`).
+    pi_h3={choice: pi_h3_sampling(choice) for choice in PI_H3_ASSETS},
 )
 assert H3_FRAME_RATE <= FRAME_RATE_MAX  # the schema ceiling must admit it
 
@@ -332,6 +362,11 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "negative_prompt",
         "neg_method",
         "vsf_scale",
+        # pi-H3 (the low-step delta + DWD): the choice's step count and the
+        # file's path reach the worker as the ``pi_h3`` payload key, only when
+        # it is not "off" (:func:`prefill_request` holds the steps / shifts,
+        # :func:`preflight_request` the file).
+        "pi_h3",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -755,6 +790,88 @@ def _validate_inpaint(request: GenerateRequest) -> None:
         )
 
 
+def prefill_request(request: GenerateRequest) -> None:
+    """pi-H3's step count and shifts, before the family defaults; raises
+    ``ValueError``. Called by ``services.engines.validate_for_family`` ahead of
+    ``REQUEST_RULES.fill_defaults``, so an omitted value becomes the choice's
+    (:func:`pi_h3_sampling`) and not the plain default.
+
+    Nothing to do with ``pi_h3="off"``. With a choice: each of
+    ``num_inference_steps`` / ``shift_video`` / ``shift_audio`` left ``None``
+    (omitted) is written with the choice's value; an explicit value that
+    differs from it is refused, the message naming the field, the value sent,
+    the choice and the choice's value.
+    """
+    choice = request.pi_h3
+    if choice == "off":
+        return
+    for name, value in pi_h3_sampling(choice).items():
+        given = getattr(request, name)
+        if given is None:
+            setattr(request, name, int(value) if name == "num_inference_steps" else float(value))
+        elif given != value:
+            raise ValueError(
+                f"{name}={given:g} differs from the value pi_h3=\"{choice}\" "
+                f"uses ({name}={value:g})"
+            )
+
+
+#: How many of the pi-H3 / transformer match findings a refusal lists; the
+#: rest is counted.
+_PI_H3_FINDINGS_SHOWN = 5
+
+
+def preflight_request(
+    request: GenerateRequest,
+    *,
+    assets: Callable[[str], Path],
+    transformer: Callable[[], Path | None],
+) -> None:
+    """pi-H3's file, checked before a job exists (``services.engines.preflight_request``,
+    from api/generate.py); raises 422.
+
+    Nothing to do with ``pi_h3="off"``. With a choice: the descriptor's
+    asset for it (:data:`PI_H3_ASSETS`) must be declared and be a file
+    (``MODEL_FILE_MISSING``), and ``h3_pih3_format.model_problems`` against
+    the selected transformer (``transformer()``: the file the pipeline holds
+    or will load) must find nothing (``MODEL_INCOMPATIBLE``, the findings
+    listed). A transformer that does not resolve (``None``) is not compared
+    here; the engine compares again before it reads a weight. No fallback to
+    the stock video VAE, and no Turbo-merged-weight test (VERIFICATION_LOG
+    §223.3).
+    """
+    choice = request.pi_h3
+    if choice == "off":
+        return
+    key = PI_H3_ASSETS[choice]
+    try:
+        path = Path(assets(key))
+    except KeyError:
+        raise model_file_missing(
+            "pi_h3", choice,
+            detail=f"このベースモデルの記述子に pi-H3 のファイル（assets.{key}）がありません。",
+        ) from None
+    if not path.is_file():
+        raise model_file_missing(
+            "pi_h3", choice,
+            detail=f"pi-H3 のファイルがありません（{path.parent.name}/{path.name}）。",
+        )
+    dit = transformer()
+    if dit is None:
+        return
+    findings = h3_pih3_format.model_problems(path, dit)
+    if findings:
+        shown = "；".join(findings[:_PI_H3_FINDINGS_SHOWN])
+        rest = len(findings) - _PI_H3_FINDINGS_SHOWN
+        raise model_incompatible(
+            "pi_h3", choice,
+            detail=(
+                f"pi-H3 のファイル（{path.name}）と本体の重み（{Path(dit).name}）を照合しました: "
+                f"{shown}" + (f"（ほか {rest} 件）" if rest > 0 else "")
+            ),
+        )
+
+
 def _feather_px(r: int, width: int, height: int) -> int:
     """The paste-back feather in pixels: ``floor(r * max(W, H) / 64 + 0.5)``,
     ``r`` = ``blend_dilation_stage1`` of ``outpaint`` / ``inpaint``, ``W`` /
@@ -1108,6 +1225,17 @@ class _RealBackendH3(_RealBackend):
                 "feather_px": _feather_px(ipx.blend_dilation_stage1, request.width, request.height),
             }
 
+        # pi_h3: the choice's step count and the file's absolute path (the
+        # descriptor's asset, the PrunaVAED route; must exist — the API checked
+        # it, this is the backstop). The step count and the shifts are already
+        # the choice's in the request (prefill_request).
+        pi_h3: dict | None = None
+        if request.pi_h3 != "off":
+            pi_h3 = {
+                "steps": int(h3_pih3_format.PI_H3_CHOICES[request.pi_h3]),
+                "path": self._require_asset(PI_H3_ASSETS[request.pi_h3]),
+            }
+
         if progress_callback:
             progress_callback(None, None, 0.05)
 
@@ -1154,6 +1282,9 @@ class _RealBackendH3(_RealBackend):
                 "method": request.neg_method,
                 "vsf_scale": float(request.vsf_scale),
             }
+        # pi_h3: only for a pi-H3 job (an absent key = off), {steps, path}.
+        if pi_h3 is not None:
+            payload["pi_h3"] = pi_h3
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -1201,6 +1332,8 @@ class _RealBackendH3(_RealBackend):
             block_swap_prefetch_used=event.get("block_swap_prefetch_used"),
             keep_resident_used=event.get("keep_resident_used"),
             vram16_mode_used=event.get("vram16_mode_used"),
+            # A pi-H3 job only ("4steps" / "2steps"); absent otherwise -> None.
+            pi_h3_used=event.get("pi_h3_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=_h3_block(event),
         )
@@ -1577,6 +1710,17 @@ def _mock_inpaint_record(
     }
 
 
+def _mock_pi_h3_record(request: GenerateRequest) -> dict:
+    """The mock's ``done.h3.pi_h3``: what the request decides (the choice and
+    its step count) plus ``mock: true``. Nothing the engine alone can tell
+    (the delta's application, the DWD decode) is claimed."""
+    return {
+        "choice": request.pi_h3,
+        "steps": int(h3_pih3_format.PI_H3_CHOICES[request.pi_h3]),
+        "mock": True,
+    }
+
+
 class _MockBackendH3(_MockBackend):
     """2.3's synthetic-clip mock plus the H3-only inputs: ``source_audio`` and
     ``references``.
@@ -1605,6 +1749,10 @@ class _MockBackendH3(_MockBackend):
     the upload; the latent-side keys the mock cannot know are ``None``. The mock
     does not mux audio (its mp4 is silent), so ``muxed_audio_samples`` is
     ``None``.
+
+    A pi-H3 job (``request.pi_h3`` other than "off") gets the same clip; the
+    mock echoes the choice as ``pi_h3_used`` and adds the ``pi_h3`` record
+    (:func:`_mock_pi_h3_record`), which lands in ``metadata["h3"]["pi_h3"]``.
     """
 
     def _inpaint_canvas_multiple(self) -> int:
@@ -1657,6 +1805,15 @@ class _MockBackendH3(_MockBackend):
                     **(outcome.h3 or {}),
                     "inpaint": _mock_inpaint_record(request, inpaint_source_path, inpaint_mask_path),
                 },
+            )
+        if request.pi_h3 != "off":
+            # The real worker's ``done.pi_h3_used`` echo, and a ``done.h3.pi_h3``
+            # record of what the request decides (the choice and its step
+            # count) with ``mock: true``; it lands in metadata["h3"]["pi_h3"].
+            outcome = dataclasses.replace(
+                outcome,
+                pi_h3_used=request.pi_h3,
+                h3={**(outcome.h3 or {}), "pi_h3": _mock_pi_h3_record(request)},
             )
         if request.source_audio is None:
             return outcome

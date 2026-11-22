@@ -634,6 +634,7 @@ class H3DiT(nn.Module):
         tokens_box: list | None = None,
         vsf=None,
         vsf_probe=None,
+        capture: dict | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """One model evaluation. Returns (v_video [Nv, 96], v_audio [Na, 32]) float32,
         the data-direction velocity (x0 = x + sigma * v).
@@ -645,6 +646,12 @@ class H3DiT(nn.Module):
         ``vsf``: the negative prompt's rows and flip (``engine_h3.vsf.H3Vsf``),
         None = no negative prompt; its rows must be the tail of ``layout.text``.
         ``vsf_probe``: an ``engine_h3.vsf.H3VsfProbe`` observed in block 0, or None.
+        ``capture`` (pi-H3's DWD, ``engine_h3.dwd``): a dict that receives CPU
+        copies of what the DWD head reads, taken after the 50 blocks and before
+        ``final_rows`` (the same values off and in VRAM 16GB mode):
+        ``hidden`` (the video rows of the hidden state, its dtype), ``t_emb``
+        (``[M, rank]`` float32) and ``time_index`` (the video rows'). None (the
+        default) adds nothing to the evaluation.
         """
         if tokens is None:
             tokens = tokens_box.pop()
@@ -683,4 +690,9 @@ class H3DiT(nn.Module):
         # Blocks may have run on the swap device; the rest of the model lives
         # with the AdaLN table.
         x = x.to(t_emb.device)
+        if capture is not None:
+            rows = layout.video
+            capture["hidden"] = x[rows].detach().to("cpu")
+            capture["t_emb"] = t_emb.detach().float().cpu()
+            capture["time_index"] = time_index[rows].detach().to("cpu")
         return self.final_rows(x, t_emb, time_index, layout, vram16=vram16)

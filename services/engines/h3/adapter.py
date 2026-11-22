@@ -57,9 +57,7 @@ clip) to ``encode`` and ``stage1_denoise``, read as the one-band chain
 (``_read_chain_events(one_stage=True)``).
 
 LIKE THE LTX ADAPTERS, THIS FILE NEVER IMPORTS torch. The engine lives only in
-``.venv-engine-h3``; the app venv has none of it. The one ``engine_h3`` module
-imported here is ``engine_h3.h3_pih3_format`` (torch-free by contract, the
-numbers and the file checks of pi-H3 shared with the worker).
+``.venv-engine-h3``; the app venv has none of it.
 """
 
 from __future__ import annotations
@@ -76,6 +74,7 @@ from PIL import Image
 
 import h3_chain_math
 import h3_lora_format
+import h3_pih3_format
 from api.errors import feature_unsupported, model_file_missing, model_incompatible
 from api.models import (
     GenerateChainRequest,
@@ -85,7 +84,6 @@ from api.models import (
     VRAM16_MODE_DEFAULT_H3,
 )
 from config import AppConfig
-from engine_h3 import h3_pih3_format
 from services import gpu_info, prompt_tokens, video_io
 from services.engines.ltx.adapter import (
     GenerationOutcome,
@@ -166,7 +164,7 @@ PI_H3_ASSETS: dict[str, str] = {
 
 def pi_h3_sampling(choice: str) -> dict[str, float]:
     """The sampling values a pi-H3 choice runs with: its step count and the
-    two shifts. The numbers' source of truth is ``engine_h3.h3_pih3_format``
+    two shifts. The numbers' source of truth is ``h3_pih3_format``
     (torch-free, shared with the worker); published per choice as
     ``constraints["pi_h3"]`` and written into the request by
     :func:`prefill_request`."""

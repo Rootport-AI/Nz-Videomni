@@ -6,7 +6,7 @@ Runs in ``.venv-engine-h3`` through the engine-venv runner, without a GPU::
 
 What is pinned:
   * the sigma lists against the closed form (2 / 4 steps, video / audio), other counts refused;
-  * ``engine_h3.h3_pih3_format`` on the real pi-H3 files and base weights (skipped when absent)
+  * ``h3_pih3_format`` on the real pi-H3 files and base weights (skipped when absent)
     and on small synthetic headers (the facts it reports);
   * ``pi_h3.apply_adapter`` on a small 50-block DiT whose blocks 46-49 are int8, float, fp8 or
     w4a8, and a block mixing layer kinds running off and in VRAM 16GB mode;
@@ -50,7 +50,7 @@ from test_h3_engine import (  # noqa: E402
     _write_sft,
 )
 
-from engine_h3 import h3_pih3_format as PF  # noqa: E402
+import h3_pih3_format as PF  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PI_DIR = ROOT / "models" / "MiniMaxH3" / "VAE" / "pi-H3"
@@ -203,11 +203,11 @@ def test_format_module_is_torch_free():
     import subprocess
     import sys
 
-    code = ("import sys; sys.path.insert(0, sys.argv[1]); import engine_h3.h3_pih3_format; "
-            "print('torch' in sys.modules)")
+    code = ("import sys; sys.path.insert(0, sys.argv[1]); import h3_pih3_format; "
+            "print('torch' in sys.modules, 'engine_h3' in sys.modules)")
     out = subprocess.run([sys.executable, "-I", "-c", code, str(ROOT)], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
-    assert out.stdout.strip() == "False"
+    assert out.stdout.strip() == "False False"
 
 
 @pytest.mark.skipif(not all(p.is_file() for p in PI_REAL.values()), reason="the pi-H3 files are not in models/")

@@ -38,7 +38,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from engine_h3 import h3_pih3_format as PF
+import h3_pih3_format as PF
 from engine_h3.quant_linear import H3Int8Linear, H3QuantLinear
 
 #: The DiT attribute naming the pi-H3 applied to it (None / absent = none).

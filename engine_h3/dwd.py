@@ -76,7 +76,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from engine_h3 import h3_pih3_format as PF
+import h3_pih3_format as PF
 from engine_h3.quant_linear import H3Int8Linear, H3QuantLinear
 from engine_h3.video_vae import _apply_rope
 

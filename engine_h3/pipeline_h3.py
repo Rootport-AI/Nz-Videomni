@@ -371,7 +371,7 @@ def validate_request(req: H3GenerateRequest, *, dit_path: str | None = None) -> 
             inspect_lora_file(lora.path)
     pi = req.pi_h3
     if pi is not None:
-        from engine_h3 import h3_pih3_format as PF  # noqa: PLC0415
+        import h3_pih3_format as PF  # noqa: PLC0415
 
         steps = pi.steps
         choice = PF.choice_for_steps(steps)   # 4 or 2, else its ValueError
@@ -1900,7 +1900,7 @@ class H3Pipeline:
         pi = req.pi_h3
         pi_choice = None
         if pi is not None:
-            from engine_h3 import h3_pih3_format as _PF  # noqa: PLC0415
+            import h3_pih3_format as _PF  # noqa: PLC0415
             from engine_h3 import pi_h3 as _PI  # noqa: PLC0415
 
             pi_choice = _PF.choice_for_steps(pi.steps)

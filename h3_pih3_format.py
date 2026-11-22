@@ -2,12 +2,14 @@
 
 pi-H3 (the low-step distilled difference and DWD, Docs/MINIMAX_H3_RESEARCH_NOTES.md
 §18; the experiment and the owner's rulings: Docs/VERIFICATION_LOG.md §223) ships
-as one safetensors file per step count. Same manners as ``h3_lora_format`` /
-``h3_format``: imports only the standard library and the root modules
-``sft_quant_format`` / ``h3_format`` (both torch-free), and reads nothing but
-the headers and the tiny ``comfy_quant`` byte tensors. The app calls it for the
-acceptance check, the engine (``engine_h3.pipeline_h3.validate_request``,
-``engine_h3.pi_h3``, ``engine_h3.dwd``) before it reads any weight.
+as one safetensors file per step count. Lives next to ``h3_lora_format.py`` /
+``h3_format.py`` / ``sft_quant_format.py`` because both processes import it:
+the app (its own torch-less ``.venv``, which never imports ``engine_h3``) for
+the acceptance check, and the engine (``engine_h3.pipeline_h3.validate_request``,
+``engine_h3.pi_h3``, ``engine_h3.dwd``) before it reads any weight. Imports
+only the standard library and the root modules ``sft_quant_format`` /
+``h3_format`` (both torch-free), and reads nothing but the headers and the tiny
+``comfy_quant`` byte tensors.
 
 What the file holds (keys without prefix; §18.3 of the research notes):
 

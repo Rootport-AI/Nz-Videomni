@@ -8,7 +8,7 @@ Pinned here, none of it needing a GPU or a real pi-H3 file:
    golden one, the steps / shifts are the plain defaults, no file is looked at,
    and metadata.json has no ``pi_h3_used`` key;
 2. with a choice, an omitted step count / shift becomes the choice's value
-   (``constraints.pi_h3``, from ``engine_h3.h3_pih3_format``) and an explicit
+   (``constraints.pi_h3``, from ``h3_pih3_format``) and an explicit
    other value is a 422 that states the fact;
 3. the acceptance check: a missing file is ``MODEL_FILE_MISSING``, a file that
    ``h3_pih3_format.model_problems`` finds fault with is ``MODEL_INCOMPATIBLE``,
@@ -30,6 +30,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
+import h3_pih3_format
 import main
 from api.errors import APIError
 from api.models import GenerateRequest
@@ -42,7 +43,6 @@ from conftest import (
     write_gguf_with_kv,
     write_h3_model_files,
 )
-from engine_h3 import h3_pih3_format
 from services import engines
 from services.base_models import load_base_models
 from services.engines.h3 import adapter as h3

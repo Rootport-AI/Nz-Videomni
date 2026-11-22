@@ -11,6 +11,38 @@
 
 ---
 
+## 1. 近日中の改修項目
+
+実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
+
+### 1-291. MiniMax H3 の BF16 のブロックを含む重みの快適上限の較正（起票：2026-11-22）
+
+- **概要**: 一部のブロックを BF16 のまま残した int8 の重み（`Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49`・`10Eros_Max_h3_8stepTURBO_beta7_int8HQ`）は、block swap の置き場が大きくなるぶん VRAM を多く使うのに、int8 の線の快適上限の印が出る。1920×1088 と 2560×1472 の境界を実機で測り、int8 の線のままでよいか、線を分けるかを決める。
+- **判断材料**: 概算と、実機 1 点（1280×768×73）との照合は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221.9。印の線の仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 102、線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1。
+- **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105。今回は起票だけ）。
+
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
+
+### 1-290. MiniMax H3 の混在 int8 の重み（一部のブロックを BF16 のまま残した int8・adaln_proj まで int8 にした int8）を動かす（起票：2026-11-22）
+
+- **概要**: 動かなかった 3 本の重み（`s3_raw_int8` はブロック状のノイズ、`Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49` と `10Eros_Max_h3_8stepTURBO_beta7_int8HQ` はノイズ除去の最初で停止）が、置くだけで完走するようにエンジンを直した（dev `074b125f`）。残るのはオーナーの実機での確認と視聴による判定。
+- **出典**: 記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221、裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105、計画は保管庫の写し [`Outputs-archive/h3-mixed-int8-2026-11-22/計画.md`](Outputs-archive/h3-mixed-int8-2026-11-22/計画.md)。本節が実機確認の項目の正本。
+
+前提: dev の `074b125f` 以降でサーバーを起動し直す（変えたのはエンジンだけなので、aux2 の配置は要らない）。3 本の重みは `models\MiniMaxH3\Weights\` に置いておく。画面上部のベースモデルの欄は MiniMax H3 にする。Settings の「Acceleration（生成の高速化）」の区画の「VRAM 16GB mode」は on（既定）のままにする。重みは Settings の「動画モデル (checkpoint)」で選んで「選択したモデルを読込」を押して切り替える。生成は Single タブで、解像度 1280×768・73 フレーム（約 3 秒）にし、プロンプトに場面を 1 文書いて Generate を押す。
+
+#### 3 本の重み
+
+- [ ] `s3_raw_int8` を読み込み、Steps 20・Shift（映像）12・Shift（音声）3 で生成する → ジョブが完了し、ブロック状のノイズにならず、プロンプトに沿った音声つきの動画がタイムラインに置かれる。
+- [ ] `Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49` を読み込み、Steps 20・Shift（映像）12・Shift（音声）3 で生成する → 途中で止まらずにジョブが完了し、プロンプトに沿った音声つきの動画がタイムラインに置かれる。
+- [ ] `10Eros_Max_h3_8stepTURBO_beta7_int8HQ` を読み込み、Steps 8・Shift（映像）10・Shift（音声）3 で生成する → 途中で止まらずにジョブが完了し、プロンプトに沿った音声つきの動画がタイムラインに置かれる。
+- [ ] `Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49` を読み込んだまま、Inventory の LoRA の棚の `minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16` のカードを押してプロンプト欄にタグを入れ、タグの強さを 1.0 にして、Steps 4・Shift（映像）12・Shift（音声）3 で生成する → ジョブが完了し、プロンプトに沿った音声つきの動画がタイムラインに置かれる。
+
+#### 公式の重み
+
+- [ ] `minimax_h3_fl2va_pruned_int8_convrot` を読み込み、Steps 20・Shift（映像）12・Shift（音声）3 で生成する → 今までどおりジョブが完了し、今までと同じ品質の音声つきの動画がタイムラインに置かれる。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。

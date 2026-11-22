@@ -377,7 +377,7 @@
   - **② FL2VA の重みでは、参照を使うバッチの開始を止める**: FL2VA の重みが読み込まれていて、実行する行の使われるクリップに、使われる参照が 1 件でもあるときは、バッチの開始を止めて「Ref2VA モデルまたは Hybrid モデルをロードしてください。現在ロードされているFL2VA モデルでは、Referenceは使えません。」を出す。単発の生成と Chained 画面の Generate が注意（裁定 87 の注意文 ①）だけで止めないのと違う。理由は、初心者に H3 には FL2VA と Ref2VA の 2 種類の重みがあると知ってもらうため。参照を使わないバッチは FL2VA のまま流せる（参照が無いなら FL2VA のほうが適した重みのため）。種別が判定できない Hybrid の重みでは止めない（注意文 ① と同じ判定）。
     > **更新（2026-11-21）**: オーナーの実機確認を受けて、止めるときの文をオーナーの指定の文に変えた（止める条件は変わらない）。修正の記録はフロントエンド `Docs/DEVLOG.md` §174、実機確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §216。
   - **状態**: 完結（2026-11-22。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-288）。オーナーの実機確認は全項目合格（記録簿 §216.2・§217.2・§218.2・§218.9）。
-- **裁定 105 【オーナー裁定・監督裁定】**: 一部のブロックを BF16 のまま残した int8 の重みと、adaln_proj（時刻による変調の層）まで int8 にした重み（Sulphur-3 の int8 版 2 本と 10Eros int8HQ。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290。2026-11-22）を動かす修正で決めたことです。重みの構成・原因・数値の照合・実機の確認・VRAM の概算の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221 にだけ書きます（本書には写しません）。仕組みは §5・§6.5・§7 です。
+- **裁定 105 【オーナー裁定・監督裁定】**: 一部のブロックを BF16 のまま残した int8 の重みと、adaln_proj（時刻による変調の層）まで int8 にした重み（Sulphur-3 の int8 版 2 本と 10Eros int8HQ。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290。2026-11-22）を動かす修正で決めたことです。重みの構成・原因・数値の照合・実機の確認・VRAM の概算の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221 にだけ書きます（本書には写しません）。仕組みは §5・§6.5・§7 です。
   - **① ゴール（オーナー裁定）**: 置くだけで動き、意味のある動画として収束すること。ComfyUI とのビット一致は求めないが、同じ品質であること。問題なく動いている推論の経路を壊さないこと。快適上限の較正と操作パネルの修正は範囲外。
   - **② 範囲（オーナー裁定）**: 10Eros int8HQ も一緒に直す。
   - **③ int8 の adaln_proj の計算（監督裁定。オーナー承認の計画）**: int8 の値に行ごとの倍率を掛けて float32 に戻してから、これまでと同じ float32 の行列積で計算する（§5）。量子化の前の値に最も近い方法だった（記録簿 §221.5）。
@@ -387,17 +387,18 @@
   - **⑥ 実機の確認の設定（オーナー裁定）**: 製品の既定（20 ステップ・shift 12／3）で回す。
   - **進め方（オーナー裁定）**: 事前調査の担当が出した案（qkv に素の線形層の経路を足す）は、決定事項ではなく検証すべき仮説として扱う。
   - **採らなかった案**: 読み込みの段で int8 を float に戻して素の線形層に入れる（倍率の置き場が無く、読み込みの手順に例外の規則が増える）。adaln_proj を ComfyUI と同じく int8 の核に通す（量子化層の入出力が bf16 固定なので、公式の重みも通る関数を変えることになる。精度も ③ に劣る）。qkv を一括で計算する（④）。
-  - **留保**: §5 の「int8 ConvRot」の項と §6.5 の「範囲と既知の限界」にある（ConvRot つきで量子化した int8 の adaln_proj・BF16 の qkv の GPU でのビット一致）。オーナーの視聴による判定は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290。
-    > **更新（2026-11-22）**: オーナーの視聴の判定は済んだ（以前のようなノイズは無かった。記録簿 §221.8 の追記）。残るのは操作パネルからの実機確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290）。
-  - **状態**: 実装済み（dev `074b125f`）・オーナーの実機確認待ち（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290）。
-- **裁定 106 【オーナー裁定・監督裁定】**: 一部のブロックを BF16 のまま残した重み（裁定 105）に、概算による暫定の快適上限の線を出すとき（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-292。2026-11-22）に決めたことです。線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、API の欄は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.7・§6.9(c)、概算の前提・印の位置・確認の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222 にだけ書きます（本書には写しません）。
+  - **留保**: §5 の「int8 ConvRot」の項と §6.5 の「範囲と既知の限界」にある（ConvRot つきで量子化した int8 の adaln_proj・BF16 の qkv の GPU でのビット一致）。オーナーの視聴による判定は台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290。
+    > **更新（2026-11-22）**: オーナーの視聴の判定は済んだ（以前のようなノイズは無かった。記録簿 §221.8 の追記）。残るのは操作パネルからの実機確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290）。その後、同じ日に合格した（記録簿 §221.13。閉じたあとは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290）。
+  - **状態**: 完結（2026-11-22。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290）。オーナーの実機確認は 5 項目すべて合格（記録簿 §221.13）。
+- **裁定 106 【オーナー裁定・監督裁定】**: 一部のブロックを BF16 のまま残した重み（裁定 105）に、概算による暫定の快適上限の線を出すとき（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292。2026-11-22）に決めたことです。線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、API の欄は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.7・§6.9(c)、概算の前提・印の位置・確認の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222 にだけ書きます（本書には写しません）。
   - **① 暫定の線を載せる（オーナー裁定）**: 実機の較正（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291）を待たず、概算（記録簿 §221.9）の数字を暫定の線として印に載せる。理由は裁定 102 の C1 と同じで、目安は、不正確でも無いよりある方がよい。この線は、ほかの線の決まり（実測で快適だった最も大きい S にちょうど置く。裁定 94）の外にあり、実測の点を持たない。
   - **② 線は概算の中央の値（オーナー裁定）**: 概算の 3 つの見込み（楽観・中央・悲観）のうち中央を採る。監督は悲観を推したが、オーナーは中央を選んだ。
   - **③ 種類 `"bf16_blocks"` を足し、最初に判定する（監督裁定。オーナー承認の計画）**: 本体ブロックの大きな線形層（qkv・out_proj・fc1・fc2）に量子化の印が無いものが 1 つでもあれば `"bf16_blocks"`、それ以外は裁定 102 の C1 のまま（w4a8 → fp8 → int8）。adaln_proj と token_refiner は数えない（公式の重みでも量子化されていないので、数えると公式の重みが新しい線に入る）。最初に判定するのは、新しい線がいちばん低いので、w4a8 や fp8 の層と印の無いブロックの両方を含む重みも低い方の線に寄せるため。量子化の層が 1 つも無い DiT も `"bf16_blocks"` になる（block swap の置き場の大きさからいって、int8 より実態に近い）。
   - **④ 操作パネルは変えない（オーナー裁定）**: 操作パネルは種類の値を辞書の鍵として引くだけなので、バックエンドを起動し直すだけで、裁定 102 の 5 か所の印が新しい線に切り替わる。操作パネルの型の定義に新しい値が載っていないのは動作に効かないので、次に操作パネルを直す機会に足す（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-280）。
+    > **更新（2026-11-22）**: オーナーの実機確認で、操作パネルを配置し直さずに、バックエンドの再起動だけで Single の印が新しい位置に出ることを確かめた（記録簿 §222.11）。
   - **採らなかった案**: 悲観の値（監督の推奨）と楽観の値。1920×1088・キーフレーム 1 枚の梯子の段の S に寄せた値（保管庫 [`Outputs-archive/h3-mixed-int8-2026-11-22/`](Outputs-archive/h3-mixed-int8-2026-11-22/) の `F_marker_inventory.md` §4.4 の (B)）。
   - **留保**: 線は概算で、w4a8 のときは概算より実測が厳しく出たので、印の内側で失敗しうる。Chained・Outpainting・Inpainting・参照つきも同じ線を共用し、BF16 のブロックを含む重みで参照つきの場合は概算もしていない。w4a8 や fp8 の層と印の無いブロックの両方を含む重み（手元にも配布物にも見つかっていない）は、この線でも足りない可能性がある。
-  - **状態**: 実装済み（dev `c555cc79`。バックエンドだけ）・オーナーの実機確認待ち（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-292）。実測の線への置き換えは台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291。
+  - **状態**: 完結（2026-11-22。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292）。オーナーの実機確認は 4 項目すべて合格（記録簿 §222.11）。線の値は概算のままで、実測の線への置き換えは台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -1647,8 +1648,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | Outpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205、操作パネルはフロントエンド `Docs/DEVLOG.md` §168） | 弾 1＝調査・幾何・エンジン・ワーカー・CPU の門・GPU の門 G0〜G4・遠隔目視（go。記録簿 §205.16）、弾 2＝API・アプリ層・アダプタ・配信・操作パネル・MCP・文書。GPU の門 G5（快適上限の 2 点）・G6（20 ステップの完走）は合格し（記録簿 §205.19・§205.20）、操作パネルは配布済み（§205.22）。オーナーの実機の門 G7 も合格した（§205.25。裁定 99・§3.6） |
 | Inpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208、操作パネルはフロントエンド `Docs/DEVLOG.md` §169） | 第 0 段＝スパイク、弾 1＝エンジン・ワーカー・アダプタ・API・mock・MCP・テスト・文書、弾 2＝操作パネル。GPU の門とオーナーの目視・実機確認は合格した（記録簿 §208.7・§208.10。裁定 100・§3.7） |
 | fp8 と w4a8 の重み（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-283。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211、操作パネルはフロントエンド `Docs/DEVLOG.md` §171） | 第 0 段＝スパイク（記録簿 §210）、弾 1＝検出・層・読み込みのときの判定・テスト、弾 2＝操作パネルの Settings の理由文、弾 3＝文書。機械の門・GPU の門・オーナーの視聴は合格（記録簿 §211。裁定 101・§5・§7） |
-| 混在の int8 の重み（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221） | エンジンの 2 か所（int8 の adaln_proj の倍率・VRAM 16GB mode の BF16 の qkv）とテスト。機械の門と GPU の門（開発機の 6 条件）は完走、オーナーの実機確認は台帳 §1-290（裁定 105・§5・§6.5） |
-| BF16 のブロックを含む重みの暫定の快適上限の線（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-292。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222） | 重みの種類 `"bf16_blocks"` と記述子の線（バックエンドだけ）とテスト。実機での生成の確認はしていない。オーナーの実機確認は台帳 §1-292（裁定 106） |
+| 混在の int8 の重み（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221） | エンジンの 2 か所（int8 の adaln_proj の倍率・VRAM 16GB mode の BF16 の qkv）とテスト。機械の門と GPU の門（開発機の 6 条件）は完走、オーナーの実機確認は合格した（記録簿 §221.13。裁定 105・§5・§6.5） |
+| BF16 のブロックを含む重みの暫定の快適上限の線（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222） | 重みの種類 `"bf16_blocks"` と記述子の線（バックエンドだけ）とテスト。実機での生成の確認はしていない。オーナーの実機確認（印の位置）は合格した（記録簿 §222.11。裁定 106） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。

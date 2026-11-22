@@ -50,8 +50,42 @@ DITS = {
     "fp8": (lambda: _dit_tensors(layers=2, refiner=1, fmt_of=_all("fp8"), **WIDE), "fp8"),
     "w4a8": (lambda: _dit_tensors(layers=2, refiner=1, fmt_of=_all("w4a8"), **WIDE), "w4a8"),
     "mixed": (lambda: _dit_tensors(layers=2, refiner=1, fmt_of=_mixed, **WIDE), "w4a8"),
-    "unquantized": (lambda: _dit_tensors(quant=False), "int8"),
+    "unquantized": (lambda: _dit_tensors(quant=False), "bf16_blocks"),
 }
+
+
+def _bf16_in(base, *heads):
+    """``base`` (a fmt_of), but no marker (bf16) on the layers under ``heads``."""
+    return lambda layer: None if layer.startswith(heads) else base(layer)
+
+
+def _cls(tmp_path, tensors):
+    _, cfg = h3_format.inspect_h3_dit(_write(tmp_path / "dit.safetensors", tensors))
+    return h3_format.quant_class(cfg)
+
+
+@pytest.mark.parametrize("heads", [
+    ("blocks.1.",),  # a whole block: qkv / out_proj / fc1 / fc2
+    ("blocks.2.attn.qkv_proj",),
+    ("blocks.0.attn.out_proj",),
+    ("blocks.1.mlp.fc1",),
+    ("blocks.2.mlp.fc2",),
+], ids=["block", "qkv", "out_proj", "fc1", "fc2"])
+def test_an_unmarked_block_linear_is_bf16_blocks(tmp_path, heads):
+    assert _cls(tmp_path, _dit_tensors(fmt_of=_bf16_in(_all("int8"), *heads))) == "bf16_blocks"
+
+
+def test_unmarked_adaln_proj_and_refiner_stay_int8(tmp_path):
+    """The official layout: every block Linear int8, ``adaln_proj`` F16 and the refiner bf16, no marker."""
+    _, cfg = h3_format.inspect_h3_dit(_write(tmp_path / "dit.safetensors", _dit_tensors()))
+    assert not any("adaln_proj" in layer or layer.startswith("token_refiner.") for layer in cfg.quant)
+    assert h3_format.quant_class(cfg) == "int8"
+
+
+@pytest.mark.parametrize("base", [_all("w4a8"), _all("fp8"), _mixed], ids=["w4a8", "fp8", "mixed"])
+def test_bf16_blocks_wins_over_the_quantized_kinds(tmp_path, base):
+    tensors = _dit_tensors(layers=2, refiner=1, fmt_of=_bf16_in(base, "blocks.1."), **WIDE)
+    assert _cls(tmp_path, tensors) == "bf16_blocks"
 
 
 @contextmanager

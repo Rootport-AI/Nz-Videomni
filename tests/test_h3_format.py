@@ -415,6 +415,28 @@ def test_mixed_formats_in_one_file(tmp_path):
     assert len(cfg.quant) == 9
 
 
+def test_bf16_blocks_and_an_int8_adaln_proj(tmp_path):
+    """Blocks 0 and 2 BF16 (no marker), block 1 int8 with its ``adaln_proj`` int8 too (a
+    marker without the ConvRot keys): accepted; the BF16 layers are not in ``quant`` and
+    the AdaLN marker reads ``convrot=False``."""
+    bf16 = ("blocks.0.", "blocks.2.")
+    t = _dit_tensors(fmt_of=lambda layer: "int8" if layer.startswith("blocks.") and not layer.startswith(bf16) else None)
+    for head in bf16:
+        t[f"{head}adaln_proj.linear.weight"] = ("BF16", (18 * HID, 8))
+        t[f"{head}adaln_proj.linear.bias"] = ("BF16", (18 * HID,))
+    entries = _quant_entries("blocks.1.adaln_proj.linear", (18 * HID, 8), "int8")
+    entries["blocks.1.adaln_proj.linear.comfy_quant"] += ({"format": "int8_tensorwise"},)
+    t.update(entries)
+    _, cfg = h3_format.inspect_h3_dit(_write(tmp_path / "dit.safetensors", t))
+    assert cfg.unknown == ()
+    assert sorted(cfg.quant) == [
+        "blocks.1.adaln_proj.linear", "blocks.1.attn.out_proj", "blocks.1.attn.qkv_proj",
+        "blocks.1.mlp.fc1", "blocks.1.mlp.fc2",
+    ]
+    assert cfg.quant["blocks.1.adaln_proj.linear"] == QuantSpec("int8_tensorwise", False, 256)
+    assert cfg.quant["blocks.1.attn.qkv_proj"] == QuantSpec("int8_tensorwise", True, 256)
+
+
 def test_metadata_markers_alone(tmp_path):
     """Kijai's layout: no comfy_quant tensor, every marker in the header metadata."""
     fmt_of = _all({"fmt": "w4a8", "g": 16})

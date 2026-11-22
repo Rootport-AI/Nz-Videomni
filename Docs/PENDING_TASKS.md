@@ -11,6 +11,16 @@
 
 ---
 
+## 1. 近日中の改修項目
+
+実装・修正の内容が具体的で、まだ着手していないもの。全項目が片づいて空になったら、本節は見出しごと削除する。
+
+### 1-291. MiniMax H3 の BF16 のブロックを含む重みの快適上限の較正（起票：2026-11-22）
+
+- **概要**: 一部のブロックを BF16 のまま残した重み（種類 `bf16_blocks`。`Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49`・`10Eros_Max_h3_8stepTURBO_beta7_int8HQ`）の快適上限の線は、概算による暫定の値である。この暫定の線を、実機で測った境界に基づく線で置き換える。1920×1088 と 2560×1472 で、快適の上端とその 1 段上の OOM の点を測り、記述子の `bf16_blocks` の値を決める。
+- **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
+- **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
@@ -133,8 +143,9 @@
   - (a) 本文を付けない `POST /pipeline/load` に、同時 1 ジョブの守り（`has_active`）が無い。ワーカーの降ろしの最中に読み込みが割り込むと、後片付けが state を UNLOADED で上書きする経路が残っています。
   - (b) キャンセル前の早期終了（`services/pipeline_manager.py` の `run_job`・`run_chain_job` の冒頭）が、読み込み済みかを見ずに state を READY に書く。
   - (c) `OutpaintSpec.source_video_id` が空文字を通す（`api/models.py`）。空文字はスキーマでは LTX の形に見え、受付では H3 の枝に入ります。`InpaintSpec.source_video_id` は `min_length=1` で拒むようにしたので、Outpainting 側も揃える（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 の「API とフィーチャースコープ」）。
+  - (d) 操作パネルの型の定義（`webui/src/api/types.ts` の重みの種類の列挙 `TransformerQuantClass`）と説明のコメントに、バックエンドが返すようになった `"bf16_blocks"` が無い。値は辞書の鍵として引くだけなので動作には影響しません。次に操作パネルを直す機会に足す（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222.3）。
   - (a)・(b) の事実と場所は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11（1 と 2）。
-- **前提**: (a)・(b) は 1-279 の敵対的レビューで見つかり（記録簿 §206.6 の提-3）、コードの読解で確かめました。(c) は 1-124 の実装で見つかりました。どれも実害の観測はありません。
+- **前提**: (a)・(b) は 1-279 の敵対的レビューで見つかり（記録簿 §206.6 の提-3）、コードの読解で確かめました。(c) は 1-124 の実装で見つかりました。(d) は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292 の実装で残したものです。どれも実害の観測はありません。
 - **留意**: 直すときは 1-279 の原則「終端の状態は後片付けの後に最後に書く」（記録簿 §206.4・§206.5）に揃える。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。
 

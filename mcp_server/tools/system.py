@@ -108,7 +108,9 @@ async def list_models() -> dict[str, Any]:
             読み込みの成功時にファイルの SHA-256 で判定した保存値）、
             ``transformer_quant_class``（有効なベースモデルで選択中の
             MiniMax H3 の transformer の重みの形式 ``int8`` / ``fp8`` /
-            ``w4a8`` / null。w4a8 の層を 1 層でも含めば ``w4a8``。読み込みの
+            ``w4a8`` / ``bf16_blocks`` / null。本体ブロックの大きな線形層に
+            量子化していない層が 1 つでもあれば ``bf16_blocks``、そうでなく
+            w4a8 の層を 1 層でも含めば ``w4a8``。読み込みの
             成功時と起動時にヘッダから判定した値で、LTX は null。get_config
             の ``limits.comfort_budgets.h3.single_rows_budget_by_quant_class``
             の鍵と照合して快適上限の線を選ぶ。``Docs/COMFORT_LIMIT_TABLE.md``

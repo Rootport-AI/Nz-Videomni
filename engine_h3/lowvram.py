@@ -13,7 +13,9 @@ quantized kernels: the layer's ``shares_input`` decides. When it says yes
 groups' slices reuse it (the layer's ``quantize_input`` / ``forward_rows_q``,
 台帳 §1-105 ①; the same comfy-kitchen kernels with the same arguments, see
 ``engine_h3.quant_linear``); otherwise (w4a8, whose kernel quantizes inside)
-once per slice by ``forward_rows`` as before. Every one of those operations is
+once per slice by ``forward_rows`` as before. A qkv the checkpoint keeps as a
+plain bf16 ``nn.Linear`` gets the same head groups' rows through ``F.linear``
+(checked by the CPU tests only). Every one of those operations is
 per row or per head, so the target is the off path's result bit for bit
 (裁定 46; checked by the CPU tests and the GPU gates A-G2 / A-G3b). sdpa is
 bit-identical; with sage, 2 of the 50 blocks differ (the SageAttention kernel
@@ -42,6 +44,8 @@ import math
 from dataclasses import dataclass
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from engine_h3 import dit as _dit
 from engine_h3 import lora as _lora
@@ -116,6 +120,14 @@ def _rows_into(out: torch.Tensor, chunks, fn) -> torch.Tensor:
     return out
 
 
+def _linear_rows(layer, x, n0, n1, lora_xa=None):
+    """Output features [n0, n1) of a plain nn.Linear (no bias): the quantized Linear's forward_rows for a bf16 layer."""
+    out = F.linear(x, layer.weight[n0:n1])
+    if lora_xa is not None:   # not through Module.__call__, so the LoRA hook does not fire
+        out = _lora.apply(layer, None, out, n0, n1, xa=lora_xa)
+    return out
+
+
 def block_forward(
     block,
     x: torch.Tensor,
@@ -147,7 +159,10 @@ def block_forward(
     o = torch.empty((s, inner), dtype=torch.bfloat16, device=x.device)
     qkv = attn.qkv_proj
     xa = _lora.xa_for(qkv, h)   # LoRA's f32(h) @ A^T once per block (before h goes); None without LoRA
-    if qkv.shares_input(h):
+    if isinstance(qkv, nn.Linear):
+        # a block the checkpoint keeps in bf16: same head-group rows, plain F.linear
+        proj = functools.partial(_linear_rows, qkv, h, lora_xa=xa)
+    elif qkv.shares_input(h):
         # h quantized once for every head group's q, k, v slice (台帳 §1-105 ①)
         proj = functools.partial(qkv.forward_rows_q, *qkv.quantize_input(h), lora_xa=xa)
     else:

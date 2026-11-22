@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査（DiT の量子化は int8 ConvRot・fp8・w4a8。§5・§7。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211）・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査（DiT の量子化は int8 ConvRot・fp8・w4a8。ConvRot なしの int8 と、一部のブロックを BF16 のまま残したファイルも受ける。§5・§7。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211・§221）・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -27,7 +27,7 @@
 ## 1. 結論（何をするのか）
 
 1. MiniMax H3 を第 3 のエンジン系統（`h3`）として載せている。**専用の仮想環境 `.venv-engine-h3`・専用のワーカー `engine_h3/worker.py`・専用のアダプタ**を持つ（MULTI_ENGINE_DESIGN §3.3 の「同居できない系統」パターン）。
-2. 重みは公式系 FL2VA の**枝刈り（AdaLN の枝を表に畳んだ版）** の DiT と、**int8 ConvRot のテキストエンコーダ**、Comfy-Org 配布の映像 VAE と音声 VAE である。DiT の量子化の形式は **int8 ConvRot・fp8（`float8_e4m3fn`）・w4a8（`asym_w4a8_int8`）の 3 つ**を受け、1 つのファイルに混在してもよい（裁定 101。§5・§7）。量子化層の計算は、ComfyUI が呼ぶのと同じ comfy-kitchen の CUDA 拡張の関数に同じ引数で任せ、CPU オフロードは本製品の block swap と先読みに載せる。VRAM 16GB で動かす。
+2. 重みは公式系 FL2VA の**枝刈り（AdaLN の枝を表に畳んだ版）** の DiT と、**int8 ConvRot のテキストエンコーダ**、Comfy-Org 配布の映像 VAE と音声 VAE である。DiT の量子化の形式は **int8 ConvRot・fp8（`float8_e4m3fn`）・w4a8（`asym_w4a8_int8`）の 3 つ**を受け、1 つのファイルに混在してもよい（裁定 101。§5・§7）。int8 は ConvRot なしも受け、量子化されていない BF16 の層（ブロックごと BF16 のまま残したもの）が混ざってもよい（裁定 105）。量子化層の計算は、ComfyUI が呼ぶのと同じ comfy-kitchen の CUDA 拡張の関数に同じ引数で任せ、CPU オフロードは本製品の block swap と先読みに載せる。VRAM 16GB で動かす。
 3. 推論は CFG なし・1 ステップ 1 回の前向き計算で、映像と音声を同じ系列の中で同時にノイズ除去する。ステップ数と shift は要求の項目として API と操作パネルから渡し、ワーカーの引数で受け取る（§9）。
 4. ノイズ除去の段には「VRAM 16GB mode」（既定 on）がある。活性化をヘッド群と行の塊に分けて VRAM の山を下げ、共有メモリへの退避を防ぐ（§6.5）。
 5. 単発の A2V（音声から映像）は、音声の行を元の音声の潜在に寄せる「行ごとの連続値マスク」で行う（§3.1）。同じ仕組みで、連結のクリップごとの A2V（§3.3）も動く。ネガティブプロンプトは VSF 方式だけを持つ（§3.5）。
@@ -45,6 +45,7 @@
   > **更新（2026-10-19）**: 「α版の I2V は先頭フレームだけ」は台帳 §1-97 で広げた。いまの I2V は、最大 10 枚のキーフレームを 0〜F−1 の任意のフレームに置ける（裁定 56・59、§3）。
 - **裁定 6 【オーナー裁定】**: 重みの形式は int8 ConvRot とする。利用者が CivitAI などから落としたファイルをフォルダに置くだけで動かせることを理想とする。理由は、ファインチューンが大量に出回っており、コミュニティの主流が int8 ConvRot だからである。
   > **更新（2026-11-12）**: → 2026-11-12 裁定 101 で更新。DiT は int8 ConvRot に加えて fp8 と w4a8 も受ける（§5・§7）。
+  > **更新（2026-11-22）**: → 2026-11-22 裁定 105 で更新。int8 は ConvRot なしも受け、一部のブロックを BF16 のまま残したファイルと、adaln_proj まで int8 にしたファイルも動く（§5・§6.5・§7）。
 - **裁定 7 【オーナー裁定】**: 配布は公開リポジトリからの直接ダウンロードとし、再ホストはしない（ライセンスに地域条項があるため）。
 - **裁定 8 【オーナー裁定】**: テキストエンコーダは int8 ConvRot を使う。nvfp4 や bf16 は将来の拡張とする。
   > **更新（2026-11-12）**: → 2026-11-12 裁定 101 で更新。テキストエンコーダは int8 ConvRot のまま据え置き、事前検査も int8 だけを受ける（裁定 101 ①。§7）。fp8 と w4a8 を受けるのは DiT だけである。
@@ -355,6 +356,7 @@
   - **A3 形式の種類はアプリ側で、選択が変わるときに決める（オーナー裁定）**: 読み込みの成功時と、起動時（前回の選択を復元したとき）に、`h3_format.inspect_h3_dit`（safetensors のヘッダだけを読む）から種類を決め、`PipelineManager` の属性 1 つに持つ。`GET /models` は新しい欄 `transformer_quant_class`（`"int8"`／`"fp8"`／`"w4a8"`／null。LTX の系統は null）でその値を返すだけで、ファイルを読まない。ワーカーとワーカーへの送り物は変えない。LTX の種別判定 `services/weight_class.py` は広げず（裁定 94 は生きている）、H3 は別の口にする。
   - **B1 線は記述子が種類ごとに持つ（オーナー裁定）**: 記述子 `scripts/manifests/40-minimaxh3.json` の `comfort` に `single_rows_budget_by_quant_class`（鍵は種類名、値はその種類の S〔DiT に入る総行数〕の線）を足し、既存の `single_rows_budget` は既定の線として残す。操作パネルが種類で引き、サーバーは線を読まない（助言専用のまま）。鍵は起動時に `build_comfort_budgets` が `h3_format.H3_QUANT_CLASSES` と照合し、違えば起動を止める。
   - **C1 w4a8 の層が 1 層でもあれば w4a8 の線（オーナー裁定）**: w4a8 の層を含む重みは w4a8 の線、それ以外（int8・fp8・量子化の層が無い DiT）は既定の線。1 つのファイルに w4a8 と int8 の層が混在する重み（TenStrip の Eros）も w4a8 の線にする。
+    > **更新（2026-11-22）**: → 2026-11-22 裁定 106 で更新。本体ブロックの大きな線形層に量子化の印が無い層がある重み（一部のブロックを BF16 のまま残した重み・量子化の層が無い DiT）は、w4a8 より先に判定して種類 `"bf16_blocks"` とし、概算による暫定の線を当てる。A3 の値の一覧にも `"bf16_blocks"` が加わった。
   - **理由（オーナーの言葉）**: 「マーカーがないと、ユーザーには目安となるものがなくて途方に暮れてしまう。混在型の重みを使ったときに OOM する可能性があるとしても、ユーザーは『次はこのマーカーの少し下で試そう』と判断できる。何の手がかりもなく、OOM しなくなるまでフレーム数の階梯を上から順番に試していくよりもずっとマシだ」。印は常に出し、外れうる条件は文書の注記に置く。
   - **振る舞い**: 起動直後（復元した選択・未読み込み）から起動時の判定の値で印が出る。読み込みの成功で更新し、解放では保持する（`transformer_role` と同じ）。ヘッダが読めないときは null と WARNING、ファイルが無いときは null で、どちらも読み込みは失敗させない（印は既定の線）。欄を知らない古い操作パネルは既定の線のまま（後方互換）。Single・Chained（クリップごと）・Inpaint・Outpaint の 4 つの印と、右クリックの種（新規オブジェクトの初期フレーム数）の 5 か所が同じ解決関数を通るので、同時に切り替わる。
   - **変えないこと**: 線の値そのもの・Gradio・サーバー側の検証・LTX の `rows[]`・事前検査と `default` の検査飛ばし（ワーカーと `services/weight_class.py` は A3）。
@@ -375,6 +377,28 @@
   - **② FL2VA の重みでは、参照を使うバッチの開始を止める**: FL2VA の重みが読み込まれていて、実行する行の使われるクリップに、使われる参照が 1 件でもあるときは、バッチの開始を止めて「Ref2VA モデルまたは Hybrid モデルをロードしてください。現在ロードされているFL2VA モデルでは、Referenceは使えません。」を出す。単発の生成と Chained 画面の Generate が注意（裁定 87 の注意文 ①）だけで止めないのと違う。理由は、初心者に H3 には FL2VA と Ref2VA の 2 種類の重みがあると知ってもらうため。参照を使わないバッチは FL2VA のまま流せる（参照が無いなら FL2VA のほうが適した重みのため）。種別が判定できない Hybrid の重みでは止めない（注意文 ① と同じ判定）。
     > **更新（2026-11-21）**: オーナーの実機確認を受けて、止めるときの文をオーナーの指定の文に変えた（止める条件は変わらない）。修正の記録はフロントエンド `Docs/DEVLOG.md` §174、実機確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §216。
   - **状態**: 完結（2026-11-22。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-288）。オーナーの実機確認は全項目合格（記録簿 §216.2・§217.2・§218.2・§218.9）。
+- **裁定 105 【オーナー裁定・監督裁定】**: 一部のブロックを BF16 のまま残した int8 の重みと、adaln_proj（時刻による変調の層）まで int8 にした重み（Sulphur-3 の int8 版 2 本と 10Eros int8HQ。台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290。2026-11-22）を動かす修正で決めたことです。重みの構成・原因・数値の照合・実機の確認・VRAM の概算の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221 にだけ書きます（本書には写しません）。仕組みは §5・§6.5・§7 です。
+  - **① ゴール（オーナー裁定）**: 置くだけで動き、意味のある動画として収束すること。ComfyUI とのビット一致は求めないが、同じ品質であること。問題なく動いている推論の経路を壊さないこと。快適上限の較正と操作パネルの修正は範囲外。
+  - **② 範囲（オーナー裁定）**: 10Eros int8HQ も一緒に直す。
+  - **③ int8 の adaln_proj の計算（監督裁定。オーナー承認の計画）**: int8 の値に行ごとの倍率を掛けて float32 に戻してから、これまでと同じ float32 の行列積で計算する（§5）。量子化の前の値に最も近い方法だった（記録簿 §221.5）。
+  - **④ BF16 のまま残った qkv（監督裁定。オーナー承認の計画）**: VRAM 16GB mode では、量子化層と同じヘッド群ごとに重みの行を切り出して計算する（§6.5）。qkv を一括で計算する作りにはしない（省 VRAM の設計を保つ）。
+  - **⑤ 快適上限（オーナー裁定）**: 実機の較正はしないが、概算まではする。3 秒までしか作れないほど重いなら打ち手が要る。概算では 1920×1088 で約 10 秒は作れる見込みなので、打ち手は入れない。BF16 のブロックを含む重みの較正は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291 に起票した（今回は起票だけ）。それまでは、この種の重みにも int8 の線の印が出る（裁定 102 の C1 の規則のまま）。
+    > **更新（2026-11-22）**: → 2026-11-22 裁定 106 で更新。この種の重みには、較正を待たずに概算による暫定の線で印を出す。§1-291 の較正は、この暫定の線を実測の線で置き換える作業になった。
+  - **⑥ 実機の確認の設定（オーナー裁定）**: 製品の既定（20 ステップ・shift 12／3）で回す。
+  - **進め方（オーナー裁定）**: 事前調査の担当が出した案（qkv に素の線形層の経路を足す）は、決定事項ではなく検証すべき仮説として扱う。
+  - **採らなかった案**: 読み込みの段で int8 を float に戻して素の線形層に入れる（倍率の置き場が無く、読み込みの手順に例外の規則が増える）。adaln_proj を ComfyUI と同じく int8 の核に通す（量子化層の入出力が bf16 固定なので、公式の重みも通る関数を変えることになる。精度も ③ に劣る）。qkv を一括で計算する（④）。
+  - **留保**: §5 の「int8 ConvRot」の項と §6.5 の「範囲と既知の限界」にある（ConvRot つきで量子化した int8 の adaln_proj・BF16 の qkv の GPU でのビット一致）。オーナーの視聴による判定は台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290。
+    > **更新（2026-11-22）**: オーナーの視聴の判定は済んだ（以前のようなノイズは無かった。記録簿 §221.8 の追記）。残るのは操作パネルからの実機確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-290）。その後、同じ日に合格した（記録簿 §221.13。閉じたあとは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290）。
+  - **状態**: 完結（2026-11-22。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290）。オーナーの実機確認は 5 項目すべて合格（記録簿 §221.13）。
+- **裁定 106 【オーナー裁定・監督裁定】**: 一部のブロックを BF16 のまま残した重み（裁定 105）に、概算による暫定の快適上限の線を出すとき（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292。2026-11-22）に決めたことです。線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、API の欄は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.7・§6.9(c)、概算の前提・印の位置・確認の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222 にだけ書きます（本書には写しません）。
+  - **① 暫定の線を載せる（オーナー裁定）**: 実機の較正（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291）を待たず、概算（記録簿 §221.9）の数字を暫定の線として印に載せる。理由は裁定 102 の C1 と同じで、目安は、不正確でも無いよりある方がよい。この線は、ほかの線の決まり（実測で快適だった最も大きい S にちょうど置く。裁定 94）の外にあり、実測の点を持たない。
+  - **② 線は概算の中央の値（オーナー裁定）**: 概算の 3 つの見込み（楽観・中央・悲観）のうち中央を採る。監督は悲観を推したが、オーナーは中央を選んだ。
+  - **③ 種類 `"bf16_blocks"` を足し、最初に判定する（監督裁定。オーナー承認の計画）**: 本体ブロックの大きな線形層（qkv・out_proj・fc1・fc2）に量子化の印が無いものが 1 つでもあれば `"bf16_blocks"`、それ以外は裁定 102 の C1 のまま（w4a8 → fp8 → int8）。adaln_proj と token_refiner は数えない（公式の重みでも量子化されていないので、数えると公式の重みが新しい線に入る）。最初に判定するのは、新しい線がいちばん低いので、w4a8 や fp8 の層と印の無いブロックの両方を含む重みも低い方の線に寄せるため。量子化の層が 1 つも無い DiT も `"bf16_blocks"` になる（block swap の置き場の大きさからいって、int8 より実態に近い）。
+  - **④ 操作パネルは変えない（オーナー裁定）**: 操作パネルは種類の値を辞書の鍵として引くだけなので、バックエンドを起動し直すだけで、裁定 102 の 5 か所の印が新しい線に切り替わる。操作パネルの型の定義に新しい値が載っていないのは動作に効かないので、次に操作パネルを直す機会に足す（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-280）。
+    > **更新（2026-11-22）**: オーナーの実機確認で、操作パネルを配置し直さずに、バックエンドの再起動だけで Single の印が新しい位置に出ることを確かめた（記録簿 §222.11）。
+  - **採らなかった案**: 悲観の値（監督の推奨）と楽観の値。1920×1088・キーフレーム 1 枚の梯子の段の S に寄せた値（保管庫 [`Outputs-archive/h3-mixed-int8-2026-11-22/`](Outputs-archive/h3-mixed-int8-2026-11-22/) の `F_marker_inventory.md` §4.4 の (B)）。
+  - **留保**: 線は概算で、w4a8 のときは概算より実測が厳しく出たので、印の内側で失敗しうる。Chained・Outpainting・Inpainting・参照つきも同じ線を共用し、BF16 のブロックを含む重みで参照つきの場合は概算もしていない。w4a8 や fp8 の層と印の無いブロックの両方を含む重み（手元にも配布物にも見つかっていない）は、この線でも足りない可能性がある。
+  - **状態**: 完結（2026-11-22。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292）。オーナーの実機確認は 4 項目すべて合格（記録簿 §222.11）。線の値は概算のままで、実測の線への置き換えは台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -1231,6 +1255,8 @@ MCP の `submit_generate` は `inpaint_*` の 4 引数（マスクの ID・音�
 - **3 つが同じ名前で持つもの**: `in_features`・`out_features`・`spec`・`bias`（fp8・w4a8 では常に None）・`forward(x)`・`forward_rows(x, n0, n1, lora_xa=None)`・`shares_input(x)`・`quantize_input(x)`・`forward_rows_q(xq, xs, n0, n1, lora_xa=None)`・`extra_repr`。VRAM 16GB mode（§6.5）と LoRA はこれらを名前で呼ぶ（duck typing）。そろっていることはテストで固定する。
 - **差し替え**: `swap_in_int8_linears`（名前は据え置き。`text_encoder.py` が import のときに束縛するため）が、層の印の形式（`spec.format`）で 3 つのモジュールを選び、meta の上で組む。fp8 と w4a8 の層が差し替え先の `nn.Linear` にバイアスを持つときは、理由を出して読み込みを断る。
 - comfy-kitchen は `quant_linear._ck()` のモジュール属性を経由して呼ぶ（テストの偽のカーネルがそこを差し替える）。
+- **印の無い層は差し替えない**: 量子化の印が無い浮動小数点の層（一部のブロックを丸ごと BF16 のまま残したファイルの qkv・out_proj・fc1・fc2 など）は、素の `nn.Linear` のまま残る。素の `nn.Linear` は上の名前（`shares_input`・`forward_rows` など）を持たないので、それを名前で呼ぶ箇所は型で分ける（いまは VRAM 16GB mode の qkv の 1 か所だけ。§6.5。out_proj・fc1・fc2 と LoRA は素の線形層でもそのまま動く）。
+- **【改修者への注意】量子化されうる線形層の重みを、層を呼ばずに直接読む箇所では、倍率を掛けて float に戻す必要がある。** int8 の `weight` は生の符号で、倍率（`weight_scale`）を掛けて初めて元の重みになる。いま直接読んでいるのは `H3AdaLNProj.forward`（`engine_h3/dit.py`）だけで、層が `H3Int8Linear` のときだけ倍率を掛ける（下の「int8 ConvRot」の項。裁定 105）。
 
 ### int8 ConvRot
 
@@ -1241,6 +1267,10 @@ MCP の `submit_generate` は `inpaint_*` の 4 引数（マスクの ID・音�
   - eager を切る理由: eager は制約から外れた呼び出しを黙って受けて遅くなるだけで、速度の低下から区別できない。切っておけば、CUDA 経路に乗らない呼び出しは `NoCapableBackendError` で止まる（**fail loud**）。
 - **CUDA 経路に乗る条件**: 重みとスケールが GPU 上にあること。block swap が重みを GPU に載せた状態で呼ぶ限り満たされる。
 - groupsize は 256 以外（例: 64）も、そのまま `int8_linear` に渡す。
+- **ConvRot なしの int8**: 印に `convrot` の鍵が無い（または偽の）層も `H3Int8Linear` で、印の旗をそのまま `int8_linear` に渡す（回転しない）。専用の分岐は無い（Sulphur-3 の `s3_raw_int8` で完走。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221）。
+- **int8 の adaln_proj（裁定 105）**: adaln_proj（時刻による変調の層。公式の重みでは F16）に印があれば、ほかの層と同じく `H3Int8Linear` に差し替わる。この層は `H3AdaLNProj.forward` が重みを直接読んで float32 の行列積で計算する（精度の島）ので、層が `H3Int8Linear` のときだけ、int8 の値に `weight_scale`（`[N,1]`）を掛けて float32 に戻してから計算する。素の線形層（公式の形）の計算は変わらない。最終層の変調も同じ関数を通る。
+  - **既知の限界**: ConvRot つきで量子化した int8 の adaln_proj が来ると、入力の回転を戻さずに計算するので誤った値になる。入力は 8 次元で組 256 の回転は成り立たず、そうした配布物も見つかっていない（見つかった int8 の adaln_proj は ConvRot なしだけ）ので、分岐は足していない。
+  - adaln_proj が fp8・w4a8 のファイルは、バイアスつきの層への差し替えの時点で断る（上の「差し替え」）。
 - **例外（VRAM 16GB mode の qkv だけ。台帳 §1-105 ①・オーナー裁定 2026-10-25）**: VRAM 16GB mode の qkv の射影（§6.5）だけは、関数 API の `int8_linear` に任せず、comfy-kitchen 0.2.37 の**公開されていない内部**を使って、入力の量子化を 1 ブロック 1 回にする。量子化は `backends.cuda.quantize_int8_rowwise_convrot64`（`int8_linear` が中で呼ぶものと同じ核・同じ引数）、行列積は `int8_linear` の量子化より後の部分を写した `_int8_gemm_prequantized`（`engine_h3/quant_linear.py`）で行う。
   - 版 0.2.37・記号・引数の並びを起動時に検査し、外れたらログに残して従来の経路に戻す（ロードは拒否しない。詳細は `quant_linear.py` の冒頭）。
   - **fail loud の保ち方**: この経路は comfy-kitchen の登録の制約を通らない。そのため、重みとスケールが入力と同じデバイスに無い呼び出しは共有せず、従来の `int8_linear` に回して `NoCapableBackendError` で止める。
@@ -1310,7 +1340,7 @@ on の経路で行うことは次の 9 つである。#1・#7・#8 は VRAM の�
 ### 置き方
 
 - **`engine_h3/lowvram.py`**: 新しい計算を書かない。off の経路が呼ぶ既存の関数（`_modulate`・`_gate`・`block.mlp`・`_attention`・`apply_rope`・`_linear_f32`・各 norm）を、**行の範囲・ヘッドの群ごとに呼ぶだけ**で、結果は事前に確保した受け皿へ書く。含むのは `Vram16Plan`（分割の単位）・`row_chunks`・`blocks_on_gpu_for`・`derive_memory_cap`・`block_forward`・`embed_rows_packed`・`final_rows_chunked`。`_modulate`・`_gate`・`_attention`・`apply_rope`・`_linear_f32` の 5 つは `engine_h3.dit` のモジュールを経由して呼ぶので、テストでの差し替えが効く（`block.mlp` と各 norm はブロックから直接呼ぶ）。
-  - **例外（台帳 §1-105 ①・オーナー裁定 2026-10-25）**: qkv の入力は、ヘッド群のループの前に 1 回だけ量子化し（`H3Int8Linear.quantize_input`）、その直後に `h` を捨てる。ループの中の q・k・v は、量子化済みの入力から `forward_rows_q` で切片ごとに計算する（行列積は `_int8_gemm_prequantized`。§5 の例外）。使えるかはブロックごとに `shares_input` が決め、使えないときは従来どおり `forward_rows` で切片ごとに量子化する（分岐はこの 1 か所）。LoRA の行数は `xa` から取る（`forward_rows_q` は `lora.apply` に入力を渡さない）。
+  - **例外（台帳 §1-105 ①・オーナー裁定 2026-10-25）**: qkv の入力は、ヘッド群のループの前に 1 回だけ量子化し（`H3Int8Linear.quantize_input`）、その直後に `h` を捨てる。ループの中の q・k・v は、量子化済みの入力から `forward_rows_q` で切片ごとに計算する（行列積は `_int8_gemm_prequantized`。§5 の例外）。使えるかはブロックごとに `shares_input` が決め、使えないときは従来どおり `forward_rows` で切片ごとに量子化する。qkv が素の `nn.Linear`（BF16 のまま残したブロック。§5 の「印の無い層は差し替えない」）のときは、その前に型で分け、同じヘッド群の重みの行を切り出して `F.linear` で計算する（`_linear_rows`。LoRA は `lora.apply` で行の範囲に足す。裁定 105）。分岐はこの 1 か所である。LoRA の行数は `xa` から取る（`forward_rows_q` は `lora.apply` に入力を渡さない）。
 - **`engine_h3/dit.py`** は分岐と引数だけ。`H3DiTBlock.vram16`（クラス属性。None なら off）に計画が入っていれば、`forward` の先頭で `lowvram.block_forward` へ渡す。`H3DiT.forward` は `vram16` と `tokens_box`（埋め込み済みトークンを入れた容れ物。取り出した後に呼び出し側の参照が残らないようにするため）を受け、ブロックごとに `block.vram16` を**毎回**代入する（None も。常駐した DiT の後始末になる）。`embed_rows` と `final_rows` も `vram16` の有無で分岐する。off の経路の行は変えない。
 - **`H3Int8Linear.forward_rows(x, n0, n1)`**: 出力の行 `[n0, n1)` だけを、毎回 `self.weight` から切った連続ビューで計算する。呼び出し側がヘッドの境目で切るので、`n0` は結果として `head_dim`（128）の倍数になる。
 - 割り当て器の上限と、モジュールを降ろす処理と、`tokens_box` と、ステップの中の 2 か所の `empty_cache`（#9）は `pipeline_h3.py` の `_denoise`（`_vram16_begin`・`_vram16_finish`・`_evict_text_modules`・`_vram16_release`）にある。`lowvram.py` は計算の配置だけを書き、割り当て器を操作しない。ワーカーとアダプタの鍵は §8。
@@ -1378,6 +1408,7 @@ block swap の常駐ブロック数 `blocks_on_gpu`（block swap が GPU に置�
 - 上限のせいで先読みの受け皿が確保できないとき、同期の経路に黙って切り替わる（記録だけ。on の条件では起きていない）。
 - Turing と、comfy-kitchen の内部が検査に合わないときは、qkv の量子化は従来どおり 1 ブロック 21 回になる（§5 の例外）。共有の経路は Ampere では確かめていない（オーナー裁定 2026-10-25 で門に入れなかった）。
 - **fp8 と w4a8 の層**: qkv の入力の共有は、fp8 の `scaled` の経路では行い、fp8 の `dequant` の経路と w4a8 では行わない（§5）。w4a8 の層の一時メモリ（カーネルの中で入力を量子化する作業領域）は int8 より大きいが（層ごとの値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210.6）、定数と上限の決め方は変えていない。製品の条件でのノイズ除去の山は int8 以下に収まった（記録簿 §211.6）。大きな画角・長い尺では w4a8 の予約の山が int8 を上回り、境界が 1 段下がった（2026-11-13 の較正。快適上限表 §21。配信の線は据え置き。裁定 101 ①の更新注記）。
+- **BF16 のまま残したブロック（裁定 105）**: 先読みの受け皿は最大のブロックの大きさで一律に確保するので、BF16 のブロックが 1 個でもあれば受け皿のすべてが BF16 のブロックの大きさになる（BF16 のブロックの数は効かない）。BF16 の qkv では、bf16 の入力を最後のヘッド群まで持ち続けるぶんも山に乗る見込みである。概算と実機 1 点の照合は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221.9 で、較正はしていない（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-291）。快適上限の印は、この概算による暫定の線で出す（種類 `"bf16_blocks"`。裁定 106）。素の BF16 の qkv を行で切り出す経路が off の経路とビット単位で一致することは、CPU のテストでだけ確かめた（GPU では測っていない）。
 
 ---
 
@@ -1454,11 +1485,11 @@ diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・
 - **吸収する揺れ**:
   - 接頭辞 4 通り（無し／`model.diffusion_model.`／`model.model.`／`net.`）を剥がす。
   - 構成（層数・幅・ヘッド数・ffn・AdaLN 表の格子数 G とランク・枝刈りか否か）は、メタデータでなく**テンソルの形状**から導く。
-  - 量子化されていない層は、読んだ後に島の外側を bf16、内側を f32 に揃える。
+  - 量子化されていない層は、読んだ後に島の外側を bf16、内側を f32 に揃える。印の無い浮動小数点の層（BF16・F16・F32）は量子化層に差し替えず、素の Linear のまま受ける。一部のブロックを丸ごと BF16 のまま残したファイルも、この形で受ける（裁定 105。§5 の「印の無い層は差し替えない」）。
   - 知らないテンソルは警告ログを出して捨てる（例: h3ErosMax の `adaln_basis`・`adaln_mean`。研究ノート §13）。量子化層の補助テンソル（`weight_scale`・`input_scale`・`weight_s_rel`・`weight_s_channel`・`weight_codebook`・`comfy_quant`）は知っている名前として扱う。
 - **量子化層の決め方（裁定 101）**: 層が量子化されているかと、その形式は、**重みの dtype ではなく量子化の印**で決める（w4a8 の重みも int8 と同じ I8 で保存されるため）。
   - **印の置き場所は 2 つ**: ファイル先頭のメタデータ式（`__metadata__._quantization_metadata` の `layers`。鍵はテンソル名そのまま）と、層ごとのテンソル `<層>.comfy_quant`。**メタデータ式に載っている層はそちらを採り、載っていない層だけ層ごとの印を読む**（ComfyUI の `convert_old_quants` がメタデータで層ごとの印を上書きするのと同じ優先順位。LTX 側の判定器 `sft_quant_format` も同じ）。両者の一致は確かめない（ComfyUI にも無い）。メタデータの読み出しは `sft_quant_format.metadata_layers` を共用する。
-  - **印から読む鍵**: `format`・`convrot`・`convrot_groupsize`・`group_size`（w4a8）を最上位か `params` の中から（最上位が勝つ）、`full_precision_matrix_mult`（fp8。w4a8 では断るために読む）を最上位から読む。w4a8 の `convrot` は読まない（常に回転する。ComfyUI と同じ）。ほかの鍵（`per_row`・`orig_dtype` など）は無視する。int8 の groupsize は 256 以外も通し、そのまま `int8_linear` に渡す。
+  - **印から読む鍵**: `format`・`convrot`（int8 で鍵が無ければ ConvRot なし）・`convrot_groupsize`・`group_size`（w4a8）を最上位か `params` の中から（最上位が勝つ）、`full_precision_matrix_mult`（fp8。w4a8 では断るために読む）を最上位から読む。w4a8 の `convrot` は読まない（常に回転する。ComfyUI と同じ）。ほかの鍵（`per_row`・`orig_dtype` など）は無視する。int8 の groupsize は 256 以外も通し、そのまま `int8_linear` に渡す。
   - **受ける形式は呼び出し側が指定する**: DiT（`inspect_h3_dit`）は `int8_tensorwise`・`float8_e4m3fn`・`asym_w4a8_int8` の 3 つ（`h3_format.DIT_FORMATS`）、テキストエンコーダ（`inspect_h3_te`）は `int8_tensorwise` だけ（`TE_FORMATS`。裁定 101 ①）。1 つのファイルに形式が混在してよい。
   - **順序**: 印を先に読み、w4a8 の重み（4 ビットを 2 つずつ詰めた `[N,K/2]`）を論理の形 `[N,K]` に直してから、構成を導く形の表を通す。
 - **形式ごとのテンソルの検査**（dtype と形を厳密に）:
@@ -1474,7 +1505,7 @@ diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・
   - 形式ごとのテンソルの dtype か形が上の表と合わないもの。
   - VSA の追加テンソル、PDD ヘッド（拒否するか警告して捨てる）。
   - 量子化層の差し替え先にバイアスがある fp8・w4a8 の層は、事前検査ではなく読み込みの差し替えで断る（§5）。w4a8 の層を RTX 20 系で読み込むときの拒否も、読み込みのとき（§5）である。
-- **コミュニティ版**: 主に試したのは公式のファイルと、検証用の第三者の fp8・w4a8（Kijai の w4a8・h3ErosMax の w4a8 と旧式の印の int8。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211）である。オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。それ以外の派生版の対応の保証は §12 のとおり後回し（§13）。
+- **コミュニティ版**: 主に試したのは公式のファイルと、検証用の第三者の fp8・w4a8（Kijai の w4a8・h3ErosMax の w4a8 と旧式の印の int8。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211）、混在の int8（Sulphur-3 の `s3_raw_int8`〔adaln_proj まで int8・ConvRot なし〕と `Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49`〔一部のブロックが BF16・adaln_proj も int8〕、`10Eros_Max_h3_8stepTURBO_beta7_int8HQ`〔一部のブロックが BF16〕。同 §221）である。オーナーが PinkCherry Hybrid を置いて生成に成功した（実機の事実・2026-10-18）。構造が同じことの根拠は研究ノート §13.3（ComfyUI のコードの読解であり、実測ではない）。それ以外の派生版の対応の保証は §12 のとおり後回し（§13）。
 - **置き場**: 判定は torch に依存しない `h3_format.py`（リポジトリ直下。`sft_quant_format.py`・`chain_math.py` と同じ置き場）に書く。アプリ側（torch の無い仮想環境）の事前検査からも呼ぶためである。
 - **アプリ側の事前検査**: `services/model_registry.py` の `precheck_model_file` が記述子の系統を見て、`h3` なら DiT を `inspect_h3_dit`、テキストエンコーダを `inspect_h3_te` にかける。VAE 2 本は汎用の safetensors 検査（長さと JSON）である。`h3_format.py` の `H3FormatError` は `MODEL_INCOMPATIBLE` に変換して返す。
 - **FL2VA と Ref2VA はヘッダで区別できない**（テンソル名・形状が同じ）。記述子（`scripts/manifests/40-minimaxh3.json`）で配布ファイル名を固定して縛る。
@@ -1617,6 +1648,8 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | Outpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-125。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205、操作パネルはフロントエンド `Docs/DEVLOG.md` §168） | 弾 1＝調査・幾何・エンジン・ワーカー・CPU の門・GPU の門 G0〜G4・遠隔目視（go。記録簿 §205.16）、弾 2＝API・アプリ層・アダプタ・配信・操作パネル・MCP・文書。GPU の門 G5（快適上限の 2 点）・G6（20 ステップの完走）は合格し（記録簿 §205.19・§205.20）、操作パネルは配布済み（§205.22）。オーナーの実機の門 G7 も合格した（§205.25。裁定 99・§3.6） |
 | Inpainting（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-124。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §207・§208、操作パネルはフロントエンド `Docs/DEVLOG.md` §169） | 第 0 段＝スパイク、弾 1＝エンジン・ワーカー・アダプタ・API・mock・MCP・テスト・文書、弾 2＝操作パネル。GPU の門とオーナーの目視・実機確認は合格した（記録簿 §208.7・§208.10。裁定 100・§3.7） |
 | fp8 と w4a8 の重み（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-283。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211、操作パネルはフロントエンド `Docs/DEVLOG.md` §171） | 第 0 段＝スパイク（記録簿 §210）、弾 1＝検出・層・読み込みのときの判定・テスト、弾 2＝操作パネルの Settings の理由文、弾 3＝文書。機械の門・GPU の門・オーナーの視聴は合格（記録簿 §211。裁定 101・§5・§7） |
+| 混在の int8 の重み（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-290。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §221） | エンジンの 2 か所（int8 の adaln_proj の倍率・VRAM 16GB mode の BF16 の qkv）とテスト。機械の門と GPU の門（開発機の 6 条件）は完走、オーナーの実機確認は合格した（記録簿 §221.13。裁定 105・§5・§6.5） |
+| BF16 のブロックを含む重みの暫定の快適上限の線（台帳 [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292。記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222） | 重みの種類 `"bf16_blocks"` と記述子の線（バックエンドだけ）とテスト。実機での生成の確認はしていない。オーナーの実機確認（印の位置）は合格した（記録簿 §222.11。裁定 106） |
 | 以後 | 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目 |
 
 - 快適上限のマーカーは、Single と Chained の各クリップに総行数の線で出す（裁定 94・95。第 2 弾の時点では較正の前で、記述子に `comfort` を持たせず、マーカーを出していなかった）。

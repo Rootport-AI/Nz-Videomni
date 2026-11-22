@@ -839,7 +839,9 @@ _ST_DTYPES = {torch.float32: "F32", torch.bfloat16: "BF16", torch.float16: "F16"
 
 
 def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int, heads: int = HEADS,
-                      hid: int = HID, ffn: int = FFN) -> dict:
+                      hid: int = HID, ffn: int = FFN, bf16_blocks=(), int8_adaln: bool = False) -> dict:
+    """``bf16_blocks``: blocks whose 4 Linears and AdaLN projection stay BF16 (no marker);
+    ``int8_adaln``: the other blocks' and the final layer's AdaLN projections in int8."""
     HID, FFN = hid, ffn  # noqa: N806 -- the module widths, overridable (w4a8 needs K % 256 == 0)
     g = torch.Generator().manual_seed(0)
     inner = heads * HD
@@ -870,15 +872,32 @@ def _tiny_dit_tensors(layers: int, refiner: int, grid: int, rank: int, heads: in
         "adaln_t_table": rnd(grid, rank, dtype=torch.float32),
     }
     lin = {"attn.qkv_proj": (3 * inner, HID), "attn.out_proj": (HID, inner), "mlp.fc1": (2 * FFN, HID), "mlp.fc2": (HID, FFN)}
+
+    def int8(layer, shp):
+        t[f"{layer}.weight"] = rnd(*shp, dtype=torch.int8)
+        t[f"{layer}.weight_scale"] = rnd(shp[0], 1, dtype=torch.float32).abs() / 100
+        t[f"{layer}.comfy_quant"] = mark.clone()
+
+    if int8_adaln:
+        int8("final_layer.adaln_proj.linear", (2 * HID, rank))
     for i in range(layers):
         h = f"blocks.{i}."
+        bf16 = i in bf16_blocks
         for n, shp in lin.items():
-            t[f"{h}{n}.weight"] = rnd(*shp, dtype=torch.int8)
-            t[f"{h}{n}.weight_scale"] = rnd(shp[0], 1, dtype=torch.float32).abs() / 100
-            t[f"{h}{n}.comfy_quant"] = mark.clone()
+            if bf16:
+                t[f"{h}{n}.weight"] = rnd(*shp)
+            else:
+                int8(f"{h}{n}", shp)
         for leaf, n in (("attn.q_norm.weight", HD), ("attn.k_norm.weight", HD), ("norm1.weight", HID), ("norm2.weight", HID)):
             t[h + leaf] = rnd(n)
-        t[f"{h}adaln_proj.linear.weight"] = rnd(18 * HID, rank, dtype=torch.float16)
+        if bf16:
+            t[f"{h}adaln_proj.linear.weight"] = rnd(18 * HID, rank)
+            t[f"{h}adaln_proj.linear.bias"] = rnd(18 * HID)
+            continue
+        if int8_adaln:
+            int8(f"{h}adaln_proj.linear", (18 * HID, rank))
+        else:
+            t[f"{h}adaln_proj.linear.weight"] = rnd(18 * HID, rank, dtype=torch.float16)
         t[f"{h}adaln_proj.linear.bias"] = rnd(18 * HID, dtype=torch.float16)
     for i in range(refiner):
         h = f"token_refiner.blocks.{i}."
@@ -1921,14 +1940,15 @@ def test_shares_input_conditions(monkeypatch):
         assert not mod.shares_input(x()), name
 
 
-def _tiny_vram16_dit(tmp_path, heads=4, layers=2):
+def _tiny_vram16_dit(tmp_path, heads=4, layers=2, bf16_blocks=(), int8_adaln=False):
     from engine_h3.dit import H3DiT
     from engine_h3.pipeline_h3 import dit_key_map_for
     from engine_h3.quant_linear import swap_in_int8_linears
     from engine_h3.sft_load import load_streaming
 
     path = tmp_path / f"tiny_h{heads}.safetensors"
-    _write_sft(path, _tiny_dit_tensors(layers=layers, refiner=1, grid=1025, rank=8, heads=heads))
+    _write_sft(path, _tiny_dit_tensors(layers=layers, refiner=1, grid=1025, rank=8, heads=heads,
+                                       bf16_blocks=bf16_blocks, int8_adaln=int8_adaln))
     header, cfg = h3_format.inspect_h3_dit(str(path))
     assert cfg.num_heads == heads
     with torch.device("meta"):
@@ -2145,6 +2165,44 @@ def test_vram16_falls_back_when_not_shared(monkeypatch, tmp_path):
         assert torch.equal(g, w)
     groups = math.ceil(4 / plan.head_group)
     assert calls == {"forward_rows": 3 * groups * len(dit.blocks), "quantize_input": 0, "forward_rows_q": 0}
+
+
+@pytest.mark.parametrize("head_group, row_chunk", [(3, 16), (1, 7), (4, 4096), (2, 41)])
+def test_vram16_block_forward_matches_off_bf16_block(monkeypatch, tmp_path, head_group, row_chunk):
+    """A block the file keeps in BF16 (a plain ``nn.Linear`` qkv): the head groups' rows
+    through ``F.linear``, the same bf16 block output as the off path, bit for bit."""
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path, bf16_blocks=(0,))
+    tokens, kw = _tiny_forward_inputs(dit)
+    t_emb = dit.adaln_embed(kw["t_unique"])
+    adaln_index = kw["time_index"] * 3 + kw["modality"]
+    block = dit.blocks[0]
+    assert type(block.attn.qkv_proj) is torch.nn.Linear
+    with torch.no_grad():
+        want = block(tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+        block.vram16 = Vram16Plan(head_group=head_group, row_chunk=row_chunk)
+        got = block(tokens, t_emb, adaln_index, kw["rope_cos"], kw["rope_sin"])
+    assert torch.isfinite(want.float()).all() and got.dtype == want.dtype
+    assert torch.equal(got, want)
+
+
+def test_vram16_dit_forward_matches_off_with_bf16_and_int8_blocks(monkeypatch, tmp_path):
+    """BF16 blocks (0 and 2) among int8 ones, the int8 blocks' AdaLN in int8 too: the
+    whole forward in VRAM 16GB mode == off, bit for bit."""
+    from engine_h3.lowvram import Vram16Plan
+    from engine_h3.quant_linear import H3Int8Linear
+
+    _fake_int8(monkeypatch)
+    dit = _tiny_vram16_dit(tmp_path, layers=3, bf16_blocks=(0, 2), int8_adaln=True)
+    assert [type(b.attn.qkv_proj) for b in dit.blocks] == [torch.nn.Linear, H3Int8Linear, torch.nn.Linear]
+    tokens, kw = _tiny_forward_inputs(dit)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        got = dit(None, tokens_box=[tokens.clone()], vram16=Vram16Plan(head_group=3, row_chunk=16), **kw)
+    for g, w in zip(got, want):
+        assert torch.isfinite(w).all() and torch.equal(g, w)
 
 
 @pytest.mark.parametrize("vram16", [False, True])
@@ -2764,6 +2822,50 @@ def test_lora_vram16_shared_matches_off(monkeypatch, tmp_path, heads, head_group
     assert rows_args == [(True, True)] * n
     assert h_gone == [True] * n
     assert calls == {"forward_rows": 0, "quantize_input": len(dit.blocks), "forward_rows_q": n}
+
+
+@pytest.mark.parametrize("heads, head_group, row_chunk", [(16, None, None), (4, 2, 16), (4, 1, 7)])
+def test_lora_vram16_matches_off_with_bf16_and_int8_blocks(monkeypatch, tmp_path, heads, head_group, row_chunk):
+    """``test_lora_vram16_matches_off`` on the DiT with BF16 blocks (0 and 2) among int8
+    ones: on == off bit for bit, the LoRA changes the output, and the plain qkv of each
+    BF16 block gets the LoRA on its head-group rows (3 x groups ``apply`` with ``xa``)."""
+    from engine_h3 import lora as L
+    from engine_h3.lowvram import Vram16Plan
+
+    _fake_int8(monkeypatch)
+    if head_group is None:
+        plan = Vram16Plan()
+    else:
+        monkeypatch.setattr(C, "LORA_COL_CHUNK", head_group * HD)
+        monkeypatch.setattr(C, "VRAM16_ROW_CHUNK", row_chunk)
+        plan = Vram16Plan(head_group=head_group, row_chunk=row_chunk)
+    dit = _tiny_vram16_dit(tmp_path, heads=heads, layers=3, bf16_blocks=(0, 2), int8_adaln=True)
+    tokens, kw = _tiny_forward_inputs(dit)
+    with torch.no_grad():
+        plain = dit(tokens, **kw)
+    files = [(L.load_lora_file(_write_lora(tmp_path, f"{s}.safetensors", _tiny_lora_tensors(dit, seed=s, rank=r))), st)
+             for s, r, st in ((1, 4, 1.0), (2, 6, 0.7))]
+    L.attach(dit, files)
+    rows = []
+    real_apply = L.apply
+
+    def apply(mod, x, out, n0=0, n1=None, xa=None):
+        if n1 is not None:
+            rows.append((mod, xa is not None))
+        return real_apply(mod, x, out, n0, n1, xa=xa)
+
+    monkeypatch.setattr(L, "apply", apply)
+    with torch.no_grad():
+        want = dit(tokens, **kw)
+        got = dit(None, tokens_box=[tokens.clone()], vram16=plan, **kw)
+    assert not torch.equal(want[0], plain[0])
+    for g, w in zip(got, want):
+        assert torch.isfinite(w).all() and torch.equal(g, w)
+    groups = math.ceil(heads / plan.head_group)
+    for i in (0, 2):
+        qkv = dit.blocks[i].attn.qkv_proj
+        assert type(qkv) is torch.nn.Linear
+        assert [xa for mod, xa in rows if mod is qkv] == [True] * (3 * groups)
 
 
 def test_lora_buffers_are_in_the_prefetch_slots(tmp_path):
@@ -4736,6 +4838,105 @@ def test_build_dit_streams_w4a8_packed_weights(tmp_path, codebook):
         assert fc1.weight_codebook.dtype == torch.float32 and tuple(fc1.weight_codebook.shape) == (16,)
     else:
         assert fc1.weight_codebook is None and "weight_codebook" not in fc1.state_dict()
+
+
+def _tiny_build_dit(tmp_path, tensors, name="tiny.safetensors"):
+    """``H3Pipeline._build_dit`` on ``tensors`` written to a file: ``(dit, entry)``."""
+    from engine_h3 import pipeline_h3 as P
+
+    path = tmp_path / name
+    _write_sft(path, tensors)
+    pipe = P.H3Pipeline(P.H3Paths(str(path), "te", "vv", "av", "tok"), P.H3LoadOptions(),
+                        device="cpu", progress=lambda *a: None, log=lambda m: None)
+    entry = {}
+    dit, _cfg = pipe._build_dit(entry)
+    return dit, entry
+
+
+def _adaln_reference(proj, t_emb, w, b):
+    """``H3AdaLNProj.forward``'s split of ``F.linear(t, w, b)`` (w, b already float32)."""
+    x = torch.nn.functional.linear(t_emb.float(), w, b)
+    x = x.view(x.shape[0] * proj.modality_num, proj.expand * proj.hidden)
+    return tuple(x.chunk(proj.expand, dim=-1))
+
+
+def test_int8_adaln_proj_multiplies_the_codes_by_the_row_scale(tmp_path):
+    """An int8 ``adaln_proj.linear`` (built by ``_build_dit``) is an ``H3Int8Linear`` and
+    the projection is ``F.linear(t, W_int8 * weight_scale, b)``; the block's and the final
+    layer's, bit for bit. The F16 projection (the official file) stays ``F.linear(t, W, b)``."""
+    from engine_h3.dit import H3AdaLNProj
+    from engine_h3.quant_linear import H3Int8Linear
+
+    t_unique = torch.tensor([0.3, 0.6])
+    for int8_adaln in (True, False):
+        tensors = _tiny_dit_tensors(layers=2, refiner=1, grid=1025, rank=8, int8_adaln=int8_adaln)
+        dit, _entry = _tiny_build_dit(tmp_path, tensors, name=f"adaln_{int8_adaln}.safetensors")
+        t_emb = dit.adaln_embed(t_unique)
+        for stem, proj in (("blocks.1.adaln_proj.linear", dit.blocks[1].adaln_proj),
+                           ("final_layer.adaln_proj.linear", dit.final_layer.adaln_proj)):
+            assert isinstance(proj, H3AdaLNProj)
+            w, b = tensors[f"{stem}.weight"], tensors[f"{stem}.bias"]
+            if int8_adaln:
+                assert type(proj.linear) is H3Int8Linear and proj.linear.weight.dtype == torch.int8
+                w = w.float() * tensors[f"{stem}.weight_scale"]
+            else:
+                assert type(proj.linear) is torch.nn.Linear and w.dtype == torch.float16
+            with torch.no_grad():
+                got = proj(t_emb)
+            want = _adaln_reference(proj, t_emb, w.float(), b.float())
+            assert len(got) == proj.expand
+            for g, x in zip(got, want):
+                assert g.dtype == torch.float32 and torch.equal(g, x), stem
+
+
+@pytest.mark.parametrize("convrot", [True, False])
+def test_int8_linear_passes_the_markers_convrot_to_the_kernel(monkeypatch, convrot):
+    """``forward`` and ``forward_rows`` hand ``int8_linear`` the marker's ``convrot`` and
+    ``convrot_groupsize`` as they are (a recording fake kernel)."""
+    import types
+
+    from engine_h3 import quant_linear
+    from engine_h3.quant_linear import H3Int8Linear
+
+    seen = []
+
+    def record(x2d, weight, weight_scale, bias, *, out_dtype, convrot, convrot_groupsize):
+        seen.append((convrot, convrot_groupsize))
+        return torch.zeros(x2d.shape[0], weight.shape[0], dtype=out_dtype)
+
+    monkeypatch.setattr(quant_linear, "_ck", lambda: types.SimpleNamespace(int8_linear=record))
+    spec = h3_format.parse_comfy_quant(json.dumps(
+        {"format": "int8_tensorwise", "convrot": convrot, "convrot_groupsize": 128}).encode())
+    lin = H3Int8Linear(64, 32, bias=False, spec=spec)
+    lin.weight = torch.nn.Parameter(torch.zeros(32, 64, dtype=torch.int8), requires_grad=False)
+    lin.weight_scale = torch.ones(32, 1)
+    x = torch.zeros(3, 64, dtype=torch.bfloat16)
+    with torch.no_grad():
+        lin(x)
+        lin.forward_rows(x, 8, 16)
+    assert seen == [(convrot, 128)] * 2
+
+
+def test_build_dit_with_bf16_and_int8_blocks(tmp_path):
+    """A file whose blocks 0 and 2 are BF16 (no marker) and block 1 int8 (AdaLN too):
+    ``_build_dit`` gives bf16 ``nn.Linear`` for the BF16 layers, ``H3Int8Linear`` for the
+    int8 ones, and leaves no tensor on meta."""
+    from engine_h3.quant_linear import H3Int8Linear
+    from engine_h3.sft_load import meta_tensor_names
+
+    tensors = _tiny_dit_tensors(layers=3, refiner=1, grid=1025, rank=8, bf16_blocks=(0, 2), int8_adaln=True)
+    dit, entry = _tiny_build_dit(tmp_path, tensors)
+    assert meta_tensor_names(dit) == []
+    assert entry["dit"]["quant_linears"] == 4 + 1 + 1   # block 1's Linears + AdaLN, the final AdaLN
+    for i, block in enumerate(dit.blocks):
+        layers = [block.attn.qkv_proj, block.attn.out_proj, block.mlp.fc1, block.mlp.fc2]
+        if i == 1:
+            assert all(type(m) is H3Int8Linear for m in layers + [block.adaln_proj.linear])
+            assert torch.equal(block.attn.qkv_proj.weight, tensors["blocks.1.attn.qkv_proj.weight"])
+        else:
+            assert all(type(m) is torch.nn.Linear and m.weight.dtype == torch.bfloat16 for m in layers)
+            assert type(block.adaln_proj.linear) is torch.nn.Linear
+            assert torch.equal(block.attn.qkv_proj.weight, tensors[f"blocks.{i}.attn.qkv_proj.weight"])
 
 
 def _load_report(monkeypatch, tmp_path, quant, capability, *, scaled_mm=True):

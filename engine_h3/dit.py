@@ -88,7 +88,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from engine_h3.constants import ATTENTION_BACKENDS, MODALITY_AUDIO, MODALITY_TEXT, MODALITY_VIDEO
-from engine_h3.quant_linear import H3QuantLinear
+from engine_h3.quant_linear import H3Int8Linear, H3QuantLinear
 from engine_h3.rope import apply_rope
 from engine_h3.vsf import flip_values
 from h3_format import H3DiTConfig
@@ -304,6 +304,7 @@ class H3AdaLNProj(nn.Module):
     Returns ``expand`` tensors of [M * modality_num, hidden] float32; row
     ``m * modality_num + tag`` is timestep m, modality tag (the
     ``view(M * modality_num, expand * hidden)`` of ``minimax_h3_dit.py:182``).
+    An int8 ``linear`` (``H3Int8Linear``) has its codes multiplied by the per-row scale.
     """
 
     def __init__(self, rank: int, hidden: int, *, expand: int, modality_num: int) -> None:
@@ -314,8 +315,11 @@ class H3AdaLNProj(nn.Module):
         self.linear = nn.Linear(rank, expand * hidden * modality_num, bias=True, dtype=torch.float32)
 
     def forward(self, t_emb: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        w = self.linear.weight.to(torch.float32)
-        b = self.linear.bias.to(torch.float32)
+        lin = self.linear
+        w = lin.weight.to(torch.float32)
+        if isinstance(lin, H3Int8Linear):   # int8 codes x per-row scale
+            w = w * lin.weight_scale
+        b = lin.bias.to(torch.float32)
         x = F.linear(t_emb.to(torch.float32), w, b)
         m = x.shape[0]
         x = x.view(m * self.modality_num, self.expand * self.hidden)

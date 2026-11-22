@@ -6,7 +6,7 @@
 
 **本書は 2 部に分かれます。** 第 1 部「仕様」は、決まった結果だけを現在形で書き、第 1 部だけを読めば動きと作りが分かることを目標にしています。第 2 部「経緯と採らなかった案」は、一度検討して退けた案を再び提案せずに済むようにするための記録です。
 
-- 台帳: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288（オーナーの実機確認は 2026-11-22 に全項目合格し、閉じた）。参照素材フォルダの枠を横に並べた変更（§23）の実機確認は [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-289。
+- 台帳: [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288（オーナーの実機確認は 2026-11-22 に全項目合格し、閉じた）。参照素材フォルダの枠を横に並べた変更（§23）は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-289（実機確認は 2026-11-22 に全項目合格し、閉じた）。
 - 裁定: バックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 104（裁定 87 の「共通の参照は作らない」をこのバッチでは緩めること、FL2VA の重みで開始を止める条件）。
 - 実装の記録は [`DEVLOG.md`](DEVLOG.md) §173（実機確認を受けた修正は §174、クリップを 1 つまで減らせるようにした変更は §175、設定の列のクリップ数の赤い警告を消した変更は §176、参照素材フォルダの枠を横に並べた変更は §177）、機械の門と、計画の段階で確かめた前提は [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §215（実機確認の 1 回目の結果・時間切れの原因の調査・修正の機械の門は §216、冒頭動画の無い行の確認とクリップの下限の変更の機械の門は §217、実機確認の 2 回目の結果と赤い警告を消した変更の機械の門は §218、最後の項目の合格は §218.9、枠を横に並べた変更の機械の門は §220）。
 - 画面の文言の正本は `webui/src/i18n/strings.ts` の `batchV2vRefLong` です。本書では日本語の文を引用します。
@@ -27,9 +27,9 @@
 | [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 87・裁定 104・§3.3 | 参照付きの連結と V2V の仕組み、このバッチの裁定 |
 | [`BATCH_I2V_WORKORDER.md`](BATCH_I2V_WORKORDER.md) | 手本にしたバッチ i2v-long（設定の雛形・1 行ずつ流す仕組み・排他） |
 | [`DEVLOG.md`](DEVLOG.md) §173・§174・§175・§176・§177 | 実装の記録・実機確認を受けた修正の記録・クリップの下限の変更の記録・赤い警告を消した変更の記録・枠を横に並べた変更の記録 |
-| [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §215・§216・§217・§218・§220 | 機械の門・設計の前提の確認／実機確認の 1 回目・時間切れと参照の調査・修正の機械の門／冒頭動画の無い行の確認・クリップの下限の変更の機械の門／実機確認の 2 回目・赤い警告を消した変更の機械の門・最後の項目の合格／枠を横に並べた変更の機械の門 |
+| [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §215・§216・§217・§218・§220 | 機械の門・設計の前提の確認／実機確認の 1 回目・時間切れと参照の調査・修正の機械の門／冒頭動画の無い行の確認・クリップの下限の変更の機械の門／実機確認の 2 回目・赤い警告を消した変更の機械の門・最後の項目の合格／枠を横に並べた変更の機械の門と実機確認の合格 |
 | [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288 | 台帳のクローズの記録（実機確認は全項目合格） |
-| [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-289 | 枠を横に並べた変更の実機確認の項目 |
+| [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-289 | 枠を横に並べた変更のクローズの記録（実機確認は全項目合格） |
 
 ---
 
@@ -330,7 +330,7 @@
 
 - 操作パネル（`webui/`）: `npm run typecheck`、`npm run lint`、`npx vitest run --exclude "**/backend.integration.test.ts"`（実物のサーバーに触るテストは除く）。本機能のテストは `modes/batch-v2v-ref-long/` の各テストと、`modes/chained/ChainedScreen.batchSection.test.tsx`・`modes/single/ReferenceAccordion.test.tsx`・`shell/runLock.test.ts` の追加分と、バッチのきっかけでクリップを減らせる下限を確かめる `modes/chained/useChainForm.batchFloor.test.ts`・`modes/chained/ChainedScreen.batchClipFloor.test.tsx` です。
 - プラグイン: `scripts/build.ps1 -RunTests` で操作パネルを埋め込んで再ビルドします。実機への配置は AviUtl2 を閉じてから `scripts/deploy.ps1` で行います。
-- オーナーの実機確認は 2026-11-22 に全項目合格しました。クローズの記録は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288、各回の結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §216.2・§217.2・§218.2・§218.9 です。そのあとの参照素材フォルダの枠を横に並べた変更（§23）は、枠の並びとボタンの位置、増えたときの右端へのスクロールを `FolderInputs.test.tsx` で確かめています。枠の幅と横スクロールの見え方はテストの疑似ブラウザが幅を計算しないので確かめられず、台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-289 の実機確認に回しています。
+- オーナーの実機確認は 2026-11-22 に全項目合格しました。クローズの記録は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-288、各回の結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §216.2・§217.2・§218.2・§218.9 です。そのあとの参照素材フォルダの枠を横に並べた変更（§23）は、枠の並びとボタンの位置、増えたときの右端へのスクロールを `FolderInputs.test.tsx` で確かめています。枠の幅と横スクロールの見え方はテストの疑似ブラウザが幅を計算しないので確かめられず、実機確認に回して 2026-11-22 に全項目合格しました（[`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-289、記録簿 §220.8）。
 
 ---
 

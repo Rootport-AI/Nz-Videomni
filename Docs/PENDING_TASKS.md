@@ -58,6 +58,7 @@
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「✒ … right-clicked video opens the accordion」（2026-10-31 に 9 回中 2 回・変更前の HEAD でも 8 回中 1 回。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §187.7・§188.4）と、`AlphaControls.test.tsx` の「from the matte, with no MOV yet …」（全件実行で 1 回。単独では通る。同 §188.4）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」が全件実行で 1 回、5 秒の時限切れで落ちた（負荷による）。単独（4 件）と 2 回目の全件実行では合格（2026-11-02。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/chained/ChainEndSourcePanel.test.tsx` の「📁 attaches whatever the native dialog returned」が全件実行で 1 回落ち（`getByAltText(t.videoPlaceholderAlt)` が要素を見つけられない）、単独（32 件）と最後の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §218.6）。同じ日のもう 1 回の全件実行でも 1 件落ちたが、落ちたテストの名前は控えていない。
+- **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「a video truncated to the 15 s total carries max_sec; the shorter one before it does not」（上の「✒ … right-clicked video opens the accordion」とは別のテスト）と、`webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」（2026-11-02 の追記と同じテストの再発）が、同じ全件実行で 1 回ずつ約 5 秒の時限切れで落ちた（負荷による）。単独（2 ファイル・21 件）と 2 回目の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §220.5）。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。

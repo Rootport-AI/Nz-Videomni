@@ -12,12 +12,21 @@ function inputsWith(patch: Partial<V2vRefLongInputs>): V2vRefLongInputs {
   return { ...createInitialV2vRefLongState().inputs, ...patch };
 }
 
-function renderInputs(form: UseV2vRefLongFormResult) {
-  return render(
+function withLanguage(form: UseV2vRefLongFormResult) {
+  return (
     <LanguageProvider>
       <FolderInputs form={form} />
-    </LanguageProvider>,
+    </LanguageProvider>
   );
+}
+
+function renderInputs(form: UseV2vRefLongFormResult) {
+  return render(withLanguage(form));
+}
+
+function stateWithFrames(count: number) {
+  const frames = Array.from({ length: count }, (_, i) => createDefaultFrame(i + 1));
+  return { ...createInitialV2vRefLongState(), inputs: inputsWith({ frames }) };
 }
 
 function frameWith(id: number, paths: Record<number, string>): FolderFrame {
@@ -128,6 +137,47 @@ describe("FolderInputs", () => {
     renderInputs(form);
     fireEvent.click(screen.getByRole("button", { name: "Add clip" }));
     expect(form.addFrame).toHaveBeenCalled();
+  });
+
+  it("lines the frames up in the strip; Add clip sits after it, outside", () => {
+    const form = makeForm({ state: stateWithFrames(3) });
+    const { container } = renderInputs(form);
+    const strip = container.querySelector(".v2v-frames-strip") as HTMLElement;
+    expect(Array.from(strip.children).map((el) => el.getAttribute("data-testid"))).toEqual([
+      "v2v-frame-0",
+      "v2v-frame-1",
+      "v2v-frame-2",
+    ]);
+    const add = screen.getByRole("button", { name: "Add clip" });
+    expect(strip.contains(add)).toBe(false);
+    expect(strip.nextElementSibling?.contains(add)).toBe(true);
+  });
+
+  it("an added frame scrolls the strip to its right end; a removed one leaves it", () => {
+    const { container, rerender } = renderInputs(makeForm({ state: stateWithFrames(2) }));
+    const strip = container.querySelector(".v2v-frames-strip") as HTMLElement;
+    Object.defineProperty(strip, "scrollWidth", { value: 900, configurable: true });
+
+    strip.scrollLeft = 50;
+    rerender(withLanguage(makeForm({ state: stateWithFrames(3) })));
+    expect(strip.scrollLeft).toBe(900);
+
+    strip.scrollLeft = 50;
+    rerender(withLanguage(makeForm({ state: stateWithFrames(2) })));
+    expect(strip.scrollLeft).toBe(50);
+  });
+
+  it("the first render leaves the strip's scroll alone", () => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { get: () => 900, configurable: true });
+    try {
+      const { container } = renderInputs(makeForm({ state: stateWithFrames(3) }));
+      const strip = container.querySelector(".v2v-frames-strip") as HTMLElement;
+      expect(strip.scrollLeft).toBe(0);
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, "scrollWidth", original);
+      else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
+    }
   });
 
   it("notes the frames past the clip count with the display number, outside the accordion", () => {

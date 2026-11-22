@@ -1,0 +1,1108 @@
+{
+  "item": "C4_4step",
+  "script": "outputs\\h3-pih3-spike-2026-11-22\\h3_pih3_spike.py",
+  "started_at": "2026-11-22T21:24:26+09:00",
+  "status": "done",
+  "git": {
+    "head": "a7c539e1253d89093f035c3c4cc6a2acb6591552",
+    "status_short": [],
+    "clean": true
+  },
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "source": {
+    "item": "C3_4step",
+    "file": "outputs\\h3-pih3-spike-2026-11-22\\runs\\C3_4step\\hidden_concat.safetensors",
+    "exists": true,
+    "contents": [
+      5,
+      1
+    ],
+    "margins": [
+      4,
+      2,
+      1
+    ],
+    "meta": {
+      "pi_file": "models/MiniMaxH3/VAE/pi-H3/pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+      "grid": "[67, 12, 20]",
+      "fixed_head_latents": "7",
+      "steps": "4"
+    },
+    "hidden_shape": [
+      16080,
+      5376
+    ]
+  },
+  "gate": {
+    "at": "2026-11-22T21:24:26+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "nvidia_smi_compute_apps": "(removed for privacy)",
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "1090",
+        "16376"
+      ],
+      "memory_used_mib": 1090,
+      "python_like_others": []
+    },
+    "engine_workers": []
+  },
+  "backends": {
+    "triton": true,
+    "eager": true,
+    "hip": false,
+    "ascend": false,
+    "cuda": true
+  },
+  "head_load": {
+    "loaded_tensors": 139,
+    "loaded_mib": 612.6,
+    "int8_layers": 32,
+    "seconds": 0.47,
+    "peak_alloc_mib": 613
+  },
+  "features_stats": {
+    "numel": 86446080,
+    "mean": -0.0005462615106012277,
+    "std": 0.9429770380183897,
+    "max_abs": 29.875,
+    "nan": 0,
+    "inf": 0
+  },
+  "whole": {
+    "chunks": [
+      {
+        "keep_blocks": [
+          0,
+          14
+        ],
+        "context_blocks": [
+          0,
+          14
+        ],
+        "latents": [
+          0,
+          67
+        ],
+        "frames": 226,
+        "seconds": 1.127,
+        "peak_alloc_mib": 2631,
+        "peak_reserved_mib": 3264
+      }
+    ],
+    "frames": 226,
+    "raw_min": -3.09375,
+    "raw_max": 4.3125,
+    "codec_outside_pm1_ratio": 0.031040884072332842
+  },
+  "variants": {
+    "content5_margin4": {
+      "frames": 226,
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            9
+          ],
+          "latents": [
+            0,
+            45
+          ],
+          "frames": 85,
+          "seconds": 0.618,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            5,
+            10
+          ],
+          "context_blocks": [
+            1,
+            14
+          ],
+          "latents": [
+            5,
+            67
+          ],
+          "frames": 85,
+          "seconds": 0.826,
+          "peak_alloc_mib": 2448,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            10,
+            14
+          ],
+          "context_blocks": [
+            6,
+            14
+          ],
+          "latents": [
+            30,
+            67
+          ],
+          "frames": 56,
+          "seconds": 0.509,
+          "peak_alloc_mib": 1831,
+          "peak_reserved_mib": 3264
+        }
+      ],
+      "seconds_total": 1.953,
+      "peak_alloc_mib_max": 2448,
+      "vs_whole": {
+        "float_max_abs_diff": 0.0,
+        "float_mean_abs_diff": 0.0,
+        "uint8_differing_ratio": 0.0,
+        "uint8_max_diff": 0
+      }
+    },
+    "content5_margin2": {
+      "frames": 226,
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            7
+          ],
+          "latents": [
+            0,
+            35
+          ],
+          "frames": 85,
+          "seconds": 0.68,
+          "peak_alloc_mib": 1762,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            5,
+            10
+          ],
+          "context_blocks": [
+            3,
+            12
+          ],
+          "latents": [
+            15,
+            60
+          ],
+          "frames": 85,
+          "seconds": 0.621,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            10,
+            14
+          ],
+          "context_blocks": [
+            8,
+            14
+          ],
+          "latents": [
+            40,
+            67
+          ],
+          "frames": 56,
+          "seconds": 0.373,
+          "peak_alloc_mib": 1630,
+          "peak_reserved_mib": 3264
+        }
+      ],
+      "seconds_total": 1.674,
+      "peak_alloc_mib_max": 2074,
+      "vs_whole": {
+        "float_max_abs_diff": 0.03125,
+        "float_mean_abs_diff": 0.0001922991796163842,
+        "uint8_differing_ratio": 0.010783514007925987,
+        "uint8_max_diff": 2
+      }
+    },
+    "content5_margin1": {
+      "frames": 226,
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            6
+          ],
+          "latents": [
+            0,
+            30
+          ],
+          "frames": 85,
+          "seconds": 0.606,
+          "peak_alloc_mib": 1773,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            5,
+            10
+          ],
+          "context_blocks": [
+            4,
+            11
+          ],
+          "latents": [
+            20,
+            55
+          ],
+          "frames": 85,
+          "seconds": 0.502,
+          "peak_alloc_mib": 1762,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            10,
+            14
+          ],
+          "context_blocks": [
+            9,
+            14
+          ],
+          "latents": [
+            45,
+            67
+          ],
+          "frames": 56,
+          "seconds": 0.322,
+          "peak_alloc_mib": 1582,
+          "peak_reserved_mib": 3264
+        }
+      ],
+      "seconds_total": 1.43,
+      "peak_alloc_mib_max": 1773,
+      "vs_whole": {
+        "float_max_abs_diff": 0.046875,
+        "float_mean_abs_diff": 0.000797333603259176,
+        "uint8_differing_ratio": 0.04458116367459297,
+        "uint8_max_diff": 3
+      }
+    },
+    "content1_margin4": {
+      "frames": 226,
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            1
+          ],
+          "context_blocks": [
+            0,
+            5
+          ],
+          "latents": [
+            0,
+            25
+          ],
+          "frames": 17,
+          "seconds": 0.5,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            1,
+            2
+          ],
+          "context_blocks": [
+            0,
+            6
+          ],
+          "latents": [
+            0,
+            30
+          ],
+          "frames": 17,
+          "seconds": 0.422,
+          "peak_alloc_mib": 1773,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            2,
+            3
+          ],
+          "context_blocks": [
+            0,
+            7
+          ],
+          "latents": [
+            0,
+            35
+          ],
+          "frames": 17,
+          "seconds": 0.441,
+          "peak_alloc_mib": 1762,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            3,
+            4
+          ],
+          "context_blocks": [
+            0,
+            8
+          ],
+          "latents": [
+            0,
+            40
+          ],
+          "frames": 17,
+          "seconds": 0.5,
+          "peak_alloc_mib": 1974,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            4,
+            5
+          ],
+          "context_blocks": [
+            0,
+            9
+          ],
+          "latents": [
+            0,
+            45
+          ],
+          "frames": 17,
+          "seconds": 0.558,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            5,
+            6
+          ],
+          "context_blocks": [
+            1,
+            10
+          ],
+          "latents": [
+            5,
+            50
+          ],
+          "frames": 17,
+          "seconds": 0.561,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            6,
+            7
+          ],
+          "context_blocks": [
+            2,
+            11
+          ],
+          "latents": [
+            10,
+            55
+          ],
+          "frames": 17,
+          "seconds": 0.558,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            7,
+            8
+          ],
+          "context_blocks": [
+            3,
+            12
+          ],
+          "latents": [
+            15,
+            60
+          ],
+          "frames": 17,
+          "seconds": 0.565,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            8,
+            9
+          ],
+          "context_blocks": [
+            4,
+            13
+          ],
+          "latents": [
+            20,
+            65
+          ],
+          "frames": 17,
+          "seconds": 0.564,
+          "peak_alloc_mib": 2074,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            9,
+            10
+          ],
+          "context_blocks": [
+            5,
+            14
+          ],
+          "latents": [
+            25,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.53,
+          "peak_alloc_mib": 2044,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            10,
+            11
+          ],
+          "context_blocks": [
+            6,
+            14
+          ],
+          "latents": [
+            30,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.468,
+          "peak_alloc_mib": 1831,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            11,
+            12
+          ],
+          "context_blocks": [
+            7,
+            14
+          ],
+          "latents": [
+            35,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.412,
+          "peak_alloc_mib": 1842,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            12,
+            13
+          ],
+          "context_blocks": [
+            8,
+            14
+          ],
+          "latents": [
+            40,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.354,
+          "peak_alloc_mib": 1630,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            13,
+            14
+          ],
+          "context_blocks": [
+            9,
+            14
+          ],
+          "latents": [
+            45,
+            67
+          ],
+          "frames": 5,
+          "seconds": 0.283,
+          "peak_alloc_mib": 1582,
+          "peak_reserved_mib": 3264
+        }
+      ],
+      "seconds_total": 6.716,
+      "peak_alloc_mib_max": 2074,
+      "vs_whole": {
+        "float_max_abs_diff": 0.0,
+        "float_mean_abs_diff": 0.0,
+        "uint8_differing_ratio": 0.0,
+        "uint8_max_diff": 0
+      }
+    },
+    "content1_margin2": {
+      "frames": 226,
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            1
+          ],
+          "context_blocks": [
+            0,
+            3
+          ],
+          "latents": [
+            0,
+            15
+          ],
+          "frames": 17,
+          "seconds": 0.364,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            1,
+            2
+          ],
+          "context_blocks": [
+            0,
+            4
+          ],
+          "latents": [
+            0,
+            20
+          ],
+          "frames": 17,
+          "seconds": 0.298,
+          "peak_alloc_mib": 1544,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            2,
+            3
+          ],
+          "context_blocks": [
+            0,
+            5
+          ],
+          "latents": [
+            0,
+            25
+          ],
+          "frames": 17,
+          "seconds": 0.324,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            3,
+            4
+          ],
+          "context_blocks": [
+            1,
+            6
+          ],
+          "latents": [
+            5,
+            30
+          ],
+          "frames": 17,
+          "seconds": 0.322,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            4,
+            5
+          ],
+          "context_blocks": [
+            2,
+            7
+          ],
+          "latents": [
+            10,
+            35
+          ],
+          "frames": 17,
+          "seconds": 0.323,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            5,
+            6
+          ],
+          "context_blocks": [
+            3,
+            8
+          ],
+          "latents": [
+            15,
+            40
+          ],
+          "frames": 17,
+          "seconds": 0.323,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            6,
+            7
+          ],
+          "context_blocks": [
+            4,
+            9
+          ],
+          "latents": [
+            20,
+            45
+          ],
+          "frames": 17,
+          "seconds": 0.32,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            7,
+            8
+          ],
+          "context_blocks": [
+            5,
+            10
+          ],
+          "latents": [
+            25,
+            50
+          ],
+          "frames": 17,
+          "seconds": 0.322,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            8,
+            9
+          ],
+          "context_blocks": [
+            6,
+            11
+          ],
+          "latents": [
+            30,
+            55
+          ],
+          "frames": 17,
+          "seconds": 0.324,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            9,
+            10
+          ],
+          "context_blocks": [
+            7,
+            12
+          ],
+          "latents": [
+            35,
+            60
+          ],
+          "frames": 17,
+          "seconds": 0.326,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            10,
+            11
+          ],
+          "context_blocks": [
+            8,
+            13
+          ],
+          "latents": [
+            40,
+            65
+          ],
+          "frames": 17,
+          "seconds": 0.32,
+          "peak_alloc_mib": 1657,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            11,
+            12
+          ],
+          "context_blocks": [
+            9,
+            14
+          ],
+          "latents": [
+            45,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.287,
+          "peak_alloc_mib": 1582,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            12,
+            13
+          ],
+          "context_blocks": [
+            10,
+            14
+          ],
+          "latents": [
+            50,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.236,
+          "peak_alloc_mib": 1580,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            13,
+            14
+          ],
+          "context_blocks": [
+            11,
+            14
+          ],
+          "latents": [
+            55,
+            67
+          ],
+          "frames": 5,
+          "seconds": 0.161,
+          "peak_alloc_mib": 1436,
+          "peak_reserved_mib": 3264
+        }
+      ],
+      "seconds_total": 4.25,
+      "peak_alloc_mib_max": 1657,
+      "vs_whole": {
+        "float_max_abs_diff": 0.03125,
+        "float_mean_abs_diff": 0.0010210045147687197,
+        "uint8_differing_ratio": 0.057094912976026535,
+        "uint8_max_diff": 2
+      }
+    },
+    "content1_margin1": {
+      "frames": 226,
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            1
+          ],
+          "context_blocks": [
+            0,
+            2
+          ],
+          "latents": [
+            0,
+            10
+          ],
+          "frames": 17,
+          "seconds": 0.284,
+          "peak_alloc_mib": 1396,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            1,
+            2
+          ],
+          "context_blocks": [
+            0,
+            3
+          ],
+          "latents": [
+            0,
+            15
+          ],
+          "frames": 17,
+          "seconds": 0.245,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            2,
+            3
+          ],
+          "context_blocks": [
+            1,
+            4
+          ],
+          "latents": [
+            5,
+            20
+          ],
+          "frames": 17,
+          "seconds": 0.201,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            3,
+            4
+          ],
+          "context_blocks": [
+            2,
+            5
+          ],
+          "latents": [
+            10,
+            25
+          ],
+          "frames": 17,
+          "seconds": 0.203,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            4,
+            5
+          ],
+          "context_blocks": [
+            3,
+            6
+          ],
+          "latents": [
+            15,
+            30
+          ],
+          "frames": 17,
+          "seconds": 0.205,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            5,
+            6
+          ],
+          "context_blocks": [
+            4,
+            7
+          ],
+          "latents": [
+            20,
+            35
+          ],
+          "frames": 17,
+          "seconds": 0.201,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            6,
+            7
+          ],
+          "context_blocks": [
+            5,
+            8
+          ],
+          "latents": [
+            25,
+            40
+          ],
+          "frames": 17,
+          "seconds": 0.2,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            7,
+            8
+          ],
+          "context_blocks": [
+            6,
+            9
+          ],
+          "latents": [
+            30,
+            45
+          ],
+          "frames": 17,
+          "seconds": 0.2,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            8,
+            9
+          ],
+          "context_blocks": [
+            7,
+            10
+          ],
+          "latents": [
+            35,
+            50
+          ],
+          "frames": 17,
+          "seconds": 0.207,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            9,
+            10
+          ],
+          "context_blocks": [
+            8,
+            11
+          ],
+          "latents": [
+            40,
+            55
+          ],
+          "frames": 17,
+          "seconds": 0.201,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            10,
+            11
+          ],
+          "context_blocks": [
+            9,
+            12
+          ],
+          "latents": [
+            45,
+            60
+          ],
+          "frames": 17,
+          "seconds": 0.2,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            11,
+            12
+          ],
+          "context_blocks": [
+            10,
+            13
+          ],
+          "latents": [
+            50,
+            65
+          ],
+          "frames": 17,
+          "seconds": 0.201,
+          "peak_alloc_mib": 1495,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            12,
+            13
+          ],
+          "context_blocks": [
+            11,
+            14
+          ],
+          "latents": [
+            55,
+            67
+          ],
+          "frames": 17,
+          "seconds": 0.166,
+          "peak_alloc_mib": 1436,
+          "peak_reserved_mib": 3264
+        },
+        {
+          "keep_blocks": [
+            13,
+            14
+          ],
+          "context_blocks": [
+            12,
+            14
+          ],
+          "latents": [
+            60,
+            67
+          ],
+          "frames": 5,
+          "seconds": 0.094,
+          "peak_alloc_mib": 1343,
+          "peak_reserved_mib": 3264
+        }
+      ],
+      "seconds_total": 2.808,
+      "peak_alloc_mib_max": 1495,
+      "vs_whole": {
+        "float_max_abs_diff": 0.0625,
+        "float_mean_abs_diff": 0.002033584052696824,
+        "uint8_differing_ratio": 0.11401960253715515,
+        "uint8_max_diff": 4
+      }
+    }
+  },
+  "finished_at": "2026-11-22T21:24:54+09:00"
+}

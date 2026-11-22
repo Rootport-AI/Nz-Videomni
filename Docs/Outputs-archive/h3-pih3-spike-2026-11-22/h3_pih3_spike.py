@@ -1967,6 +1967,104 @@ def post_outpaint() -> dict:
 POST = {"R1": post_retake, "I1": post_inpaint, "O1": post_outpaint}
 
 
+# --------------------------------------------------------------------------- #
+# --head-bench (GPU: the DWD head alone, no DiT)
+# --------------------------------------------------------------------------- #
+
+#: name -> (width, height, latents). N blocks = 5 N latents in ONE chunk; P1_shape = P1's 22 latents.
+HEAD_BENCH = {
+    "P1_shape_1280x768_T22": (1280, 768, 22),
+    "1280x768_N5": (1280, 768, 25), "1280x768_N9": (1280, 768, 45),
+    "1920x1088_N5": (1920, 1088, 25), "1920x1088_N9": (1920, 1088, 45),
+    "2560x1472_N5": (2560, 1472, 25), "2560x1472_N9": (2560, 1472, 45),
+}
+
+
+def _mib(v: int) -> int:
+    return int(round(v / 2**20))
+
+
+def head_bench(cases: list[str]) -> int:
+    """Each case: load the 4-step file's DWD head as DWDDecoderStandIn does (PD.load_head, INT8 layers =
+    H3Int8Linear), then random bf16 hidden rows [T * gh * gw, 5376] through the stand-in's own path:
+    PD.normalize_features (t_emb one random row, every time index 0) -> PD.decode (one chunk, no split)
+    -> PD.to_uint8 (CPU uint8). Peaks: reset before the head load (-> after_head_load) and again right
+    before normalize (-> run). An OOM is recorded and the next case goes on."""
+    out_dir = RUNS / "head_bench"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    LOG.open(out_dir / "run.log", mode="a")
+    install_log_bridge()
+    path = out_dir / "result.json"
+    data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"cases": {}}
+    rec = {"started_at": now(), "cases": cases}
+    if not _gate_or_refuse(rec, out_dir / "refused.json"):
+        return 2
+    data.setdefault("runs", []).append({"at": rec["started_at"], "cases": cases, "gate": rec["gate"],
+                                        "git": git_state(), "versions": versions(),
+                                        "gpu": torch.cuda.get_device_name(0)})
+    dev = torch.device("cuda")
+    ok = True
+    for name in cases:
+        w, h, t = HEAD_BENCH[name]
+        gh, gw = h // 32, w // 32
+        r: dict = {"width": w, "height": h, "latents": t, "blocks": t / PD.BLOCK, "rows_per_latent": gh * gw,
+                   "rows": t * gh * gw, "expected_frames": PD.frames_for_latents(t), "at": now(),
+                   "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)"}
+        head = hidden = feats = pixels = frames = None
+        LOG(f"head-bench {name}: {w}x{h} T={t} rows={r['rows']}")
+        try:
+            P._free_cuda()
+            torch.cuda.reset_peak_memory_stats()
+            head, info = PD.load_head(ROOT / PA.PI_FILES[EDIT_STEPS], dev)
+            torch.cuda.synchronize()
+            r["head_load"] = info
+            r["after_head_load_mib"] = {"allocated": _mib(torch.cuda.memory_allocated()),
+                                        "peak_allocated": _mib(torch.cuda.max_memory_allocated()),
+                                        "peak_reserved": _mib(torch.cuda.max_memory_reserved())}
+            g = torch.Generator(device=dev).manual_seed(1234)
+            hidden = torch.randn((r["rows"], PD.HeadConfig().in_channels), generator=g, device=dev, dtype=torch.bfloat16)
+            temb = torch.randn((1, PD.HeadConfig().t_dim), generator=g, device=dev).cpu()
+            tidx = torch.zeros(r["rows"], dtype=torch.long)
+            torch.cuda.synchronize()
+            r["before_run_allocated_mib"] = _mib(torch.cuda.memory_allocated())
+            torch.cuda.reset_peak_memory_stats()
+            t0 = time.perf_counter()
+            feats = PD.normalize_features(head, hidden, temb, tidx)
+            torch.cuda.synchronize()
+            t1 = time.perf_counter()
+            pixels, chunks = PD.decode(head, feats, (t, gh, gw))
+            torch.cuda.synchronize()
+            t2 = time.perf_counter()
+            frames, _ps = PD.to_uint8(pixels)
+            t3 = time.perf_counter()
+            r["run_peak_mib"] = {"allocated": _mib(torch.cuda.max_memory_allocated()),
+                                 "reserved": _mib(torch.cuda.max_memory_reserved())}
+            r["seconds"] = {"normalize": round(t1 - t0, 3), "refiner": round(t2 - t1, 3),
+                            "to_uint8": round(t3 - t2, 3), "total": round(t3 - t0, 3)}
+            r["chunks"] = chunks
+            r["frames"] = int(frames.shape[0])
+            r["frames_shape"] = list(frames.shape)
+            r["result"] = "success" if r["frames"] == r["expected_frames"] else "frame count mismatch"
+        except torch.cuda.OutOfMemoryError as exc:
+            r["result"] = "メモリ不足"
+            r["error"] = repr(exc)[:600]
+            r["peak_at_oom_mib"] = {"allocated": _mib(torch.cuda.max_memory_allocated()),
+                                    "reserved": _mib(torch.cuda.max_memory_reserved())}
+        except BaseException as exc:  # noqa: BLE001
+            failure(r, exc)
+            r["result"] = "failed"
+            ok = False
+        finally:
+            del head, hidden, feats, pixels, frames
+            P._free_cuda()
+        LOG(f"head-bench {name}: {r['result']} peak={r.get('run_peak_mib') or r.get('peak_at_oom_mib')} "
+            f"seconds={r.get('seconds')}")
+        data["cases"][name] = r
+        write_json(path, data)
+    LOG.close()
+    return 0 if ok else 1
+
+
 def post(items: list[str]) -> int:
     COMPARE.mkdir(parents=True, exist_ok=True)
     LOG.open(COMPARE / "post.log", mode="a")
@@ -2068,6 +2166,8 @@ def parse_args(argv=None):
     g.add_argument("--prepare", action="store_true", help="CPU only: cut the edit items' material into _material/")
     g.add_argument("--edit", choices=list(EDIT), help="GPU: one edit item (R1 / I1 / O1 pi-H3, R1c / I1c / O1c control)")
     g.add_argument("--post", choices=list(POST), nargs="+", help="CPU only: comparison sheets into runs/_compare/")
+    g.add_argument("--head-bench", choices=list(HEAD_BENCH), nargs="+",
+                   help="GPU: the DWD head alone on random hidden rows, one chunk per case (no DiT)")
     ap.add_argument("--split-content", type=int, nargs="+", default=list(SPLIT_CONTENT),
                     help="native blocks kept per chunk (default 5 1)")
     ap.add_argument("--split-margins", type=int, nargs="+", default=list(SPLIT_MARGINS),
@@ -2085,6 +2185,8 @@ def main(argv=None) -> int:
         return run_edit(args.edit)
     if args.post:
         return post(args.post)
+    if args.head_bench:
+        return head_bench(args.head_bench)
     if args.single:
         return run_single(args.single)
     if args.vae_decode:

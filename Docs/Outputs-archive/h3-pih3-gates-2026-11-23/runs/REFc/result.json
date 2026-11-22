@@ -1,0 +1,406 @@
+{
+  "item": "REFc",
+  "title": "切り分け: REF と同じ要求を pi-H3 なしで（G-R1 の条件: 20 ステップ・sdpa）",
+  "group": 7,
+  "rule": "完了し、フレーム数と音声が期待どおり。G-R1 の出力と比べる（記録）",
+  "started_at": "2026-11-23T02:17:01+09:00",
+  "git": {
+    "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+    "branch": "dev",
+    "status_porcelain": [
+      " M engine_h3/dwd.py",
+      " M tests/test_h3_pih3_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T02:17:01+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 338,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 29,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "REFc",
+      "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "<Picture 1> is an elderly gentleman with white hair and a beard in a dark suit. He walks slowly through a sunlit park, turns to the camera and smiles. Natural ambient sound.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sdpa",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "d3923a03-7803-4b71-a72e-ac462dca2cc2",
+            "slot": 1
+          }
+        ]
+      },
+      "started_at": "2026-11-23T02:17:11+09:00",
+      "submit_http": 202,
+      "job_id": "321d27cb-7720-40b2-b381-f67c78f2a0ad",
+      "seconds_wall": 1103.1,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 35.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 20
+        },
+        {
+          "t": 85.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 20
+        },
+        {
+          "t": 135.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 20
+        },
+        {
+          "t": 190.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 20
+        },
+        {
+          "t": 240.7,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 4,
+          "total": 20
+        },
+        {
+          "t": 290.9,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 5,
+          "total": 20
+        },
+        {
+          "t": 346.0,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 6,
+          "total": 20
+        },
+        {
+          "t": 396.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 7,
+          "total": 20
+        },
+        {
+          "t": 446.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 8,
+          "total": 20
+        },
+        {
+          "t": 496.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 9,
+          "total": 20
+        },
+        {
+          "t": 551.7,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 10,
+          "total": 20
+        },
+        {
+          "t": 601.8,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 11,
+          "total": 20
+        },
+        {
+          "t": 652.0,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 12,
+          "total": 20
+        },
+        {
+          "t": 702.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 13,
+          "total": 20
+        },
+        {
+          "t": 757.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 14,
+          "total": 20
+        },
+        {
+          "t": 807.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 15,
+          "total": 20
+        },
+        {
+          "t": 857.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 16,
+          "total": 20
+        },
+        {
+          "t": 912.8,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 17,
+          "total": 20
+        },
+        {
+          "t": 962.9,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 18,
+          "total": 20
+        },
+        {
+          "t": 1013.0,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 19,
+          "total": 20
+        },
+        {
+          "t": 1068.1,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 1103.1,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": "[h3_worker] generate: seed=42 1344x768 frames=124 steps=20 shift=12.0/3.0 attention=sdpa images=0 keep_resident=False prefetch=True vram16=True loras=[] references=[('picture', 1, 'input.png', None)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-pih3-gates-2026-11-23\\_rt\\outputs\\321d27cb-7720-40b2-b381-f67c78f2a0ad\\output.mp4",
+      "mp4": "outputs/h3-pih3-gates-2026-11-23/runs/REFc/output.mp4",
+      "metadata_file": "outputs/h3-pih3-gates-2026-11-23/runs/REFc/REFc.metadata.json",
+      "finished_at": "2026-11-23T02:35:34+09:00",
+      "comfort": {
+        "quant_class": "int8",
+        "budget_rows": 219516,
+        "rows_estimate": {
+          "video": 37296,
+          "cond": 0,
+          "audio": 414,
+          "text": 40,
+          "ref": 0,
+          "total": 37750
+        },
+        "text_tokens": 40,
+        "inside": true
+      },
+      "picks": {
+        "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 1100.59,
+        "steps_shift": [
+          20,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sdpa",
+        "images_used": 0,
+        "references": {
+          "pictures": 1,
+          "videos": 0,
+          "audios": 0,
+          "inputs": [
+            {
+              "kind": "picture",
+              "slot": 1,
+              "id": "d3923a03-7803-4b71-a72e-ac462dca2cc2",
+              "max_sec": null
+            }
+          ]
+        },
+        "seconds": {
+          "encode": 17.6,
+          "denoise": 1044.27,
+          "decode": 37.28,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            6389,
+            7618
+          ],
+          "denoise": [
+            4370,
+            5954
+          ],
+          "decode": [
+            6389,
+            7618
+          ]
+        },
+        "rss_peak_gib": 22.48,
+        "commit_peak_gib": 32.28,
+        "sequence": {
+          "text": 1062,
+          "cond": 0,
+          "audio": 414,
+          "video": 37296,
+          "total": 39786,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "vram16": {
+          "cap_mib": 14033,
+          "num_ooms": 0
+        },
+        "vae_source": "file",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": null
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-pih3-gates-2026-11-23/runs/REFc/output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1344,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      },
+      "extra": {
+        "no_pi_keys": true,
+        "references": true
+      },
+      "extra_ok": true,
+      "compare": {
+        "label": "2026-10-28 G-R1 (selftest output)",
+        "ref_mp4": "outputs/h3-ref2va-2026-10-28/G-R1.mp4",
+        "md5": {
+          "video": "98386897845cc6f2ca08640072c271ed",
+          "audio": "a3688a85ec9007d2d107932a924bb416"
+        },
+        "ref_md5": {
+          "video": "98386897845cc6f2ca08640072c271ed",
+          "audio": "a3688a85ec9007d2d107932a924bb416"
+        },
+        "video_equal": true,
+        "audio_equal": true,
+        "equal": true
+      }
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "name": "minimax_h3_ref2va_pruned_int8_convrot",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 3.1
+    }
+  ],
+  "server": {
+    "port": 18698,
+    "pid": 20576,
+    "config": "outputs/h3-pih3-gates-2026-11-23/_rt/config.h3pih3gates.yaml",
+    "started_at": "2026-11-23T02:17:04+09:00",
+    "stop": {
+      "at": "2026-11-23T02:35:34+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "equal",
+  "finished_at": "2026-11-23T02:35:36+09:00",
+  "workers_after": []
+}

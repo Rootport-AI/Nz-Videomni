@@ -1,0 +1,611 @@
+{
+  "cases": {
+    "P1_shape_1280x768_T22": {
+      "width": 1280,
+      "height": 768,
+      "latents": 22,
+      "blocks": 4.4,
+      "rows_per_latent": 960,
+      "rows": 21120,
+      "expected_frames": 73,
+      "at": "2026-11-22T23:36:26+09:00",
+      "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)",
+      "head_load": {
+        "loaded_tensors": 139,
+        "loaded_mib": 612.6,
+        "int8_layers": 32,
+        "seconds": 0.4
+      },
+      "after_head_load_mib": {
+        "allocated": 613,
+        "peak_allocated": 613,
+        "peak_reserved": 630
+      },
+      "before_run_allocated_mib": 829,
+      "run_peak_mib": {
+        "allocated": 3287,
+        "reserved": 3428
+      },
+      "seconds": {
+        "normalize": 0.084,
+        "refiner": 2.615,
+        "to_uint8": 0.626,
+        "total": 3.325
+      },
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            5
+          ],
+          "latents": [
+            0,
+            22
+          ],
+          "frames": 73,
+          "seconds": 2.581,
+          "peak_alloc_mib": 3287,
+          "peak_reserved_mib": 3428
+        }
+      ],
+      "frames": 73,
+      "frames_shape": [
+        73,
+        768,
+        1280,
+        3
+      ],
+      "result": "success"
+    },
+    "1280x768_N5": {
+      "width": 1280,
+      "height": 768,
+      "latents": 25,
+      "blocks": 5.0,
+      "rows_per_latent": 960,
+      "rows": 24000,
+      "expected_frames": 85,
+      "at": "2026-11-22T23:36:49+09:00",
+      "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)",
+      "head_load": {
+        "loaded_tensors": 139,
+        "loaded_mib": 612.6,
+        "int8_layers": 32,
+        "seconds": 0.33
+      },
+      "after_head_load_mib": {
+        "allocated": 613,
+        "peak_allocated": 613,
+        "peak_reserved": 630
+      },
+      "before_run_allocated_mib": 859,
+      "run_peak_mib": {
+        "allocated": 3549,
+        "reserved": 3756
+      },
+      "seconds": {
+        "normalize": 0.083,
+        "refiner": 2.732,
+        "to_uint8": 0.718,
+        "total": 3.532
+      },
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            5
+          ],
+          "latents": [
+            0,
+            25
+          ],
+          "frames": 85,
+          "seconds": 2.693,
+          "peak_alloc_mib": 3549,
+          "peak_reserved_mib": 3756
+        }
+      ],
+      "frames": 85,
+      "frames_shape": [
+        85,
+        768,
+        1280,
+        3
+      ],
+      "result": "success"
+    },
+    "1280x768_N9": {
+      "width": 1280,
+      "height": 768,
+      "latents": 45,
+      "blocks": 9.0,
+      "rows_per_latent": 960,
+      "rows": 43200,
+      "expected_frames": 153,
+      "at": "2026-11-22T23:36:56+09:00",
+      "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)",
+      "head_load": {
+        "loaded_tensors": 139,
+        "loaded_mib": 612.6,
+        "int8_layers": 32,
+        "seconds": 0.31
+      },
+      "after_head_load_mib": {
+        "allocated": 613,
+        "peak_allocated": 613,
+        "peak_reserved": 630
+      },
+      "before_run_allocated_mib": 1056,
+      "run_peak_mib": {
+        "allocated": 5499,
+        "reserved": 5730
+      },
+      "seconds": {
+        "normalize": 0.102,
+        "refiner": 4.179,
+        "to_uint8": 1.29,
+        "total": 5.57
+      },
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            9
+          ],
+          "context_blocks": [
+            0,
+            9
+          ],
+          "latents": [
+            0,
+            45
+          ],
+          "frames": 153,
+          "seconds": 3.917,
+          "peak_alloc_mib": 5499,
+          "peak_reserved_mib": 5730
+        }
+      ],
+      "frames": 153,
+      "frames_shape": [
+        153,
+        768,
+        1280,
+        3
+      ],
+      "result": "success"
+    },
+    "1920x1088_N5": {
+      "width": 1920,
+      "height": 1088,
+      "latents": 25,
+      "blocks": 5.0,
+      "rows_per_latent": 2040,
+      "rows": 51000,
+      "expected_frames": 85,
+      "at": "2026-11-22T23:37:16+09:00",
+      "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)",
+      "head_load": {
+        "loaded_tensors": 139,
+        "loaded_mib": 612.6,
+        "int8_layers": 32,
+        "seconds": 0.34
+      },
+      "after_head_load_mib": {
+        "allocated": 613,
+        "peak_allocated": 613,
+        "peak_reserved": 630
+      },
+      "before_run_allocated_mib": 1136,
+      "run_peak_mib": {
+        "allocated": 6321,
+        "reserved": 6856
+      },
+      "seconds": {
+        "normalize": 0.1,
+        "refiner": 4.576,
+        "to_uint8": 1.758,
+        "total": 6.433
+      },
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            5
+          ],
+          "latents": [
+            0,
+            25
+          ],
+          "frames": 85,
+          "seconds": 4.342,
+          "peak_alloc_mib": 6321,
+          "peak_reserved_mib": 6856
+        }
+      ],
+      "frames": 85,
+      "frames_shape": [
+        85,
+        1088,
+        1920,
+        3
+      ],
+      "result": "success"
+    },
+    "1920x1088_N9": {
+      "width": 1920,
+      "height": 1088,
+      "latents": 45,
+      "blocks": 9.0,
+      "rows_per_latent": 2040,
+      "rows": 91800,
+      "expected_frames": 153,
+      "at": "2026-11-22T23:37:26+09:00",
+      "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)",
+      "head_load": {
+        "loaded_tensors": 139,
+        "loaded_mib": 612.6,
+        "int8_layers": 32,
+        "seconds": 0.35
+      },
+      "after_head_load_mib": {
+        "allocated": 613,
+        "peak_allocated": 613,
+        "peak_reserved": 630
+      },
+      "before_run_allocated_mib": 1555,
+      "run_peak_mib": {
+        "allocated": 10460,
+        "reserved": 11170
+      },
+      "seconds": {
+        "normalize": 0.125,
+        "refiner": 7.172,
+        "to_uint8": 3.182,
+        "total": 10.479
+      },
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            9
+          ],
+          "context_blocks": [
+            0,
+            9
+          ],
+          "latents": [
+            0,
+            45
+          ],
+          "frames": 153,
+          "seconds": 6.774,
+          "peak_alloc_mib": 10460,
+          "peak_reserved_mib": 11170
+        }
+      ],
+      "frames": 153,
+      "frames_shape": [
+        153,
+        1088,
+        1920,
+        3
+      ],
+      "result": "success"
+    },
+    "2560x1472_N5": {
+      "width": 2560,
+      "height": 1472,
+      "latents": 25,
+      "blocks": 5.0,
+      "rows_per_latent": 3680,
+      "rows": 92000,
+      "expected_frames": 85,
+      "at": "2026-11-22T23:37:52+09:00",
+      "input": "random normal bf16 hidden -> normalize_features (t_emb: 1 random row, index 0)",
+      "head_load": {
+        "loaded_tensors": 139,
+        "loaded_mib": 612.6,
+        "int8_layers": 32,
+        "seconds": 0.34
+      },
+      "after_head_load_mib": {
+        "allocated": 613,
+        "peak_allocated": 613,
+        "peak_reserved": 630
+      },
+      "before_run_allocated_mib": 1557,
+      "run_peak_mib": {
+        "allocated": 10699,
+        "reserved": 11416
+      },
+      "seconds": {
+        "normalize": 0.127,
+        "refiner": 7.132,
+        "to_uint8": 3.386,
+        "total": 10.644
+      },
+      "chunks": [
+        {
+          "keep_blocks": [
+            0,
+            5
+          ],
+          "context_blocks": [
+            0,
+            5
+          ],
+          "latents": [
+            0,
+            25
+          ],
+          "frames": 85,
+          "seconds": 6.747,
+          "peak_alloc_mib": 10699,
+          "peak_reserved_mib": 11416
+        }
+      ],
+      "frames": 85,
+      "frames_shape": [
+        85,
+        1472,
+        2560,
+        3
+      ],
+      "result": "success"
+    },
+    "2560x1472_N9": {
+      "width": 2560,
+      "height": 1472,
+      "latents": 45,
+      "blocks": 9.0,
+      "rows_per_latent": 3680,
+      "rows": 165600,
+      "expected_frames": 153,
+      "result": "時間切れ（VRAM 溢れの疑い）",
+      "note": "head loaded (0.60 GiB) and the run started; the process was ended by coreutils timeout 240 s (exit 124) before the case finished, so no peak was recorded by the script. After it, nvidia-smi showed 194 MiB used and no python process remained."
+    }
+  },
+  "runs": [
+    {
+      "at": "2026-11-22T23:36:24+09:00",
+      "cases": [
+        "P1_shape_1280x768_T22"
+      ],
+      "gate": {
+        "at": "2026-11-22T23:36:24+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "1223",
+            "16376"
+          ],
+          "memory_used_mib": 1223,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "git": {
+        "head": "6dfbe183c5688b2ec629c1ccac794dc4d35b8c40",
+        "status_short": [],
+        "clean": true
+      },
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "comfy-kitchen": "0.2.37",
+        "safetensors": "0.8.0"
+      },
+      "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER"
+    },
+    {
+      "at": "2026-11-22T23:36:47+09:00",
+      "cases": [
+        "1280x768_N5"
+      ],
+      "gate": {
+        "at": "2026-11-22T23:36:47+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "1237",
+            "16376"
+          ],
+          "memory_used_mib": 1237,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "git": {
+        "head": "6dfbe183c5688b2ec629c1ccac794dc4d35b8c40",
+        "status_short": [],
+        "clean": true
+      },
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "comfy-kitchen": "0.2.37",
+        "safetensors": "0.8.0"
+      },
+      "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER"
+    },
+    {
+      "at": "2026-11-22T23:36:55+09:00",
+      "cases": [
+        "1280x768_N9"
+      ],
+      "gate": {
+        "at": "2026-11-22T23:36:55+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "1226",
+            "16376"
+          ],
+          "memory_used_mib": 1226,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "git": {
+        "head": "6dfbe183c5688b2ec629c1ccac794dc4d35b8c40",
+        "status_short": [],
+        "clean": true
+      },
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "comfy-kitchen": "0.2.37",
+        "safetensors": "0.8.0"
+      },
+      "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER"
+    },
+    {
+      "at": "2026-11-22T23:37:14+09:00",
+      "cases": [
+        "1920x1088_N5"
+      ],
+      "gate": {
+        "at": "2026-11-22T23:37:14+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "1236",
+            "16376"
+          ],
+          "memory_used_mib": 1236,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "git": {
+        "head": "6dfbe183c5688b2ec629c1ccac794dc4d35b8c40",
+        "status_short": [],
+        "clean": true
+      },
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "comfy-kitchen": "0.2.37",
+        "safetensors": "0.8.0"
+      },
+      "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER"
+    },
+    {
+      "at": "2026-11-22T23:37:25+09:00",
+      "cases": [
+        "1920x1088_N9"
+      ],
+      "gate": {
+        "at": "2026-11-22T23:37:25+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "1227",
+            "16376"
+          ],
+          "memory_used_mib": 1227,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "git": {
+        "head": "6dfbe183c5688b2ec629c1ccac794dc4d35b8c40",
+        "status_short": [],
+        "clean": true
+      },
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "comfy-kitchen": "0.2.37",
+        "safetensors": "0.8.0"
+      },
+      "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER"
+    },
+    {
+      "at": "2026-11-22T23:37:50+09:00",
+      "cases": [
+        "2560x1472_N5"
+      ],
+      "gate": {
+        "at": "2026-11-22T23:37:50+09:00",
+        "blocking": [],
+        "owner_server": {
+          "port": 18620,
+          "listening": false
+        },
+        "gpu": {
+          "blocking": [],
+          "nvidia_smi_compute_apps": "(removed for privacy)",
+          "returncode": 0,
+          "gpu": [
+            "NVIDIA GeForce RTX 4070 Ti SUPER",
+            "1222",
+            "16376"
+          ],
+          "memory_used_mib": 1222,
+          "python_like_others": []
+        },
+        "engine_workers": []
+      },
+      "git": {
+        "head": "6dfbe183c5688b2ec629c1ccac794dc4d35b8c40",
+        "status_short": [],
+        "clean": true
+      },
+      "versions": {
+        "torch": "2.13.0+cu130",
+        "comfy-kitchen": "0.2.37",
+        "safetensors": "0.8.0"
+      },
+      "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER"
+    }
+  ]
+}

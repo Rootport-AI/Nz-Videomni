@@ -1,0 +1,274 @@
+{
+  "made_at": "2026-11-23T04:26:32+09:00",
+  "git": {
+    "head": "ce9c29488305aa9aa8303f727ed354e3135123a1",
+    "branch": "dev",
+    "status_porcelain": [
+      " M Docs/MINIMAX_H3_DESIGN.md",
+      " M Docs/Outputs-archive/h3-pih3-spike-2026-11-22/README.md",
+      " M Docs/Outputs-archive/h3-pih3-spike-2026-11-22/h3_pih3_spike.py",
+      " M Docs/VERIFICATION_LOG.md",
+      " M engine_h3/dwd.py",
+      " D engine_h3/h3_pih3_format.py",
+      " M engine_h3/pi_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M services/engines/h3/adapter.py",
+      " M tests/test_h3_pih3_api.py",
+      " M tests/test_h3_pih3_engine.py",
+      "?? Docs/Outputs-archive/h3-pih3-gates-2026-11-23/",
+      "?? Docs/Outputs-archive/h3-pih3-spike-2026-11-22/runs/head_bench/",
+      "?? h3_pih3_format.py"
+    ],
+    "dirty": true
+  },
+  "order": [
+    "F1d",
+    "P1d",
+    "P3d"
+  ],
+  "items": {
+    "F1d": {
+      "title": "F1 の回し直し（照合のモジュールを移したあと）",
+      "group": 7,
+      "kind": "api",
+      "rule": "ストリームの MD5 が R1 の記録と一致し、記録に pi-H3 の鍵が無い",
+      "done": false,
+      "jobs": [
+        {
+          "job": "F1d",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "body": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "width": 1280,
+            "height": 768,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "seed": 1234,
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0
+          },
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "off",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 21417,
+            "text_tokens": 53,
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare_to": {
+            "label": "2026-11-22 gate R1 (record)",
+            "mp4": "outputs/h3-mixed-int8-gate-2026-11-22/runs/R1/output.mp4",
+            "present": true
+          }
+        }
+      ]
+    },
+    "P1d": {
+      "title": "P1 の回し直し（照合のモジュールを移したあと）",
+      "group": 7,
+      "kind": "api",
+      "rule": "ストリームの MD5 が実験の P1 と一致",
+      "done": false,
+      "jobs": [
+        {
+          "job": "P1d",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "body": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "width": 1280,
+            "height": 768,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "seed": 1234,
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "pi_h3": "4steps"
+          },
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 21417,
+            "text_tokens": 53,
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare_to": {
+            "label": "spike P1",
+            "mp4": "outputs/h3-pih3-spike-2026-11-22/runs/P1/output.mp4",
+            "present": true
+          }
+        }
+      ]
+    },
+    "P3d": {
+      "title": "P3 の回し直し（照合のモジュールを移したあと）",
+      "group": 7,
+      "kind": "api",
+      "rule": "ストリームの MD5 が実験の P3 と一致",
+      "done": false,
+      "jobs": [
+        {
+          "job": "P3d",
+          "file": "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors",
+          "body": {
+            "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+            "width": 1280,
+            "height": 768,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "seed": 1234,
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "pi_h3": "4steps"
+          },
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 21417,
+            "text_tokens": 53,
+            "budget_rows": 160472,
+            "inside": true
+          },
+          "compare_to": {
+            "label": "spike P3",
+            "mp4": "outputs/h3-pih3-spike-2026-11-22/runs/P3/output.mp4",
+            "present": true
+          }
+        }
+      ]
+    }
+  },
+  "gate_unit": {
+    "blocking": {
+      "free": [],
+      "python_on_gpu": [
+        "GPU を別の python／uvicorn が使っている（1 件）"
+      ],
+      "busy": [
+        "GPU の使用量 5000 MiB が 3072 MiB を超えている"
+      ],
+      "smi_failed": [
+        "nvidia-smi が失敗（1/0）"
+      ]
+    },
+    "ok": true
+  },
+  "gate_now": {
+    "at": "2026-11-23T04:26:32+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 345,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 29,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "halt_marker": null,
+  "files": {
+    "spike runs": {
+      "outputs/h3-pih3-spike-2026-11-22/runs/P1/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/P2/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/P3/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/P4/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/I1c/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/O1c/output.mp4": true
+    },
+    "spike materials": {
+      "outputs/h3-pih3-spike-2026-11-22/_material/I1_source_1280x768_73f.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/_material/I1_mask_1280x768_73f.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/_material/O1_source_1024x576_124f.mp4": true
+    },
+    "R1 record": {
+      "Docs/Outputs-archive/h3-mixed-int8-2026-11-22/summary.json": true,
+      "outputs/h3-mixed-int8-gate-2026-11-22/runs/R1/output.mp4": true
+    },
+    "weights": {
+      "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/Weights/Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors": true,
+      "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/Weights/10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors": true,
+      "models/MiniMaxH3/VAE/pi-H3/pi_h3_4step_dwd_adapter_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/VAE/pi-H3/pi_h3_2step_dwd_adapter_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors": true
+    },
+    "materials": {
+      "outputs/h3-gate2/i2v_input.png": true,
+      "outputs/h3-keyframes-2026-10-19/kf_first.png": true,
+      "outputs/h3-keyframes-2026-10-19/kf_last.png": true,
+      "Docs/Outputs-archive/h3-ref2va-2026-10-28/17fde0c1-image.png": true,
+      "uploads/h3-a2v-development/00043-2168133585.jpg": true,
+      "uploads/h3-a2v-development/実験の成功、楽しみにしていますね.wav": true
+    },
+    "venvs": {
+      ".venv/Scripts/python.exe": true,
+      ".venv-engine-h3/Scripts/python.exe": true
+    }
+  },
+  "r1_md5": {
+    "video": "dc4d54641a648eb359dc74001be3bf5c",
+    "audio": "0717000179fb6bb4cb0f2800d824f490"
+  },
+  "pi_match": {
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors + 4steps": [],
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors + 2steps": [],
+    "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors + 4steps": [],
+    "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors + 2steps": [],
+    "minimax_h3_ref2va_pruned_int8_convrot.safetensors + 4steps": [],
+    "minimax_h3_ref2va_pruned_int8_convrot.safetensors + 2steps": [],
+    "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors + 4steps": [],
+    "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors + 2steps": []
+  },
+  "quant_class": {
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors": "int8",
+    "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors": "bf16_blocks",
+    "minimax_h3_ref2va_pruned_int8_convrot.safetensors": "int8",
+    "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors": "w4a8"
+  },
+  "problems": [],
+  "ok": true
+}

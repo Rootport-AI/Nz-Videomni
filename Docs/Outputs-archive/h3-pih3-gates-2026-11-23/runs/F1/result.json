@@ -1,0 +1,374 @@
+{
+  "item": "F1",
+  "title": "API の off の単発（2026-11-22 の門の R1 と同じ条件）",
+  "group": 1,
+  "rule": "完了し、映像と音声のストリームの MD5 が R1 の記録と一致。記録に pi-H3 の鍵が無い",
+  "started_at": "2026-11-23T01:10:28+09:00",
+  "git": {
+    "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+    "branch": "dev",
+    "status_porcelain": [],
+    "dirty": false
+  },
+  "gate": {
+    "at": "2026-11-23T01:10:28+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 320,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "F1",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 20,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      },
+      "started_at": "2026-11-23T01:10:55+09:00",
+      "submit_http": 202,
+      "job_id": "960ae1e9-440a-4857-8415-b33aaffa3468",
+      "seconds_wall": 240.6,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 35.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 20
+        },
+        {
+          "t": 45.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 20
+        },
+        {
+          "t": 55.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 20
+        },
+        {
+          "t": 65.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 20
+        },
+        {
+          "t": 75.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 4,
+          "total": 20
+        },
+        {
+          "t": 80.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 5,
+          "total": 20
+        },
+        {
+          "t": 90.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 6,
+          "total": 20
+        },
+        {
+          "t": 100.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 7,
+          "total": 20
+        },
+        {
+          "t": 110.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 8,
+          "total": 20
+        },
+        {
+          "t": 115.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 9,
+          "total": 20
+        },
+        {
+          "t": 125.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 10,
+          "total": 20
+        },
+        {
+          "t": 135.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 11,
+          "total": 20
+        },
+        {
+          "t": 145.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 12,
+          "total": 20
+        },
+        {
+          "t": 155.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 13,
+          "total": 20
+        },
+        {
+          "t": 160.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 14,
+          "total": 20
+        },
+        {
+          "t": 170.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 15,
+          "total": 20
+        },
+        {
+          "t": 180.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 16,
+          "total": 20
+        },
+        {
+          "t": 190.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 17,
+          "total": 20
+        },
+        {
+          "t": 195.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 18,
+          "total": 20
+        },
+        {
+          "t": 205.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 19,
+          "total": 20
+        },
+        {
+          "t": 215.6,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 240.6,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": "[h3_worker] generate: seed=1234 1280x768 frames=73 steps=20 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-pih3-gates-2026-11-23\\_rt\\outputs\\960ae1e9-440a-4857-8415-b33aaffa3468\\output.mp4",
+      "mp4": "outputs/h3-pih3-gates-2026-11-23/runs/F1/output.mp4",
+      "metadata_file": "outputs/h3-pih3-gates-2026-11-23/runs/F1/F1.metadata.json",
+      "finished_at": "2026-11-23T01:14:56+09:00",
+      "comfort": {
+        "quant_class": "int8",
+        "budget_rows": 219516,
+        "rows_estimate": {
+          "video": 21120,
+          "cond": 0,
+          "audio": 244,
+          "text": 53,
+          "ref": 0,
+          "total": 21417
+        },
+        "text_tokens": 53,
+        "inside": true
+      },
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 236.86,
+        "steps_shift": [
+          20,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": 21.42,
+          "denoise": 191.45,
+          "decode": 23.84,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            6332,
+            7484
+          ],
+          "denoise": [
+            3780,
+            4536
+          ],
+          "decode": [
+            6332,
+            7484
+          ]
+        },
+        "rss_peak_gib": 22.24,
+        "commit_peak_gib": 31.51,
+        "sequence": {
+          "text": 53,
+          "cond": 0,
+          "audio": 244,
+          "video": 21120,
+          "total": 21417,
+          "latent_frames": 22,
+          "audio_latents": 122,
+          "grid": [
+            24,
+            40
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14025,
+          "num_ooms": 0
+        },
+        "vae_source": "file",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": null
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-pih3-gates-2026-11-23/runs/F1/output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      },
+      "extra": {
+        "no_pi_keys": true
+      },
+      "extra_ok": true,
+      "compare": {
+        "label": "2026-11-22 gate R1 (record)",
+        "ref_mp4": "outputs/h3-mixed-int8-gate-2026-11-22/runs/R1/output.mp4",
+        "md5": {
+          "video": "dc4d54641a648eb359dc74001be3bf5c",
+          "audio": "0717000179fb6bb4cb0f2800d824f490"
+        },
+        "ref_md5": {
+          "video": "dc4d54641a648eb359dc74001be3bf5c",
+          "audio": "0717000179fb6bb4cb0f2800d824f490"
+        },
+        "video_equal": true,
+        "audio_equal": true,
+        "equal": true
+      }
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "name": "default",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 18.1
+    }
+  ],
+  "server": {
+    "port": 18698,
+    "pid": 42764,
+    "config": "outputs/h3-pih3-gates-2026-11-23/_rt/config.h3pih3gates.yaml",
+    "started_at": "2026-11-23T01:10:30+09:00",
+    "stop": {
+      "at": "2026-11-23T01:14:56+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T01:14:58+09:00",
+  "workers_after": []
+}

@@ -1,0 +1,294 @@
+{
+  "item": "REFt",
+  "title": "切り分け: REF と同じ要求を pi-H3 なし・Turbo LoRA 0.8 の 4 ステップで",
+  "group": 7,
+  "rule": "完了し、フレーム数と音声が期待どおり",
+  "started_at": "2026-11-23T02:39:44+09:00",
+  "git": {
+    "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+    "branch": "dev",
+    "status_porcelain": [
+      " M engine_h3/dwd.py",
+      " M tests/test_h3_pih3_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T02:39:44+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 339,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 29,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "REFt",
+      "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "<Picture 1> is an elderly gentleman with white hair and a beard in a dark suit. He walks slowly through a sunlit park, turns to the camera and smiles. Natural ambient sound.",
+        "width": 1344,
+        "height": 768,
+        "num_frames": 124,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "cee84705-2e1a-45dd-b473-9efd45ddf256",
+            "slot": 1
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-23T02:39:53+09:00",
+      "submit_http": 202,
+      "job_id": "0130e6ec-884e-4d92-b635-1b8147eba944",
+      "seconds_wall": 180.5,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 35.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 60.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 90.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 115.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 140.4,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 180.5,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": "[h3_worker] generate: seed=42 1344x768 frames=124 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] references=[('picture', 1, 'input.png', None)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-pih3-gates-2026-11-23\\_rt\\outputs\\0130e6ec-884e-4d92-b635-1b8147eba944\\output.mp4",
+      "mp4": "outputs/h3-pih3-gates-2026-11-23/runs/REFt/output.mp4",
+      "metadata_file": "outputs/h3-pih3-gates-2026-11-23/runs/REFt/REFt.metadata.json",
+      "finished_at": "2026-11-23T02:42:54+09:00",
+      "comfort": {
+        "quant_class": "int8",
+        "budget_rows": 219516,
+        "rows_estimate": {
+          "video": 37296,
+          "cond": 0,
+          "audio": 414,
+          "text": 40,
+          "ref": 0,
+          "total": 37750
+        },
+        "text_tokens": 40,
+        "inside": true
+      },
+      "picks": {
+        "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 177.46,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": {
+          "pictures": 1,
+          "videos": 0,
+          "audios": 0,
+          "inputs": [
+            {
+              "kind": "picture",
+              "slot": 1,
+              "id": "cee84705-2e1a-45dd-b473-9efd45ddf256",
+              "max_sec": null
+            }
+          ]
+        },
+        "seconds": {
+          "encode": 18.04,
+          "denoise": 120.39,
+          "decode": 37.47,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            6390,
+            7614
+          ],
+          "denoise": [
+            4770,
+            6482
+          ],
+          "decode": [
+            6390,
+            7614
+          ]
+        },
+        "rss_peak_gib": 23.54,
+        "commit_peak_gib": 35.7,
+        "sequence": {
+          "text": 1062,
+          "cond": 0,
+          "audio": 414,
+          "video": 37296,
+          "total": 39786,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            42
+          ],
+          "ref_video": 1014,
+          "ref_audio": 0
+        },
+        "vram16": {
+          "cap_mib": 14033,
+          "num_ooms": 0
+        },
+        "vae_source": "file",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ]
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-pih3-gates-2026-11-23/runs/REFt/output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1344,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "5.166667",
+            "nb_read_frames": 124
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "5.167000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      },
+      "extra": {
+        "no_pi_keys": true,
+        "references": true
+      },
+      "extra_ok": true
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "name": "minimax_h3_ref2va_pruned_int8_convrot",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 3.2
+    }
+  ],
+  "server": {
+    "port": 18698,
+    "pid": 33140,
+    "config": "outputs/h3-pih3-gates-2026-11-23/_rt/config.h3pih3gates.yaml",
+    "started_at": "2026-11-23T02:39:46+09:00",
+    "stop": {
+      "at": "2026-11-23T02:42:54+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T02:42:56+09:00",
+  "workers_after": []
+}

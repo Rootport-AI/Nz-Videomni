@@ -6953,3 +6953,23 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 179.6 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-295 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-295）。
+
+## 180. MiniMax H3 の Settings の「Fast VAE」で、pi-H3 を選んだときの文を 1 つの段落にまとめ、赤い太字の文を最後に置く（設計正本 裁定 108 ①。2026-11-24）
+
+### 180.1 結論
+
+- **pi-H3_4s・pi-H3_2s を選んだときの「Fast VAE」の行の下の表示が、1 つの段落になりました。** 並びは、値ごとの解説文「pi-H3 の n ステップ版で生成します。」→ 普通の書体の「生成が高速になる代わりに、動画の品質は劣化します。」→ 赤い太字の「pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」です。文そのもの、Off と Sol の表示、Gradio とサーバーは変えていません。
+- オーナーの実機での確認（記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §231）のあとの、オーナーの指示によります（同 §231.6）。作りの正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 108 ①と §6.8 の「操作パネル（段 2）」で、本節には写しません。
+- 機械の確認の数値と配置の記録は記録簿 §231.7 にだけ、残りの確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-295 にだけ書きます。
+
+### 180.2 変えたファイル
+
+置き場所は `webui/src/`。コミットは監督が dev に入れます。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/SettingsPanel.tsx` | 行の下を `<p className="field-hint">` 1 つにし、中に値ごとの解説文、`piH3 !== "off"` のときだけ `accelPiH3NoteDetail` と、`<strong className="field-hint-error">` の `accelPiH3Note` を、この順に置いた |
+| `i18n/strings.ts` | 英語の `accelPiH3NoteDetail` を、前後に半角の空白を 1 つずつ持つ形にした（3 つの英語の文を区切るため。日本語は空白なしのまま）。文そのものは日本語・英語とも変えていない |
+| `shell/SettingsPanel.test.tsx` | 段落が 1 つであること、3 つの文の順、赤い太字が最後の文だけであることを、英語の pi-H3_4s・pi-H3_2s と日本語の pi-H3_2s で確かめる形にした |
+
+- §179.4 の「赤い太字は文の部分だけ」は、そのまま保っています（段落は普通の書体で、`<strong>` は裁定 107 ①の文だけ）。

@@ -27,8 +27,8 @@
 
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。main へ取り込む前の確認（機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件）は済んだ。
-- **これからすること**: main へ取り込んだあとに、検証用の別の機械で、下のインストーラーの確認を行う。
+- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。
+- **これからすること**: 検証用の別の機械で、下のインストーラーの確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
 - **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。本節が実機確認の項目の正本。
 
 #### インストーラー（main へ取り込んだあと、検証用の別の機械で）

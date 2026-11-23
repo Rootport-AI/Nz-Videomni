@@ -2606,13 +2606,14 @@ export const en = {
     accelFastVaePiH3TwoStepsNote: "pi-H3 2steps model.",
     accelFastVaeSolNote:
       "A lightweight decoder (Sol-H3-VAE) speeds up generation. Output quality may be slightly reduced. When Sol cannot be used (e.g. the video is too long), the standard VAE is used instead.",
-    /** Shown in red bold under the note while a pi-H3 choice is selected (the
-     * owner's wording, ruling 107 ①). A note only — nothing stops the job. */
+    /** Ends the note paragraph in red bold while a pi-H3 choice is selected
+     * (the owner's wording, ruling 107 ①). A note only — nothing stops the job. */
     accelPiH3Note: "pi-H3 is not recommended when using Turbo LoRA or Turbo models.",
-    /** Follows {@link accelPiH3Note} in the plain type (the owner's wording).
-     * The leading space separates the two English sentences; the Japanese
-     * pair is written without one. */
-    accelPiH3NoteDetail: " Generation is faster, but video quality is reduced.",
+    /** Sits between the choice's note and {@link accelPiH3Note}, in the plain
+     * type (the owner's wording). The English text carries its own leading and
+     * trailing space to separate the three sentences; the Japanese is written
+     * without any. */
+    accelPiH3NoteDetail: " Generation is faster, but video quality is reduced. ",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",

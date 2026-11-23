@@ -626,9 +626,9 @@ export function SettingsPanel({
             (`fastVaeChoice` reads the pressed button, `onFastVaeChange` writes
             both). Right after the PrunaVAED row (which H3 hides, so on H3 it
             shows directly above VRAM 16GB mode). Under the buttons: the
-            choice's plain note (none for Off), then — for the two pi-H3
-            choices only, the same `piH3 !== "off"` condition as before — the
-            red bold warning followed by a sentence in the plain type. Whether
+            choice's note (none for Off) as ONE paragraph; for the two pi-H3
+            choices only (`piH3 !== "off"`) the same paragraph continues with
+            a sentence in the plain type and ends with the red bold warning. Whether
             Turbo is actually in use is not judged, and nothing stops the job.
             HIDDEN OUTRIGHT, row and notes under the ONE condition, on an engine
             whose `unsupported_features` name `pi_h3` or `sol_vae` (LTX 2.3 /
@@ -656,11 +656,15 @@ export function SettingsPanel({
                 ))}
               </div>
             </div>
-            {fastVaeNote !== null && <p className="field-hint">{fastVaeNote}</p>}
-            {acceleration.piH3 !== "off" && (
+            {fastVaeNote !== null && (
               <p className="field-hint">
-                <strong className="field-hint-error">{strings.settings.accelPiH3Note}</strong>
-                {strings.settings.accelPiH3NoteDetail}
+                {fastVaeNote}
+                {acceleration.piH3 !== "off" && (
+                  <>
+                    {strings.settings.accelPiH3NoteDetail}
+                    <strong className="field-hint-error">{strings.settings.accelPiH3Note}</strong>
+                  </>
+                )}
               </p>
             )}
           </>

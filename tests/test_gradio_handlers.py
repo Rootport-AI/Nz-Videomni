@@ -4523,3 +4523,99 @@ def test_generate_handler_vram16_off_sends_false_last():
 def test_generate_handler_vram16_default_omits_the_key():
     assert "vram16_mode" not in _captured_generate()
     assert "vram16_mode" not in _captured_generate(vram16_mode=True)
+
+
+# --------------------------------------------------------------------------- #
+# pi-H3 (MiniMax H3): the Settings radio rides the single /generate request.
+# --------------------------------------------------------------------------- #
+_H3_SAMPLING = {
+    "num_inference_steps": {"min": 1, "max": 50, "step": 1, "default": 20},
+    "shift_video": {"min": 1, "max": 20, "step": 0.1, "default": 12},
+    "shift_audio": {"min": 1, "max": 20, "step": 0.1, "default": 3},
+}
+_H3_PI_CONSTRAINTS = {
+    "num_frames": {"step": 17, "offset": 5, "min": 22, "max": 481},
+    "dimension_multiple": 32,
+    "frame_rate": {"min": 24, "max": 24},
+    "sampling": _H3_SAMPLING,
+    "pi_h3": {
+        "4steps": {"num_inference_steps": 4, "shift_video": 12.0, "shift_audio": 3.0},
+        "2steps": {"num_inference_steps": 2, "shift_video": 12.0, "shift_audio": 3.0},
+    },
+}
+
+
+def _captured_h3_generate(**kw) -> dict:
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json={"job_id": "job-pi"})
+
+    generate = make_generate_handler(_make_client(handler))
+    gen = generate("A calm river", "", _kf_args(),
+                   640, 384, False, 0, 0, 124, 24.0, -1,
+                   constraints=_H3_PI_CONSTRAINTS,
+                   num_inference_steps=4, shift_video=12.0, shift_audio=3.0, **kw)
+    _run_until_job_started(gen)
+    return captured
+
+
+@pytest.mark.parametrize("choice", ["4steps", "2steps"])
+def test_generate_handler_pi_h3_sends_the_choice_last_and_no_sampling(choice):
+    captured = _captured_h3_generate(pi_h3=choice, vram16_mode=False)
+    assert captured["pi_h3"] == choice
+    assert list(captured.keys())[-1] == "pi_h3"
+    assert list(captured.keys())[-2] == "vram16_mode"
+    for key in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert key not in captured
+
+
+def test_generate_handler_pi_h3_off_is_todays_request():
+    captured = _captured_h3_generate()
+    assert "pi_h3" not in captured
+    assert (captured["num_inference_steps"], captured["shift_video"],
+            captured["shift_audio"]) == (4, 12.0, 3.0)
+    assert _captured_h3_generate(pi_h3="off") == captured
+
+
+def test_generate_handler_pi_h3_without_served_values_is_todays_request():
+    # LTX scope (no sampling, no pi_h3 block): the key never rides.
+    captured = _captured_generate(pi_h3="4steps")
+    assert "pi_h3" not in captured
+    assert captured == _captured_generate()
+
+
+def test_generate_handler_a2v_never_carries_pi_h3(tmp_path):
+    aud = tmp_path / "a.wav"
+    aud.write_bytes(b"RIFF....WAVEfmt ")
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-1"})
+        assert request.url.path.endswith("/generate/chain")
+        import json
+        captured.update(json.loads(request.content))
+        return httpx.Response(202, json={"job_id": "chain-a2v"})
+
+    generate = make_generate_handler(_make_client(handler))
+    gen = generate("a singer", "", _kf_args(), 640, 384, False, 0, 0, 124, 24.0, -1,
+                   src_audio=str(aud), constraints=_H3_PI_CONSTRAINTS, pi_h3="4steps")
+    # The A2V branch yields an upload message first; stop once the job started.
+    for out in gen:
+        if out[1]:
+            gen.close()
+            break
+    assert captured and "pi_h3" not in captured
+
+
+def test_pi_h3_i18n_keys_exist_with_the_owners_wording():
+    from gradio_ui.i18n import LABELS
+
+    for key in ("accel_lbl_pi_h3", "accel_info_pi_h3", "accel_warn_pi_h3", "cap_pi_h3_lock"):
+        assert LABELS["en"][key] and LABELS["ja"][key], key
+    assert LABELS["ja"]["accel_warn_pi_h3"] == "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。"
+    assert LABELS["en"]["accel_warn_pi_h3"] == (
+        "pi-H3 is not recommended when using Turbo LoRA or Turbo models.")

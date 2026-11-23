@@ -135,6 +135,12 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vram16": "VRAM 16GB mode (MiniMax H3)",
         "accel_info_vram16": ("For MiniMax H3 only. Splits the denoising computation "
                               "so it fits in 16GB of VRAM. Precision is not changed."),
+        # pi-H3 (MiniMax H3 only): the Settings radio, its warning (the
+        # owner's wording, verbatim) and the Generate tab's lock caption.
+        "accel_lbl_pi_h3": "pi-H3",
+        "accel_info_pi_h3": "Generates with MiniMax H3 in 4 steps or 2 steps.",
+        "accel_warn_pi_h3": "pi-H3 is not recommended when using Turbo LoRA or Turbo models.",
+        "cap_pi_h3_lock": "Fixed because pi-H3 is enabled in Settings",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -698,6 +704,10 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vram16": "VRAM 16GB mode（MiniMax H3）",
         "accel_info_vram16": ("MiniMax H3 専用。ノイズ除去の計算を分割して "
                               "VRAM 16GB に収めます。精度は変えません。"),
+        "accel_lbl_pi_h3": "pi-H3",
+        "accel_info_pi_h3": "MiniMax H3 を 4 ステップまたは 2 ステップで生成します。",
+        "accel_warn_pi_h3": "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。",
+        "cap_pi_h3_lock": "Settings の pi-H3 が有効のため固定",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

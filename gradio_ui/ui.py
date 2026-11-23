@@ -91,10 +91,12 @@ from .presets import (
 )
 from .styles import CUSTOM_CSS
 from .constraints import (
+    PI_H3_OFF,
     active_scope,
     comfort_table_missing,
     default_scope,
     field_labels,
+    pi_h3_sampling_updates,
     scope_constraints,
     single_scope_updates,
 )
@@ -628,6 +630,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                                                         label=L("lbl_shift_audio"),
                                                         visible=False), "lbl_shift_audio")
                         cap_lock = reg(gr.Markdown(L("cap_lock")), "cap_lock", "value")
+                        # Shown only while the Settings pi-H3 radio locks the
+                        # three sliders (constraints.pi_h3_sampling_updates).
+                        cap_pi_h3_lock = reg(gr.Markdown(L("cap_pi_h3_lock"), visible=False),
+                                             "cap_pi_h3_lock", "value")
 
                         seed = reg(gr.Number(value=-1, label=L("lbl_seed"), precision=0), "lbl_seed")
 
@@ -1312,6 +1318,28 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_vae"),
                 ), "accel_lbl_vae")
                 reg(accel_vae, "accel_info_vae", "info")
+                # pi-H3 (MiniMax H3 only): gated like VRAM 16GB mode above --
+                # built INVISIBLE, shown by refresh_model_dropdowns when the
+                # ACTIVE base model does not name ``pi_h3`` (both LTX families
+                # do), hidden + reset to "off" otherwise (feature_scope.py).
+                # Wired into the SINGLE Generate flow only, right after
+                # accel_vram16 (see dispatch()). While a choice is on, the
+                # Generate tab's steps / shift sliders show the server's
+                # constraints.pi_h3 values, locked, and are not sent
+                # (constraints.pi_h3_locked_values). The warning below it is not
+                # gated (a gated control's value is rewritten on reset); its
+                # visibility follows the radio's .change.
+                accel_pi_h3 = reg(gr.Radio(
+                    choices=[("off", "off"), ("4steps", "4steps"), ("2steps", "2steps")],
+                    value="off",
+                    label=L("accel_lbl_pi_h3"),
+                    info=L("accel_info_pi_h3"),
+                    visible=False,
+                ), "accel_lbl_pi_h3")
+                reg(accel_pi_h3, "accel_info_pi_h3", "info")
+                accel_pi_h3_warning = reg(gr.Markdown(
+                    L("accel_warn_pi_h3"), visible=False,
+                    elem_classes=["pi-h3-warning"]), "accel_warn_pi_h3", "value")
 
                 # ---- Output (generation conditions in the mp4) ----
                 # Not an acceleration option, but a per-job request field
@@ -1481,18 +1509,37 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # the HTML ``min`` step-snap base of the three Numbers client-side
         # from their new labels (see _min_attr_js below for why ``min`` is
         # not a server-side prop).
-        def on_gen_scope_change(scope_v, w, h, nf, cfg_v, lang_v):
-            return single_scope_updates(scope_constraints(scope_v), lang_v) + (
+        # The Settings pi-H3 radio is an input so a reload onto another H3
+        # weight keeps the sliders locked while a choice is on.
+        def on_gen_scope_change(scope_v, w, h, nf, cfg_v, lang_v, pi_h3_v):
+            return single_scope_updates(scope_constraints(scope_v), lang_v,
+                                        pi_h3_v) + (
                 _spill_warning_for_scope(w, h, nf, cfg_v, scope_v, lang_v),)
 
         gen_scope_state.change(
             on_gen_scope_change,
             inputs=[gen_scope_state, width, height, num_frames, config_state,
-                    lang_state],
+                    lang_state, accel_pi_h3],
             outputs=[steps, cfg, shift_video, shift_audio, cap_lock,
                      width, height, num_frames, spill_warning],
             show_progress="hidden",
         ).then(None, js=_GEN_MIN_FROM_LABELS_JS)
+
+        # pi-H3 radio: the three sampling sliders (locked at the choice's
+        # served values, or back to the scope's own look / defaults), the lock
+        # caption, and the warning (shown while a choice is on). Nothing else
+        # on the Generate tab is touched.
+        def on_pi_h3_change(pi_h3_v, scope_v):
+            return pi_h3_sampling_updates(scope_constraints(scope_v), pi_h3_v) + (
+                gr.update(visible=pi_h3_v not in (None, "", PI_H3_OFF)),)
+
+        accel_pi_h3.change(
+            on_pi_h3_change,
+            inputs=[accel_pi_h3, gen_scope_state],
+            outputs=[steps, shift_video, shift_audio, cap_pi_h3_lock,
+                     accel_pi_h3_warning],
+            show_progress="hidden",
+        )
         gen_scope_state.change(_spill_table_for_scope,
                                inputs=[config_state, gen_scope_state],
                                outputs=spill_table, show_progress="hidden")
@@ -1556,7 +1603,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_out_mode_v, batch_out_dir_v, batch_add_replace_v,
                      batch_img_dir_v, batch_chunked_upsample_v,
                      gen_scope_v, steps_v, shift_video_v, shift_audio_v,
-                     accel_vram16_v,
+                     accel_vram16_v, accel_pi_h3_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
@@ -1593,7 +1640,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     constraints=scope_constraints(gen_scope_v),
                     num_inference_steps=steps_v, shift_video=shift_video_v,
                     shift_audio=shift_audio_v,
-                    vram16_mode=bool(accel_vram16_v))
+                    vram16_mode=bool(accel_vram16_v),
+                    pi_h3=accel_pi_h3_v or PI_H3_OFF)
                 return
 
             rows = batch_rows_v or []
@@ -1765,8 +1813,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     # trailing order shared with the Chain flow is unchanged.
                     gen_scope_state, steps, shift_video, shift_audio,
                     # VRAM 16GB mode (MiniMax H3, single-only): here for the
-                    # same reason as the sliders above.
-                    accel_vram16,
+                    # same reason as the sliders above. pi-H3 (MiniMax H3,
+                    # single-only) right after it, for the same reason.
+                    accel_vram16, accel_pi_h3,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
@@ -2544,6 +2593,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             "accel_vae": accel_vae,
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
             "accel_vram16": accel_vram16,
+            "accel_pi_h3": accel_pi_h3,
             "accel_fused_dequant": accel_fused_dequant,
             # Each keyframe slot's strength slider, as kf_strength_<slot>.
             **{f"kf_strength_{slot_n}": slot[3]

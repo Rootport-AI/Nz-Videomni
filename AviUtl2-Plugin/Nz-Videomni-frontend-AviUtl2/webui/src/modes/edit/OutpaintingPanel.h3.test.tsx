@@ -6,6 +6,8 @@ import type { NativeBridge } from "../../bridge";
 import { en } from "../../i18n/strings";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import { ToastProvider } from "../../shell/ToastContext";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
@@ -372,5 +374,116 @@ describe("EditScreen — Outpainting（MiniMax H3・§1-125）", () => {
 
     fireEvent.change(duration, { target: { value: String(expected) } });
     expect(panel.queryByText(/units of work/i)).toBeNull();
+  });
+});
+
+/**
+ * Ruling 107 (2026-11-23): pi-H3 on the Outpainting screen — the panel hands
+ * the form's fixed values to the sliders, the body drops the three sampling
+ * values, and a refusal's `detail` sentence shows as a third line.
+ */
+describe("EditScreen — Outpainting（MiniMax H3）の pi-H3（裁定 107）", () => {
+  const H3_PI = resolveGenerationConstraints({
+    ...H3_BLOCK,
+    pi_h3: {
+      "4steps": { num_inference_steps: 4, shift_video: 12, shift_audio: 3 },
+      "2steps": { num_inference_steps: 2, shift_video: 12, shift_audio: 3 },
+    },
+  });
+
+  function renderPi(acceleration: AccelerationSettings, options: BridgeOptions = {}) {
+    const { bridge, request } = createBridge(options);
+    render(
+      <LanguageProvider>
+        <ToastProvider>
+          <div role="tabpanel">
+            <EditScreen
+              nativeBridge={bridge}
+              initialIntent={OUTPAINT_TAB_INTENT}
+              prompt="a wide street"
+              onJobSubmitted={vi.fn()}
+              engineFamily="h3"
+              constraints={H3_PI}
+              acceleration={acceleration}
+              loraAudioHidden
+            />
+          </div>
+        </ToastProvider>
+      </LanguageProvider>,
+    );
+    return { request, panel: within(screen.getByRole("tabpanel")) };
+  }
+
+  function stepsSlider(): HTMLInputElement {
+    return within(outpaintPanel()).getByRole("slider", { name: /^steps/i }) as HTMLInputElement;
+  }
+
+  it("有効: スライダーは選択の値で固定され理由のツールチップが付き、body に pi_h3 があってサンプリングの 3 項目は無い", async () => {
+    const user = userEvent.setup();
+    const { panel, request } = renderPi({ ...ACCELERATION_DEFAULTS, piH3: "4steps" });
+    expect(stepsSlider().value).toBe("4");
+    expect(stepsSlider()).toBeDisabled();
+    expect(stepsSlider().closest("label")).toHaveAttribute("title", en.single.sampling.fixedTooltip);
+    await attach(panel, user);
+    setPads(panel, { left: 12, right: 20, bottom: 48 });
+    await pressGenerate(panel, user);
+    await waitFor(() => expect(generateBody(request)).toBeDefined());
+    const body = generateBody(request)!;
+    expect(body.pi_h3).toBe("4steps");
+    expect(body).not.toHaveProperty("num_inference_steps");
+    expect(body).not.toHaveProperty("shift_video");
+    expect(body).not.toHaveProperty("shift_audio");
+  });
+
+  it("off: スライダーは今日どおり動かせ、ツールチップは無く、body に pi_h3 が無く 3 項目がある", async () => {
+    const user = userEvent.setup();
+    const { panel, request } = renderPi(ACCELERATION_DEFAULTS);
+    expect(stepsSlider().value).toBe("20");
+    expect(stepsSlider()).toBeEnabled();
+    expect(stepsSlider().closest("label")).not.toHaveAttribute("title");
+    await attach(panel, user);
+    setPads(panel, { left: 12, right: 20, bottom: 48 });
+    await pressGenerate(panel, user);
+    await waitFor(() => expect(generateBody(request)).toBeDefined());
+    const body = generateBody(request)!;
+    expect(body).not.toHaveProperty("pi_h3");
+    expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+  });
+
+  it("受付で断られたとき、サーバーの detail の文が code と message の下に 3 行目として出る", async () => {
+    const user = userEvent.setup();
+    const detail = "pi-H3 のファイルがありません（pi-H3/pi-h3-4steps.safetensors）。";
+    const { panel } = renderPi(
+      { ...ACCELERATION_DEFAULTS, piH3: "4steps" },
+      {
+        generateResponse: {
+          status: 422,
+          body: { error: { code: "MODEL_FILE_MISSING", message: "model file missing: pi_h3/4steps", detail } },
+        },
+      },
+    );
+    await attach(panel, user);
+    setPads(panel, { left: 12, right: 20, bottom: 48 });
+    await pressGenerate(panel, user);
+    const code = await screen.findByText("MODEL_FILE_MISSING");
+    const card = code.closest(".card-error")!;
+    expect(Array.from(card.querySelectorAll("p")).map((p) => p.textContent)).toEqual([
+      "MODEL_FILE_MISSING",
+      "model file missing: pi_h3/4steps",
+      detail,
+    ]);
+  });
+
+  it("detail が無い拒否では、今日と同じ 2 行のまま", async () => {
+    const user = userEvent.setup();
+    const { panel } = renderPi(ACCELERATION_DEFAULTS, {
+      generateResponse: { status: 422, body: { error: { code: "SOME_REFUSAL", message: "refused" } } },
+    });
+    await attach(panel, user);
+    setPads(panel, { left: 12, right: 20, bottom: 48 });
+    await pressGenerate(panel, user);
+    const code = await screen.findByText("SOME_REFUSAL");
+    const card = code.closest(".card-error")!;
+    expect(Array.from(card.querySelectorAll("p")).map((p) => p.textContent)).toEqual(["SOME_REFUSAL", "refused"]);
   });
 });

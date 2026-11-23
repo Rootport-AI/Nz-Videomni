@@ -330,6 +330,7 @@ function RetakeSettings({ form, disabled }: RetakePanelProps) {
         <SamplingFields
           constraints={form.samplingConstraints}
           values={form.sampling}
+          fixedValues={form.fixedSampling}
           disabled={disabled}
           onChange={form.setSamplingValue}
         />

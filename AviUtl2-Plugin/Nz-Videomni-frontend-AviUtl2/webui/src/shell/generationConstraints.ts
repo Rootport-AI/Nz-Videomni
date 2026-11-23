@@ -9,6 +9,7 @@ import {
 import type { FrameGrid } from "../modes/single/paramUtils";
 import { MIN_NUM_FRAMES } from "../modes/single/defaultConfig";
 import type { ReferenceRules } from "../modes/single/referenceRules";
+import type { SamplingValues } from "../modes/single/samplingValues";
 
 /**
  * The loaded base model's numeric rules, in the shape Create, Chained (and the
@@ -101,6 +102,13 @@ export interface GenerationConstraints {
    * block (LTX, fallback). Its presence alone switches the Inpainting form
    * into that engine's shape (no featureScope entry, like {@link outpaint}). */
   inpaint: { audioStrength: SamplingParamConstraint; blendDilationStage1: SamplingParamConstraint } | null;
+  /** Ruling 107: the three sampling values each pi-H3 choice runs with, in
+   * the form's vocabulary, flattened from `constraints.pi_h3`, or `null` when
+   * the server publishes no `pi_h3` block (LTX, fallback). Verbatim from the
+   * server — the WebUI holds no number of its own. Read through
+   * `modes/single/samplingValues.ts`'s `piH3FixedSampling`. A choice the
+   * server does not publish is simply absent. */
+  piH3: Partial<Record<"4steps" | "2steps", SamplingValues>> | null;
 }
 
 /** What the WebUI uses while the server publishes no `constraints` — the LTX
@@ -120,6 +128,7 @@ export const LTX_GENERATION_CONSTRAINTS: Readonly<GenerationConstraints> = Objec
   retake: null,
   outpaint: null,
   inpaint: null,
+  piH3: null,
 });
 
 /** Flattens a served `constraints` block; `null`/absent → the LTX fallback.
@@ -173,7 +182,25 @@ export function resolveGenerationConstraints(
           blendDilationStage1: raw.inpaint.blend_dilation_stage1,
         }
       : null,
+    piH3: raw.pi_h3 ? flattenPiH3(raw.pi_h3) : null,
   };
+}
+
+/** `constraints.pi_h3` in the form's vocabulary (see
+ * {@link GenerationConstraints.piH3}). */
+function flattenPiH3(raw: NonNullable<BaseModelConstraints["pi_h3"]>): GenerationConstraints["piH3"] {
+  const out: Partial<Record<"4steps" | "2steps", SamplingValues>> = {};
+  for (const choice of ["4steps", "2steps"] as const) {
+    const entry = raw[choice];
+    if (entry) {
+      out[choice] = {
+        numInferenceSteps: entry.num_inference_steps,
+        shiftVideo: entry.shift_video,
+        shiftAudio: entry.shift_audio,
+      };
+    }
+  }
+  return out;
 }
 
 /** The frame rate the engine is fixed at, or `null` when the user may choose

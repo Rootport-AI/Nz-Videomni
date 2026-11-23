@@ -280,6 +280,7 @@ export function GenerationForm({
         <SamplingFields
           constraints={form.samplingConstraints}
           values={values.sampling}
+          fixedValues={form.fixedSampling}
           disabled={disabled}
           onChange={form.setSamplingValue}
         />

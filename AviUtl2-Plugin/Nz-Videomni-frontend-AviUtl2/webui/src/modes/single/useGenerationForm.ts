@@ -33,7 +33,8 @@ import type { H3SequenceShape } from "../../shell/h3SequenceRows";
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { SamplingConstraints } from "../../api/types";
-import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "./samplingValues";
+import { clampSamplingValue, piH3FixedSampling, samplingDefaults, samplingRequestFields } from "./samplingValues";
+import { usePiH3SamplingReset } from "./usePiH3SamplingReset";
 import type { SamplingValues } from "./samplingValues";
 import { singleAudioPrecheck, suggestFramesForSingleAudio } from "./audioFit";
 import { MIN_HEIGHT, MIN_WIDTH } from "./defaultConfig";
@@ -426,6 +427,10 @@ export interface UseGenerationFormResult {
   /** The served sampling ranges (`constraints.sampling`), or `null` — what
    * `GenerationForm` draws the three sliders from. */
   samplingConstraints: SamplingConstraints | null;
+  /** Ruling 107: the values the Settings panel's pi-H3 choice fixes the three
+   * sliders at (`samplingValues.ts`'s `piH3FixedSampling`), or `null` —
+   * `GenerationForm` hands it to `SamplingFields`. */
+  fixedSampling: SamplingValues | null;
   /** The fixed frame rate the loaded engine runs at, or `null` when the user
    * chooses (`constraints.frame_rate.min === max`). Disables the fps field. */
   fixedFrameRate: number | null;
@@ -842,6 +847,16 @@ export function useGenerationForm(
     [samplingConstraints],
   );
 
+  // Ruling 107: while the Settings panel's pi-H3 choice is not off, the
+  // sliders show the choice's served values and are locked, and the three
+  // values are not sent (`samplingRequestFields`, same condition). Changing
+  // the choice puts the step count and the shifts — and nothing else — back
+  // to the served defaults, so turning it off lands on them.
+  const fixedSampling = piH3FixedSampling(acceleration.piH3, rules.piH3);
+  usePiH3SamplingReset(acceleration.piH3, () =>
+    setValues((prev) => ({ ...prev, sampling: samplingDefaults(rules.sampling) })),
+  );
+
   const setSeed = useCallback((raw: number) => setValues((prev) => ({ ...prev, seed: Math.trunc(raw) })), []);
 
   const applyPreset = useCallback(
@@ -1205,7 +1220,8 @@ export function useGenerationForm(
       // the loaded base model publishes `constraints.sampling` (one rule — the
       // server would write its defaults back anyway) and never otherwise, so
       // a request to a base model without them carries none of the three keys.
-      ...samplingRequestFields(values.sampling),
+      // Ruling 107: none either while pi-H3 is on (the server fills them).
+      ...samplingRequestFields(values.sampling, acceleration),
       // NAG (2026-07-28)/VSF (2026-07-29): the additive `negative_prompt`/
       // `nag_*`/`neg_method`/`vsf_scale` set of 7, built by the single shared
       // contract function — `{}` (no keys at all)
@@ -1343,6 +1359,7 @@ export function useGenerationForm(
     setSeed,
     setSamplingValue,
     samplingConstraints,
+    fixedSampling,
     fixedFrameRate: fixedFps,
     frameGrid,
     dimensionStep: generalMultiple,

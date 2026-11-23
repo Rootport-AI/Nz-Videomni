@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../../bridge/mockBridge";
-import { createApiClient } from "../../api/client";
+import { BackendApiError, createApiClient } from "../../api/client";
 import type { ApiClient } from "../../api/client";
 import { useGenerationSubmit } from "./useGeneration";
 import type { GenerateChainRequest, GenerateRequest } from "../../api/types";
@@ -103,6 +103,36 @@ describe("useGenerationSubmit", () => {
     if (result.current.submitState.phase !== "error") throw new Error("unreachable");
     expect(result.current.submitState.code).toBe("JOB_BUSY");
     expect(onSubmitted).not.toHaveBeenCalled();
+  });
+
+  // Ruling 107: the envelope's `detail` STRING rides along on the error state
+  // (the card shows it as a third line); absent otherwise.
+  it("carries the backend's detail string on the error state, and none when there is none", async () => {
+    const detail = "pi-H3 のファイルがありません（pi-H3/pi-h3-4steps.safetensors）。";
+    const withDetail = {
+      generate: vi.fn(() => Promise.reject(new BackendApiError("MODEL_FILE_MISSING", "model file missing", 422, detail))),
+    } as unknown as ApiClient;
+    const a = renderHook(() => useGenerationSubmit({ apiClient: withDetail }));
+    act(() => a.result.current.submit(REQUEST));
+    await waitFor(() => expect(a.result.current.submitState.phase).toBe("error"));
+    expect(a.result.current.submitState).toEqual({
+      phase: "error",
+      code: "MODEL_FILE_MISSING",
+      message: "model file missing",
+      detail,
+    });
+
+    // A 409 JOB_BUSY carries no detail: the state is exactly what it was.
+    const { apiClient } = setup(50);
+    await apiClient.generate(REQUEST);
+    const b = renderHook(() => useGenerationSubmit({ apiClient }));
+    act(() => b.result.current.submit(REQUEST));
+    await waitFor(() => expect(b.result.current.submitState.phase).toBe("error"));
+    expect(b.result.current.submitState).toStrictEqual({
+      phase: "error",
+      code: "JOB_BUSY",
+      message: "Another job is already running",
+    });
   });
 
   it("fires onFailed (not onSubmitted) when the submit rejects — X2(a)", async () => {

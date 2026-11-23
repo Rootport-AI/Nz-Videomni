@@ -2030,6 +2030,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           keepResidentEmbeddingsUnsupported={settingsRowsHidden.keepResidentEmbeddings}
           onVram16ModeChange={accelerationControls.setVram16Mode}
           vram16Unsupported={settingsRowsHidden.vram16}
+          onPiH3Change={accelerationControls.setPiH3}
+          piH3Unsupported={settingsRowsHidden.piH3}
           onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
           // §3-166: the same base-model state and handler the header dropdown
           // uses — one `useBaseModels()` call, two views of it.

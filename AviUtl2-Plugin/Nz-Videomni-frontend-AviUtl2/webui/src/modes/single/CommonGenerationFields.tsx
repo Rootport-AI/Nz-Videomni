@@ -596,6 +596,13 @@ export interface SamplingFieldsProps {
   /** The served ranges (`constraints.sampling`). */
   constraints: SamplingConstraints;
   values: SamplingValues;
+  /** The values the sliders are FIXED at, or `null` for none. REQUIRED (a
+   * value or `null`) so a screen that forgets to pass it fails `typecheck`.
+   * While non-null the three rows show these values instead of
+   * {@link values}, cannot be moved, and carry a tooltip saying why. The
+   * component does not know where the values come from (today: the Settings
+   * panel's pi-H3 choice, `samplingValues.ts`'s `piH3FixedSampling`). */
+  fixedValues: SamplingValues | null;
   disabled: boolean;
   onChange: (key: keyof SamplingValues, value: number) => void;
 }
@@ -610,7 +617,7 @@ export interface SamplingFieldsProps {
  * server's; the values live in `useGenerationForm` (`values.sampling`), whose
  * setter also rounds the step count to a whole number.
  */
-export function SamplingFields({ constraints, values, disabled, onChange }: SamplingFieldsProps) {
+export function SamplingFields({ constraints, values, fixedValues, disabled, onChange }: SamplingFieldsProps) {
   const strings = useStrings();
   const t = strings.single.sampling;
   const rows: { key: keyof SamplingValues; label: string; range: SamplingConstraints["shift_video"] }[] = [
@@ -618,6 +625,7 @@ export function SamplingFields({ constraints, values, disabled, onChange }: Samp
     { key: "shiftVideo", label: t.shiftVideo, range: constraints.shift_video },
     { key: "shiftAudio", label: t.shiftAudio, range: constraints.shift_audio },
   ];
+  const shown = fixedValues ?? values;
   return (
     <div className="sampling-fields">
       {rows.map(({ key, label, range }) => (
@@ -625,11 +633,12 @@ export function SamplingFields({ constraints, values, disabled, onChange }: Samp
           key={key}
           inline
           label={label}
-          value={values[key]}
+          value={shown[key]}
           min={range.min}
           max={range.max}
           step={range.step}
-          disabled={disabled}
+          disabled={disabled || fixedValues !== null}
+          title={fixedValues !== null ? t.fixedTooltip : undefined}
           onChange={(value) => onChange(key, value)}
         />
       ))}

@@ -188,6 +188,7 @@ export function InpaintingPanel({ form, disabled }: InpaintingPanelProps) {
         <SamplingFields
           constraints={form.samplingConstraints}
           values={form.sampling}
+          fixedValues={form.fixedSampling}
           disabled={busy}
           onChange={form.setSamplingValue}
         />

@@ -22,7 +22,7 @@ import {
   keepResidentEffective,
   sageAvailability,
 } from "./accelerationSettings";
-import type { AccelerationSettings, AttentionBackend, VaeMode } from "./accelerationSettings";
+import type { AccelerationSettings, AttentionBackend, PiH3Mode, VaeMode } from "./accelerationSettings";
 import { comfortDisplayTableFor, resolveComfortCell } from "./comfortDisplayTable";
 import type { ServerStatusState } from "../modes/single/useServerStatus";
 import "./SettingsPanel.css";
@@ -106,6 +106,16 @@ export interface SettingsPanelProps {
    * {@link keepResidentEmbeddingsUnsupported}; it is LTX 2.3 / 2.5 that
    * publish the name and hide this row. */
   vram16Unsupported: boolean;
+  /** Acceleration (2026-11-23, ruling 107): pi-H3 (MiniMax H3 only).
+   * INDEPENDENT like the VAE row — no `/status` capability flag and no
+   * relationship to any other row. */
+  onPiH3Change: (value: PiH3Mode) => void;
+  /** Ruling 107: whether the LOADED base model's engine refuses `pi_h3` —
+   * derived by `AppShell` from `GET /models`' `unsupported_features`, never
+   * from a base-model id. Same HIDE-don't-grey treatment as
+   * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the name and
+   * hide this row (and its note). */
+  piH3Unsupported: boolean;
   /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
    * conditions written into their `comment` tag. Stored alongside the
    * acceleration choices (`acceleration.embedMp4Metadata`). */
@@ -160,6 +170,8 @@ export function SettingsPanel({
   keepResidentEmbeddingsUnsupported,
   onVram16ModeChange,
   vram16Unsupported,
+  onPiH3Change,
+  piH3Unsupported,
   onEmbedMp4MetadataChange,
   baseModelOptions,
   baseModelValue,
@@ -595,6 +607,44 @@ export function SettingsPanel({
                 spirit as sage's: a pruned decoder is a different decoder, so
                 the output can differ slightly. */}
             {acceleration.vaeMode === "prune_vaed" && <p className="field-hint">{strings.settings.accelVaeNote}</p>}
+          </>
+        )}
+
+        {/* pi-H3 (2026-11-23, ruling 107) — MiniMax H3 only. Right after the
+            PrunaVAED row (which H3 hides, so on H3 it shows directly above
+            VRAM 16GB mode). Same three-button shape as the right-click menu's
+            rows. The note is red bold and shown whenever a choice other than
+            off is selected — whether Turbo is actually in use is not judged,
+            and nothing stops the job. HIDDEN OUTRIGHT, row and note under the
+            ONE condition, on an engine whose `unsupported_features` name
+            `pi_h3` (LTX 2.3 / 2.5). */}
+        {!piH3Unsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelPiH3Label}</span>
+              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelPiH3Label}>
+                {[
+                  { mode: "off" as const, label: strings.settings.accelPiH3Off },
+                  { mode: "4steps" as const, label: strings.settings.accelPiH3FourSteps },
+                  { mode: "2steps" as const, label: strings.settings.accelPiH3TwoSteps },
+                ].map(({ mode, label }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`mode-tab${acceleration.piH3 === mode ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.piH3 === mode}
+                    onClick={() => onPiH3Change(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {acceleration.piH3 !== "off" && (
+              <p className="field-hint field-hint-error">
+                <strong>{strings.settings.accelPiH3Note}</strong>
+              </p>
+            )}
           </>
         )}
 

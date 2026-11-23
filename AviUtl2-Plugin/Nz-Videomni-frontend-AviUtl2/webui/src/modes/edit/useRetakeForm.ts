@@ -43,7 +43,8 @@ import {
   roundToMultiple,
   snapFrameRate,
 } from "../single/paramUtils";
-import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import { clampSamplingValue, piH3FixedSampling, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import { usePiH3SamplingReset } from "../single/usePiH3SamplingReset";
 import type { SamplingValues } from "../single/samplingValues";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが動かさない
 // —— `useOutpaintForm` がすでに同じ理由（chained/ は別ワークストリームの占有領域）で
@@ -235,6 +236,9 @@ export interface UseRetakeFormResult {
   /** §1-123: サンプリングの 3 項目（Chained と同じ部品）。`null` = 配信が無い（LTX）。 */
   sampling: SamplingValues | null;
   samplingConstraints: SamplingConstraints | null;
+  /** Ruling 107: the values the Settings panel's pi-H3 choice fixes the sliders
+   * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
+  fixedSampling: SamplingValues | null;
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
 
   /** Stage-2（アップスケール工程）のクリップ長。Chain と同じ選択肢（§3-165 で
@@ -399,6 +403,14 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     },
     [samplingConstraints],
   );
+
+  // Ruling 107: the same rule as Create (`useGenerationForm`) — locked to the
+  // pi-H3 choice's served values while it is not off (and not sent,
+  // `samplingRequestFields`); a change of the choice puts the step count and
+  // the shifts, and nothing else, back to the served defaults.
+  const piH3 = (acceleration ?? ACCELERATION_DEFAULTS).piH3;
+  const fixedSampling = piH3FixedSampling(piH3, rules.piH3);
+  usePiH3SamplingReset(piH3, () => setSampling(samplingDefaults(samplingConstraints)));
   const [stale, setStale] = useState(false);
   const [stage2Window, setStage2Window] = useState<Stage2Window>(
     () => carried()?.stage2Window ?? STAGE2_WINDOW_DEFAULT,
@@ -745,8 +757,8 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
       // サーバ側の既定に追随させるため。それ以外の段を選んだときだけ載せる。
       // H3 には Stage-2 が無いので送らない。
       ...(h3 || stage2Window === STAGE2_WINDOW_DEFAULT ? {} : { stage2_window: stage2Window }),
-      // §1-123: サンプリングの 3 項目。配信があるときだけ 3 つとも送る（LTX は何も送らない）。
-      ...samplingRequestFields(sampling),
+      // §1-123: サンプリングの 3 項目。配信があるときだけ 3 つとも送る（LTX は何も送らない。pi-H3 が有効なら送らない。裁定 107）。
+      ...samplingRequestFields(sampling, acceleration),
       // `chunked_upsample` は**意図的に載せない**。`api/types.ts` の同フィールドは
       // 「WebUI は常に明示送信すること」と書いており Chain 系の他のビルダーは全て
       // そうしているが、Retake の窓はどの段でも stage-2 のタイル 1 枚に収まる長さ
@@ -820,6 +832,7 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     setAudioStrength,
     sampling,
     samplingConstraints,
+    fixedSampling,
     setSamplingValue,
     stage2Window,
     setStage2Window,

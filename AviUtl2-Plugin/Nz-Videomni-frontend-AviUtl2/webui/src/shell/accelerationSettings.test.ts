@@ -31,6 +31,7 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     keepResidentEmbeddings: true,
     // §3-164: the Output row sharing this store, at its server default.
     vram16Mode: true,
+    piH3: "off",
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -46,6 +47,9 @@ describe("effectiveAccelerationFields", () => {
       vae_mode: "prune_vaed",
       keep_resident_embeddings: true,
       vram16_mode: true,
+      // Ruling 107: pi-H3 at its server default. No served row's `requires`
+      // names it, so it takes no part in the match.
+      pi_h3: "off",
     });
   });
 
@@ -60,6 +64,7 @@ describe("effectiveAccelerationFields", () => {
       "fused_gguf_dequant_kernel",
       "keep_resident",
       "keep_resident_embeddings",
+      "pi_h3",
       "vae_mode",
       "vram16_mode",
     ]);
@@ -71,6 +76,7 @@ describe("effectiveAccelerationFields", () => {
       vae_mode: "default",
       keep_resident_embeddings: false,
       vram16_mode: true,
+      pi_h3: "off",
     });
   });
 
@@ -225,6 +231,65 @@ describe("vram16Mode (§1-101)", () => {
     it("reads a malformed value as on", () => {
       window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ vram16Mode: "no" }));
       expect(readStoredAcceleration().vram16Mode).toBe(true);
+    });
+  });
+});
+
+/** Ruling 107 (2026-11-23): pi-H3 — MiniMax H3's few-step sampler + DWD. */
+describe("piH3 (ruling 107)", () => {
+  it("defaults to off, matching the server default", () => {
+    expect(ACCELERATION_DEFAULTS.piH3).toBe("off");
+  });
+
+  it("sends nothing while off", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).toEqual({});
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("pi_h3");
+  });
+
+  it("sends pi_h3 only while a choice is selected", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, piH3: "4steps" })).toEqual({ pi_h3: "4steps" });
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, piH3: "2steps" })).toEqual({ pi_h3: "2steps" });
+  });
+
+  it("effectiveAccelerationFields carries the choice", () => {
+    expect(effectiveAccelerationFields(makeAllOn({ piH3: "2steps" }), true).pi_h3).toBe("2steps");
+  });
+
+  it("withServerDefaults writes it back to off (the feature-scope reset on LTX)", () => {
+    const after = withServerDefaults(makeAllOn({ piH3: "4steps" }), ["piH3"]);
+    expect(after.piH3).toBe("off");
+    expect(after).toEqual(makeAllOn());
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back each of the three values", () => {
+      for (const piH3 of ["off", "4steps", "2steps"] as const) {
+        writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, piH3 });
+        expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).piH3).toBe(piH3);
+        expect(readStoredAcceleration().piH3).toBe(piH3);
+      }
+    });
+
+    it("reads a JSON blob without the key (written before ruling 107) as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ attentionBackend: "sage" }));
+      expect(readStoredAcceleration().piH3).toBe("off");
+      expect(readStoredAcceleration().attentionBackend).toBe("sage");
+    });
+
+    it("reads the pre-2026-08-01 bare string form as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sage");
+      expect(readStoredAcceleration().piH3).toBe("off");
+    });
+
+    it("reads an unknown value as off", () => {
+      for (const bad of ["8steps", "4", true, 4, null, "OFF"]) {
+        window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: bad }));
+        expect(readStoredAcceleration().piH3).toBe("off");
+      }
     });
   });
 });

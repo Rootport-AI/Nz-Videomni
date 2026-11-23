@@ -10,6 +10,10 @@ export interface FloatSliderFieldProps {
    * (`.field-inline`) instead of stacked. Omitted = stacked, as NAG's four
    * sliders have always been. */
   inline?: boolean;
+  /** A tooltip on the whole row (the `<label>`), e.g. why a disabled slider
+   * cannot be moved — the same `title` shape as Create's fixed fps row.
+   * Omitted = no tooltip. */
+  title?: string | undefined;
 }
 
 /**
@@ -25,7 +29,17 @@ export interface FloatSliderFieldProps {
  * `ReferenceStrengthField.tsx` was, rather than folded into the already
  * 400+-line `CommonGenerationFields.tsx`.
  */
-export function FloatSliderField({ label, value, min, max, step, disabled, onChange, inline = false }: FloatSliderFieldProps) {
+export function FloatSliderField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+  inline = false,
+  title,
+}: FloatSliderFieldProps) {
   const handleChange = (raw: string) => {
     const v = Number(raw);
     if (!Number.isFinite(v)) return;
@@ -33,7 +47,7 @@ export function FloatSliderField({ label, value, min, max, step, disabled, onCha
   };
 
   return (
-    <label className={inline ? "field field-inline" : "field"}>
+    <label className={inline ? "field field-inline" : "field"} title={title}>
       <span className="field-label">{label}</span>
       <input
         type="range"

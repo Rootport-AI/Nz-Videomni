@@ -894,6 +894,76 @@ describe("useRetakeForm — MiniMax H3（§1-123）", () => {
     expect(body.retake).not.toHaveProperty("tail_px");
   });
 
+  describe("pi-H3（裁定 107）", () => {
+    const H3_PI = resolveGenerationConstraints({
+      num_frames: { step: 17, offset: 5, min: 22, max: 481 },
+      dimension_multiple: 32,
+      frame_rate: { min: 24, max: 24 },
+      sampling: {
+        num_inference_steps: { min: 1, max: 50, step: 1, default: 20 },
+        shift_video: { min: 1, max: 20, step: 0.1, default: 12 },
+        shift_audio: { min: 1, max: 20, step: 0.1, default: 3 },
+      },
+      chain: { overlap_frames: 22 },
+      retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+      pi_h3: {
+        "4steps": { num_inference_steps: 4, shift_video: 12, shift_audio: 3 },
+        "2steps": { num_inference_steps: 2, shift_video: 12, shift_audio: 3 },
+      },
+    });
+    const ON: AccelerationSettings = { ...ACCELERATION_DEFAULTS, piH3: "4steps" };
+
+    function renderPi(initial: AccelerationSettings) {
+      const nativeBridge = createBridge();
+      return renderHook(
+        ({ acceleration }: { acceleration: AccelerationSettings }) =>
+          useRetakeForm({ prompt: "a cat", nativeBridge, initialIntent: makeIntent(), constraints: H3_PI, acceleration }),
+        { initialProps: { acceleration: initial } },
+      );
+    }
+
+    it("有効なら pi_h3 を送り、サンプリングの 3 項目は送らない。固定の値は選択の配信値", async () => {
+      const { result } = renderPi(ON);
+      await waitReady(result);
+      const body = result.current.buildRequest();
+      expect(body.pi_h3).toBe("4steps");
+      expect(body).not.toHaveProperty("num_inference_steps");
+      expect(body).not.toHaveProperty("shift_video");
+      expect(body).not.toHaveProperty("shift_audio");
+      expect(result.current.fixedSampling).toEqual({ numInferenceSteps: 4, shiftVideo: 12, shiftAudio: 3 });
+    });
+
+    it("off なら pi_h3 は無く、3 項目は今日どおり。固定の値は null", async () => {
+      const { result } = renderPi(ACCELERATION_DEFAULTS);
+      await waitReady(result);
+      const body = result.current.buildRequest();
+      expect(body).not.toHaveProperty("pi_h3");
+      expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+      expect(result.current.fixedSampling).toBeNull();
+    });
+
+    it("選択を変えるとステップ数と shift だけが既定へ戻る（音声の Strength はそのまま）。初回の描画では戻さない", async () => {
+      const { result, rerender } = renderPi(ACCELERATION_DEFAULTS);
+      await waitReady(result);
+      act(() => {
+        result.current.setSamplingValue("numInferenceSteps", 30);
+        result.current.setSamplingValue("shiftVideo", 8);
+        result.current.setAudioStrength(0.25);
+      });
+      // 何も変えていない再描画では戻らない。
+      rerender({ acceleration: ACCELERATION_DEFAULTS });
+      expect(result.current.sampling).toEqual({ numInferenceSteps: 30, shiftVideo: 8, shiftAudio: 3 });
+
+      rerender({ acceleration: ON });
+      rerender({ acceleration: ACCELERATION_DEFAULTS });
+      await waitFor(() =>
+        expect(result.current.sampling).toEqual({ numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 }),
+      );
+      expect(result.current.audioStrength).toBe(0.25);
+      expect(result.current.fixedSampling).toBeNull();
+    });
+  });
+
   it("Stage-2 を選んでいても H3 では stage2_window を送らない", async () => {
     const { result } = renderWith(makeIntent(), H3);
     await waitReady(result);

@@ -31,6 +31,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     vaeMode: "prune_vaed",
     keepResidentEmbeddings: false,
     vram16Mode: true,
+    piH3: "off",
     embedMp4Metadata: true,
     ...overrides,
   };

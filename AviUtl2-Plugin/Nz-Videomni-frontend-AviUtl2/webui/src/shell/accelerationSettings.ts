@@ -102,6 +102,17 @@
  *    `unsupported_features` and 422 a `true`, and `AppShell` hides the row and
  *    writes a leftover choice back to the default on any engine that publishes
  *    the name. Since §1-106 the chain request carries it too (H3 chains).
+ *  - `piH3` — REAL (2026-11-23, backend ruling 107 / MINIMAX_H3_DESIGN §6.7).
+ *    MiniMax H3's distilled few-step sampling + DWD decode: `"off"` (the
+ *    server default) / `"4steps"` / `"2steps"`. It changes the output (a
+ *    different sampler and decoder), so — like PrunaVAED — it is opt-in and
+ *    the key rides along only while it is not `"off"`. While on, the server
+ *    fills the step count and both shifts with the choice's values (served as
+ *    `GET /models` `constraints.pi_h3`), so the submission paths drop those
+ *    three values (`samplingRequestFields`). The scope points the
+ *    `vram16Mode` way: LTX 2.3 / 2.5 publish `pi_h3` in
+ *    `unsupported_features`, and `AppShell` hides the row and writes a
+ *    leftover choice back to `"off"`.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -116,6 +127,11 @@ export type AttentionBackend = "sdpa" | "sage";
  * VALUE stays `"prune_vaed"` even though the display name settled on
  * "PrunaVAED": it is an external contract. */
 export type VaeMode = "default" | "prune_vaed";
+
+/** Which pi-H3 choice a MiniMax H3 job runs with. Mirrors the backend's
+ * `api/models.py` `pi_h3` literal as of 2026-11-23 (ruling 107) — if the
+ * backend's set of values ever changes, update both sides together. */
+export type PiH3Mode = "off" | "4steps" | "2steps";
 
 /** The Acceleration section's full state — one object shared by
  * Create/Chain/Batch, owned by `AppShell`. */
@@ -162,6 +178,13 @@ export interface AccelerationSettings {
    * H3 server defaults to `true`. LTX 2.3 / 2.5 publish the name in
    * `unsupported_features`, so the row is hidden there. */
   vram16Mode: boolean;
+  /** REAL (2026-11-23, ruling 107): pi-H3 — MiniMax H3 only. `"4steps"` /
+   * `"2steps"` run the distilled few-step sampler and the DWD decode; the step
+   * count and both shifts then come from the server (`constraints.pi_h3`), so
+   * the sliders are locked and those three values are not sent. Sent as
+   * `pi_h3` — but only while not `"off"` (the server default). LTX 2.3 / 2.5
+   * publish the name in `unsupported_features`, so the row is hidden there. */
+  piH3: PiH3Mode;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -240,6 +263,11 @@ export const EMBED_MP4_METADATA_SERVER_DEFAULT = true;
  * OFF. On LTX the row is hidden and the stored value is reset to this default,
  * so an absent key is all an LTX request ever carries. */
 export const VRAM16_MODE_SERVER_DEFAULT = true;
+/** Server default for `pi_h3` as of ruling 107 (2026-11-23): `"off"`.
+ * Direction matches `vae_mode`: the key rides along only while the user picks
+ * a choice. On LTX the row is hidden and the stored value is reset to this
+ * default, so an absent key is all an LTX request ever carries. */
+export const PI_H3_DEFAULT: PiH3Mode = "off";
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -265,6 +293,7 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   vaeMode: VAE_MODE_DEFAULT,
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
+  piH3: PI_H3_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
@@ -316,6 +345,7 @@ export function withServerDefaults(
       ? ACCELERATION_DEFAULTS.keepResidentEmbeddings
       : acceleration.keepResidentEmbeddings,
     vram16Mode: at("vram16Mode") ? ACCELERATION_DEFAULTS.vram16Mode : acceleration.vram16Mode,
+    piH3: at("piH3") ? ACCELERATION_DEFAULTS.piH3 : acceleration.piH3,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -335,6 +365,8 @@ export interface StoredAcceleration {
   keepResidentEmbeddings: boolean;
   /** 台帳 §1-101 (2026-10-18): persisted from its first day. */
   vram16Mode: boolean;
+  /** Ruling 107 (2026-11-23): persisted from its first day, like `vaeMode`. */
+  piH3: PiH3Mode;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -347,6 +379,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   vaeMode: VAE_MODE_DEFAULT,
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
+  piH3: PI_H3_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
@@ -362,14 +395,16 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *  3. the current JSON object `{"attentionBackend":...,
  *     "blockSwapPrefetch":...,"keepResident":...,
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
- *     "keepResidentEmbeddings":...,"vram16Mode":...,"embedMp4Metadata":...}`
+ *     "keepResidentEmbeddings":...,"vram16Mode":...,"piH3":...,
+ *     "embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
  * (which has no `keepResident` key at all) — or a pre-§51 one (no
  * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`), or a pre-§3-114
  * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
- * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`) — read back
+ * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`), or a pre-ruling-107
+ * one (no `piH3`) — read back
  * cleanly. EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
  * whole-object write below would persist an `undefined` that reads back as
@@ -391,6 +426,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       vaeMode: VAE_MODE_DEFAULT,
       keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
+      piH3: PI_H3_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -400,6 +436,7 @@ export function readStoredAcceleration(): StoredAcceleration {
     const rec = parsed as Record<string, unknown>;
     const backend = rec.attentionBackend;
     const vaeMode = rec.vaeMode;
+    const piH3 = rec.piH3;
     return {
       attentionBackend: backend === "sdpa" || backend === "sage" ? backend : ATTENTION_BACKEND_DEFAULT,
       blockSwapPrefetch:
@@ -415,6 +452,7 @@ export function readStoredAcceleration(): StoredAcceleration {
           ? rec.keepResidentEmbeddings
           : KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       vram16Mode: typeof rec.vram16Mode === "boolean" ? rec.vram16Mode : VRAM16_MODE_SERVER_DEFAULT,
+      piH3: piH3 === "off" || piH3 === "4steps" || piH3 === "2steps" ? piH3 : PI_H3_DEFAULT,
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -523,6 +561,9 @@ export interface AccelerationRequestFields {
   /** 台帳 §1-101: VRAM 16GB mode — `/generate` and, since §1-106,
    * `/generate/chain` (MiniMax H3 chains). */
   vram16_mode?: boolean;
+  /** Ruling 107 (2026-11-23): pi-H3 — `/generate` and `/generate/chain`
+   * (MiniMax H3 only). Never sent as `"off"`. */
+  pi_h3?: PiH3Mode;
 }
 
 /**
@@ -570,6 +611,7 @@ export function effectiveAccelerationFields(
     vae_mode: acceleration.vaeMode,
     keep_resident_embeddings: acceleration.keepResidentEmbeddings,
     vram16_mode: acceleration.vram16Mode,
+    pi_h3: acceleration.piH3,
   };
 }
 
@@ -656,6 +698,16 @@ export function accelerationRequestFields(
   // request never carries the key. (LTX's reject table fires on `true` only.)
   if (acceleration.vram16Mode !== VRAM16_MODE_SERVER_DEFAULT) {
     out.vram16_mode = acceleration.vram16Mode;
+  }
+  // Ruling 107 (2026-11-23): pi-H3. The server default is `"off"`, so the key
+  // only ever appears as `"4steps"` / `"2steps"` (the `vae_mode` direction).
+  // INDEPENDENT — no capability flag, no dependency on any other row. The
+  // scope half is `AppShell`'s, as for `vram16_mode` above: LTX publishes the
+  // name, the row is hidden and the stored choice is written back to `"off"`.
+  // While on, the three sampling values are dropped by `samplingRequestFields`
+  // (the server fills them with the choice's), not here.
+  if (acceleration.piH3 !== PI_H3_DEFAULT) {
+    out.pi_h3 = acceleration.piH3;
   }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order

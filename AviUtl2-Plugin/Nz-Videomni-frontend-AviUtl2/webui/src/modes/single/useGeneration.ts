@@ -15,14 +15,26 @@ import type { AlphaGenRequestBody, GenerateChainRequest, GenerateRequest } from 
  * PIPELINE_LOADING` a stale
  * `serverBusy` can still let through (Docs/API_REFERENCE.md §7 "同時1ジョブ",
  * reservation/auto-retry removed 2026-07-17): `describeError` surfaces the
- * backend code/message just below the Generate button, and re-clicking retries. */
+ * backend code/message just below the Generate button, and re-clicking retries.
+ *
+ * Ruling 107 (2026-11-23): `detail` is the backend envelope's `detail` STRING
+ * when it sent one (`BackendApiError.detail` — e.g. the Japanese sentence a
+ * pi-H3 refusal states, naming the missing file), shown as one more line
+ * under the code and message. Absent otherwise, and then the card is exactly
+ * what it was. */
 export type SubmitState =
   | { phase: "idle" }
   | { phase: "submitting" }
-  | { phase: "error"; code: string; message: string };
+  | { phase: "error"; code: string; message: string; detail?: string };
 
-function describeError(error: unknown): { code: string; message: string } {
-  if (error instanceof BackendApiError) return { code: error.code, message: error.message };
+function describeError(error: unknown): { code: string; message: string; detail?: string } {
+  if (error instanceof BackendApiError) {
+    return {
+      code: error.code,
+      message: error.message,
+      ...(error.detail !== undefined ? { detail: error.detail } : {}),
+    };
+  }
   if (error instanceof BridgeError) return { code: error.code, message: error.message };
   if (error instanceof Error) return { code: "UNKNOWN", message: error.message };
   return { code: "UNKNOWN", message: String(error) };
@@ -119,8 +131,7 @@ export function useGenerationSubmit(deps: UseGenerationSubmitDeps = {}): UseGene
         // surfacing below.
         void onFailedRef.current?.();
         if (!mountedRef.current) return;
-        const { code, message } = describeError(err);
-        setSubmitState({ phase: "error", code, message });
+        setSubmitState({ phase: "error", ...describeError(err) });
         return;
       }
       // MN-6: hold "submitting" across the caller's `onSubmitted` (the ledger

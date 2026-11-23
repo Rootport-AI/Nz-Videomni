@@ -1,0 +1,24 @@
+{
+  "at": "2026-11-23T15:52:02+09:00",
+  "blocking": [],
+  "owner_server": {
+    "port": 18620,
+    "listening": false
+  },
+  "gpu": {
+    "blocking": [],
+    "compute_apps": {
+      "count": 30,
+      "python_or_uvicorn_present": false,
+      "python_or_uvicorn_count": 0
+    },
+    "returncode": 0,
+    "gpu": [
+      "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "763",
+      "16376"
+    ],
+    "memory_used_mib": 763
+  },
+  "engine_workers": []
+}

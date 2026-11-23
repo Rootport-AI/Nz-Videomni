@@ -1,0 +1,402 @@
+{
+  "made_at": "2026-11-23T23:08:44+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "items": {
+    "S1": {
+      "title": "製品の復号器と実験の構成 B の一致（実験の潜在 5 本）",
+      "kind": "engine",
+      "engine": {
+        "item": "S1",
+        "dry_run": true,
+        "started": "2026-11-23T23:08:46",
+        "torch": "2.13.0+cu130",
+        "cuda_available": false,
+        "latents": {
+          "a": [
+            1,
+            24,
+            37,
+            48,
+            80
+          ],
+          "b": [
+            1,
+            24,
+            37,
+            48,
+            80
+          ],
+          "c": [
+            1,
+            24,
+            102,
+            48,
+            80
+          ],
+          "d": [
+            1,
+            24,
+            37,
+            72,
+            56
+          ],
+          "e": [
+            1,
+            24,
+            67,
+            24,
+            40
+          ]
+        },
+        "experiment_B_mp4": {
+          "a": true,
+          "b": true,
+          "c": true,
+          "d": true,
+          "e": true
+        },
+        "experiment_config_B": "weights=int8 attention=float compute=fp16",
+        "file_problems": [],
+        "ok": true,
+        "finished": "2026-11-23T23:08:48"
+      }
+    },
+    "S2": {
+      "title": "製品の経路で Sol（T2V・連結 2 本・V2V・Inpainting。Turbo LoRA 0.8・4 ステップ）",
+      "kind": "api",
+      "jobs": [
+        {
+          "job": "S2_t2v",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        },
+        {
+          "job": "S2_chain",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        },
+        {
+          "job": "S2_v2v",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        },
+        {
+          "job": "S2_inpaint",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        }
+      ]
+    },
+    "S3": {
+      "title": "ふだんの使い方（Turbo LoRA 0.8・4 ステップ・1280×768・124 フレーム × 5 本）の Off と Sol",
+      "kind": "api",
+      "jobs": [
+        {
+          "job": "S3_off",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": false
+        },
+        {
+          "job": "S3_sol",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        }
+      ]
+    },
+    "S4": {
+      "title": "切り替え（資産のパスを無いファイルに向けた記述子の写し）",
+      "kind": "api",
+      "jobs": [
+        {
+          "job": "S4_sol",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        },
+        {
+          "job": "S4_off",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": false
+        }
+      ]
+    },
+    "S5": {
+      "title": "Off の経路（F0: ワーカーの自己試験の照合値／F1: R1 の条件の API）",
+      "kind": "off_path",
+      "selftest_cmd": [
+        ".venv-engine-h3/Scripts/python.exe",
+        "-B",
+        "-m",
+        "engine_h3.worker",
+        "--selftest-generate",
+        "--transformer",
+        "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "--text-encoder",
+        "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "--video-vae",
+        "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+        "--audio-vae",
+        "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+        "--tokenizer-dir",
+        "models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer",
+        "--width",
+        "640",
+        "--height",
+        "384",
+        "--num-frames",
+        "124",
+        "--seed",
+        "42",
+        "--steps",
+        "20",
+        "--shift-video",
+        "12",
+        "--shift-audio",
+        "3",
+        "--attention-backend",
+        "sdpa",
+        "--vram16",
+        "--prompt",
+        "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "--output",
+        "outputs/h3-sol-gates-2026-11-23/runs/S5/f0.mp4",
+        "--report",
+        "outputs/h3-sol-gates-2026-11-23/runs/S5/selftest.json"
+      ],
+      "jobs": [
+        {
+          "job": "S5_F1",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": false
+        }
+      ]
+    },
+    "S6": {
+      "title": "壊れたファイル（実物の先頭 64 MiB の写し）",
+      "kind": "engine",
+      "engine": {
+        "item": "S6",
+        "dry_run": true,
+        "started": "2026-11-23T23:08:48",
+        "torch": "2.13.0+cu130",
+        "cuda_available": false,
+        "broken": {
+          "file": "outputs/h3-sol-gates-2026-11-23/_material/broken_sol_first64MiB.safetensors",
+          "bytes": 67108864,
+          "of": 1988306504
+        },
+        "file_problems": [
+          "ヘッダーを読めません（safetensors として読めません: 'decoder.blocks.0.ff.w2.weight' の data_offsets [50483416, 67260632] がデータ領域 [0, 67042184] の外です）"
+        ],
+        "paths_present": {
+          "transformer": true,
+          "text_encoder": true,
+          "video_vae": true,
+          "audio_vae": true,
+          "tokenizer_dir": true
+        },
+        "ok": true,
+        "finished": "2026-11-23T23:08:49"
+      }
+    },
+    "S7": {
+      "title": "常駐 on で Off → Sol → Off",
+      "kind": "api",
+      "jobs": [
+        {
+          "job": "S7_1off",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": false
+        },
+        {
+          "job": "S7_2sol",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        },
+        {
+          "job": "S7_3off",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": false
+        }
+      ]
+    },
+    "S8": {
+      "title": "製品の経路での VRAM（2560×1472・192 フレーム × 2 本・Sol）",
+      "kind": "api",
+      "jobs": [
+        {
+          "job": "S8",
+          "family_rules": "passed",
+          "uploads_missing": [],
+          "sol_vae": true
+        }
+      ]
+    },
+    "S9": {
+      "title": "Sol の重みの読み込みの時間",
+      "kind": "engine",
+      "engine": {
+        "item": "S9",
+        "dry_run": true,
+        "started": "2026-11-23T23:08:50",
+        "torch": "2.13.0+cu130",
+        "cuda_available": false,
+        "file": "models/MiniMaxH3/VAE/Sol/minimax_h3_sol_vae_int8_convrot.safetensors",
+        "bytes": 1988306504,
+        "ok": true,
+        "finished": "2026-11-23T23:08:51"
+      }
+    },
+    "S10": {
+      "title": "上限の境目（2560×1472。T'=112 は Sol、T'=117 は too_large）",
+      "kind": "engine",
+      "engine": {
+        "item": "S10",
+        "dry_run": true,
+        "started": "2026-11-23T23:08:51",
+        "torch": "2.13.0+cu130",
+        "cuda_available": false,
+        "limit": 1650000,
+        "cases": {
+          "inside": {
+            "latent": [
+              1,
+              24,
+              112,
+              92,
+              160
+            ],
+            "tokens": 1648640,
+            "frames": 379,
+            "size_fallback": null
+          },
+          "above": {
+            "latent": [
+              1,
+              24,
+              117,
+              92,
+              160
+            ],
+            "tokens": 1722240,
+            "frames": 396,
+            "size_fallback": "too_large"
+          }
+        },
+        "shape_ok": true,
+        "ok": true,
+        "finished": "2026-11-23T23:08:53"
+      }
+    }
+  },
+  "gate_now": {
+    "at": "2026-11-23T23:08:44+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 717,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 29,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "files": {
+    "outputs/h3-sol-spike-2026-11-23/runs/gen_a/latent.safetensors": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/gen_b/latent.safetensors": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/gen_c/latent.safetensors": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/gen_d/latent.safetensors": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/gen_e/latent.safetensors": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/compare_a/B.mp4": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/compare_b/B.mp4": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/compare_c/B.mp4": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/compare_d/B.mp4": true,
+    "outputs/h3-sol-spike-2026-11-23/runs/compare_e/B.mp4": true,
+    "outputs/h3-sol-spike-2026-11-23/sol_decoder.py": true,
+    "outputs/h3-sol-gates-2026-11-23/wddm_sampler.ps1": true,
+    "outputs/0b57ea7d-b494-43ea-a504-2a5637380581/output.mp4": true,
+    "uploads/h3-inpaint-development/inpaint-base.mp4": true,
+    "uploads/h3-inpaint-development/mask-768p.mp4": true,
+    "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors": true,
+    "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors": true,
+    "models/MiniMaxH3/VAE/Sol/minimax_h3_sol_vae_int8_convrot.safetensors": true,
+    "Docs/Outputs-archive/h3-mixed-int8-2026-11-22/summary.json": true,
+    ".venv/Scripts/python.exe": true,
+    ".venv-engine-h3/Scripts/python.exe": true
+  },
+  "r1_md5": {
+    "video": "dc4d54641a648eb359dc74001be3bf5c",
+    "audio": "0717000179fb6bb4cb0f2800d824f490"
+  },
+  "s4_descriptor": {
+    "sol_vae_path": "MiniMaxH3/VAE/Sol/__h3_sol_gates_absent__.safetensors",
+    "file_exists": false,
+    "temp_config": "outputs/h3-sol-gates-2026-11-23/_rt/config.h3solgates.yaml"
+  },
+  "problems": [],
+  "ok": true
+}

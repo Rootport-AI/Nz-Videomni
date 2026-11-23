@@ -1,0 +1,327 @@
+{
+  "item": "S1",
+  "title": "製品の復号器と実験の構成 B の一致（実験の潜在 5 本）",
+  "rule": "5 本とも uint8 が 1 ビットまで一致し、製品の映像の MD5 が実験の B.mp4 と一致",
+  "started_at": "2026-11-23T23:08:53+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T23:08:53+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 718,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 29,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "cmd": [
+    ".venv-engine-h3/Scripts/python.exe",
+    "-B",
+    "outputs/h3-sol-gates-2026-11-23/engine_items.py",
+    "--item",
+    "S1",
+    "--out",
+    "outputs/h3-sol-gates-2026-11-23/runs/S1"
+  ],
+  "exit_code": 0,
+  "seconds_wall": 64.2,
+  "engine": {
+    "item": "S1",
+    "dry_run": false,
+    "started": "2026-11-23T23:08:55",
+    "torch": "2.13.0+cu130",
+    "cuda_available": true,
+    "latents": {
+      "a": [
+        1,
+        24,
+        37,
+        48,
+        80
+      ],
+      "b": [
+        1,
+        24,
+        37,
+        48,
+        80
+      ],
+      "c": [
+        1,
+        24,
+        102,
+        48,
+        80
+      ],
+      "d": [
+        1,
+        24,
+        37,
+        72,
+        56
+      ],
+      "e": [
+        1,
+        24,
+        67,
+        24,
+        40
+      ]
+    },
+    "experiment_B_mp4": {
+      "a": true,
+      "b": true,
+      "c": true,
+      "d": true,
+      "e": true
+    },
+    "experiment_config_B": "weights=int8 attention=float compute=fp16",
+    "file_problems": [],
+    "backends": {
+      "cuda": {
+        "available": true,
+        "disabled": false
+      },
+      "triton": {
+        "available": true,
+        "disabled": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false
+      },
+      "eager": {
+        "available": true,
+        "disabled": true
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false
+      }
+    },
+    "items": {
+      "a": {
+        "product": {
+          "seconds": 3.97,
+          "peak": {
+            "allocated_mib": 3091,
+            "reserved_mib": 3142
+          },
+          "load": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 0.72
+          },
+          "stats": {
+            "latent_tokens": 142080,
+            "max_sections_alive": 2,
+            "nonfinite_pixels": 0
+          },
+          "frames": 124
+        },
+        "experiment": {
+          "seconds": 3.71,
+          "peak": {
+            "allocated_mib": 3092,
+            "reserved_mib": 3154
+          }
+        },
+        "equal": true,
+        "product_mp4": "outputs/h3-sol-gates-2026-11-23/runs/S1/product_a.mp4"
+      },
+      "b": {
+        "product": {
+          "seconds": 3.66,
+          "peak": {
+            "allocated_mib": 3092,
+            "reserved_mib": 3154
+          },
+          "load": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 0.57
+          },
+          "stats": {
+            "latent_tokens": 142080,
+            "max_sections_alive": 2,
+            "nonfinite_pixels": 0
+          },
+          "frames": 124
+        },
+        "experiment": {
+          "seconds": 3.65,
+          "peak": {
+            "allocated_mib": 3092,
+            "reserved_mib": 3154
+          }
+        },
+        "equal": true,
+        "product_mp4": "outputs/h3-sol-gates-2026-11-23/runs/S1/product_b.mp4"
+      },
+      "c": {
+        "product": {
+          "seconds": 10.15,
+          "peak": {
+            "allocated_mib": 4067,
+            "reserved_mib": 4144
+          },
+          "load": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 0.66
+          },
+          "stats": {
+            "latent_tokens": 391680,
+            "max_sections_alive": 2,
+            "nonfinite_pixels": 0
+          },
+          "frames": 345
+        },
+        "experiment": {
+          "seconds": 10.17,
+          "peak": {
+            "allocated_mib": 4067,
+            "reserved_mib": 4144
+          }
+        },
+        "equal": true,
+        "product_mp4": "outputs/h3-sol-gates-2026-11-23/runs/S1/product_c.mp4"
+      },
+      "d": {
+        "product": {
+          "seconds": 4.06,
+          "peak": {
+            "allocated_mib": 3142,
+            "reserved_mib": 3536
+          },
+          "load": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 0.72
+          },
+          "stats": {
+            "latent_tokens": 149184,
+            "max_sections_alive": 2,
+            "nonfinite_pixels": 0
+          },
+          "frames": 124
+        },
+        "experiment": {
+          "seconds": 3.86,
+          "peak": {
+            "allocated_mib": 3142,
+            "reserved_mib": 3536
+          }
+        },
+        "equal": true,
+        "product_mp4": "outputs/h3-sol-gates-2026-11-23/runs/S1/product_d.mp4"
+      },
+      "e": {
+        "product": {
+          "seconds": 1.69,
+          "peak": {
+            "allocated_mib": 2174,
+            "reserved_mib": 2294
+          },
+          "load": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 0.7
+          },
+          "stats": {
+            "latent_tokens": 64320,
+            "max_sections_alive": 2,
+            "nonfinite_pixels": 0
+          },
+          "frames": 226
+        },
+        "experiment": {
+          "seconds": 1.68,
+          "peak": {
+            "allocated_mib": 2174,
+            "reserved_mib": 2294
+          }
+        },
+        "equal": true,
+        "product_mp4": "outputs/h3-sol-gates-2026-11-23/runs/S1/product_e.mp4"
+      }
+    },
+    "ok": true,
+    "finished": "2026-11-23T23:09:59"
+  },
+  "mp4_vs_experiment_B": {
+    "a": true,
+    "b": true,
+    "c": true,
+    "d": true,
+    "e": true
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T23:09:59+09:00",
+  "workers_after": []
+}

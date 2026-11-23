@@ -1,0 +1,193 @@
+{
+  "item": "S10",
+  "title": "上限の境目（2560×1472。T'=112 は Sol、T'=117 は too_large）",
+  "rule": "内側は Sol で完走し共有 GPU メモリの増分が 0 付近、超えたほうは通常の VAE（reason too_large）で完走",
+  "started_at": "2026-11-23T23:59:27+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T23:59:27+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 714,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 27,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "cmd": [
+    ".venv-engine-h3/Scripts/python.exe",
+    "-B",
+    "outputs/h3-sol-gates-2026-11-23/engine_items.py",
+    "--item",
+    "S10",
+    "--out",
+    "outputs/h3-sol-gates-2026-11-23/runs/S10"
+  ],
+  "exit_code": 0,
+  "seconds_wall": 472.7,
+  "engine": {
+    "item": "S10",
+    "dry_run": false,
+    "started": "2026-11-23T23:59:33",
+    "torch": "2.13.0+cu130",
+    "cuda_available": true,
+    "limit": 1650000,
+    "cases": {
+      "inside": {
+        "latent": [
+          1,
+          24,
+          112,
+          92,
+          160
+        ],
+        "tokens": 1648640,
+        "frames": 379,
+        "size_fallback": null,
+        "seconds": 54.96,
+        "peak": {
+          "allocated_mib": 11640,
+          "reserved_mib": 12592
+        },
+        "error": null,
+        "vae_source": "sol",
+        "sol": {
+          "decoder": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 0.66
+          },
+          "latent_tokens": 1648640,
+          "nonfinite_pixels": 0,
+          "seconds": 43.23
+        },
+        "sol_fallback": null,
+        "frames_written": 379
+      },
+      "above": {
+        "latent": [
+          1,
+          24,
+          117,
+          92,
+          160
+        ],
+        "tokens": 1722240,
+        "frames": 396,
+        "size_fallback": "too_large",
+        "seconds": 406.69,
+        "peak": {
+          "allocated_mib": 11036,
+          "reserved_mib": 15018
+        },
+        "error": null,
+        "vae_source": "file",
+        "sol": null,
+        "sol_fallback": {
+          "reason": "too_large",
+          "latent_tokens": 1722240,
+          "max_latent_tokens": 1650000
+        },
+        "frames_written": 396
+      }
+    },
+    "shape_ok": true,
+    "marks": {
+      "inside": {
+        "t0": 1795445976.9713688,
+        "t1": 1795446031.927328
+      },
+      "above": {
+        "t0": 1795446032.122251,
+        "t1": 1795446438.8127203
+      }
+    },
+    "ok": true,
+    "finished": "2026-11-24T00:07:18"
+  },
+  "wddm": {
+    "inside": {
+      "samples": 55,
+      "dedicated_peak_mb": 13574.3,
+      "shared_peak_mb": 141.5,
+      "shared_median_mb": 139.0,
+      "shared_baseline_mb": 58.599999999999994,
+      "shared_median_rise_mb": 80.4,
+      "shared_peak_rise_mb": 82.9,
+      "rule": "median rise >= 300 MB over the baseline (>= 10 samples)",
+      "overflow": false
+    },
+    "above": {
+      "samples": 406,
+      "dedicated_peak_mb": 15785.4,
+      "shared_peak_mb": 274.6,
+      "shared_median_mb": 234.1,
+      "shared_baseline_mb": 58.599999999999994,
+      "shared_median_rise_mb": 175.5,
+      "shared_peak_rise_mb": 216.0,
+      "rule": "median rise >= 300 MB over the baseline (>= 10 samples)",
+      "overflow": false
+    }
+  },
+  "shared_overflow_inside": false,
+  "verdict": "pass",
+  "finished_at": "2026-11-24T00:07:21+09:00",
+  "workers_after": []
+}

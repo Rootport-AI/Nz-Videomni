@@ -1,0 +1,167 @@
+{
+  "S8": {
+    "status": "completed",
+    "sol": {
+      "sol_vae_used": "on",
+      "sol_vae": {
+        "used": "on",
+        "decoder": {
+          "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+          "int8_layers": 96,
+          "loaded_tensors": 393,
+          "loaded_mib": 1552.2,
+          "seconds": 1.08
+        },
+        "latent_tokens": 1575040,
+        "nonfinite_pixels": 0,
+        "seconds": 42.6
+      },
+      "vae_source": "sol",
+      "decode_seconds": 55.68,
+      "decode_vram_mib": [
+        11346,
+        12308
+      ],
+      "request_sol_vae": true
+    },
+    "generation_time_seconds": 2917.1,
+    "seconds": {
+      "encode": null,
+      "denoise": 2817.3,
+      "decode": 55.68,
+      "dwd": null
+    },
+    "vram_peak_mib": {
+      "job": [
+        13185,
+        13972
+      ],
+      "denoise": [
+        13185,
+        13972
+      ],
+      "decode": [
+        11346,
+        12308
+      ]
+    },
+    "stage_times": {
+      "denoise_start": 40.1,
+      "decode_start": 2863.8,
+      "end": 2918.9
+    },
+    "denoise_step_intervals_s": [
+      351.1,
+      351.1,
+      351.0,
+      371.1,
+      351.1,
+      346.1,
+      351.1
+    ],
+    "shared_mb": {
+      "before_job_median": 99.8,
+      "encode_median": 143.1,
+      "first_10s_of_denoise_median": 1169.1,
+      "denoise_median": 1131.3,
+      "pre_decode_60s_median": 1147.6,
+      "decode_median": 1147.6,
+      "decode_max": 1157.7
+    },
+    "dedicated_mb": {
+      "encode_max": 14527.6,
+      "denoise_max": 14875.5,
+      "decode_max": 13217.5
+    },
+    "wddm_judgement": {
+      "job": {
+        "samples": 2914,
+        "shared_median_rise_mb": 1031.2,
+        "overflow": true
+      },
+      "decode": {
+        "samples": 58,
+        "shared_median_rise_mb": 1047.5,
+        "overflow": true
+      }
+    },
+    "denoise_jump_at_s": 35.1
+  },
+  "S8_off": {
+    "status": "completed",
+    "sol": {
+      "sol_vae_used": null,
+      "sol_vae": null,
+      "vae_source": "file",
+      "decode_seconds": 374.95,
+      "decode_vram_mib": [
+        11009,
+        15004
+      ],
+      "request_sol_vae": false
+    },
+    "generation_time_seconds": 3229.04,
+    "seconds": {
+      "encode": null,
+      "denoise": 2817.43,
+      "decode": 374.95,
+      "dwd": null
+    },
+    "vram_peak_mib": {
+      "job": [
+        13185,
+        15004
+      ],
+      "denoise": [
+        13185,
+        13972
+      ],
+      "decode": [
+        11009,
+        15004
+      ]
+    },
+    "stage_times": {
+      "denoise_start": 30.1,
+      "decode_start": 2858.7,
+      "end": 3229.7
+    },
+    "denoise_step_intervals_s": [
+      351.0,
+      351.1,
+      351.1,
+      371.0,
+      351.1,
+      351.1,
+      351.1,
+      346.1
+    ],
+    "shared_mb": {
+      "before_job_median": 126.8,
+      "encode_median": 138.8,
+      "first_10s_of_denoise_median": 1165.1,
+      "denoise_median": 1147.6,
+      "pre_decode_60s_median": 1130.3,
+      "decode_median": 1258.0,
+      "decode_max": 1292.7
+    },
+    "dedicated_mb": {
+      "encode_max": 14531.3,
+      "denoise_max": 14880.2,
+      "decode_max": 15783.4
+    },
+    "wddm_judgement": {
+      "job": {
+        "samples": 3224,
+        "shared_median_rise_mb": 1021.0,
+        "overflow": true
+      },
+      "decode": {
+        "samples": 373,
+        "shared_median_rise_mb": 1131.2,
+        "overflow": true
+      }
+    },
+    "denoise_jump_at_s": 27.1
+  }
+}

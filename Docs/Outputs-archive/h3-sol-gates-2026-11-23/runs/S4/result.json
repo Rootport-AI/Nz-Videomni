@@ -1,0 +1,517 @@
+{
+  "item": "S4",
+  "title": "切り替え（資産のパスを無いファイルに向けた記述子の写し）",
+  "rule": "2 本とも完了し、Sol のジョブは on->off（理由 file_missing）、映像のストリームが同じシードの Off と一致",
+  "started_at": "2026-11-23T23:27:37+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T23:27:37+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 869,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "S4_sol",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "sol_vae": true,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-23T23:27:46+09:00",
+      "submit_http": 202,
+      "job_id": "cce1baca-1aec-4d1c-b44e-004c40c74a28",
+      "seconds_wall": 110.3,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 35.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 45.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 60.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 70.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 85.3,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 105.3,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 110.3,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": "[h3_worker] generate: seed=1234 1280x768 frames=73 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] sol_vae=__h3_sol_gates_absent__.safetensors neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-sol-gates-2026-11-23\\_rt\\outputs\\cce1baca-1aec-4d1c-b44e-004c40c74a28\\output.mp4",
+      "mp4": "outputs/h3-sol-gates-2026-11-23/runs/S4/S4_sol.mp4",
+      "metadata_file": "outputs/h3-sol-gates-2026-11-23/runs/S4/S4_sol.metadata.json",
+      "finished_at": "2026-11-23T23:29:37+09:00",
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 105.24,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": 17.59,
+          "denoise": 63.26,
+          "decode": 24.23,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            6333,
+            7496
+          ],
+          "denoise": [
+            4073,
+            4948
+          ],
+          "decode": [
+            6333,
+            7496
+          ]
+        },
+        "rss_peak_gib": 23.51,
+        "commit_peak_gib": 32.97,
+        "sequence": {
+          "text": 53,
+          "cond": 0,
+          "audio": 244,
+          "video": 21120,
+          "total": 21417,
+          "latent_frames": 22,
+          "audio_latents": 122,
+          "grid": [
+            24,
+            40
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14025,
+          "num_ooms": 0
+        },
+        "vae_source": "file",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "per_clip_denoise_seconds": null,
+        "chain_clips": [],
+        "chain_total_frames": null,
+        "retake": null,
+        "v2v": null,
+        "inpaint": null,
+        "outpaint": null
+      },
+      "sol": {
+        "sol_vae_used": "on->off",
+        "sol_vae": {
+          "used": "on->off",
+          "reason": "file_missing",
+          "latent_tokens": 84480,
+          "max_latent_tokens": 1650000
+        },
+        "vae_source": "file",
+        "decode_seconds": 24.23,
+        "decode_vram_mib": [
+          6333,
+          7496
+        ],
+        "request_sol_vae": true
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-sol-gates-2026-11-23/runs/S4/S4_sol.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      },
+      "compare_off": {
+        "video_equal": true
+      }
+    },
+    {
+      "job": "S4_off",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-23T23:29:37+09:00",
+      "submit_http": 202,
+      "job_id": "f9608ee1-a833-4fd3-9e52-ec51527c2178",
+      "seconds_wall": 105.3,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 35.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 45.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 60.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 70.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 85.2,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 105.3,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": "[h3_worker] generate: seed=1234 1280x768 frames=73 steps=4 shift=12.0/3.0 attention=sage images=0 keep_resident=False prefetch=True vram16=True loras=[('minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors', 0.8)] neg=off -> S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-sol-gates-2026-11-23\\_rt\\outputs\\f9608ee1-a833-4fd3-9e52-ec51527c2178\\output.mp4",
+      "mp4": "outputs/h3-sol-gates-2026-11-23/runs/S4/S4_off.mp4",
+      "metadata_file": "outputs/h3-sol-gates-2026-11-23/runs/S4/S4_off.metadata.json",
+      "finished_at": "2026-11-23T23:31:22+09:00",
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 104.64,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": 18.61,
+          "denoise": 62.31,
+          "decode": 23.57,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            6333,
+            7496
+          ],
+          "denoise": [
+            4073,
+            4948
+          ],
+          "decode": [
+            6333,
+            7496
+          ]
+        },
+        "rss_peak_gib": 24.15,
+        "commit_peak_gib": 34.15,
+        "sequence": {
+          "text": 53,
+          "cond": 0,
+          "audio": 244,
+          "video": 21120,
+          "total": 21417,
+          "latent_frames": 22,
+          "audio_latents": 122,
+          "grid": [
+            24,
+            40
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14001,
+          "num_ooms": 0
+        },
+        "vae_source": "file",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "per_clip_denoise_seconds": null,
+        "chain_clips": [],
+        "chain_total_frames": null,
+        "retake": null,
+        "v2v": null,
+        "inpaint": null,
+        "outpaint": null
+      },
+      "sol": {
+        "sol_vae_used": null,
+        "sol_vae": null,
+        "vae_source": "file",
+        "decode_seconds": 23.57,
+        "decode_vram_mib": [
+          6333,
+          7496
+        ],
+        "request_sol_vae": false
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-sol-gates-2026-11-23/runs/S4/S4_off.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "3.041667",
+            "nb_read_frames": 73
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "3.042000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      }
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "name": "default",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 3.2
+    }
+  ],
+  "server": {
+    "port": 18699,
+    "pid": 71036,
+    "config": "outputs/h3-sol-gates-2026-11-23/_rt/config.h3solgates.yaml",
+    "started_at": "2026-11-23T23:27:39+09:00",
+    "stop": {
+      "at": "2026-11-23T23:31:22+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T23:31:24+09:00",
+  "workers_after": []
+}

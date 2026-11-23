@@ -1,0 +1,822 @@
+{
+  "script": "outputs/h3-sol-spike-2026-11-23/h3_sol_spike.py",
+  "started_at": "2026-11-23T15:53:20+09:00",
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "python": "3.12.9",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "cuda_visible_devices": "-1",
+  "cuda_available": false,
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "items": {
+    "1_paths_and_versions": {
+      "files": {
+        "transformer": {
+          "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "bytes": 20970379616
+        },
+        "text_encoder": {
+          "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+          "bytes": 27141342152
+        },
+        "video_vae": {
+          "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+          "bytes": 5207808496
+        },
+        "audio_vae": {
+          "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+          "bytes": 605254808
+        },
+        "sol_fp16": {
+          "path": "models/MiniMaxH3/VAE/Sol/minimax_h3_sol_vae_fp16.safetensors",
+          "bytes": 3596335728
+        },
+        "sol_int8": {
+          "path": "models/MiniMaxH3/VAE/Sol/minimax_h3_sol_vae_int8_convrot.safetensors",
+          "bytes": 1988306504
+        },
+        "turbo_lora": {
+          "path": "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+          "bytes": 1956193000
+        },
+        "illustration": {
+          "path": "uploads/h3-a2v-development/00043-2168133585.jpg",
+          "bytes": 220139
+        }
+      },
+      "tokenizer_dir": true,
+      "ref_nvidia": {
+        "file": "outputs/h3-sol-spike-2026-11-23/ref_nvidia/decoder.py",
+        "sha256": "87f25f35bb1ceebbcae4abcfb0439d522dfbc0c233d3fce84a3e19f12ce242de",
+        "expected": "87f25f35bb1ceebbcae4abcfb0439d522dfbc0c233d3fce84a3e19f12ce242de"
+      },
+      "sampler": true,
+      "ffmpeg": true,
+      "illustration_size": [
+        896,
+        1152
+      ],
+      "comfy_kitchen": "0.2.37",
+      "passed": true
+    },
+    "2_generation_conditions": {
+      "table": [
+        {
+          "項目": "seed",
+          "製品の既定": -1,
+          "出どころ": "config.yaml generation_defaults.seed（-1 = 毎回ランダム）",
+          "この実験の値": {
+            "a": 1234,
+            "b": 1234,
+            "c": 1234,
+            "d": 1234,
+            "e": 1234
+          },
+          "違う理由": "同じ潜在をすべての復号器で比べるため、種を固定する（pi-H3 の実験と同じ 1234）"
+        },
+        {
+          "項目": "steps",
+          "製品の既定": 20,
+          "出どころ": "engine_h3/constants.py DEFAULT_STEPS・services/engines/h3/adapter.py H3_DEFAULT_STEPS",
+          "この実験の値": {
+            "a": 4,
+            "b": 4,
+            "c": 20,
+            "d": 4,
+            "e": 4
+          },
+          "違う理由": "計画 5.3: Turbo LoRA の対照の条件（記録簿 §223.12）は 4 ステップ。c だけ操作パネルの既定の 20"
+        },
+        {
+          "項目": "shift_video",
+          "製品の既定": 12.0,
+          "出どころ": "engine_h3/constants.py DEFAULT_SHIFT_VIDEO",
+          "この実験の値": {
+            "a": 12.0,
+            "b": 12.0,
+            "c": 12.0,
+            "d": 12.0,
+            "e": 12.0
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "shift_audio",
+          "製品の既定": 3.0,
+          "出どころ": "engine_h3/constants.py DEFAULT_SHIFT_AUDIO",
+          "この実験の値": {
+            "a": 3.0,
+            "b": 3.0,
+            "c": 3.0,
+            "d": 3.0,
+            "e": 3.0
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "width",
+          "製品の既定": 1280,
+          "出どころ": "config.yaml generation_defaults.width",
+          "この実験の値": {
+            "a": 1280,
+            "b": 1280,
+            "c": 1280,
+            "d": 896,
+            "e": 640
+          },
+          "違う理由": "計画 5.3: d は素材のイラスト（896×1152）の大きさ、e は連結の実験の 640×384"
+        },
+        {
+          "項目": "height",
+          "製品の既定": 768,
+          "出どころ": "config.yaml generation_defaults.height",
+          "この実験の値": {
+            "a": 768,
+            "b": 768,
+            "c": 768,
+            "d": 1152,
+            "e": 384
+          },
+          "違う理由": "計画 5.3: d は素材のイラスト（896×1152）の大きさ、e は連結の実験の 640×384"
+        },
+        {
+          "項目": "num_frames",
+          "製品の既定": 345,
+          "出どころ": "config.yaml generation_defaults.num_frames",
+          "この実験の値": {
+            "a": 124,
+            "b": 124,
+            "c": 345,
+            "d": 124,
+            "e": "124 x 2"
+          },
+          "違う理由": "計画 5.3: ComfyUI の実測の条件（124）と比べやすくし GPU の時間を抑える。c は既定の 345"
+        },
+        {
+          "項目": "frame_rate",
+          "製品の既定": 24,
+          "出どころ": "engine_h3/constants.py FRAME_RATE",
+          "この実験の値": {
+            "a": 24,
+            "b": 24,
+            "c": 24,
+            "d": 24,
+            "e": 24
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "loras",
+          "製品の既定": "なし",
+          "出どころ": "操作パネルの既定（LoRA なし）",
+          "この実験の値": {
+            "a": "Turbo LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors 0.8",
+            "b": "Turbo LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors 0.8",
+            "c": "なし",
+            "d": "Turbo LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors 0.8",
+            "e": "Turbo LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors 0.8"
+          },
+          "違う理由": "計画 5.3: a・b・d・e は Turbo LoRA 0.8（記録簿 §223.12 の対照の条件）。c は既定のなし"
+        },
+        {
+          "項目": "negative_prompt",
+          "製品の既定": "",
+          "出どころ": "engine_h3/pipeline_h3.py H3GenerateRequest",
+          "この実験の値": {
+            "a": "",
+            "b": "",
+            "c": "",
+            "d": "",
+            "e": ""
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "attention_backend",
+          "製品の既定": "sdpa",
+          "出どころ": "webui shell/accelerationSettings.ts ATTENTION_BACKEND_DEFAULT・api/models.py",
+          "この実験の値": {
+            "a": "sdpa",
+            "b": "sdpa",
+            "c": "sdpa",
+            "d": "sdpa",
+            "e": "sdpa"
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "vram16_mode",
+          "製品の既定": true,
+          "出どころ": "webui VRAM16_MODE_SERVER_DEFAULT・api/models.py VRAM16_MODE_DEFAULT_H3",
+          "この実験の値": {
+            "a": true,
+            "b": true,
+            "c": true,
+            "d": true,
+            "e": true
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "block_swap_prefetch",
+          "製品の既定": true,
+          "出どころ": "webui BLOCK_SWAP_PREFETCH_SERVER_DEFAULT・api/models.py",
+          "この実験の値": {
+            "a": true,
+            "b": true,
+            "c": true,
+            "d": true,
+            "e": true
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "keep_resident",
+          "製品の既定": false,
+          "出どころ": "webui KEEP_RESIDENT_SERVER_DEFAULT・api/models.py",
+          "この実験の値": {
+            "a": false,
+            "b": false,
+            "c": false,
+            "d": false,
+            "e": false
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "blocks_on_gpu",
+          "製品の既定": 8,
+          "出どころ": "services/engines/h3/adapter.py DEFAULT_BLOCKS_ON_GPU",
+          "この実験の値": {
+            "a": 8,
+            "b": 8,
+            "c": 8,
+            "d": 8,
+            "e": 8
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "deterministic",
+          "製品の既定": true,
+          "出どころ": "services/engines/h3/adapter.py（読み込みの指示の deterministic）",
+          "この実験の値": {
+            "a": true,
+            "b": true,
+            "c": true,
+            "d": true,
+            "e": true
+          },
+          "違う理由": "同じ"
+        },
+        {
+          "項目": "重み・テキストエンコーダ・動画VAE・音声VAE",
+          "製品の既定": "マニフェストの default_file",
+          "出どころ": "scripts/manifests/40-minimaxh3.json",
+          "この実験の値": {
+            "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+            "text_encoder": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+            "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+            "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+            "tokenizer_dir": "qwen3vl_tokenizer"
+          },
+          "違う理由": "同じ（計画 5.3: FL2VA 版の INT8 ConvRot）"
+        },
+        {
+          "項目": "生成の種類・入力",
+          "製品の既定": "T2V",
+          "出どころ": "操作パネル",
+          "この実験の値": {
+            "a": "t2v",
+            "b": "t2v",
+            "c": "t2v",
+            "d": "i2v（先頭の画像 00043-2168133585.jpg）",
+            "e": "chain"
+          },
+          "違う理由": "計画 5.3: d は I2V（記録簿 §224.12 の縦長のイラスト）、e は連結 2 本（共通のプロンプト）"
+        }
+      ],
+      "table_file": "outputs/h3-sol-spike-2026-11-23/conditions_table.md",
+      "requests": {
+        "a": {
+          "validate": "passed",
+          "expected_latents": 37,
+          "frames": 124
+        },
+        "b": {
+          "validate": "passed",
+          "expected_latents": 37,
+          "frames": 124
+        },
+        "c": {
+          "validate": "passed",
+          "expected_latents": 102,
+          "frames": 345
+        },
+        "d": {
+          "validate": "passed",
+          "expected_latents": 37,
+          "frames": 124
+        },
+        "e": {
+          "validate": "passed",
+          "expected_latents": 67,
+          "frames": 226,
+          "layout": {
+            "total_px": 226,
+            "segment_seam_junctions": [
+              123
+            ],
+            "tile_seam_junctions": [],
+            "all_junctions": [
+              122,
+              123,
+              124
+            ],
+            "n_tiles": 0,
+            "overlap_frames": 22,
+            "overlap_strength": 1.0,
+            "clip_frames": [
+              124,
+              124
+            ],
+            "clip_latent_frames": [
+              37,
+              37
+            ],
+            "clip_audio_latents": [
+              207,
+              207
+            ],
+            "overlap_latents": 7,
+            "seam_start_frames": [
+              102
+            ],
+            "seam_new_frames": [
+              124
+            ],
+            "audio_overlap_latents": [
+              37
+            ],
+            "total_latent_frames": 67,
+            "total_audio_latents": 377,
+            "audio_latents_expected": 377,
+            "audio_latent_excess": 0,
+            "audio_place_error_latents": [
+              0.0
+            ],
+            "audio_head_shift_latents": [
+              0.0
+            ],
+            "audio_drift_flags": [
+              false,
+              false
+            ]
+          }
+        }
+      },
+      "prompts": {
+        "a": "A close-up portrait of a young woman's face in soft natural window light. She slowly turns her head toward the camera and gives a gentle smile; the fine natural texture of her skin is clearly visible. Quiet room tone. Shallow depth of field, steady camera.",
+        "b": "A calm, minimal scene: a clear, cloudless blue sky above the plain white wall of a modern building. A single small bird glides slowly across the empty sky. Large flat areas of even color, soft wind sound. Steady camera.",
+        "c": "A woman with long, wavy brown hair stands under a leafy tree on a breezy day. The wind moves the countless small leaves, her loose strands of hair and the fine woven texture of her knitted wool sweater. Rustling leaves. Rich fine detail, natural daylight, steady camera.",
+        "d": "An anime-style illustration of a girl drawn with flat cel-shaded colors and clean line art. She blinks and gently tilts her head while smiling at the viewer; the plain background stays still. Soft indoor ambience. Steady camera.",
+        "e": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera."
+      },
+      "passed": true
+    },
+    "3_sol_files_and_model_keys": {
+      "fp16": {
+        "num_layers": 24,
+        "int8_layers": 0,
+        "specs": [],
+        "decoder_keys": 297,
+        "model_keys": 297,
+        "file_keys_not_in_model": [],
+        "model_keys_not_in_file": [],
+        "shape_mismatch": [],
+        "dtypes": [
+          "F16"
+        ],
+        "problems": [],
+        "passed": true
+      },
+      "int8": {
+        "num_layers": 24,
+        "int8_layers": 96,
+        "specs": [
+          "int8_tensorwise/convrot=True/g256"
+        ],
+        "decoder_keys": 393,
+        "model_keys": 393,
+        "file_keys_not_in_model": [],
+        "model_keys_not_in_file": [],
+        "shape_mismatch": [],
+        "dtypes": [
+          "F16",
+          "F32",
+          "I8"
+        ],
+        "problems": [],
+        "passed": true
+      },
+      "passed": true
+    },
+    "4_reference_keys": {
+      "ref_keys": 297,
+      "file_keys": 297,
+      "only_ref": [],
+      "only_file": [],
+      "shape_mismatch": [],
+      "keep_layers": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        19,
+        20,
+        21,
+        31,
+        32,
+        35
+      ],
+      "imports_of_ref": [
+        "__future__",
+        "math",
+        "torch",
+        "torch.nn"
+      ],
+      "passed": true
+    },
+    "5_latent_statistics": {
+      "fp16": {
+        "mean_max_diff_vs_standard_vae": 0.0,
+        "std_max_diff_vs_standard_vae": 0.0
+      },
+      "int8": {
+        "mean_max_diff_vs_standard_vae": 0.0,
+        "std_max_diff_vs_standard_vae": 0.0
+      },
+      "passed": true
+    },
+    "6_tiny_decoder_vs_reference_cpu": {
+      "dims": {
+        "dim": 128,
+        "heads": 2,
+        "head_dim": 64,
+        "ffn_mult": 4,
+        "num_layers": 4,
+        "latent_channels": 24,
+        "num_register": 4
+      },
+      "shapes": {
+        "T14_h23_w37": {
+          "psnr_db": 148.024,
+          "max_abs": 4.76837158203125e-07,
+          "mean_abs": 2.5364304407114063e-08,
+          "frames": 47,
+          "expected_frames": 47,
+          "max_sections_alive": 2,
+          "sections": 12
+        },
+        "T12_h20_w32": {
+          "psnr_db": 148.038,
+          "max_abs": 4.172325134277344e-07,
+          "mean_abs": 2.5297448988784995e-08,
+          "frames": 39,
+          "expected_frames": 39,
+          "max_sections_alive": 2,
+          "sections": 12
+        },
+        "T7_h17_w33": {
+          "psnr_db": 147.985,
+          "max_abs": 4.172325134277344e-07,
+          "mean_abs": 2.5508756729360307e-08,
+          "frames": 22,
+          "expected_frames": 22,
+          "max_sections_alive": 2,
+          "sections": 8
+        },
+        "T5_h16_w16": {
+          "psnr_db": 147.922,
+          "max_abs": 3.5762786865234375e-07,
+          "mean_abs": 2.5757291201871874e-08,
+          "frames": 17,
+          "expected_frames": 17,
+          "max_sections_alive": 1,
+          "sections": 4
+        }
+      },
+      "sensitivity_t_shift_1": {
+        "psnr_db": 58.434,
+        "max_abs": 0.02912318706512451,
+        "mean_abs": 0.0007547530421239059
+      },
+      "worst_psnr_db": 147.922,
+      "fp16_path_cpu_vs_reference_fp32": {
+        "psnr_db": 73.956,
+        "max_abs": 0.0012601017951965332,
+        "mean_abs": 0.00015617382351761238,
+        "rope_impl": "torch",
+        "uint8_out_dtype": "torch.uint8"
+      },
+      "passed": true
+    },
+    "7_rope_formula_cpu": {
+      "plain": {
+        "torch_vs_kitchen_eager_q": 0.0,
+        "torch_vs_kitchen_eager_k": 0.0,
+        "torch_vs_video_vae_apply_rope": 0.0
+      },
+      "shifted": {
+        "torch_vs_kitchen_eager_q": 0.0,
+        "torch_vs_kitchen_eager_k": 0.0,
+        "torch_vs_video_vae_apply_rope": 0.0
+      },
+      "note": "fp32 on the CPU: the torch formula against comfy-kitchen's eager rms_rope_split_half (the table layout) and video_vae._apply_rope. The fp16 CUDA kernel is compared in --selfcheck.",
+      "passed": true
+    },
+    "8_int8_fused_arguments_cpu": {
+      "to_qkv(rms_norm)": {
+        "rel_l2": 0.01229393295943737,
+        "cosine": 0.9999316930770874
+      },
+      "to_out(+residual)": {
+        "rel_l2": 3.164324880344793e-05,
+        "cosine": 1.0000014305114746
+      },
+      "w1(rms_norm)": {
+        "rel_l2": 0.012433884665369987,
+        "cosine": 0.9999481439590454
+      },
+      "w2(swiglu,+residual)": {
+        "rel_l2": 1.289205783905345e-06,
+        "cosine": 1.000001311302185
+      },
+      "note": "block 0 of the INT8 file through comfy-kitchen's eager int8_linear with the fused arguments (CPU, float32) against the FP16 file's layer with the same steps written out: a wrong scale, rotation or half of the swiglu would give an error near 100 %.",
+      "passed": true
+    },
+    "9_replacement_in_and_out": {
+      "in": true,
+      "restored": true,
+      "passed": true
+    },
+    "10_frame_counts_and_bench_points": {
+      "verify": {
+        "V1_640x384_73f": {
+          "grid": [
+            22,
+            24,
+            40
+          ],
+          "frames": 73,
+          "windows_odd_layer_time": 5,
+          "blocks": 5
+        },
+        "V3_odd_592x368_T14": {
+          "grid": [
+            14,
+            23,
+            37
+          ],
+          "frames": 47,
+          "windows_odd_layer_time": 4,
+          "blocks": 3
+        },
+        "V2_512x320_39f": {
+          "grid": [
+            12,
+            20,
+            32
+          ],
+          "frames": 39,
+          "windows_odd_layer_time": 3,
+          "blocks": 3
+        }
+      },
+      "bench": {
+        "1280x768_124": {
+          "latents": 37,
+          "frames": 124,
+          "grid": [
+            37,
+            48,
+            80
+          ],
+          "standard_too": true,
+          "tokens": 142080,
+          "comfy_estimate_mib_fp16_without_weights": 2921.1,
+          "latent_a_tiling": [
+            1,
+            1,
+            1
+          ]
+        },
+        "1280x768_345": {
+          "latents": 102,
+          "frames": 345,
+          "grid": [
+            102,
+            48,
+            80
+          ],
+          "standard_too": true,
+          "tokens": 391680,
+          "comfy_estimate_mib_fp16_without_weights": 3993.6,
+          "latent_a_tiling": [
+            3,
+            1,
+            1
+          ]
+        },
+        "1280x768_481": {
+          "latents": 142,
+          "frames": 481,
+          "grid": [
+            142,
+            48,
+            80
+          ],
+          "standard_too": false,
+          "tokens": 545280,
+          "comfy_estimate_mib_fp16_without_weights": 4653.6,
+          "latent_a_tiling": [
+            4,
+            1,
+            1
+          ]
+        },
+        "1920x1088_124": {
+          "latents": 37,
+          "frames": 124,
+          "grid": [
+            37,
+            68,
+            120
+          ],
+          "standard_too": true,
+          "tokens": 301920,
+          "comfy_estimate_mib_fp16_without_weights": 6206.7,
+          "latent_a_tiling": [
+            1,
+            2,
+            2
+          ]
+        },
+        "1920x1088_362": {
+          "latents": 107,
+          "frames": 362,
+          "grid": [
+            107,
+            68,
+            120
+          ],
+          "standard_too": false,
+          "tokens": 873120,
+          "comfy_estimate_mib_fp16_without_weights": 8661.0,
+          "latent_a_tiling": [
+            3,
+            2,
+            2
+          ]
+        },
+        "2560x1472_73": {
+          "latents": 22,
+          "frames": 73,
+          "grid": [
+            22,
+            92,
+            160
+          ],
+          "standard_too": false,
+          "tokens": 323840,
+          "comfy_estimate_mib_fp16_without_weights": 10247.1,
+          "latent_a_tiling": [
+            1,
+            2,
+            2
+          ]
+        },
+        "2560x1472_192": {
+          "latents": 57,
+          "frames": 192,
+          "grid": [
+            57,
+            92,
+            160
+          ],
+          "standard_too": false,
+          "tokens": 839040,
+          "comfy_estimate_mib_fp16_without_weights": 12460.9,
+          "latent_a_tiling": [
+            2,
+            2,
+            2
+          ]
+        },
+        "chain_1280x768_940": {
+          "latents": 277,
+          "frames": 940,
+          "grid": [
+            277,
+            48,
+            80
+          ],
+          "standard_too": false,
+          "tokens": 1063680,
+          "comfy_estimate_mib_fp16_without_weights": 6881.1,
+          "latent_a_tiling": [
+            8,
+            1,
+            1
+          ]
+        },
+        "chain_1920x1088_685": {
+          "latents": 202,
+          "frames": 685,
+          "grid": [
+            202,
+            68,
+            120
+          ],
+          "standard_too": false,
+          "tokens": 1648320,
+          "comfy_estimate_mib_fp16_without_weights": 11992.0,
+          "latent_a_tiling": [
+            6,
+            2,
+            2
+          ]
+        },
+        "chain_2560x1472_362": {
+          "latents": 107,
+          "frames": 362,
+          "grid": [
+            107,
+            92,
+            160
+          ],
+          "standard_too": false,
+          "tokens": 1575040,
+          "comfy_estimate_mib_fp16_without_weights": 15623.4,
+          "latent_a_tiling": [
+            3,
+            2,
+            2
+          ]
+        }
+      },
+      "passed": true
+    },
+    "11_user_name_scrub": {
+      "names_counted": 2,
+      "names_have_space": true,
+      "fake_name_with_space_removed": true,
+      "real_home_long_short_json_removed": true,
+      "example": "C:\\Users\\<user>\\AppData\\x.py",
+      "passed": true
+    },
+    "12_metrics_synthetic": {
+      "grid_line_x128": {
+        "on": 60.0,
+        "off": 0.315,
+        "ratio": 190.5,
+        "lines": 2,
+        "off_excluding_16": 0.3333,
+        "ratio_excluding_16": 180.0
+      },
+      "flicker": {
+        "boundary_mean": 50.0,
+        "inside_mean": 0.0
+      },
+      "passed": true
+    }
+  },
+  "all_passed": true,
+  "git_after": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "status": "done",
+  "finished_at": "2026-11-23T15:53:29+09:00"
+}

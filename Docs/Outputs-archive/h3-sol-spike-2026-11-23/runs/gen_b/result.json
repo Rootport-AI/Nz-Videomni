@@ -1,0 +1,473 @@
+{
+  "item": "gen_b",
+  "script": "outputs/h3-sol-spike-2026-11-23/h3_sol_spike.py",
+  "started_at": "2026-11-23T16:01:14+09:00",
+  "status": "done",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "python": "3.12.9",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "title": "平坦な領域の多い場面（空・無地の壁）",
+  "conditions": {
+    "seed": 1234,
+    "steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "width": 1280,
+    "height": 768,
+    "num_frames": 124,
+    "frame_rate": 24,
+    "loras": "Turbo LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors 0.8",
+    "negative_prompt": "",
+    "attention_backend": "sdpa",
+    "vram16_mode": true,
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "blocks_on_gpu": 8,
+    "deterministic": true,
+    "kind": "t2v",
+    "prompt": "A calm, minimal scene: a clear, cloudless blue sky above the plain white wall of a modern building. A single small bird glides slowly across the empty sky. Large flat areas of even color, soft wind sound. Steady camera.",
+    "paths": {
+      "transformer": {
+        "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "bytes": 20970379616
+      },
+      "text_encoder": {
+        "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "bytes": 27141342152
+      },
+      "video_vae": {
+        "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+        "bytes": 5207808496
+      },
+      "audio_vae": {
+        "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+        "bytes": 605254808
+      },
+      "tokenizer_dir": {
+        "path": "models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer",
+        "bytes": null
+      }
+    },
+    "image": null
+  },
+  "gate": {
+    "at": "2026-11-23T16:01:14+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "compute_apps": {
+        "count": 30,
+        "python_or_uvicorn_present": false,
+        "python_or_uvicorn_count": 0
+      },
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "770",
+        "16376"
+      ],
+      "memory_used_mib": 770
+    },
+    "engine_workers": []
+  },
+  "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "request_check": {
+    "validate": "passed",
+    "expected_latents": 37,
+    "frames": 124
+  },
+  "request": {
+    "prompt": "A calm, minimal scene: a clear, cloudless blue sky above the plain white wall of a modern building. A single small bird glides slowly across the empty sky. Large flat areas of even color, soft wind sound. Steady camera.",
+    "seed": 1234,
+    "width": 1280,
+    "height": 768,
+    "num_frames": 124,
+    "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-sol-spike-2026-11-23\\runs\\gen_b\\output.mp4",
+    "frame_rate": 24,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images": [],
+    "keep_resident": false,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "vram16_mode": true,
+    "loras": [
+      {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8
+      }
+    ],
+    "source_audio": null,
+    "references": [],
+    "negative_prompt": "",
+    "vsf_scale": 1.5,
+    "outpaint": null,
+    "inpaint": null,
+    "pi_h3": null
+  },
+  "patch_in": true,
+  "build_report": {
+    "dit": {
+      "prefix": "",
+      "num_layers": 50,
+      "hidden_size": 5376,
+      "heads": 56,
+      "adaln_grid": 1025,
+      "adaln_rank": 8,
+      "quant_layers": 200,
+      "quant_layers_by_format": {
+        "int8_tensorwise": 200
+      },
+      "fp8_mode": null,
+      "quant_specs": [
+        "int8_tensorwise/convrot=True/g256"
+      ],
+      "unknown": []
+    },
+    "text_encoder": {
+      "num_layers": 50,
+      "int8_layers": 350,
+      "has_visual": true,
+      "metadata": {
+        "minimax_h3_te": {
+          "num_hidden_layers": 50,
+          "output": "unnormalized_hidden_after_layer_50"
+        }
+      }
+    },
+    "video_vae_tensors": 562,
+    "audio_vae_tensors": 917,
+    "options": {
+      "blocks_on_gpu": 8,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "deterministic": true
+    },
+    "quant_backends": {
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      }
+    },
+    "device": "cuda"
+  },
+  "load_seconds": 2.09,
+  "engine": {
+    "seconds": 276.93,
+    "peak_vram_mb": 6344,
+    "peak_vram_reserved_mb": 7534,
+    "full": {
+      "seed_used": 1234,
+      "sampler": "euler",
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "peak_vram_mb": 6344,
+      "peak_vram_reserved_mb": 7534,
+      "rss_peak_gib": 23.59,
+      "commit_gib": 4.83,
+      "commit_peak_gib": 34.05,
+      "seconds": 276.93,
+      "num_frames": 124,
+      "frame_rate": 24,
+      "width": 1280,
+      "height": 768,
+      "size_bytes": 522703,
+      "attention_used": "sdpa",
+      "block_swap_prefetch_used": "on",
+      "keep_resident_used": "off",
+      "vram16_mode_used": "on",
+      "images_used": 0,
+      "h3": {
+        "phases": {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.33
+            },
+            "rss_after_load_gib": 0.93,
+            "commit_after_load_gib": 2.3,
+            "te_read": {
+              "read_gib": 24.17,
+              "read_seconds": 17.35,
+              "layers_read": 50,
+              "encode_seconds": 17.67,
+              "tokens": 50,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": []
+            },
+            "rss_after_release_gib": 1.45,
+            "commit_after_release_gib": 3.16,
+            "text_tokens": 50,
+            "seconds": 27.03,
+            "rss_end_gib": 1.45,
+            "rss_process_peak_gib": 2.38,
+            "commit_end_gib": 3.16,
+            "commit_process_peak_gib": 5.21,
+            "peak_vram_mb": 1493,
+            "peak_vram_reserved_mb": 1512
+          },
+          "denoise": {
+            "dit": {
+              "quant_linears": 200,
+              "loaded_tensors": 732,
+              "loaded_gib": 19.53,
+              "read_seconds": 11.87
+            },
+            "dit_source": "file",
+            "rss_after_load_gib": 21.0,
+            "commit_after_load_gib": 26.65,
+            "rss_after_place_gib": 23.13,
+            "commit_after_place_gib": 32.84,
+            "sequence": {
+              "text": 50,
+              "cond": 0,
+              "audio": 414,
+              "video": 35520,
+              "total": 35984,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                24,
+                40
+              ]
+            },
+            "m_per_step": [
+              1,
+              2,
+              2,
+              2
+            ],
+            "block_swap_prefetch_used": "on",
+            "vram16": {
+              "cap_fraction": 0.8565,
+              "cap_mib": 14025,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "meta",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 578
+            },
+            "rss_after_release_gib": 22.33,
+            "commit_after_release_gib": 28.31,
+            "seconds": 211.4,
+            "rss_end_gib": 22.33,
+            "rss_process_peak_gib": 23.17,
+            "commit_end_gib": 28.31,
+            "commit_process_peak_gib": 34.05,
+            "peak_vram_mb": 4603,
+            "peak_vram_reserved_mb": 6156
+          },
+          "decode": {
+            "vae_source": "file",
+            "audio_samples": 165333,
+            "audio_samples_decoded": 165600,
+            "frames": 124,
+            "seconds": 38.34,
+            "rss_end_gib": 3.05,
+            "rss_process_peak_gib": 23.59,
+            "commit_end_gib": 4.93,
+            "commit_process_peak_gib": 34.05,
+            "peak_vram_mb": 6344,
+            "peak_vram_reserved_mb": 7534
+          }
+        },
+        "quant_backends": {
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true,
+            "w4a8_int8_linear": true,
+            "quantize_per_tensor_fp8": true
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false,
+            "w4a8_int8_linear": false,
+            "quantize_per_tensor_fp8": false
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false,
+            "w4a8_int8_linear": false,
+            "quantize_per_tensor_fp8": false
+          },
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true,
+            "w4a8_int8_linear": true,
+            "quantize_per_tensor_fp8": true
+          },
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true,
+            "w4a8_int8_linear": true,
+            "quantize_per_tensor_fp8": true
+          }
+        },
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ]
+      }
+    }
+  },
+  "restored": true,
+  "standard_decoder": {
+    "from_file": 1,
+    "decode": 1,
+    "standard_decode_seconds": 32.46,
+    "tiled_arg": true
+  },
+  "latent": {
+    "file": "outputs/h3-sol-spike-2026-11-23/runs/gen_b/latent.safetensors",
+    "stats": {
+      "shape": [
+        1,
+        24,
+        37,
+        48,
+        80
+      ],
+      "mean": 0.05824594350670567,
+      "std": 1.089771489367955,
+      "max_abs": 5.23406982421875,
+      "nan": 0,
+      "inf": 0
+    },
+    "dtype_handed": "torch.float32",
+    "channel_std": [
+      0.36336,
+      0.76092,
+      1.0592,
+      0.73534,
+      0.55291,
+      0.38826,
+      0.54255,
+      0.62029,
+      0.50178,
+      0.86577,
+      0.63357,
+      0.59562,
+      0.73457,
+      0.64219,
+      0.90173,
+      0.62259,
+      0.28376,
+      0.31983,
+      0.61406,
+      1.0508,
+      0.33277,
+      0.39236,
+      0.90062,
+      0.45992
+    ]
+  },
+  "outputs": {
+    "mp4": "outputs/h3-sol-spike-2026-11-23/runs/gen_b/output.mp4",
+    "probe": {
+      "path": "outputs/h3-sol-spike-2026-11-23/runs/gen_b/output.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 1280,
+        "height": 768,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "nb_read_frames": "124"
+      }
+    }
+  },
+  "self_check": {
+    "passed": true,
+    "failures": []
+  },
+  "finished_at": "2026-11-23T16:05:55+09:00"
+}

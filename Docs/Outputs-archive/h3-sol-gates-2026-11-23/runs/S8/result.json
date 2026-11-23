@@ -1,0 +1,403 @@
+{
+  "item": "S8",
+  "title": "製品の経路での VRAM（2560×1472・192 フレーム × 2 本・Sol）",
+  "rule": "完了し、sol_vae_used on。復号の段の VRAM の山（確保と予約）と、共有 GPU メモリの増分が 0 付近",
+  "started_at": "2026-11-24T00:07:22+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-24T00:07:22+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 620,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 28,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "S8",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+        "width": 2560,
+        "height": 1472,
+        "seed": 1234,
+        "clips": [
+          {
+            "num_frames": 192
+          },
+          {
+            "num_frames": 192
+          }
+        ],
+        "sol_vae": true,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-24T00:07:43+09:00",
+      "submit_http": 202,
+      "job_id": "c262ed06-8be1-4186-9490-69892468dda6",
+      "seconds_wall": 2918.9,
+      "stages": [
+        {
+          "t": 0.1,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.1,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 40.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 391.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 742.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 1093.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 1439.3,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 1464.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 1815.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 2161.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 2512.7,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 2863.8,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 2918.9,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": null,
+      "mp4": "outputs/h3-sol-gates-2026-11-23/runs/S8/output.mp4",
+      "metadata_file": "outputs/h3-sol-gates-2026-11-23/runs/S8/S8.metadata.json",
+      "finished_at": "2026-11-24T00:56:22+09:00",
+      "wddm": {
+        "job": {
+          "samples": 2914,
+          "dedicated_peak_mb": 14875.5,
+          "shared_peak_mb": 1178.8,
+          "shared_median_mb": 1131.3,
+          "shared_baseline_mb": 100.05,
+          "shared_median_rise_mb": 1031.2,
+          "shared_peak_rise_mb": 1078.8,
+          "rule": "median rise >= 300 MB over the baseline (>= 10 samples)",
+          "overflow": true
+        },
+        "decode": {
+          "samples": 58,
+          "dedicated_peak_mb": 13217.5,
+          "shared_peak_mb": 1157.7,
+          "shared_median_mb": 1147.6,
+          "shared_baseline_mb": 100.05,
+          "shared_median_rise_mb": 1047.5,
+          "shared_peak_rise_mb": 1057.7,
+          "rule": "median rise >= 300 MB over the baseline (>= 10 samples)",
+          "overflow": true
+        }
+      },
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 2917.1,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": null,
+          "denoise": 2817.3,
+          "decode": 55.68,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            13185,
+            13972
+          ],
+          "denoise": [
+            13185,
+            13972
+          ],
+          "decode": [
+            11346,
+            12308
+          ]
+        },
+        "rss_peak_gib": 24.33,
+        "commit_peak_gib": 43.78,
+        "sequence": {
+          "text": 61,
+          "cond": 0,
+          "audio": 640,
+          "video": 209760,
+          "total": 210461,
+          "latent_frames": 57,
+          "audio_latents": 320,
+          "grid": [
+            46,
+            80
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14025,
+          "num_ooms": 0
+        },
+        "vae_source": "sol",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "per_clip_denoise_seconds": [
+          1415.17,
+          1402.13
+        ],
+        "chain_clips": [
+          {
+            "latents_sha256": {
+              "video": "047def9464b6b803ad0868425b07da07a31265b276d4de57c2d0fbadbf327eab",
+              "audio": "68db581890763279fd49d421834392115cee8776a784575d9df30cc22edfc164"
+            },
+            "head_equals_prev_tail": null,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "839fae1aa5ddd7d79895a912e727bf9674513fa3c768bc88eebac5eb66f481e0",
+              "audio": "0bb8bf14127aacf3ad65ccc331f080e1f5c64c9bdc1cecf81e9224ce12f63bfd"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          }
+        ],
+        "chain_total_frames": 362,
+        "retake": null,
+        "v2v": null,
+        "inpaint": null,
+        "outpaint": null
+      },
+      "sol": {
+        "sol_vae_used": "on",
+        "sol_vae": {
+          "used": "on",
+          "decoder": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 1.08
+          },
+          "latent_tokens": 1575040,
+          "nonfinite_pixels": 0,
+          "seconds": 42.6
+        },
+        "vae_source": "sol",
+        "decode_seconds": 55.68,
+        "decode_vram_mib": [
+          11346,
+          12308
+        ],
+        "request_sol_vae": true
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-sol-gates-2026-11-23/runs/S8/output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 2560,
+            "height": 1472,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "15.083333",
+            "nb_read_frames": 362
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "15.075000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      }
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "name": "default",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 7.6
+    }
+  ],
+  "server": {
+    "port": 18699,
+    "pid": 55360,
+    "config": "outputs/h3-sol-gates-2026-11-23/_rt/config.h3solgates.yaml",
+    "started_at": "2026-11-24T00:07:25+09:00",
+    "stop": {
+      "at": "2026-11-24T00:56:29+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "fail",
+  "finished_at": "2026-11-24T00:56:31+09:00",
+  "workers_after": []
+}

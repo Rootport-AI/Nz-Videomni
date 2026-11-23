@@ -759,7 +759,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 生成の高速化（Acceleration）
 
-生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **pi-H3** の行があります（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」）。MiniMax H3 専用の **Sol-H3-VAE** は、いまは API・MCP と Gradio UI の Settings タブ（「Fast VAE」の行の Sol）から選べます（下の「[Sol-H3-VAE](#sol-h3-vae)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
+生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
 |------|--------|------------------|------------------|---------------------|
@@ -770,8 +770,8 @@ $env:PYTHONPATH = (Get-Location).Path
 | 埋め込み処理器の常駐（keep_resident_embeddings） | On / Off | **この項目はありません**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません**。API へ指定すると **422** | **実装済み**。既定は off | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ指定すると **422** |
 | VAE（映像の復元処理） | Default / PrunaVAED | **実装済み**。既定は Default（＝off） | Default のみ。PrunaVAED は **422**。**AviUtl2 の操作パネルでも Gradio UI の Settings タブでも、この行そのものが見えません** | LTX 2.5 と同じく Default のみで、行は見えません。PrunaVAED は **422** |
 | VRAM 16GB mode（ノイズ除去の計算の分割） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は on（中身は §7.6） |
-| pi-H3（少ないステップの生成。Gradio UI では Generate タブの単発だけ） | off / 4steps / 2steps | **この項目はありません**。行は見えません。API へ off 以外を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ off 以外を指定すると **422** | **実装済み**。既定は off（中身は下の「[pi-H3](#pi-h3)」） |
-| Sol-H3-VAE（軽量化した映像の復元処理。Gradio UI では Generate タブの単発だけ） | off / on（Gradio UI では「Fast VAE」の Sol） | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**（API・MCP・Gradio UI。AviUtl2 の操作パネルの行はこれから入れます）。既定は off（中身は下の「[Sol-H3-VAE](#sol-h3-vae)」） |
+| pi-H3（少ないステップの生成。Gradio UI では Generate タブの単発だけ） | off / 4steps / 2steps（両方の UI とも「Fast VAE」の行の pi-H3_4s・pi-H3_2s） | **この項目はありません**。行は見えません。API へ off 以外を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ off 以外を指定すると **422** | **実装済み**。既定は off（中身は下の「[pi-H3](#pi-h3)」） |
+| Sol-H3-VAE（軽量化した映像の復元処理。Gradio UI では Generate タブの単発だけ） | off / on（両方の UI とも「Fast VAE」の行の Sol） | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[Sol-H3-VAE](#sol-h3-vae)」） |
 
 **GGUF逆量子化の1カーネル化と先読み block swap を LTX 2.5 で併用したときの生成時間は、実測で 102.86 秒 → 39.28 秒＝61.8%短縮です。** 出力そのものは変わらず、**固定の検証用ジョブ17本すべてで動画のファイルが1バイトも変わっていない**ことを確認しています。残る PrunaVAED だけは LTX 2.5 で **422** で断られます——利用者が意図して on にしたときだけ付くものなので、効かないまま黙って通すより断ったほうが親切だという判断です（詳しくは §7.1 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75・§76・§77）。
 
@@ -882,7 +882,7 @@ GGUF ファイルの中で圧縮された形で持っている重みを計算に
 
 ### <a id="pi-h3"></a>pi-H3（MiniMax H3 の少ないステップの生成・`pi_h3`）
 
-MiniMax H3 を、4 ステップまたは 2 ステップで生成する高速化です。少ないステップで仕上がるように学習し直した差分を本体の重みに当て、最後の映像の復元も専用の軽い仕組みで行います。AviUtl2 の操作パネルの Settings の「生成の高速化」にある **pi-H3** の行の off / 4steps / 2steps で、他の項目と同じくジョブ単位で切り替えられます。**既定は off です。** 選んだ内容は保存され、AviUtl2 を起動し直しても保たれます。重みは `models\MiniMaxH3\VAE\pi-H3\` に置きます。
+MiniMax H3 を、4 ステップまたは 2 ステップで生成する高速化です。少ないステップで仕上がるように学習し直した差分を本体の重みに当て、最後の映像の復元も専用の軽い仕組みで行います。AviUtl2 の操作パネルの Settings の「生成の高速化」にある **Fast VAE** の行の pi-H3_4s / pi-H3_2s（使わないときは Off）で、他の項目と同じくジョブ単位で切り替えられます。**既定は off です。** 選んだ内容は保存され、AviUtl2 を起動し直しても保たれます。重みは `models\MiniMaxH3\VAE\pi-H3\` に置きます。
 
 - **4steps か 2steps を選んでいるあいだ、ステップ数と Shift（映像・音声）のスライダーは、選んだ方式の値で固定され、動かせません。** マウスを乗せると理由が出ます。off に戻すと、この 3 つは既定値に戻ります。Single・Chained・Edit（Retake・Outpainting・Inpainting）のどれでも同じです。
 - **LTX 2.3・LTX 2.5 を選んでいるあいだは、この行が見えません。** 選択は off へ戻ります（H3 に戻しても off のままです）。
@@ -907,7 +907,7 @@ MiniMax H3 の生成の最後に、内部表現から映像のフレームを作
 - **pi-H3 とは同時に使えません。** Gradio UI の「Fast VAE」では、どちらか 1 つしか選べません。API で両方を指定すると **422** で断られます。
 - **重みのファイルが無いときは、通常の VAE で最後まで生成します**（エラーにはなりません）。**動画が大きすぎるとき**（長い連結など）も、通常の VAE で最後まで生成します。どちらで作られたかは、メタデータの `sol_vae_used` で分かります（`"on"` が Sol-H3-VAE、`"on->off"` が通常の VAE。Sol-H3-VAE を選んだジョブにだけ入ります）。
 - **重みのファイルはあるのに形式が合わないとき**は、生成の最初でジョブが失敗し、合わなかった所を書いた文が出ます（壊れたファイルを入れ直すきっかけにしてください）。
-- **AviUtl2 の操作パネル**: Settings の行は、これから入れます。いまは下の Gradio UI・MCP・API から選べます。
+- **AviUtl2 の操作パネル**: Settings の「生成の高速化」にある「Fast VAE」の行の Sol で選びます。選んだ内容は保存され、AviUtl2 を起動し直しても保たれます。ステップ数と Shift のスライダーは固定されません。LTX 2.3・LTX 2.5 を選んでいるあいだは、この行が見えません（選択は Off に戻ります）。
 - **Gradio UI**: Settings タブの「生成の高速化」の区画の最後にある「Fast VAE」の Sol で選びます。効くのは **Generate タブの単発だけ**です。ステップ数と Shift のスライダーは固定されません。**選択は保存されません**（ページを開き直すと Off に戻ります）。
 - **MCP**: `submit_generate` と `submit_chain` の引数 `sol_vae`（`True` / `False`〔既定〕）で選びます。
 - **API**: `POST /generate` と `POST /generate/chain` の `sol_vae` です（正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2・§6.2b (j)）。連結・V2V・Retake では、つないだあとの動画の大きさで、Sol-H3-VAE を使えるかが決まります。

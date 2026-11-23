@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-23
+- 作成: 2026-07-15／最終更新: 2026-11-24
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -27,19 +27,65 @@
 
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。
+- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。Sol-H3-VAE（1-295）の重みの取得の確認も、ここにまとめた。
 - **これからすること**: 検証用の別の機械で、下のインストーラーの確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
-- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。本節が実機確認の項目の正本。
+- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。本節が実機確認の項目の正本。
 
 #### インストーラー（main へ取り込んだあと、検証用の別の機械で）
 
-前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3 のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
+前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3・Sol-H3-VAE のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
 
 - [ ] `install-MiniMaxH3.bat` を実行する → 最後の表で `pi_h3_4steps` と `pi_h3_2steps` の 2 行が `PASS` になる。
 - [ ] （続き）`models\MiniMaxH3\VAE\pi-H3\` を見る → `pi_h3_4step_dwd_adapter_int8_convrot.safetensors` と `pi_h3_2step_dwd_adapter_int8_convrot.safetensors` の 2 本があり、どちらも 2,192,176,240 バイト。
 - [ ] （続き）PowerShell で 2 本の SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §18.2 の値と一致する。
-- [ ] その機械で、操作パネルか Gradio のどちらかで pi-H3 を 4steps にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
-- 補足: pi-H3 がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
+- [ ] （続き）`install-MiniMaxH3.bat` の最後の表（1 つ目の項目で見た表）で、`h3_sol_vae` の行が `PASS` になっている。
+- [ ] （続き）`models\MiniMaxH3\VAE\Sol\` を見る → `minimax_h3_sol_vae_int8_convrot.safetensors` があり、大きさが設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.8 の「重みと取得」のバイト数と一致する。
+- [ ] （続き）PowerShell でこのファイルの SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 設計正本 §6.8 の「重みと取得」の値と一致する。
+- [ ] その機械で、操作パネルか Gradio のどちらかで「Fast VAE」を pi-H3_4s にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
+- [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
+- 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
+
+### 1-295. MiniMax H3 の Sol-H3-VAE（軽量化した映像の復元処理）を、操作パネルと Gradio から選べるようにする（起票：2026-11-24）
+
+- **概要**: サーバー側に高速化 Sol-H3-VAE（要求の欄 `sol_vae`）を足し（dev の `d0df8b87`）、操作パネルの Settings の pi-H3 の行を「Fast VAE」（Off・pi-H3_4s・pi-H3_2s・Sol）に改めた（`1e839faa`。配布用の aux2 を含む）。Gradio と MCP も対応した。GPU での確認と機械の確認、実機への配置は済み。残るのはオーナーの実機での確認。インストーラーの取得の確認は 1-294 にまとめた。
+- **出典**: 裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 108、作りは同 §6.8、サーバー側の確認は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §229、操作パネルの機械の確認と配置は同 §230、操作パネルの実装の記録はフロントエンド `Docs/DEVLOG.md` §179。本節が実機確認の項目の正本。
+
+前提: 実機への配置は済んでいる（実機のプラグインは配布用の aux2 と同じ中身）。バックエンドのサーバーを前から起動したままの場合は、起動し直してから確認する。`models\MiniMaxH3\VAE\Sol\minimax_h3_sol_vae_int8_convrot.safetensors` があることを確かめておく。画面上部のベースモデルの欄は MiniMax H3 にし、FL2VA の重みを読み込んでおく。操作パネルの言語は日本語にする。「（続き）」で始まる項目は、直前の項目の状態から続けて行う。下見の動画: GPU での確認で担当が作った連結（Off と Sol）と Inpainting の動画が、開発機の `outputs/h3-sol-gates-2026-11-23/runs/` の `S3`・`S2`・`S8` のフォルダーにある（`outputs/` は git の対象外で、開発機にだけある）。
+
+#### Settings の「Fast VAE」の行
+
+- [ ] Settings を開く → 「生成の高速化:」の欄に「Fast VAE」の行があり、ボタンが左から「Off」「pi-H3_4s」「pi-H3_2s」「Sol」の順に並び、Off が選ばれていて、ボタンの下に文が 1 行も出ていない。
+- [ ] （続き）pi-H3_4s を押す → ボタンの下に「pi-H3 の 4 ステップ版で生成します。」が出て、その下に赤い太字の「pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」と、それに続けて赤でも太字でもない「生成が高速になる代わりに、動画の品質は劣化します。」が出る。
+- [ ] （続き）pi-H3_2s を押す → 1 行目が「pi-H3 の 2 ステップ版で生成します。」に替わり、赤い太字の文と、それに続く赤でも太字でもない文は、pi-H3_4s のときと同じに出る。
+- [ ] （続き）Sol を押す → ボタンの下に「軽量化した復元処理（Sol-H3-VAE）で生成を高速化します。出力品質がわずかに低下する可能性があります。Solを使えない場合（動画が長すぎる等）には、代わりに通常のVAEが使われます。」だけが出て、赤い文は出ない。
+
+#### ステップ数のスライダー
+
+- [ ] Settings で pi-H3_4s を押し、Single タブを開く → ステップ数のスライダーが 4 で灰色になり、動かない。
+- [ ] （続き）Settings で Sol を押し、もう一度 Single タブを開く → ステップ数が 20 に戻っていて、スライダーをつまむと動く。
+
+#### ベースモデルの切り替えと、選択の保存
+
+- [ ] Settings で Sol を押したまま、画面上部のベースモデルの欄を LTX 2.3 に切り替えて Settings を開く → 「Fast VAE」の行が無い。
+- [ ] （続き）ベースモデルの欄を MiniMax H3 に戻して Settings を開く → 「Fast VAE」の行で Off が選ばれている。
+- [ ] Settings で Sol を押し、AviUtl2 を終了して起動し直してから Settings を開く → Sol が選ばれたまま。
+
+#### ふだんの使い方での絵と時間
+
+- [ ] Chained タブで、クリップを 4 本か 5 本にし（各 124 フレーム・1280×768）、Inventory の LoRA の棚の `minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16` のカードを押してプロンプト欄にタグを入れ、タグの強さ（`<lora:名前:強さ>` の最後の数）を 0.8 にし、ステップ数を 4 にし、シードの欄に 1234 を入れる。Settings の「Fast VAE」を Off にして生成し、終わったら Sol に替えて、ほかは何も変えずにもう 1 回生成する → 2 本とも完了する。Sol の mp4 を Toolbox の mp4 info に落とすと `"sol_vae_used": "on"` がある。
+- [ ] （続き）2 本を AviUtl2 のタイムラインに並べて、ふつうの速さで頭から終わりまで再生する → Sol の動画に、Off の動画には無い格子状の線（128 画素おきの縦や横の線）や、周期的なちらつきが、ふつうの再生で気にならない。
+- [ ] （続き）2 本の mp4 を mp4 info に落として、`generation_time_seconds` を比べる → Sol のほうが短い（参考の実測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §229.7）。
+
+#### 編集の機能の継ぎ目
+
+- [ ] Settings の「Fast VAE」を Sol にし、Edit タブの Inpainting で、マスクの白い部分を作り直す生成を 1 回行う → 完了し、できた動画を元の動画と見比べて、元の画素を残した部分と作り直した部分の境目に、色や明るさの段差が目立たない。
+- [ ] （続き）Sol のまま、Edit タブの Outpainting で、元の動画の外側を描き足す生成を 1 回行う → 完了し、元の動画の部分と描き足した部分の境目に、色や明るさの段差が目立たない。
+
+#### Gradio（Generate タブの単発）
+
+- [ ] ブラウザでバックエンドの Gradio の画面（`/ui`）を開き、MiniMax H3 を読み込んだ状態で Settings タブを開く → 「生成の高速化」の区画に「Fast VAE」のラジオがあり、選択肢に「Off」「pi-H3_4s」「pi-H3_2s」「Sol」がある。
+- [ ] （続き）Sol を選んで Generate タブを開く → ステップ数のスライダーを動かせる（固定の理由の行は出ない）。
+- [ ] （続き）Settings タブで pi-H3_4s を選ぶ → ラジオの下に、赤い太字の「pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」と、それに続けて赤でも太字でもない「生成が高速になる代わりに、動画の品質は劣化します。」が出る。
 
 ## 3. 将来の研究課題
 

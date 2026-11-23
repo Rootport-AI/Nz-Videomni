@@ -1586,7 +1586,9 @@ def test_pi_h3_radio_default_hidden_and_wired_into_generate_only():
     demo = _demo()
     en = LABELS["en"]
     radio, warning, caption = _pi_h3_parts(demo)
-    assert [v for _l, v in radio.choices] == ["off", "4steps", "2steps"]
+    # "Fast VAE": pi-H3's two choices and Sol-H3-VAE in one radio.
+    assert radio.label == en["accel_lbl_pi_h3"] == "Fast VAE"
+    assert radio.choices == [("Off", "off"), ("pi-H3_4s", "4steps"), ("pi-H3_2s", "2steps"), ("Sol", "sol")]
     assert radio.value == "off"
     assert radio.visible is False
     assert radio.info == en["accel_info_pi_h3"]
@@ -1633,6 +1635,37 @@ def test_pi_h3_radio_change_outputs_only_the_sliders_caption_and_warning():
     steps_u, _sv, _sa, cap_u, warn_u = dep.fn("off", scope)
     assert (steps_u["value"], steps_u["interactive"]) == (20, True)
     assert cap_u["visible"] is False and warn_u["visible"] is False
+    # Sol locks nothing and shows no pi-H3 warning.
+    steps_u, _sv, _sa, cap_u, warn_u = dep.fn("sol", scope)
+    assert (steps_u["value"], steps_u["interactive"]) == (20, True)
+    assert cap_u["visible"] is False and warn_u["visible"] is False
+
+
+def test_fast_vae_radio_is_split_into_pi_h3_and_sol_vae_by_dispatch(monkeypatch):
+    """dispatch() splits the radio's value once: "sol" -> pi_h3 "off" + sol_vae True."""
+    import gradio_ui.ui as ui_mod
+
+    seen = []
+    real = ui_mod.make_generate_handler
+
+    def spy_factory(api):
+        def gen(*a, **k):
+            seen.append((k["pi_h3"], k["sol_vae"]))
+            yield ("", "", None)
+        return gen
+
+    monkeypatch.setattr(ui_mod, "make_generate_handler", spy_factory)
+    demo = _demo()
+    monkeypatch.setattr(ui_mod, "make_generate_handler", real)
+    dep = next(d for d in demo.fns.values() if getattr(d.fn, "__name__", "") == "dispatch")
+    base = [
+        "p", "", 640, 384, False, 0, 0, 124, 24.0, -1, "none", 1.0, 1.0, 1.0, None, {},
+        "en", 1.0, 60.0, None, False, [], "", "same", "", "add", "", True, {}, 20, 12.0, 3.0, True,
+    ]
+    tail = [False, 11.0, 2.5, 0.25, "nag", 1.0, "sdpa", False, False, False, "default", False, False]
+    for value in ("off", "4steps", "2steps", "sol", None):
+        list(dep.fn(*base, value, *tail))
+    assert seen == [("off", False), ("4steps", False), ("2steps", False), ("off", True), ("off", False)]
 
 
 def test_pi_h3_texts_switch_language_with_the_owners_wording():
@@ -1642,8 +1675,10 @@ def test_pi_h3_texts_switch_language_with_the_owners_wording():
     for key in ("accel_warn_pi_h3", "cap_pi_h3_lock"):
         idx = next(i for i, (_c, k, _a) in enumerate(registry) if k == key)
         assert updates[idx]["value"] == LABELS["ja"][key]
-    assert LABELS["ja"]["accel_warn_pi_h3"] == "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。"
+    assert LABELS["ja"]["accel_warn_pi_h3"] == (
+        "<strong>pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。</strong>生成が高速になる代わりに、動画の品質は劣化します。")
     assert LABELS["en"]["accel_warn_pi_h3"] == (
-        "pi-H3 is not recommended when using Turbo LoRA or Turbo models.")
+        "<strong>pi-H3 is not recommended when using Turbo LoRA or Turbo models.</strong> "
+        "Generation is faster, but video quality is reduced.")
     assert LABELS["ja"]["cap_pi_h3_lock"] == "Settings の pi-H3 が有効のため固定"
     assert LABELS["en"]["cap_pi_h3_lock"] == "Fixed because pi-H3 is enabled in Settings"

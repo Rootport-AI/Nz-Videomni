@@ -52,6 +52,10 @@ LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結
 送る（``vae_mode`` と同じ規則）。ステップ数・shift との食い違いは送る前に検査せず、
 サーバーの 422 に任せる。LTX では ``"off"`` 以外が 422。
 
+``sol_vae``（MiniMax H3 の高速化 Sol-H3-VAE。真偽値）は ``pi_h3`` の後ろに置き、
+``True`` のときだけ送る。``pi_h3`` との同時指定は送る前に検査せず、サーバーの 422 に
+任せる。LTX では ``True`` が 422。
+
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
 違うときだけ送る）を持ち、読み出しは ``outputs`` の ``get_mp4_info`` が担う
@@ -251,6 +255,7 @@ async def submit_generate(
     source_audio_id: str | None = None,
     source_audio_strength: float | None = None,
     pi_h3: Literal["off", "4steps", "2steps"] = "off",
+    sol_vae: bool = False,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -260,7 +265,7 @@ async def submit_generate(
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
-    ``source_audio_id``・``pi_h3``（``"off"`` 以外）だけです。**``nag_enabled``（ネガティブプロンプト。
+    ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True`` だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -652,6 +657,16 @@ async def submit_generate(
             （``install-MiniMaxH3.bat`` で取得します）、本体の重みと合わないと
             422 MODEL_INCOMPATIBLE です。実際に使われたかは、ジョブ完了後の
             メタデータの ``pi_h3_used``（pi-H3 のジョブにだけ入ります）。
+        sol_vae: MiniMax H3 の高速化 Sol-H3-VAE（動画VAE の復号器を軽量化した
+            版で復号します）。既定の ``False`` ならキーは送られません。復号だけを
+            差し替えるので、ステップ数と shift は変わりません。**出力品質が
+            わずかに低下する可能性があります。** **MiniMax H3 専用で、LTX 2.3 /
+            LTX 2.5 で ``True`` を指定すると 422 FEATURE_UNSUPPORTED になります。**
+            ``pi_h3`` と同時に指定すると 422 VALIDATION_ERROR です。重みが無い、
+            または動画が大きすぎるときは、通常の VAE で復号し、メタデータの
+            ``sol_vae_used`` が ``"on->off"`` になります（生成は完走します。
+            Sol で復号したときは ``"on"``。``sol_vae`` のジョブにだけ入ります）。
+            重みは ``install-MiniMaxH3.bat`` で取得します。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -781,6 +796,10 @@ async def submit_generate(
     # step count / shifts here: the server's 422 is the source of truth.
     if pi_h3 != "off":
         payload["pi_h3"] = pi_h3
+    # sol_vae (MiniMax H3): sent only when True (the server's default is
+    # False). The pi_h3 exclusion is the server's 422, not checked here.
+    if sol_vae:
+        payload["sol_vae"] = True
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -966,6 +985,7 @@ async def submit_chain(
         "w46", "w49", "w52", "w55", "w58", "w61",
     ] = "standard",
     pi_h3: Literal["off", "4steps", "2steps"] = "off",
+    sol_vae: bool = False,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -988,7 +1008,8 @@ async def submit_chain(
     ただし次の引数は使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED に
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
-    ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です。
+    ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です
+    （``sol_vae=True`` も同じです）。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -1316,6 +1337,14 @@ async def submit_chain(
             で取得します）、本体の重みと合わないと 422 MODEL_INCOMPATIBLE です。
             実際に使われたかは、ジョブ完了後のメタデータの ``pi_h3_used``
             （pi-H3 のジョブにだけ入ります）。
+        sol_vae: submit_generate と同じ意味（MiniMax H3 の高速化 Sol-H3-VAE。
+            既定の ``False`` ならキーは送りません。連結・V2V・撮り直しの 1 回の
+            復号に効きます）。**MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True``
+            を指定すると 422 FEATURE_UNSUPPORTED になります。** ``pi_h3`` と
+            同時に指定すると 422 VALIDATION_ERROR です。重みが無い、または動画が
+            大きすぎる（つないだあとの動画で数えます）ときは、通常の VAE で
+            復号し、メタデータの ``sol_vae_used`` が ``"on->off"`` になります
+            （生成は完走します。Sol で復号したときは ``"on"``）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1409,6 +1438,9 @@ async def submit_chain(
     # pre-check, the server's 422 is the source of truth).
     if pi_h3 != "off":
         payload["pi_h3"] = pi_h3
+    # sol_vae: same rule as submit_generate (sent only when True).
+    if sol_vae:
+        payload["sol_vae"] = True
     # stage2_window: same rule as vae_mode (sent only when it differs from the
     # server default "standard"). No pre-check here: the server's 422 is the
     # single source of truth (full_length shape / V2V context / retake window).

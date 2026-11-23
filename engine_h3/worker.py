@@ -43,7 +43,7 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3]}
+   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3], [sol_vae]}
       One T2V, I2V, A2V, Outpainting or Inpainting job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -93,6 +93,14 @@ Protocol (one JSON object per line; parent -> worker):
       ``{"steps", "path"}`` (``steps`` 4 or 2, equal to ``num_inference_steps``;
       ``path`` the pi-H3 file; ``engine_h3.pipeline_h3.H3PiH3Input``). Unknown
       inner keys are logged once and ignored. A chain takes it too (every clip).
+      ``sol_vae`` (``engine_h3.sol_vae``): absent / null = not a Sol-H3-VAE
+      job, else ``{"path"}`` (a string, empty allowed: no file there = the
+      stock video decoder decodes, ``sol_vae_used`` "on->off"; a file that is
+      there but does not fit fails the job before the text encoder; a clip
+      above ``sol_vae.MAX_LATENT_TOKENS`` latent tokens is decoded by the stock
+      decoder too; ``engine_h3.pipeline_h3.H3SolVaeInput``). Not with
+      ``pi_h3``. Unknown inner keys are logged once and ignored. A chain takes
+      it too (its one decode).
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
@@ -147,9 +155,11 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, [pi_h3_used], h3: {phases, quant_backends, [loras], [a2v], [references], [vsf], [outpaint],
-             [inpaint], [pi_h3]}}
+             images_used, [pi_h3_used], [sol_vae_used], h3: {phases, quant_backends, [loras], [a2v], [references],
+             [vsf], [outpaint], [inpaint], [pi_h3], [sol_vae]}}
             (``pi_h3_used`` "4steps" / "2steps" and ``h3.pi_h3`` only for a pi-H3 job)
+            (``sol_vae_used`` "on" / "on->off" and ``h3.sol_vae`` only for a Sol-H3-VAE job:
+            ``pipeline_h3.sol_record``)
             (``h3.outpaint`` only for an Outpainting job, 台帳 §1-125: canvas
             [W_c, H_c], pads, source [W_s, H_s], aligned [x0, y0, x1, y1],
             fixed_tokens, generated_tokens, feather_px, audio_strength,
@@ -291,7 +301,7 @@ _GENERATE_FIELDS = frozenset({
     "op", "prompt", "seed", "width", "height", "num_frames", "frame_rate",
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
-    "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint", "pi_h3",
+    "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint", "pi_h3", "sol_vae",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -328,6 +338,8 @@ _OUTPAINT_FIELDS = frozenset({
 _INPAINT_FIELDS = frozenset({"source_path", "mask_path", "audio_strength", "feather_px"})
 #: The keys of ``pi_h3`` this engine reads (VERIFICATION_LOG §223).
 _PI_H3_FIELDS = frozenset({"steps", "path"})
+#: The keys of ``sol_vae`` this engine reads (``engine_h3.sol_vae``).
+_SOL_VAE_FIELDS = frozenset({"path"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -676,10 +688,35 @@ def _pi_h3(msg: dict) -> tuple:
     return H3PiH3Input(steps=steps, path=path), sorted(k for k in raw if k not in _PI_H3_FIELDS)
 
 
+def _sol_vae(msg: dict) -> tuple:
+    """``sol_vae`` -> ``(H3SolVaeInput | None, ignored inner keys)``.
+
+    Absent / null = not a Sol-H3-VAE job. Else ``{"path"}``: ``path`` a string,
+    which may be empty (no file = the stock video decoder decodes; the
+    pipeline's ``sol_start`` decides, and checks the file when there is one).
+    """
+    from engine_h3.pipeline_h3 import H3SolVaeInput  # noqa: PLC0415
+
+    raw = msg.get("sol_vae")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"sol_vae は path を持つオブジェクトで渡してください（{type(raw).__name__}）")
+    path = raw.get("path")
+    if not isinstance(path, str):
+        raise ValueError(f"sol_vae の path は文字列で渡してください（{path!r}）")
+    return H3SolVaeInput(path=path), sorted(k for k in raw if k not in _SOL_VAE_FIELDS)
+
+
+def _sol_vae_summary(sol) -> str:
+    """The log's ``sol_vae=``: the file name, or ``(no path)``."""
+    return Path(sol.path).name if sol.path.strip() else "(no path)"
+
+
 def _generate_request(
     msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
     references: tuple | None = None, *, negative_prompt: str = "", vsf_scale: float = 1.5, outpaint=None,
-    inpaint=None, pi_h3=None,
+    inpaint=None, pi_h3=None, sol_vae=None,
 ):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
@@ -699,6 +736,7 @@ def _generate_request(
     ``inpaint`` in one job are refused (``ValueError``).
     ``pi_h3``: the already parsed ``H3PiH3Input``; ``None`` falls back to
     parsing the message (a message without the key is not a pi-H3 job).
+    ``sol_vae``: the same for ``H3SolVaeInput``.
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -721,6 +759,8 @@ def _generate_request(
         raise ValueError("outpaint と inpaint は同じジョブで併用できません")
     if pi_h3 is None:
         pi_h3, _ignored = _pi_h3(msg)
+    if sol_vae is None:
+        sol_vae, _ignored = _sol_vae(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -745,6 +785,7 @@ def _generate_request(
         outpaint=outpaint,
         inpaint=inpaint,
         pi_h3=pi_h3,
+        sol_vae=sol_vae,
     )
 
 
@@ -760,6 +801,7 @@ def _do_generate(msg: dict) -> None:
     outpaint, outpaint_ignored = _outpaint(msg)
     inpaint, inpaint_ignored = _inpaint(msg)
     pi_h3, pi_h3_ignored = _pi_h3(msg)
+    sol_vae, sol_vae_ignored = _sol_vae(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
@@ -769,10 +811,11 @@ def _do_generate(msg: dict) -> None:
     ignored += [f"outpaint.{k}" for k in outpaint_ignored]
     ignored += [f"inpaint.{k}" for k in inpaint_ignored]
     ignored += [f"pi_h3.{k}" for k in pi_h3_ignored]
+    ignored += [f"sol_vae.{k}" for k in sol_vae_ignored]
     req = _generate_request(
         msg, images=images, loras=loras, source_audio=source_audio, references=references,
         negative_prompt=negative_prompt, vsf_scale=vsf_scale, outpaint=outpaint, inpaint=inpaint,
-        pi_h3=pi_h3,
+        pi_h3=pi_h3, sol_vae=sol_vae,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -803,6 +846,7 @@ def _do_generate(msg: dict) -> None:
             f"pi_h3=({req.pi_h3.steps}, {Path(req.pi_h3.path).name}) "
             if req.pi_h3 is not None else ""
         )
+        + (f"sol_vae={_sol_vae_summary(req.sol_vae)} " if req.sol_vae is not None else "")
         + (f"neg=vsf(scale={req.vsf_scale}) " if req.negative_prompt else "neg=off ")
         + f"-> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
@@ -939,12 +983,14 @@ def _do_generate_chain(msg: dict) -> None:
     source, source_ignored = _chain_source(msg)
     retake, retake_ignored = _chain_retake(msg)
     pi_h3, pi_h3_ignored = _pi_h3(msg)
+    sol_vae, sol_vae_ignored = _sol_vae(msg)
     ignored = sorted(k for k in msg if k not in _CHAIN_FIELDS)
     ignored += [f"clips[].{k}" for k in clip_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
     ignored += [f"source.{k}" for k in source_ignored]
     ignored += [f"retake.{k}" for k in retake_ignored]
     ignored += [f"pi_h3.{k}" for k in pi_h3_ignored]
+    ignored += [f"sol_vae.{k}" for k in sol_vae_ignored]
     # The shared settings, read by the single job's rules. The prompt and the
     # frame count are each clip's; ``clips[0]``'s stand in for them here.
     base_msg = {k: v for k, v in msg.items() if k in _CHAIN_FIELDS}
@@ -956,7 +1002,7 @@ def _do_generate_chain(msg: dict) -> None:
     ignored += [f"nag.{k}" for k in nag_ignored]
     base = _generate_request(
         base_msg, images=(), loras=loras, source_audio=None, references=(),
-        negative_prompt=negative_prompt, vsf_scale=vsf_scale, pi_h3=pi_h3,
+        negative_prompt=negative_prompt, vsf_scale=vsf_scale, pi_h3=pi_h3, sol_vae=sol_vae,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -973,6 +1019,7 @@ def _do_generate_chain(msg: dict) -> None:
         + (f"source={(Path(source.path).name, source.context_frames)} " if source is not None else "")
         + (f"retake={(Path(retake.path).name, retake.audio_strength)} " if retake is not None else "")
         + (f"pi_h3=({base.pi_h3.steps}, {Path(base.pi_h3.path).name}) " if base.pi_h3 is not None else "")
+        + (f"sol_vae={_sol_vae_summary(base.sol_vae)} " if base.sol_vae is not None else "")
         + (f"neg=vsf(scale={base.vsf_scale}) " if base.negative_prompt else "neg=off ")
         + f"-> {base.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")

@@ -221,7 +221,8 @@ def test_unsupported_features_per_family():
     # LTX 2.5 用の IC-LoRA と engine25 の 1 段原寸の経路）。順序は REJECT_TABLE の順。
     # VRAM 16GB mode で 3 件目 ``vram16_mode`` が加わった（MiniMax H3 専用。
     # 2.5 も同じく断る）。単発の A2V の ``source_audio``、Ref2VA の
-    # ``references``、pi-H3 の ``pi_h3``（どれも MiniMax H3 専用）が続く。
+    # ``references``、pi-H3 の ``pi_h3``、Sol-H3-VAE の ``sol_vae``（どれも
+    # MiniMax H3 専用）が続く。
     assert engines.unsupported_features("ltx") == (
         "keep_resident_embeddings",
         "alpha_gen",
@@ -229,6 +230,7 @@ def test_unsupported_features_per_family():
         "source_audio",
         "references",
         "pi_h3",
+        "sol_vae",
     )
     features = engines.unsupported_features("ltx25")
     # 系統ごとの一覧は「その系統のアダプタが宣言したものだけ」である。それは

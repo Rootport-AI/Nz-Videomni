@@ -2000,6 +2000,7 @@ class PipelineManager:
                     vram16_mode_used=outcome.vram16_mode_used,
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                     pi_h3_used=getattr(outcome, "pi_h3_used", None),
+                    sol_vae_used=getattr(outcome, "sol_vae_used", None),
                 )
 
             result = JobResult(
@@ -2067,6 +2068,7 @@ class PipelineManager:
         peak_vram_reserved_mb=None,
         clip_a2v_provenance=None,
         pi_h3_used=None,
+        sol_vae_used=None,
     ) -> None:
         cm = chain_meta or {}
         # The overlap and the stage-2 window as the ENGINE ran them: the chain
@@ -2151,6 +2153,9 @@ class PipelineManager:
         # other chain's metadata.json is unchanged.
         if pi_h3_used is not None:
             metadata["pi_h3_used"] = pi_h3_used
+        # The same for Sol-H3-VAE: present on a sol_vae chain only.
+        if sol_vae_used is not None:
+            metadata["sol_vae_used"] = sol_vae_used
         # V2V continuation (additive): only present when a source_video was used,
         # so a chain without one carries no ``v2v`` key. The engine's (or mock's)
         # chain.v2v sub-dict + the app-side provenance (source_video_id,
@@ -2446,6 +2451,14 @@ class PipelineManager:
         pi_h3_used = getattr(outcome, "pi_h3_used", None)
         if pi_h3_used is not None:
             metadata["pi_h3_used"] = pi_h3_used
+        # Acceleration, MiniMax H3 only: whether Sol-H3-VAE decoded ("on") or
+        # the stock video decoder did ("on->off": no file, or the clip too
+        # large), the worker's ``done`` (the mock's from the asset's file).
+        # Present on a sol_vae job only, as ``pi_h3_used``; the engine's own
+        # record rides ``metadata["h3"]["sol_vae"]``.
+        sol_vae_used = getattr(outcome, "sol_vae_used", None)
+        if sol_vae_used is not None:
+            metadata["sol_vae_used"] = sol_vae_used
         # IC-LoRA: additive block, only present for lora jobs, so non-lora
         # metadata carries no ``ic_lora`` key. (``loras``/``reference_video_id``
         # also appear inside the frozen-additive ``request`` dump.)

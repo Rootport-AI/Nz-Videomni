@@ -91,6 +91,7 @@ from .presets import (
 )
 from .styles import CUSTOM_CSS
 from .constraints import (
+    FAST_VAE_SOL,
     PI_H3_OFF,
     active_scope,
     comfort_table_missing,
@@ -99,6 +100,7 @@ from .constraints import (
     pi_h3_sampling_updates,
     scope_constraints,
     single_scope_updates,
+    split_fast_vae,
 )
 from .comfort import (
     STAGE2_WINDOW_DEFAULT,
@@ -1329,8 +1331,13 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # (constraints.pi_h3_locked_values). The warning below it is not
                 # gated (a gated control's value is rewritten on reset); its
                 # visibility follows the radio's .change.
+                # "Fast VAE": the same radio also carries Sol-H3-VAE ("sol"),
+                # split into ``pi_h3`` / ``sol_vae`` at one place
+                # (constraints.split_fast_vae: dispatch() and the radio's
+                # .change); what follows reads the pi-H3 value as before.
                 accel_pi_h3 = reg(gr.Radio(
-                    choices=[("off", "off"), ("4steps", "4steps"), ("2steps", "2steps")],
+                    choices=[("Off", "off"), ("pi-H3_4s", "4steps"), ("pi-H3_2s", "2steps"),
+                             ("Sol", FAST_VAE_SOL)],
                     value="off",
                     label=L("accel_lbl_pi_h3"),
                     info=L("accel_info_pi_h3"),
@@ -1512,6 +1519,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # The Settings pi-H3 radio is an input so a reload onto another H3
         # weight keeps the sliders locked while a choice is on.
         def on_gen_scope_change(scope_v, w, h, nf, cfg_v, lang_v, pi_h3_v):
+            pi_h3_v, _sol = split_fast_vae(pi_h3_v)
             return single_scope_updates(scope_constraints(scope_v), lang_v,
                                         pi_h3_v) + (
                 _spill_warning_for_scope(w, h, nf, cfg_v, scope_v, lang_v),)
@@ -1527,9 +1535,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
 
         # pi-H3 radio: the three sampling sliders (locked at the choice's
         # served values, or back to the scope's own look / defaults), the lock
-        # caption, and the warning (shown while a choice is on). Nothing else
-        # on the Generate tab is touched.
+        # caption, and the warning (shown while a pi-H3 choice is on; Sol is
+        # split off first, so it locks nothing and shows no warning). Nothing
+        # else on the Generate tab is touched.
         def on_pi_h3_change(pi_h3_v, scope_v):
+            pi_h3_v, _sol = split_fast_vae(pi_h3_v)
             return pi_h3_sampling_updates(scope_constraints(scope_v), pi_h3_v) + (
                 gr.update(visible=pi_h3_v not in (None, "", PI_H3_OFF)),)
 
@@ -1618,7 +1628,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # keyframe grid handed over as the single ``kf_slots`` list in
                 # third position); nag_*/neg_method/vsf_* and the
                 # Acceleration/Output fields are passed as keywords since they
-                # sit at the end of generate()'s signature.
+                # sit at the end of generate()'s signature. The Fast VAE radio
+                # is split into its two fields here (the one place).
+                pi_h3_v, sol_vae_v = split_fast_vae(accel_pi_h3_v)
                 yield from generate(
                     prompt_v, negative_v, kf_slot_values,
                     width_v, height_v, crop_en_v, crop_w_v, crop_h_v,
@@ -1641,7 +1653,7 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     num_inference_steps=steps_v, shift_video=shift_video_v,
                     shift_audio=shift_audio_v,
                     vram16_mode=bool(accel_vram16_v),
-                    pi_h3=accel_pi_h3_v or PI_H3_OFF)
+                    pi_h3=pi_h3_v, sol_vae=sol_vae_v)
                 return
 
             rows = batch_rows_v or []

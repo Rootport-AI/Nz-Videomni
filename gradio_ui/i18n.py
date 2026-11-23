@@ -135,11 +135,18 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vram16": "VRAM 16GB mode (MiniMax H3)",
         "accel_info_vram16": ("For MiniMax H3 only. Splits the denoising computation "
                               "so it fits in 16GB of VRAM. Precision is not changed."),
-        # pi-H3 (MiniMax H3 only): the Settings radio, its warning (the
-        # owner's wording, verbatim) and the Generate tab's lock caption.
-        "accel_lbl_pi_h3": "pi-H3",
-        "accel_info_pi_h3": "Generates with MiniMax H3 in 4 steps or 2 steps.",
-        "accel_warn_pi_h3": "pi-H3 is not recommended when using Turbo LoRA or Turbo models.",
+        # Fast VAE (MiniMax H3 only): the Settings radio (pi-H3 and
+        # Sol-H3-VAE), its pi-H3 warning (the owner's wording, verbatim) and
+        # the Generate tab's lock caption.
+        "accel_lbl_pi_h3": "Fast VAE",
+        "accel_info_pi_h3": ("pi-H3_4s / 2s: generates with the 4-step / 2-step pi-H3. "
+                             "Sol: a lightweight decoder (Sol-H3-VAE) speeds up generation. "
+                             "Output quality may be slightly reduced. "
+                             "When Sol cannot be used (e.g. the video is too long), the standard VAE is used instead."),
+        # The warning is the red bold <strong> (styles.py .pi-h3-warning);
+        # the sentence after it is in the plain text.
+        "accel_warn_pi_h3": ("<strong>pi-H3 is not recommended when using Turbo LoRA or Turbo models.</strong> "
+                             "Generation is faster, but video quality is reduced."),
         "cap_pi_h3_lock": "Fixed because pi-H3 is enabled in Settings",
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
@@ -704,9 +711,13 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_vram16": "VRAM 16GB mode（MiniMax H3）",
         "accel_info_vram16": ("MiniMax H3 専用。ノイズ除去の計算を分割して "
                               "VRAM 16GB に収めます。精度は変えません。"),
-        "accel_lbl_pi_h3": "pi-H3",
-        "accel_info_pi_h3": "MiniMax H3 を 4 ステップまたは 2 ステップで生成します。",
-        "accel_warn_pi_h3": "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。",
+        "accel_lbl_pi_h3": "Fast VAE",
+        "accel_info_pi_h3": ("pi-H3_4s／2s: pi-H3 の 4／2 ステップ版で生成します。"
+                             "Sol: 軽量化した復元処理（Sol-H3-VAE）で生成を高速化します。"
+                             "出力品質がわずかに低下する可能性があります。"
+                             "Solを使えない場合（動画が長すぎる等）には、代わりに通常のVAEが使われます。"),
+        "accel_warn_pi_h3": ("<strong>pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。</strong>"
+                             "生成が高速になる代わりに、動画の品質は劣化します。"),
         "cap_pi_h3_lock": "Settings の pi-H3 が有効のため固定",
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",

@@ -266,6 +266,14 @@ class H3PiH3Input:
     path: str
 
 
+@dataclass(frozen=True)
+class H3SolVaeInput:
+    """Sol-H3-VAE (``engine_h3.sol_vae``): the decoder file. ``path`` may be empty or
+    name no file: the job then decodes with the stock video decoder (:func:`sol_start`)."""
+
+    path: str
+
+
 def ordered_references(refs) -> list:
     """The references in the order the engine uses everywhere: pictures, videos,
     then audios, each kind by ascending ``slot`` (stable)."""
@@ -311,6 +319,8 @@ class H3GenerateRequest:
     #: pi-H3 (VERIFICATION_LOG §223): ``None`` = as before (the sigma list, the
     #: initial state, the DiT and the decode of every other job are unchanged).
     pi_h3: H3PiH3Input | None = None
+    #: Sol-H3-VAE: ``None`` = as before (the decode of every other job is unchanged).
+    sol_vae: H3SolVaeInput | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -370,6 +380,8 @@ def validate_request(req: H3GenerateRequest, *, dit_path: str | None = None) -> 
             # the text encoder runs (the keys themselves never refuse a job).
             inspect_lora_file(lora.path)
     pi = req.pi_h3
+    if pi is not None and req.sol_vae is not None:
+        raise ValueError("pi-H3 と Sol-H3-VAE は同時に指定できません")
     if pi is not None:
         import h3_pih3_format as PF  # noqa: PLC0415
 
@@ -489,6 +501,47 @@ def validate_request(req: H3GenerateRequest, *, dit_path: str | None = None) -> 
             raise ValueError("Inpainting は音声からの生成（A2V）と併用できません（音声は元動画のものを使います）")
         if tuple(req.references or ()):
             raise ValueError("Inpainting は参照（Ref2VA）と併用できません")
+
+
+def sol_start(req: H3GenerateRequest, device) -> dict | None:
+    """Sol-H3-VAE's decision at the job's start (once, after :func:`validate_request` and
+    before the text encoder; the decode follows it whatever happens to the file meanwhile).
+
+    None for a job without ``sol_vae``. Else ``{"path", "fallback"}``: ``fallback`` is
+    ``sol_vae.file_fallback``'s reason when there is no file (the stock video decoder then
+    decodes and the job completes), None when the file is there and fits. A file that is
+    there but does not fit (``sol_vae.file_problems``, the header only) refuses the job, and
+    so does, on a CUDA device, a comfy-kitchen without ``rms_rope_split_half_``. The size
+    of the clip is judged at the decode's entry (``sol_vae.size_fallback``)."""
+    sol = req.sol_vae
+    if sol is None:
+        return None
+    from engine_h3 import sol_vae as SV  # noqa: PLC0415
+
+    reason = SV.file_fallback(sol.path)
+    if reason is not None:
+        return {"path": sol.path, "fallback": reason}
+    problems = SV.file_problems(sol.path)
+    if problems:
+        raise ValueError(
+            f"Sol-H3-VAE のファイル（{os.path.basename(str(sol.path))}）の照合で、"
+            f"合わない所が {len(problems)} か所ありました: " + "；".join(problems[:5])
+            + (f"；ほか {len(problems) - 5} か所" if len(problems) > 5 else "")
+        )
+    if torch.device(device).type == "cuda":
+        problem = SV.kitchen_problem()
+        if problem is not None:
+            raise ValueError(problem)
+    return {"path": sol.path, "fallback": None}
+
+
+def sol_record(entry: dict) -> tuple[str, dict]:
+    """``(sol_vae_used, h3.sol_vae)`` of a ``sol_vae`` job from its decode record: "on" with
+    ``entry["sol"]`` when Sol decoded, "on->off" with ``entry["sol_fallback"]`` (the reason)
+    when the stock video decoder did."""
+    if entry.get("vae_source") == "sol":
+        return "on", {"used": "on", **entry.get("sol", {})}
+    return "on->off", {"used": "on->off", **entry.get("sol_fallback", {})}
 
 
 def require_fp32_matmul() -> None:
@@ -929,6 +982,8 @@ class H3Pipeline:
             # ``dit_path``: a pi-H3 job's file is matched against this DiT's header
             # (only that job reads it).
             validate_request(req, dit_path=self.paths.transformer)
+            # Sol-H3-VAE: decided once here (None for every other job).
+            sol = sol_start(req, self.device)
             # Ascending frame order (stable): the condition rows and the vision
             # tower's pictures follow it (first frame then last frame, as in the
             # official FL2VA).
@@ -1196,6 +1251,9 @@ class H3Pipeline:
                 if pi is not None:
                     # pi-H3: the frames come from the DWD head (never the video decoder).
                     composite_kw["dwd"] = {"path": pi.path, "features": pi_capture.pop("features")}
+                if sol is not None:
+                    # Sol-H3-VAE: the start's decision; only such a job passes the key.
+                    composite_kw["sol"] = sol
                 del pi_capture
                 with phases.phase("decode") as entry:
                     # Strength 1.0 keeps the audio latents as they are: the mp4
@@ -1263,6 +1321,9 @@ class H3Pipeline:
         if pi is not None:
             h3["pi_h3"] = pi_record             # only for a pi-H3 job, the same way
             extra["pi_h3_used"] = pi_record.get("choice")
+        if req.sol_vae is not None:
+            # only for a sol_vae job, the same way
+            extra["sol_vae_used"], h3["sol_vae"] = sol_record(phases.data.get("decode", {}))
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -2204,7 +2265,7 @@ class H3Pipeline:
     def _decode(
         self, req, video_lat: torch.Tensor, audio_lat: torch.Tensor, entry: dict, keep=False, source_wave=None,
         *, trim_head: int = 0, handle_path: str | None = None, composite=None,
-        crop_to: tuple[int, int] | None = None, dwd: dict | None = None,
+        crop_to: tuple[int, int] | None = None, dwd: dict | None = None, sol: dict | None = None,
     ) -> int:
         """Video decoder, audio VAE, mp4. ``source_wave`` (A2V at strength 1.0):
         the source waveform ``[2, N]`` float32 goes into the mp4 instead of the
@@ -2236,13 +2297,36 @@ class H3Pipeline:
         evaluation's ``dwd.DWDFeatures``; ``video_lat`` is not decoded and the
         video decoder is neither built nor touched (a kept one stays as it is).
         ``entry["dwd"]`` records the head's read and its chunks. Everything
-        after the frames is the same. None (the default) = as before."""
+        after the frames is the same. None (the default) = as before.
+
+        ``sol`` (Sol-H3-VAE, ``engine_h3.sol_vae``): :func:`sol_start`'s
+        ``{"path", "fallback"}``. Without a start fallback, the latents
+        themselves are judged here (``sol_vae.size_fallback``: a clip above
+        ``MAX_LATENT_TOKENS`` latent tokens is too large); when neither stops
+        it, the frames come from the Sol decoder read for this decode only
+        (never kept; a kept video decoder stays as it is, on the CPU), with
+        ``entry["vae_source"] = "sol"`` and ``entry["sol"]`` (the read, the
+        latent tokens, the non-finite count, the seconds). Otherwise the stock
+        video decoder decodes as before and ``entry["sol_fallback"]`` records
+        the reason. Everything after the frames is the same. None (the
+        default) = as before."""
         from engine_h3.audio_vae import H3AudioVAE  # noqa: PLC0415
         from engine_h3.media_out import audio_keep_samples, write_mp4  # noqa: PLC0415
         from engine_h3.video_vae import H3VideoDecoder  # noqa: PLC0415
 
         resident = self._resident or {}
         self._progress("decode", 0, 3)
+        sol_use = False
+        if sol is not None:
+            from engine_h3 import sol_vae as SV  # noqa: PLC0415
+
+            tokens = SV.latent_tokens(video_lat.shape)
+            reason = sol["fallback"] or SV.size_fallback(video_lat.shape)
+            if reason is None:
+                sol_use = True
+            else:
+                entry["sol_fallback"] = {"reason": reason, "latent_tokens": tokens,
+                                         "max_latent_tokens": SV.MAX_LATENT_TOKENS}
         if dwd is not None:
             from engine_h3.dwd import DWDDecoder  # noqa: PLC0415
 
@@ -2252,6 +2336,19 @@ class H3Pipeline:
             try:
                 frames = dec.decode(dwd.pop("features"))
                 entry["dwd"] = {"head": dec.load_report, "chunks": dec.chunks,
+                                "seconds": round(time.perf_counter() - started, 2)}
+            finally:
+                del dec
+                _free_cuda()
+        elif sol_use:
+            entry["vae_source"] = "sol"
+            started = time.perf_counter()
+            dec = SV.SolDecoder.from_file(sol["path"], device=self.device)
+            try:
+                # CPU uint8 [F, H, W, 3], as the video decoder returns it.
+                frames = dec.decode(video_lat)
+                entry["sol"] = {"decoder": dec.load_report, "latent_tokens": dec.last_stats["latent_tokens"],
+                                "nonfinite_pixels": dec.last_stats["nonfinite_pixels"],
                                 "seconds": round(time.perf_counter() - started, 2)}
             finally:
                 del dec

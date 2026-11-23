@@ -535,6 +535,7 @@ def test_shipped_assets_are_download_files_under_a_map():
             assert any(fl["path"] == to or fl["path"].startswith(to + "/") for to in tos), fl["path"]
     (pi,) = [dl for dl in manifest["downloads"] if dl["repo"] == "Lakonik/pi-H3"]
     assert sorted(pi["include"]) == sorted(Path(p).name for p in PI_FILES.values())
+    assert not any("*" in pattern for pattern in pi["include"])  # one file per line
     for fl in pi["files"]:
         assert fl["min"] < 2_192_176_240
     # every downloaded name is claimed by a map entry (top-level files)

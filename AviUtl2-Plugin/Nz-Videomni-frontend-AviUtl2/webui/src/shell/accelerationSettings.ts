@@ -113,6 +113,19 @@
  *    `vram16Mode` way: LTX 2.3 / 2.5 publish `pi_h3` in
  *    `unsupported_features`, and `AppShell` hides the row and writes a
  *    leftover choice back to `"off"`.
+ *  - `solVae` — REAL (2026-11-24, Sol-H3-VAE). MiniMax H3's lightweight
+ *    distilled video decoder: only the decode is swapped (the step count and
+ *    the shifts are untouched), and the pixels differ slightly from the
+ *    standard decoder's. Sent as `sol_vae`; the server default is `false`, so
+ *    the key rides along only while it is ON (the `keep_resident` direction).
+ *    It shares ONE Settings row ("Fast VAE") with `piH3`: the row's four
+ *    buttons are written by the single {@link fastVaeSettings} rule, so the
+ *    two are never on together (the server 422s that pair), and
+ *    {@link readStoredAcceleration} folds a stored pair back the same way.
+ *    The fields stay separate because the existing "pi-H3 is on" checks (the
+ *    slider lock, the dropped sampling values, the red note) must not fire on
+ *    Sol. Scope: LTX 2.3 / 2.5 publish `sol_vae` in `unsupported_features`,
+ *    and `AppShell` hides the row and writes a leftover `true` back to `false`.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -132,6 +145,12 @@ export type VaeMode = "default" | "prune_vaed";
  * `api/models.py` `pi_h3` literal as of 2026-11-23 (ruling 107) — if the
  * backend's set of values ever changes, update both sides together. */
 export type PiH3Mode = "off" | "4steps" | "2steps";
+
+/** The Settings panel's "Fast VAE" row: one choice over the two stored fields
+ * `piH3` and `solVae` (2026-11-24). `"sol"` is Sol-H3-VAE; the other three are
+ * the pi-H3 choices verbatim. Not an API value — {@link fastVaeSettings} maps
+ * it onto the two fields, {@link fastVaeChoice} maps them back. */
+export type FastVaeChoice = PiH3Mode | "sol";
 
 /** The Acceleration section's full state — one object shared by
  * Create/Chain/Batch, owned by `AppShell`. */
@@ -185,6 +204,13 @@ export interface AccelerationSettings {
    * `pi_h3` — but only while not `"off"` (the server default). LTX 2.3 / 2.5
    * publish the name in `unsupported_features`, so the row is hidden there. */
   piH3: PiH3Mode;
+  /** REAL (2026-11-24): Sol-H3-VAE — MiniMax H3 only. Swaps the video decoder
+   * for the lightweight distilled one (the pixels differ slightly). Sent as
+   * `sol_vae` — but only while ON, since the server defaults to `false`. Never
+   * on together with a {@link piH3} choice other than `"off"`: both are written
+   * by {@link fastVaeSettings} only. LTX 2.3 / 2.5 publish the name in
+   * `unsupported_features`, so the row is hidden there. */
+  solVae: boolean;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -268,6 +294,10 @@ export const VRAM16_MODE_SERVER_DEFAULT = true;
  * a choice. On LTX the row is hidden and the stored value is reset to this
  * default, so an absent key is all an LTX request ever carries. */
 export const PI_H3_DEFAULT: PiH3Mode = "off";
+/** Server default for `sol_vae` as of 2026-11-24: `false`. Direction matches
+ * `keep_resident`: the key rides along only while the user turns it ON. On LTX
+ * the row is hidden and the stored value is reset to this default. */
+export const SOL_VAE_SERVER_DEFAULT = false;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -294,8 +324,25 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
   piH3: PI_H3_DEFAULT,
+  solVae: SOL_VAE_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
+
+/** The pressed button of the "Fast VAE" row: the pi-H3 choice while it is not
+ * `"off"`, else `"sol"` while Sol-H3-VAE is on, else `"off"`. */
+export function fastVaeChoice(acceleration: Pick<AccelerationSettings, "piH3" | "solVae">): FastVaeChoice {
+  if (acceleration.piH3 !== "off") return acceleration.piH3;
+  if (acceleration.solVae) return "sol";
+  return "off";
+}
+
+/** The two stored fields one "Fast VAE" button writes — the ONLY way the row
+ * changes them, so a pi-H3 choice and Sol are never on together: `"sol"` is
+ * pi-H3 off + Sol on; any other choice is that pi-H3 choice + Sol off. */
+export function fastVaeSettings(choice: FastVaeChoice): Pick<AccelerationSettings, "piH3" | "solVae"> {
+  if (choice === "sol") return { piH3: "off", solVae: true };
+  return { piH3: choice, solVae: false };
+}
 
 /**
  * The settings object with the named fields forced back to their SERVER default
@@ -346,6 +393,7 @@ export function withServerDefaults(
       : acceleration.keepResidentEmbeddings,
     vram16Mode: at("vram16Mode") ? ACCELERATION_DEFAULTS.vram16Mode : acceleration.vram16Mode,
     piH3: at("piH3") ? ACCELERATION_DEFAULTS.piH3 : acceleration.piH3,
+    solVae: at("solVae") ? ACCELERATION_DEFAULTS.solVae : acceleration.solVae,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -367,6 +415,8 @@ export interface StoredAcceleration {
   vram16Mode: boolean;
   /** Ruling 107 (2026-11-23): persisted from its first day, like `vaeMode`. */
   piH3: PiH3Mode;
+  /** 2026-11-24: Sol-H3-VAE, persisted from its first day. */
+  solVae: boolean;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -380,6 +430,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
   vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
   piH3: PI_H3_DEFAULT,
+  solVae: SOL_VAE_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
@@ -396,7 +447,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *     "blockSwapPrefetch":...,"keepResident":...,
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
  *     "keepResidentEmbeddings":...,"vram16Mode":...,"piH3":...,
- *     "embedMp4Metadata":...}`
+ *     "solVae":...,"embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
@@ -404,8 +455,9 @@ const STORED_DEFAULTS: StoredAcceleration = {
  * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`), or a pre-§3-114
  * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
  * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`), or a pre-ruling-107
- * one (no `piH3`) — read back
- * cleanly. EVERY field added to
+ * one (no `piH3`), or a pre-Sol one (no `solVae`) — read back
+ * cleanly. `solVae` is also normalized against `piH3` (a pi-H3 choice other
+ * than off wins and Sol reads back off). EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
  * whole-object write below would persist an `undefined` that reads back as
  * the default forever. */
@@ -427,6 +479,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
       piH3: PI_H3_DEFAULT,
+      solVae: SOL_VAE_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -436,7 +489,12 @@ export function readStoredAcceleration(): StoredAcceleration {
     const rec = parsed as Record<string, unknown>;
     const backend = rec.attentionBackend;
     const vaeMode = rec.vaeMode;
-    const piH3 = rec.piH3;
+    const piH3: PiH3Mode = rec.piH3 === "off" || rec.piH3 === "4steps" || rec.piH3 === "2steps" ? rec.piH3 : PI_H3_DEFAULT;
+    // The "Fast VAE" row never stores a pi-H3 choice and Sol together
+    // (`fastVaeSettings`); a stored pair anyway keeps the pi-H3 choice and
+    // turns Sol off, so the request never carries the pair the server 422s.
+    let solVae = typeof rec.solVae === "boolean" ? rec.solVae : SOL_VAE_SERVER_DEFAULT;
+    if (piH3 !== "off" && solVae) solVae = false;
     return {
       attentionBackend: backend === "sdpa" || backend === "sage" ? backend : ATTENTION_BACKEND_DEFAULT,
       blockSwapPrefetch:
@@ -452,7 +510,8 @@ export function readStoredAcceleration(): StoredAcceleration {
           ? rec.keepResidentEmbeddings
           : KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       vram16Mode: typeof rec.vram16Mode === "boolean" ? rec.vram16Mode : VRAM16_MODE_SERVER_DEFAULT,
-      piH3: piH3 === "off" || piH3 === "4steps" || piH3 === "2steps" ? piH3 : PI_H3_DEFAULT,
+      piH3,
+      solVae,
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -564,6 +623,9 @@ export interface AccelerationRequestFields {
   /** Ruling 107 (2026-11-23): pi-H3 — `/generate` and `/generate/chain`
    * (MiniMax H3 only). Never sent as `"off"`. */
   pi_h3?: PiH3Mode;
+  /** 2026-11-24: Sol-H3-VAE — `/generate` and `/generate/chain` (MiniMax H3
+   * only). Never sent as `false`. */
+  sol_vae?: boolean;
 }
 
 /**
@@ -612,6 +674,9 @@ export function effectiveAccelerationFields(
     keep_resident_embeddings: acceleration.keepResidentEmbeddings,
     vram16_mode: acceleration.vram16Mode,
     pi_h3: acceleration.piH3,
+    // No served row's `requires` names `sol_vae` (Sol does not move the
+    // comfort line), so this key takes no part in the match.
+    sol_vae: acceleration.solVae,
   };
 }
 
@@ -708,6 +773,14 @@ export function accelerationRequestFields(
   // (the server fills them with the choice's), not here.
   if (acceleration.piH3 !== PI_H3_DEFAULT) {
     out.pi_h3 = acceleration.piH3;
+  }
+  // 2026-11-24: Sol-H3-VAE. The server default is `false`, so the key only
+  // ever appears as `true` (the `keep_resident` direction). Never together
+  // with `pi_h3` above: the "Fast VAE" row writes both through
+  // `fastVaeSettings` and the stored pair is folded on read. The scope half
+  // is `AppShell`'s, as for `pi_h3`.
+  if (acceleration.solVae !== SOL_VAE_SERVER_DEFAULT) {
+    out.sol_vae = acceleration.solVae;
   }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order

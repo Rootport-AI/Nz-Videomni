@@ -345,6 +345,17 @@ export interface GenerateRequest {
    * `unsupported_features` and 422 any other value than `"off"`. Mirrored on
    * {@link GenerateChainRequest}. */
   pi_h3?: "off" | "4steps" | "2steps";
+  /** Acceleration (2026-11-24): Sol-H3-VAE — MiniMax H3 only. Decodes with
+   * the lightweight distilled video decoder (the step count and shifts are
+   * untouched; the pixels differ slightly). Built exclusively by
+   * `shell/accelerationSettings.ts`'s `accelerationRequestFields` and spread
+   * in — omitted entirely while the server default (`false`) is selected, so
+   * this key only ever appears as `true`. Never together with a `pi_h3` other
+   * than `"off"` (a 422). The server falls back to the standard decoder when
+   * Sol cannot be used, and records it as `sol_vae_used` in metadata.json.
+   * LTX 2.3 / 2.5 publish `sol_vae` in `unsupported_features` and 422 a
+   * `true`. Mirrored on {@link GenerateChainRequest}. */
+  sol_vae?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
@@ -586,6 +597,10 @@ export interface GenerateChainRequest {
    * builder, same "never sent as `"off"`" rule; one choice covers every clip
    * (Chained, V2V, Retake). */
   pi_h3?: "off" | "4steps" | "2steps";
+  /** Sol-H3-VAE (2026-11-24): mirrors {@link GenerateRequest.sol_vae} — same
+   * single builder, same "sent only as `true`" rule; it covers the chain's one
+   * decode (Chained, V2V, Retake). */
+  sol_vae?: boolean;
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;

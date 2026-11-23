@@ -594,6 +594,7 @@ describe("useGenerationForm", () => {
       // §3-164: the Output row, at its server default; not part of the match.
       vram16Mode: true,
       piH3: "off",
+      solVae: false,
       embedMp4Metadata: true,
     };
 

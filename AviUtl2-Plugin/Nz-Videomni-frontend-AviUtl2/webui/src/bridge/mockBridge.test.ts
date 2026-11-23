@@ -1017,6 +1017,8 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       "references",
       // Ruling 107: MiniMax H3's pi-H3.
       "pi_h3",
+      // 2026-11-24: MiniMax H3's Sol-H3-VAE.
+      "sol_vae",
     ]);
   });
 
@@ -1028,7 +1030,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     // 台帳 §1-101: `vram16_mode` joined — VRAM 16GB mode is MiniMax H3's own.
     expect(features).toEqual(
-      expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio", "references", "pi_h3"]),
+      expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio", "references", "pi_h3", "sol_vae"]),
     );
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
     // chains now, and its absence is what un-greys the Chained tab. §3-102
@@ -1091,8 +1093,9 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // `vram16_mode`; H3 A2V added `source_audio`; §1-107 added `references`)
     // and no mode of any kind, which is what the count says rather than only
     // the membership above.
-    // Ruling 107 made it six: `pi_h3` (MiniMax H3's pi-H3).
-    expect(features).toHaveLength(6);
+    // Ruling 107 made it six: `pi_h3` (MiniMax H3's pi-H3). Sol-H3-VAE
+    // (2026-11-24) made it seven: `sol_vae`.
+    expect(features).toHaveLength(7);
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {

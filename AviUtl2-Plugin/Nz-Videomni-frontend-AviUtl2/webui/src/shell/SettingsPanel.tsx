@@ -19,10 +19,11 @@ import type { PrefillResolutionPolicy } from "./PrefillPolicyContext";
 import {
   blockSwapPrefetchAvailability,
   blockSwapPrefetchEffective,
+  fastVaeChoice,
   keepResidentEffective,
   sageAvailability,
 } from "./accelerationSettings";
-import type { AccelerationSettings, AttentionBackend, PiH3Mode, VaeMode } from "./accelerationSettings";
+import type { AccelerationSettings, AttentionBackend, FastVaeChoice, VaeMode } from "./accelerationSettings";
 import { comfortDisplayTableFor, resolveComfortCell } from "./comfortDisplayTable";
 import type { ServerStatusState } from "../modes/single/useServerStatus";
 import "./SettingsPanel.css";
@@ -106,16 +107,17 @@ export interface SettingsPanelProps {
    * {@link keepResidentEmbeddingsUnsupported}; it is LTX 2.3 / 2.5 that
    * publish the name and hide this row. */
   vram16Unsupported: boolean;
-  /** Acceleration (2026-11-23, ruling 107): pi-H3 (MiniMax H3 only).
-   * INDEPENDENT like the VAE row — no `/status` capability flag and no
-   * relationship to any other row. */
-  onPiH3Change: (value: PiH3Mode) => void;
-  /** Ruling 107: whether the LOADED base model's engine refuses `pi_h3` —
+  /** Acceleration (2026-11-24): the "Fast VAE" row (MiniMax H3 only) — pi-H3
+   * (ruling 107) and Sol-H3-VAE as one four-button choice. Wired to
+   * `useAccelerationSettings`'s `setFastVae`, the one setter that writes both
+   * stored fields. No `/status` capability flag. */
+  onFastVaeChange: (value: FastVaeChoice) => void;
+  /** Whether the LOADED base model's engine refuses `pi_h3` or `sol_vae` —
    * derived by `AppShell` from `GET /models`' `unsupported_features`, never
    * from a base-model id. Same HIDE-don't-grey treatment as
-   * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the name and
-   * hide this row (and its note). */
-  piH3Unsupported: boolean;
+   * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the names and
+   * hide this row (and its notes). */
+  fastVaeUnsupported: boolean;
   /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
    * conditions written into their `comment` tag. Stored alongside the
    * acceleration choices (`acceleration.embedMp4Metadata`). */
@@ -170,8 +172,8 @@ export function SettingsPanel({
   keepResidentEmbeddingsUnsupported,
   onVram16ModeChange,
   vram16Unsupported,
-  onPiH3Change,
-  piH3Unsupported,
+  onFastVaeChange,
+  fastVaeUnsupported,
   onEmbedMp4MetadataChange,
   baseModelOptions,
   baseModelValue,
@@ -225,6 +227,15 @@ export function SettingsPanel({
   // correct on its own terms (and testable without `AppShell`).
   const keepResidentUsable = blockSwapPrefetchEffective(acceleration, prefetchAvailable);
   const keepResidentShown = keepResidentEffective(acceleration, prefetchAvailable);
+  // Fast VAE (2026-11-24): the pressed button and its plain note (none for Off).
+  const fastVae = fastVaeChoice(acceleration);
+  const fastVaeNotes: Record<FastVaeChoice, string | null> = {
+    off: null,
+    "4steps": strings.settings.accelFastVaePiH3FourStepsNote,
+    "2steps": strings.settings.accelFastVaePiH3TwoStepsNote,
+    sol: strings.settings.accelFastVaeSolNote,
+  };
+  const fastVaeNote = fastVaeNotes[fastVae];
   const settings = useSettings(nativeBridge);
   // N11/N10: fetched once here and shared by both the comfort-limit table and
   // the raw /config viewer below — `useConfig()` already caches within its
@@ -610,39 +621,46 @@ export function SettingsPanel({
           </>
         )}
 
-        {/* pi-H3 (2026-11-23, ruling 107) — MiniMax H3 only. Right after the
-            PrunaVAED row (which H3 hides, so on H3 it shows directly above
-            VRAM 16GB mode). Same three-button shape as the right-click menu's
-            rows. The note is red bold and shown whenever a choice other than
-            off is selected — whether Turbo is actually in use is not judged,
-            and nothing stops the job. HIDDEN OUTRIGHT, row and note under the
-            ONE condition, on an engine whose `unsupported_features` name
-            `pi_h3` (LTX 2.3 / 2.5). */}
-        {!piH3Unsupported && (
+        {/* Fast VAE (2026-11-24) — MiniMax H3 only: pi-H3 (ruling 107) and
+            Sol-H3-VAE as ONE four-button choice over the two stored fields
+            (`fastVaeChoice` reads the pressed button, `onFastVaeChange` writes
+            both). Right after the PrunaVAED row (which H3 hides, so on H3 it
+            shows directly above VRAM 16GB mode). Under the buttons: the
+            choice's plain note (none for Off), then — for the two pi-H3
+            choices only, the same `piH3 !== "off"` condition as before — the
+            red bold warning followed by a sentence in the plain type. Whether
+            Turbo is actually in use is not judged, and nothing stops the job.
+            HIDDEN OUTRIGHT, row and notes under the ONE condition, on an engine
+            whose `unsupported_features` name `pi_h3` or `sol_vae` (LTX 2.3 /
+            2.5). */}
+        {!fastVaeUnsupported && (
           <>
             <div className="field">
-              <span className="field-label">{strings.settings.accelPiH3Label}</span>
-              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelPiH3Label}>
+              <span className="field-label">{strings.settings.accelFastVaeLabel}</span>
+              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelFastVaeLabel}>
                 {[
-                  { mode: "off" as const, label: strings.settings.accelPiH3Off },
-                  { mode: "4steps" as const, label: strings.settings.accelPiH3FourSteps },
-                  { mode: "2steps" as const, label: strings.settings.accelPiH3TwoSteps },
-                ].map(({ mode, label }) => (
+                  { choice: "off" as const, label: strings.settings.accelFastVaeOff },
+                  { choice: "4steps" as const, label: strings.settings.accelFastVaePiH3FourSteps },
+                  { choice: "2steps" as const, label: strings.settings.accelFastVaePiH3TwoSteps },
+                  { choice: "sol" as const, label: strings.settings.accelFastVaeSol },
+                ].map(({ choice, label }) => (
                   <button
-                    key={mode}
+                    key={choice}
                     type="button"
-                    className={`mode-tab${acceleration.piH3 === mode ? " mode-tab--active" : ""}`}
-                    aria-pressed={acceleration.piH3 === mode}
-                    onClick={() => onPiH3Change(mode)}
+                    className={`mode-tab${fastVae === choice ? " mode-tab--active" : ""}`}
+                    aria-pressed={fastVae === choice}
+                    onClick={() => onFastVaeChange(choice)}
                   >
                     {label}
                   </button>
                 ))}
               </div>
             </div>
+            {fastVaeNote !== null && <p className="field-hint">{fastVaeNote}</p>}
             {acceleration.piH3 !== "off" && (
-              <p className="field-hint field-hint-error">
-                <strong>{strings.settings.accelPiH3Note}</strong>
+              <p className="field-hint">
+                <strong className="field-hint-error">{strings.settings.accelPiH3Note}</strong>
+                {strings.settings.accelPiH3NoteDetail}
               </p>
             )}
           </>

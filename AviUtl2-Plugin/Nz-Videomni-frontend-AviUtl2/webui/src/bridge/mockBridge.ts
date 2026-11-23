@@ -531,6 +531,9 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // server's REJECT_TABLE order. Hides the Settings row; the chain refusal
     // has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
     "pi_h3",
+    // Sol-H3-VAE (2026-11-24): `sol_vae` likewise — last, after `pi_h3` as in
+    // the server's REJECT_TABLE. Hides the same Settings row ("Fast VAE").
+    "sol_vae",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -606,6 +609,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "references",
     // Ruling 107: `pi_h3` — see the LTX23 entry above.
     "pi_h3",
+    // Sol-H3-VAE: `sol_vae` — see the LTX23 entry above.
+    "sol_vae",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -755,6 +760,9 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // Last, like the real LTX `CHAIN_REJECT_TABLE` row. A string defaulting to
   // `"off"`, hence a predicate of its own (the `vae_mode` case).
   { field: "pi_h3", feature: "pi_h3", isSet: (v) => v != null && v !== "off" },
+  // Sol-H3-VAE (MiniMax H3 only — both LTX engines declare `sol_vae`). Last,
+  // like the real LTX `CHAIN_REJECT_TABLE` row; refused only when `true`.
+  { field: "sol_vae", feature: "sol_vae", isSet: (v) => v === true },
 ];
 
 /** §1-120: a clip's `source_audio` shape check only (`audio_id` a non-empty
@@ -2039,6 +2047,42 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
       }
     }
 
+    // Sol-H3-VAE (2026-11-24): LTX engines refuse a `true` (the server's
+    // REJECT_TABLE row); H3 refuses it together with a pi-H3 choice
+    // (`prefill_request`, a VALIDATION_ERROR of the shape above).
+    if (req.sol_vae === true) {
+      if ((MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("sol_vae")) {
+        return {
+          status: 422,
+          body: {
+            error: {
+              code: "FEATURE_UNSUPPORTED",
+              message: "'sol_vae' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+              detail: "Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。",
+            },
+          },
+        };
+      }
+      if (piH3 != null && piH3 !== "off") {
+        return {
+          status: 422,
+          body: {
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Request validation failed",
+              detail: [
+                {
+                  loc: ["body"],
+                  msg: `Value error, pi_h3="${piH3}" と sol_vae=true は同時に指定できません。`,
+                  type: "value_error",
+                },
+              ],
+            },
+          },
+        };
+      }
+    }
+
     jobCounter += 1;
     const id = `mock-job-${jobCounter}-${Math.random().toString(36).slice(2, 8)}`;
     const forcedTerminal = prompt.includes("__MOCK_FAIL__")
@@ -2309,6 +2353,29 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         "clips",
         "at least 2 clips are required when none of source_video/source_audio/retake/reference_video_id/end_source is set",
       );
+    }
+    // Sol-H3-VAE (2026-11-24): H3 refuses `sol_vae` together with a pi-H3
+    // choice — the real `validate_chain` -> `prefill_request` check, after
+    // the schema, with the single route's message and shape. (LTX refused
+    // both fields in the loop above.)
+    const chainPiH3 = req.pi_h3;
+    if (req.sol_vae === true && chainPiH3 != null && chainPiH3 !== "off") {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Request validation failed",
+            detail: [
+              {
+                loc: ["body"],
+                msg: `Value error, pi_h3="${String(chainPiH3)}" と sol_vae=true は同時に指定できません。`,
+                type: "value_error",
+              },
+            ],
+          },
+        },
+      };
     }
     // §1-109: a clip's `references` (an engine that refuses them was answered
     // above) — the single route's shape check, per clip.

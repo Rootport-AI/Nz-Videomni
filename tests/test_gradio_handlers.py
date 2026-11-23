@@ -4580,6 +4580,17 @@ def test_generate_handler_pi_h3_off_is_todays_request():
     assert _captured_h3_generate(pi_h3="off") == captured
 
 
+def test_generate_handler_sol_vae_rides_only_when_on():
+    captured = _captured_h3_generate(sol_vae=True, vram16_mode=False)
+    assert captured["sol_vae"] is True and list(captured.keys())[-1] == "sol_vae"
+    assert "pi_h3" not in captured
+    # Sol keeps the sampling sliders' values (nothing is locked).
+    assert (captured["num_inference_steps"], captured["shift_video"],
+            captured["shift_audio"]) == (4, 12.0, 3.0)
+    assert "sol_vae" not in _captured_h3_generate()
+    assert _captured_h3_generate(sol_vae=False) == _captured_h3_generate()
+
+
 def test_generate_handler_pi_h3_without_served_values_is_todays_request():
     # LTX scope (no sampling, no pi_h3 block): the key never rides.
     captured = _captured_generate(pi_h3="4steps")
@@ -4616,6 +4627,8 @@ def test_pi_h3_i18n_keys_exist_with_the_owners_wording():
 
     for key in ("accel_lbl_pi_h3", "accel_info_pi_h3", "accel_warn_pi_h3", "cap_pi_h3_lock"):
         assert LABELS["en"][key] and LABELS["ja"][key], key
-    assert LABELS["ja"]["accel_warn_pi_h3"] == "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。"
+    assert LABELS["ja"]["accel_warn_pi_h3"] == (
+        "<strong>pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。</strong>生成が高速になる代わりに、動画の品質は劣化します。")
     assert LABELS["en"]["accel_warn_pi_h3"] == (
-        "pi-H3 is not recommended when using Turbo LoRA or Turbo models.")
+        "<strong>pi-H3 is not recommended when using Turbo LoRA or Turbo models.</strong> "
+        "Generation is faster, but video quality is reduced.")

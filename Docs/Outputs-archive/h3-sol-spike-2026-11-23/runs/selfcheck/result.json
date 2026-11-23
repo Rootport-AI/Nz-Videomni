@@ -1,0 +1,127 @@
+{
+  "item": "selfcheck",
+  "script": "outputs/h3-sol-spike-2026-11-23/h3_sol_spike.py",
+  "started_at": "2026-11-23T15:53:31+09:00",
+  "status": "done",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "python": "3.12.9",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "gate": {
+    "at": "2026-11-23T15:53:31+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "compute_apps": {
+        "count": 30,
+        "python_or_uvicorn_present": false,
+        "python_or_uvicorn_count": 0
+      },
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "773",
+        "16376"
+      ],
+      "memory_used_mib": 773
+    },
+    "engine_workers": []
+  },
+  "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "backends": {
+    "eager": {
+      "available": true,
+      "disabled": true
+    },
+    "triton": {
+      "available": true,
+      "disabled": true
+    },
+    "ascend": {
+      "available": false,
+      "disabled": false
+    },
+    "cuda": {
+      "available": true,
+      "disabled": false
+    },
+    "hip": {
+      "available": false,
+      "disabled": false
+    }
+  },
+  "int8_attention_is_available": true,
+  "checks": {
+    "rms_rope_plain": {
+      "rows": 19200,
+      "q_max_abs": 0.001953125,
+      "k_max_abs": 0.001953125,
+      "differing_fraction": 2.5151570298476145e-05,
+      "elements": 39321600,
+      "within_rounding": true
+    },
+    "rms_rope_shifted": {
+      "rows": 19200,
+      "q_max_abs": 0.00390625,
+      "k_max_abs": 0.001953125,
+      "differing_fraction": 2.4579367163823918e-05,
+      "elements": 39321600,
+      "within_rounding": true
+    },
+    "rms_only_identity_table": {
+      "max_abs": 0.0,
+      "differing_fraction": 0.0,
+      "within_rounding": true
+    },
+    "int8_qkv_fused_vs_separate": {
+      "max_abs": 0.0098876953125,
+      "rel_l2": 0.002335340017452836
+    },
+    "int8_qkv_vs_fp16_file": {
+      "max_abs": 0.0439453125,
+      "rel_l2": 0.012265278957784176
+    },
+    "int8_out_fused_residual_vs_addcmul": {
+      "max_abs": 0.0,
+      "rel_l2": 0.0
+    },
+    "int8_w2_fused_swiglu_residual_vs_separate": {
+      "max_abs": 0.001953125,
+      "rel_l2": 6.4087757891684305e-06
+    },
+    "int8_w2_vs_fp16_file": {
+      "max_abs": 0.001953125,
+      "rel_l2": 1.4483141058008187e-05
+    },
+    "int8_attention_vs_sdpa": {
+      "max_abs": 0.015625,
+      "rel_l2": 0.014420848339796066
+    }
+  },
+  "peak": {
+    "alloc_mib": 4211,
+    "reserved_mib": 5884
+  },
+  "rope_bounds": {
+    "max_abs": 0.00390625,
+    "max_differing_fraction": 0.001
+  },
+  "judged": {
+    "rope_within_rounding": true,
+    "int8_qkv_vs_fp16_rel_l2_below_0.05": true,
+    "int8_attention_is_available": true
+  },
+  "passed": true,
+  "finished_at": "2026-11-23T15:53:34+09:00"
+}

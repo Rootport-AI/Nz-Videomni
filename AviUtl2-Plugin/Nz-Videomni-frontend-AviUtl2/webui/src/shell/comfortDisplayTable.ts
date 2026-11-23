@@ -148,6 +148,8 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
   // so it stays at the server default (H3's `true`).
   vram16Mode: true,
   piH3: "off",
+  // Sol-H3-VAE: no row's `requires` names it either (Sol does not move the line).
+  solVae: false,
   // Output setting sharing the store (§3-164); the comfort matcher ignores it.
   embedMp4Metadata: true,
 };

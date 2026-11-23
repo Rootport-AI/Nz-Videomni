@@ -55,7 +55,7 @@ export type UiTarget =
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings"
   | "settingsRow.vram16"
-  | "settingsRow.piH3"
+  | "settingsRow.fastVae"
   | "settingsRow.fusedGgufDequantKernel"
   | "chainPanel.startImageStrength";
 
@@ -176,6 +176,10 @@ interface FeatureUiEntry {
  *    kernel to unpack. Unlike the rows above, the server IGNORES the field
  *    there rather than 422-ing it; the row hides and writes back (to ON) all
  *    the same — see {@link FeatureUiEntry}'s `resets`.
+ *  - **pi_h3 / sol_vae** (ruling 107 / 2026-11-24) share ONE Settings row,
+ *    "Fast VAE", scoped like `vram16_mode` (MiniMax H3 only, so LTX 2.3 / 2.5
+ *    publish both names). Either name closes the row (the table's
+ *    disjunction), and each writes its own stored field back.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses
@@ -207,7 +211,8 @@ export const FEATURE_UI = {
     resets: "keepResidentEmbeddings",
   },
   vram16_mode: { disables: ["settingsRow.vram16"], resets: "vram16Mode" },
-  pi_h3: { disables: ["settingsRow.piH3"], resets: "piH3" },
+  pi_h3: { disables: ["settingsRow.fastVae"], resets: "piH3" },
+  sol_vae: { disables: ["settingsRow.fastVae"], resets: "solVae" },
   fused_gguf_dequant_kernel: {
     disables: ["settingsRow.fusedGgufDequantKernel"],
     resets: "fusedGgufDequantKernel",
@@ -466,8 +471,9 @@ export interface SettingsRowsHidden {
   keepResidentEmbeddings: boolean;
   /** MiniMax H3's VRAM 16GB mode row (`vram16_mode`). */
   vram16: boolean;
-  /** MiniMax H3's pi-H3 row and its ON-only note (`pi_h3`). */
-  piH3: boolean;
+  /** MiniMax H3's "Fast VAE" row (pi-H3 and Sol-H3-VAE) with its notes
+   * (`pi_h3` or `sol_vae`). */
+  fastVae: boolean;
   /** The Fused GGUF Dequantization Kernel row and its ON-only note
    * (`fused_gguf_dequant_kernel`). */
   fusedGgufDequantKernel: boolean;
@@ -488,7 +494,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     vae: disabled.has("settingsRow.vae"),
     keepResidentEmbeddings: disabled.has("settingsRow.keepResidentEmbeddings"),
     vram16: disabled.has("settingsRow.vram16"),
-    piH3: disabled.has("settingsRow.piH3"),
+    fastVae: disabled.has("settingsRow.fastVae"),
     fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };
 }

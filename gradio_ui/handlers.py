@@ -758,7 +758,11 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # on LTX). Keyword-only from ui.py's dispatch(), appended
                  # after vram16_mode. Single /generate only: the A2V branch
                  # below (POST /generate/chain) never carries it.
-                 pi_h3=PI_H3_OFF):
+                 pi_h3=PI_H3_OFF,
+                 # Acceleration (keyword, last): Sol-H3-VAE, the Fast VAE
+                 # radio's "sol" (split off by ui.py's dispatch(); False on
+                 # LTX). Single /generate only, as pi_h3.
+                 sol_vae=False):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs. They are optional, so a call that omits them (e.g. a unit
         # test) falls back to the build-time default language and
@@ -1116,6 +1120,10 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # the choice locks the sliders (see the sampling block above).
         if pi_h3_on:
             payload["pi_h3"] = pi_h3
+        # Sol-H3-VAE (MiniMax H3, additive, conditional): appended after
+        # pi_h3, only when on (never together: one radio feeds both).
+        if sol_vae:
+            payload["sol_vae"] = True
         try:
             resp = api.generate(payload)
         except Exception as exc:

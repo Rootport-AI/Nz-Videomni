@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BaseModelConstraints } from "../api/types";
-import { ACCELERATION_DEFAULTS } from "./accelerationSettings";
+import { ACCELERATION_DEFAULTS, fastVaeSettings } from "./accelerationSettings";
 import type { AccelerationSettings } from "./accelerationSettings";
 import { resolveGenerationConstraints } from "./generationConstraints";
 import { useGenerationForm } from "../modes/single/useGenerationForm";
@@ -117,6 +117,33 @@ describe("pi_h3 reaches the submission paths and drops the three sampling values
       ).result.current.toGenerateRequest(),
     );
     expect(withDefaults).toBe(without);
+  });
+});
+
+/** Sol-H3-VAE (2026-11-24): the same three paths. Sol keeps `piH3` at off,
+ * so the three sampling values ride along as before, and only `sol_vae: true`
+ * is added; while off, no path's body has the key at all. */
+describe("sol_vae reaches the submission paths and keeps the three sampling values (Sol-H3-VAE)", () => {
+  const SOL: AccelerationSettings = { ...ACCELERATION_DEFAULTS, ...fastVaeSettings("sol") };
+
+  it("on: every path's body carries sol_vae: true, no pi_h3, and the three sampling values", () => {
+    const single = singleBody(SOL);
+    expect(single.sol_vae).toBe(true);
+    expect(single).not.toHaveProperty("pi_h3");
+    expect(single).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+    for (const body of [chainBody(SOL), batchBody(SOL)]) {
+      expect(body.sol_vae).toBe(true);
+      expect(body).not.toHaveProperty("pi_h3");
+      expect(body).toMatchObject({ num_inference_steps: 30, shift_video: 10, shift_audio: 4 });
+    }
+  });
+
+  it("off and pi-H3: no path's body carries the sol_vae key", () => {
+    for (const acceleration of [ACCELERATION_DEFAULTS, ON]) {
+      for (const body of [singleBody(acceleration), chainBody(acceleration), batchBody(acceleration)]) {
+        expect(body).not.toHaveProperty("sol_vae");
+      }
+    }
   });
 });
 

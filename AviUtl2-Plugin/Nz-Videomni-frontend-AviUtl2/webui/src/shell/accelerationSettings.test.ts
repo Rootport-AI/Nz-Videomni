@@ -7,6 +7,8 @@ import {
   writeStoredAcceleration,
   effectiveAcceleration,
   effectiveAccelerationFields,
+  fastVaeChoice,
+  fastVaeSettings,
   withServerDefaults,
   type AccelerationSettings,
 } from "./accelerationSettings";
@@ -32,6 +34,7 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     // §3-164: the Output row sharing this store, at its server default.
     vram16Mode: true,
     piH3: "off",
+    solVae: false,
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -50,6 +53,8 @@ describe("effectiveAccelerationFields", () => {
       // Ruling 107: pi-H3 at its server default. No served row's `requires`
       // names it, so it takes no part in the match.
       pi_h3: "off",
+      // Sol-H3-VAE: at its server default, and likewise named by no row.
+      sol_vae: false,
     });
   });
 
@@ -65,6 +70,7 @@ describe("effectiveAccelerationFields", () => {
       "keep_resident",
       "keep_resident_embeddings",
       "pi_h3",
+      "sol_vae",
       "vae_mode",
       "vram16_mode",
     ]);
@@ -77,6 +83,7 @@ describe("effectiveAccelerationFields", () => {
       keep_resident_embeddings: false,
       vram16_mode: true,
       pi_h3: "off",
+      sol_vae: false,
     });
   });
 
@@ -290,6 +297,98 @@ describe("piH3 (ruling 107)", () => {
         window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: bad }));
         expect(readStoredAcceleration().piH3).toBe("off");
       }
+    });
+  });
+});
+
+/** 2026-11-24: Sol-H3-VAE, and the "Fast VAE" row's one rule over `piH3` +
+ * `solVae`. */
+describe("solVae (Sol-H3-VAE) and the Fast VAE row", () => {
+  it("defaults to off, matching the server default", () => {
+    expect(ACCELERATION_DEFAULTS.solVae).toBe(false);
+  });
+
+  it("sends nothing while off — not even sol_vae: false", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).toEqual({});
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("sol_vae");
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, piH3: "4steps" })).toEqual({ pi_h3: "4steps" });
+  });
+
+  it("sends sol_vae: true only while on, without pi_h3", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, solVae: true })).toEqual({ sol_vae: true });
+  });
+
+  it("withServerDefaults writes it back to off (the feature-scope reset on LTX)", () => {
+    const after = withServerDefaults(makeAllOn({ solVae: true }), ["solVae"]);
+    expect(after.solVae).toBe(false);
+    expect(after).toEqual(makeAllOn());
+  });
+
+  it("fastVaeSettings: Sol turns pi-H3 off, any other choice turns Sol off", () => {
+    expect(fastVaeSettings("sol")).toEqual({ piH3: "off", solVae: true });
+    expect(fastVaeSettings("4steps")).toEqual({ piH3: "4steps", solVae: false });
+    expect(fastVaeSettings("2steps")).toEqual({ piH3: "2steps", solVae: false });
+    expect(fastVaeSettings("off")).toEqual({ piH3: "off", solVae: false });
+  });
+
+  it("fastVaeChoice: the pi-H3 choice first, then Sol, else off", () => {
+    expect(fastVaeChoice({ piH3: "off", solVae: false })).toBe("off");
+    expect(fastVaeChoice({ piH3: "4steps", solVae: false })).toBe("4steps");
+    expect(fastVaeChoice({ piH3: "2steps", solVae: false })).toBe("2steps");
+    expect(fastVaeChoice({ piH3: "off", solVae: true })).toBe("sol");
+    // A pair the row cannot write: the pi-H3 choice is what shows.
+    expect(fastVaeChoice({ piH3: "2steps", solVae: true })).toBe("2steps");
+  });
+
+  it("fastVaeChoice reads back what fastVaeSettings wrote, for every choice", () => {
+    for (const choice of ["off", "4steps", "2steps", "sol"] as const) {
+      expect(fastVaeChoice(fastVaeSettings(choice))).toBe(choice);
+    }
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back an on value", () => {
+      writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, solVae: true });
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).solVae).toBe(true);
+      expect(readStoredAcceleration().solVae).toBe(true);
+    });
+
+    it("reads a JSON blob without the key (written before Sol) as off, keeping its pi-H3 choice", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ attentionBackend: "sage", piH3: "4steps" }));
+      const stored = readStoredAcceleration();
+      expect(stored.solVae).toBe(false);
+      expect(stored.piH3).toBe("4steps");
+      expect(stored.attentionBackend).toBe("sage");
+    });
+
+    it("reads the pre-2026-08-01 bare string form as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sage");
+      expect(readStoredAcceleration().solVae).toBe(false);
+    });
+
+    it("reads a malformed value as off", () => {
+      for (const bad of ["yes", 1, null, "true"]) {
+        window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ solVae: bad }));
+        expect(readStoredAcceleration().solVae).toBe(false);
+      }
+    });
+
+    it("folds a stored pi-H3 choice + Sol pair to the pi-H3 choice with Sol off", () => {
+      for (const piH3 of ["4steps", "2steps"] as const) {
+        window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3, solVae: true }));
+        const stored = readStoredAcceleration();
+        expect(stored.piH3).toBe(piH3);
+        expect(stored.solVae).toBe(false);
+      }
+    });
+
+    it("keeps Sol on when the stored pi-H3 choice is off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "off", solVae: true }));
+      expect(readStoredAcceleration().solVae).toBe(true);
     });
   });
 });

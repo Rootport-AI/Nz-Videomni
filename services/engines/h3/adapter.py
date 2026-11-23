@@ -39,7 +39,8 @@ worker's own default is off, the app's is on), ``source_audio``
 audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
 absent key is "no references"), ``nag`` (``{negative_prompt, method,
 vsf_scale}``; VSF only), ``pi_h3`` (``{steps, path}``; a pi-H3 job only —
-an absent key is off) and ``keep_resident`` (only when asked for — an
+an absent key is off), ``sol_vae`` (``{path}``; a Sol-H3-VAE job only — an
+absent key is off) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
@@ -160,6 +161,23 @@ PI_H3_ASSETS: dict[str, str] = {
     "4steps": "pi_h3_4steps_path",
     "2steps": "pi_h3_2steps_path",
 }
+
+#: Sol-H3-VAE (``request.sol_vae``): the descriptor ``assets`` key of its file
+#: (``models/MiniMaxH3/VAE/Sol/``). Resolved like pi-H3's, but never required:
+#: a missing file is the engine's fallback to the stock video decoder
+#: (``sol_vae_used="on->off"``), so nothing here checks that it exists.
+SOL_VAE_ASSET = "sol_vae_path"
+
+
+def sol_vae_path(config: AppConfig, descriptor) -> str:
+    """The Sol-H3-VAE file's absolute path from ``descriptor``'s ``assets``
+    (relative to ``model.models_dir``, as every descriptor path); ``""`` when
+    there is no descriptor or it declares no such asset. Whether a file is
+    there is not looked at here."""
+    rel = descriptor.assets.get(SOL_VAE_ASSET) if descriptor is not None else None
+    if not rel:
+        return ""
+    return str(config._abs((Path(config.model.models_dir) / rel).as_posix()))
 
 
 def pi_h3_sampling(choice: str) -> dict[str, float]:
@@ -365,6 +383,10 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # it is not "off" (:func:`prefill_request` holds the steps / shifts,
         # :func:`preflight_request` the file).
         "pi_h3",
+        # Sol-H3-VAE (the distilled video decoder): the asset's path reaches
+        # the worker as the ``sol_vae`` payload key, only when it is true
+        # (:func:`prefill_request` refuses it with pi_h3).
+        "sol_vae",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -477,6 +499,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         # pi-H3: the single path's ``pi_h3`` payload key ({steps, path}), only
         # when it is not "off" (validate_chain fills the steps / shifts).
         "pi_h3",
+        # Sol-H3-VAE: the single path's ``sol_vae`` payload key ({path}), only
+        # when it is true.
+        "sol_vae",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -807,8 +832,13 @@ def prefill_request(request: GenerateRequest) -> None:
     (omitted) is written with the choice's value; an explicit value that
     differs from it is refused, the message naming the field, the value sent,
     the choice and the choice's value.
+
+    First, for every request: ``pi_h3`` other than "off" together with
+    ``sol_vae`` true is refused (one decoder per job).
     """
     choice = request.pi_h3
+    if choice != "off" and request.sol_vae:
+        raise ValueError(f'pi_h3="{choice}" と sol_vae=true は同時に指定できません。')
     if choice == "off":
         return
     for name, value in pi_h3_sampling(choice).items():
@@ -1110,6 +1140,13 @@ class _RealBackendH3(_RealBackend):
             "path": self._require_asset(PI_H3_ASSETS[choice]),
         }
 
+    def _sol_vae_payload(self) -> dict:
+        """The ``sol_vae`` payload key of a Sol-H3-VAE job (single or chain):
+        ``{"path": the file's absolute path}`` (:func:`sol_vae_path`; ``""``
+        when the descriptor declares none). The file is not required: the
+        worker decodes with the stock video decoder when it is not there."""
+        return {"path": sol_vae_path(self.config, self.descriptor)}
+
     def generate(
         self,
         request: GenerateRequest,
@@ -1299,6 +1336,9 @@ class _RealBackendH3(_RealBackend):
         # pi_h3: only for a pi-H3 job (an absent key = off), {steps, path}.
         if pi_h3 is not None:
             payload["pi_h3"] = pi_h3
+        # sol_vae: only for a Sol-H3-VAE job (an absent key = off), {path}.
+        if request.sol_vae:
+            payload["sol_vae"] = self._sol_vae_payload()
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -1348,6 +1388,8 @@ class _RealBackendH3(_RealBackend):
             vram16_mode_used=event.get("vram16_mode_used"),
             # A pi-H3 job only ("4steps" / "2steps"); absent otherwise -> None.
             pi_h3_used=event.get("pi_h3_used"),
+            # A Sol-H3-VAE job only ("on" / "on->off"); absent otherwise -> None.
+            sol_vae_used=event.get("sol_vae_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=_h3_block(event),
         )
@@ -1523,6 +1565,10 @@ class _RealBackendH3(_RealBackend):
         # (validate_chain).
         if chain.pi_h3 != "off":
             payload["pi_h3"] = self._pi_h3_payload(chain.pi_h3)
+        # sol_vae: only for a Sol-H3-VAE chain (an absent key = off), the
+        # single op's {path}.
+        if chain.sol_vae:
+            payload["sol_vae"] = self._sol_vae_payload()
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
         if chain.keep_resident:
@@ -1567,6 +1613,8 @@ class _RealBackendH3(_RealBackend):
             vram16_mode_used=event.get("vram16_mode_used"),
             # A pi-H3 chain only ("4steps" / "2steps"); absent otherwise -> None.
             pi_h3_used=event.get("pi_h3_used"),
+            # A Sol-H3-VAE chain only ("on" / "on->off"); absent otherwise -> None.
+            sol_vae_used=event.get("sol_vae_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=h3_facts,
         )
@@ -1775,7 +1823,20 @@ class _MockBackendH3(_MockBackend):
     A pi-H3 job (``request.pi_h3`` other than "off") gets the same clip; the
     mock echoes the choice as ``pi_h3_used`` and adds the ``pi_h3`` record
     (:func:`_mock_pi_h3_record`), which lands in ``metadata["h3"]["pi_h3"]``.
+
+    A Sol-H3-VAE job (``request.sol_vae`` true) gets the same clip; the mock
+    reports ``sol_vae_used`` "on" when the descriptor's asset names a file
+    that is there (:func:`sol_vae_path`) and "on->off" otherwise (the size of
+    the clip, which only the engine judges, is not looked at).
     """
+
+    #: The base model whose ``assets`` a Sol-H3-VAE job's file comes from
+    #: (:meth:`H3Runner._new_mock` sets it; None = no descriptor, "on->off").
+    descriptor = None
+
+    def _mock_sol_vae_used(self) -> str:
+        path = sol_vae_path(self.config, self.descriptor)
+        return "on" if path and Path(path).is_file() else "on->off"
 
     def _inpaint_canvas_multiple(self) -> int:
         """H3's inpaint canvas is the source rounded up to 32 (the shared
@@ -1837,6 +1898,8 @@ class _MockBackendH3(_MockBackend):
                 pi_h3_used=request.pi_h3,
                 h3={**(outcome.h3 or {}), "pi_h3": _mock_pi_h3_record(request)},
             )
+        if request.sol_vae:
+            outcome = dataclasses.replace(outcome, sol_vae_used=self._mock_sol_vae_used())
         if request.source_audio is None:
             return outcome
         if source_audio_path is None:
@@ -2070,6 +2133,7 @@ class _MockBackendH3(_MockBackend):
             backend=self.backend_label,
             chain_metadata=chain_metadata,
             pi_h3_used=chain.pi_h3 if chain.pi_h3 != "off" else None,
+            sol_vae_used=self._mock_sol_vae_used() if chain.sol_vae else None,
         )
 
 
@@ -2083,6 +2147,13 @@ class H3Runner(LTXRunner):
     _REAL_BACKEND_CLS = _RealBackendH3
     _MOCK_BACKEND_CLS = _MockBackendH3
     _MOCK_BACKEND_LABEL = MOCK_BACKEND_H3
+
+    def _new_mock(self) -> _MockBackendH3:
+        """2.3's mock construction plus the runner's descriptor as given (not
+        read lazily here), for a Sol-H3-VAE job's ``sol_vae_used``."""
+        mock = super()._new_mock()
+        mock.descriptor = self._descriptor
+        return mock
 
     def generate(
         self,

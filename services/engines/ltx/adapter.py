@@ -148,6 +148,8 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("references", "references", lambda r: bool(r.references)),
     # MiniMax H3 only (the pi-H3 acceleration). The field's default is "off".
     ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
+    # MiniMax H3 only (the Sol-H3-VAE decoder). The field's default is False.
+    ("sol_vae", "sol_vae", lambda r: r.sol_vae),
 )
 
 #: The 422 message for a feature that belongs to neither LTX: the generic one
@@ -158,6 +160,7 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "source_audio": "単発の A2V は MiniMax H3 専用です。LTX の A2V は Chained の音声で使えます。",
     "references": "参照素材（Ref2VA）は MiniMax H3 専用です。",
     "pi_h3": "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
+    "sol_vae": "Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。",
 }
 
 #: The chain twin of :data:`H3_ONLY_REFUSALS`, read by both LTX families'
@@ -268,6 +271,9 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (the pi-H3 acceleration), the single path's row on the
     # chain schema. The field's default is "off". LAST, for the same reason.
     ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
+    # MiniMax H3 only (the Sol-H3-VAE decoder), the single path's row on the
+    # chain schema. The field's default is False. LAST, for the same reason.
+    ("sol_vae", "sol_vae", lambda r: r.sol_vae),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
@@ -715,6 +721,13 @@ class GenerationOutcome:
     # echoes the request's choice). None for every other job, and then
     # metadata.json carries no ``pi_h3_used`` key at all.
     pi_h3_used: str | None = None
+    # Acceleration, MiniMax H3 ONLY: whether the Sol-H3-VAE decoder ran ("on")
+    # or the job fell back to the stock video decoder because the file was not
+    # there or the latents were above ``engine_h3/sol_vae.py``'s
+    # ``MAX_LATENT_TOKENS`` ("on->off"), reported by the worker's ``done`` event for a
+    # ``sol_vae`` job only (the H3 mock decides it from the asset's file). None
+    # for every other job, and then metadata.json carries no ``sol_vae_used``.
+    sol_vae_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).

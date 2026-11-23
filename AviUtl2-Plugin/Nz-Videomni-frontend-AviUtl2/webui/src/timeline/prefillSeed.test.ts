@@ -641,6 +641,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     keepResidentEmbeddings: false,
     vram16Mode: true,
     piH3: "off",
+    solVae: false,
     embedMp4Metadata: true,
   } as const;
 
@@ -685,6 +686,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       keepResidentEmbeddings: false,
       vram16Mode: true,
       piH3: "off",
+      solVae: false,
       embedMp4Metadata: true,
     } as const;
     const withDefaults = (engineFamily: string) =>

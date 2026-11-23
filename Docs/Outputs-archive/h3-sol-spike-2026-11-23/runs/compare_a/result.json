@@ -1,0 +1,596 @@
+{
+  "item": "compare_a",
+  "script": "outputs/h3-sol-spike-2026-11-23/h3_sol_spike.py",
+  "started_at": "2026-11-23T17:54:11+09:00",
+  "status": "done",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "python": "3.12.9",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "configs": {
+    "standard": "いまの 36 層の復号器（標準の FP16 を bf16 で計算・タイル on）",
+    "A": "weights=fp16 attention=float compute=fp16",
+    "B": "weights=int8 attention=float compute=fp16",
+    "C": "weights=int8 attention=int8 compute=fp16"
+  },
+  "gate": {
+    "at": "2026-11-23T17:54:11+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "compute_apps": {
+        "count": 31,
+        "python_or_uvicorn_present": false,
+        "python_or_uvicorn_count": 0
+      },
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "694",
+        "16376"
+      ],
+      "memory_used_mib": 694
+    },
+    "engine_workers": []
+  },
+  "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "latent": {
+    "shape": [
+      1,
+      24,
+      37,
+      48,
+      80
+    ],
+    "mean": 0.02045903287198797,
+    "std": 1.088413161835928,
+    "max_abs": 4.968035697937012,
+    "nan": 0,
+    "inf": 0
+  },
+  "frames_expected": 124,
+  "backends": {
+    "triton": {
+      "available": true,
+      "disabled": true
+    },
+    "hip": {
+      "available": false,
+      "disabled": false
+    },
+    "eager": {
+      "available": true,
+      "disabled": true
+    },
+    "cuda": {
+      "available": true,
+      "disabled": false
+    },
+    "ascend": {
+      "available": false,
+      "disabled": false
+    }
+  },
+  "cudnn": {
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false
+  },
+  "decodes": {
+    "standard": {
+      "result": "done",
+      "seconds": 32.2,
+      "peak": {
+        "alloc_mib": 6344,
+        "reserved_mib": 7504
+      },
+      "load": {
+        "seconds": 2.17
+      },
+      "frames": 124,
+      "mp4": "outputs/h3-sol-spike-2026-11-23/runs/compare_a/standard.mp4"
+    },
+    "A": {
+      "result": "done",
+      "seconds": 8.19,
+      "peak": {
+        "alloc_mib": 4786,
+        "reserved_mib": 4988
+      },
+      "load": {
+        "path_name": "minimax_h3_sol_vae_fp16.safetensors",
+        "num_layers": 24,
+        "int8_layers": 0,
+        "loaded_tensors": 297,
+        "loaded_mib": 3085.7,
+        "read_seconds": 1.3,
+        "seconds": 1.85
+      },
+      "frames": 124,
+      "stats": {
+        "T": 37,
+        "h": 48,
+        "w": 80,
+        "blocks": 8,
+        "sections": 192,
+        "max_sections_alive": 2,
+        "window_calls": 480,
+        "rope_impl": "kitchen",
+        "config": "weights=fp16 attention=float compute=fp16",
+        "window_index_patterns": 14,
+        "frames": 124,
+        "seconds": {
+          "embed": 0.1512,
+          "layers": 7.8748,
+          "pixels": 0.1574,
+          "total": 8.1834
+        }
+      },
+      "mp4": "outputs/h3-sol-spike-2026-11-23/runs/compare_a/A.mp4"
+    },
+    "B": {
+      "result": "done",
+      "seconds": 3.83,
+      "peak": {
+        "alloc_mib": 3092,
+        "reserved_mib": 3154
+      },
+      "load": {
+        "path_name": "minimax_h3_sol_vae_int8_convrot.safetensors",
+        "num_layers": 24,
+        "int8_layers": 96,
+        "loaded_tensors": 393,
+        "loaded_mib": 1552.2,
+        "read_seconds": 0.59,
+        "seconds": 0.79
+      },
+      "frames": 124,
+      "stats": {
+        "T": 37,
+        "h": 48,
+        "w": 80,
+        "blocks": 8,
+        "sections": 192,
+        "max_sections_alive": 2,
+        "window_calls": 480,
+        "rope_impl": "kitchen",
+        "config": "weights=int8 attention=float compute=fp16",
+        "window_index_patterns": 14,
+        "frames": 124,
+        "seconds": {
+          "embed": 0.0602,
+          "layers": 3.6216,
+          "pixels": 0.146,
+          "total": 3.8278
+        }
+      },
+      "mp4": "outputs/h3-sol-spike-2026-11-23/runs/compare_a/B.mp4"
+    },
+    "C": {
+      "result": "done",
+      "seconds": 3.65,
+      "peak": {
+        "alloc_mib": 3093,
+        "reserved_mib": 3386
+      },
+      "load": {
+        "path_name": "minimax_h3_sol_vae_int8_convrot.safetensors",
+        "num_layers": 24,
+        "int8_layers": 96,
+        "loaded_tensors": 393,
+        "loaded_mib": 1552.2,
+        "read_seconds": 0.38,
+        "seconds": 0.59
+      },
+      "frames": 124,
+      "stats": {
+        "T": 37,
+        "h": 48,
+        "w": 80,
+        "blocks": 8,
+        "sections": 192,
+        "max_sections_alive": 2,
+        "window_calls": 480,
+        "rope_impl": "kitchen",
+        "config": "weights=int8 attention=int8 compute=fp16",
+        "window_index_patterns": 14,
+        "frames": 124,
+        "seconds": {
+          "embed": 0.022,
+          "layers": 3.4801,
+          "pixels": 0.1435,
+          "total": 3.6456
+        }
+      },
+      "mp4": "outputs/h3-sol-spike-2026-11-23/runs/compare_a/C.mp4"
+    }
+  },
+  "metrics": {
+    "ssim_stride": 1,
+    "vs_standard": {
+      "A": {
+        "psnr_db": 42.234,
+        "per_frame_min_db": 40.616,
+        "per_frame_mean_db": 42.327,
+        "max_abs": 80,
+        "ssim": 0.982119,
+        "ssim_min_frame": 0.974958,
+        "frames_used": 124,
+        "stride": 1
+      },
+      "B": {
+        "psnr_db": 42.22,
+        "per_frame_min_db": 40.585,
+        "per_frame_mean_db": 42.313,
+        "max_abs": 81,
+        "ssim": 0.982072,
+        "ssim_min_frame": 0.974895,
+        "frames_used": 124,
+        "stride": 1
+      },
+      "C": {
+        "psnr_db": 42.214,
+        "per_frame_min_db": 40.568,
+        "per_frame_mean_db": 42.306,
+        "max_abs": 80,
+        "ssim": 0.98204,
+        "ssim_min_frame": 0.974888,
+        "frames_used": 124,
+        "stride": 1
+      }
+    },
+    "pairs": {
+      "A_vs_B": {
+        "psnr_db": 59.115,
+        "per_frame_min_db": 58.637,
+        "per_frame_mean_db": 59.119,
+        "max_abs": 10
+      },
+      "A_vs_C": {
+        "psnr_db": 58.812,
+        "per_frame_min_db": 58.265,
+        "per_frame_mean_db": 58.817,
+        "max_abs": 21
+      },
+      "B_vs_C": {
+        "psnr_db": 58.753,
+        "per_frame_min_db": 58.347,
+        "per_frame_mean_db": 58.757,
+        "max_abs": 13
+      }
+    },
+    "grid_edges": {
+      "standard": {
+        "frames_used": 124,
+        "stride": 1,
+        "p16": {
+          "x": {
+            "on": 1.3654,
+            "off": 1.3591,
+            "ratio": 1.0046,
+            "lines": 79
+          },
+          "y": {
+            "on": 1.2242,
+            "off": 1.1993,
+            "ratio": 1.0207,
+            "lines": 47
+          }
+        },
+        "p128": {
+          "x": {
+            "on": 1.4289,
+            "off": 1.359,
+            "ratio": 1.0514,
+            "lines": 9,
+            "off_excluding_16": 1.3591,
+            "ratio_excluding_16": 1.0514
+          },
+          "y": {
+            "on": 1.3713,
+            "off": 1.1997,
+            "ratio": 1.143,
+            "lines": 5,
+            "off_excluding_16": 1.1993,
+            "ratio_excluding_16": 1.1434
+          }
+        },
+        "p256": {
+          "x": {
+            "on": 1.7375,
+            "off": 1.3583,
+            "ratio": 1.2791,
+            "lines": 4,
+            "off_excluding_16": 1.3591,
+            "ratio_excluding_16": 1.2784
+          },
+          "y": {
+            "on": 1.4272,
+            "off": 1.2002,
+            "ratio": 1.1891,
+            "lines": 2,
+            "off_excluding_16": 1.1993,
+            "ratio_excluding_16": 1.19
+          }
+        }
+      },
+      "A": {
+        "frames_used": 124,
+        "stride": 1,
+        "p16": {
+          "x": {
+            "on": 1.3455,
+            "off": 1.3267,
+            "ratio": 1.0142,
+            "lines": 79
+          },
+          "y": {
+            "on": 1.2036,
+            "off": 1.1577,
+            "ratio": 1.0396,
+            "lines": 47
+          }
+        },
+        "p128": {
+          "x": {
+            "on": 1.5981,
+            "off": 1.3259,
+            "ratio": 1.2053,
+            "lines": 9,
+            "off_excluding_16": 1.3267,
+            "ratio_excluding_16": 1.2046
+          },
+          "y": {
+            "on": 1.7002,
+            "off": 1.157,
+            "ratio": 1.4696,
+            "lines": 5,
+            "off_excluding_16": 1.1577,
+            "ratio_excluding_16": 1.4687
+          }
+        },
+        "p256": {
+          "x": {
+            "on": 1.9774,
+            "off": 1.3258,
+            "ratio": 1.4915,
+            "lines": 4,
+            "off_excluding_16": 1.3267,
+            "ratio_excluding_16": 1.4905
+          },
+          "y": {
+            "on": 1.7904,
+            "off": 1.1589,
+            "ratio": 1.545,
+            "lines": 2,
+            "off_excluding_16": 1.1577,
+            "ratio_excluding_16": 1.5466
+          }
+        }
+      },
+      "B": {
+        "frames_used": 124,
+        "stride": 1,
+        "p16": {
+          "x": {
+            "on": 1.3492,
+            "off": 1.3263,
+            "ratio": 1.0173,
+            "lines": 79
+          },
+          "y": {
+            "on": 1.2069,
+            "off": 1.1576,
+            "ratio": 1.0426,
+            "lines": 47
+          }
+        },
+        "p128": {
+          "x": {
+            "on": 1.6001,
+            "off": 1.3258,
+            "ratio": 1.2069,
+            "lines": 9,
+            "off_excluding_16": 1.3263,
+            "ratio_excluding_16": 1.2064
+          },
+          "y": {
+            "on": 1.705,
+            "off": 1.157,
+            "ratio": 1.4736,
+            "lines": 5,
+            "off_excluding_16": 1.1576,
+            "ratio_excluding_16": 1.4729
+          }
+        },
+        "p256": {
+          "x": {
+            "on": 1.9792,
+            "off": 1.3256,
+            "ratio": 1.493,
+            "lines": 4,
+            "off_excluding_16": 1.3263,
+            "ratio_excluding_16": 1.4923
+          },
+          "y": {
+            "on": 1.7952,
+            "off": 1.159,
+            "ratio": 1.549,
+            "lines": 2,
+            "off_excluding_16": 1.1576,
+            "ratio_excluding_16": 1.5508
+          }
+        }
+      },
+      "C": {
+        "frames_used": 124,
+        "stride": 1,
+        "p16": {
+          "x": {
+            "on": 1.3492,
+            "off": 1.3277,
+            "ratio": 1.0162,
+            "lines": 79
+          },
+          "y": {
+            "on": 1.2073,
+            "off": 1.1589,
+            "ratio": 1.0418,
+            "lines": 47
+          }
+        },
+        "p128": {
+          "x": {
+            "on": 1.5963,
+            "off": 1.3271,
+            "ratio": 1.2029,
+            "lines": 9,
+            "off_excluding_16": 1.3277,
+            "ratio_excluding_16": 1.2024
+          },
+          "y": {
+            "on": 1.7049,
+            "off": 1.1583,
+            "ratio": 1.4719,
+            "lines": 5,
+            "off_excluding_16": 1.1589,
+            "ratio_excluding_16": 1.4712
+          }
+        },
+        "p256": {
+          "x": {
+            "on": 1.975,
+            "off": 1.327,
+            "ratio": 1.4883,
+            "lines": 4,
+            "off_excluding_16": 1.3277,
+            "ratio_excluding_16": 1.4876
+          },
+          "y": {
+            "on": 1.7949,
+            "off": 1.1602,
+            "ratio": 1.547,
+            "lines": 2,
+            "off_excluding_16": 1.1589,
+            "ratio_excluding_16": 1.5488
+          }
+        }
+      }
+    },
+    "flicker": {
+      "standard": {
+        "pairs": 123,
+        "boundary_pairs": 7,
+        "boundary_mean": 3.4003,
+        "inside_mean": 2.8219,
+        "ratio": 1.2049,
+        "boundary_values": [
+          2.103,
+          7.162,
+          3.683,
+          1.832,
+          1.942,
+          2.22,
+          4.861
+        ],
+        "boundary_pair_index": [
+          16,
+          33,
+          50,
+          67,
+          84,
+          101,
+          118
+        ]
+      },
+      "A": {
+        "pairs": 123,
+        "boundary_pairs": 7,
+        "boundary_mean": 3.5251,
+        "inside_mean": 2.7936,
+        "ratio": 1.2619,
+        "boundary_values": [
+          2.228,
+          7.305,
+          3.659,
+          2.023,
+          2.078,
+          2.551,
+          4.832
+        ],
+        "boundary_pair_index": [
+          16,
+          33,
+          50,
+          67,
+          84,
+          101,
+          118
+        ]
+      },
+      "B": {
+        "pairs": 123,
+        "boundary_pairs": 7,
+        "boundary_mean": 3.5275,
+        "inside_mean": 2.7946,
+        "ratio": 1.2623,
+        "boundary_values": [
+          2.227,
+          7.307,
+          3.658,
+          2.028,
+          2.082,
+          2.554,
+          4.837
+        ],
+        "boundary_pair_index": [
+          16,
+          33,
+          50,
+          67,
+          84,
+          101,
+          118
+        ]
+      },
+      "C": {
+        "pairs": 123,
+        "boundary_pairs": 7,
+        "boundary_mean": 3.5296,
+        "inside_mean": 2.7973,
+        "ratio": 1.2618,
+        "boundary_values": [
+          2.227,
+          7.307,
+          3.662,
+          2.03,
+          2.084,
+          2.556,
+          4.84
+        ],
+        "boundary_pair_index": [
+          16,
+          33,
+          50,
+          67,
+          84,
+          101,
+          118
+        ]
+      }
+    }
+  },
+  "sheet": "outputs/h3-sol-spike-2026-11-23/runs/compare_a/a_grid128_crops.png",
+  "sheet_note": "各切り出しの中心（48 画素目）が 128 画素の倍数の縦横の線の交点。最近傍で 4 倍に拡大",
+  "finished_at": "2026-11-23T17:55:27+09:00"
+}

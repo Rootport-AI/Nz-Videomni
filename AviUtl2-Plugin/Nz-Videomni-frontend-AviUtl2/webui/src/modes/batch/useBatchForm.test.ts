@@ -2214,6 +2214,7 @@ describe("useBatchForm", () => {
             "keep_resident_embeddings",
             "vram16_mode",
             "pi_h3",
+            "sol_vae",
             "embed_mp4_metadata",
           ]) {
             expect(body).not.toHaveProperty(key);

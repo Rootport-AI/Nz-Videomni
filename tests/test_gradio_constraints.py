@@ -415,6 +415,16 @@ def test_normalize_drops_a_broken_pi_h3_block():
     assert normalize_constraints(mixed)["pi_h3"] == {"4steps": PI_H3_SERVED["4steps"]}
 
 
+def test_split_fast_vae():
+    from gradio_ui.constraints import split_fast_vae
+
+    assert split_fast_vae("off") == ("off", False)
+    assert split_fast_vae("4steps") == ("4steps", False)
+    assert split_fast_vae("2steps") == ("2steps", False)
+    assert split_fast_vae("sol") == ("off", True)
+    assert split_fast_vae(None) == split_fast_vae("") == ("off", False)
+
+
 def test_pi_h3_locked_values_judgment():
     assert pi_h3_locked_values(H3_WITH_PI, "4steps") == PI_H3_SERVED["4steps"]
     assert pi_h3_locked_values(H3_WITH_PI, "2steps") == PI_H3_SERVED["2steps"]

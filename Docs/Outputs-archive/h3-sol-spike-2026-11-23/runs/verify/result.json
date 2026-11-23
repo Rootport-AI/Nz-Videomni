@@ -1,0 +1,412 @@
+{
+  "item": "verify",
+  "script": "outputs/h3-sol-spike-2026-11-23/h3_sol_spike.py",
+  "started_at": "2026-11-23T15:53:42+09:00",
+  "status": "done",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "python": "3.12.9",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "conditions": {
+    "V1_640x384_73f": {
+      "latent_grid": [
+        22,
+        24,
+        40
+      ],
+      "frames": 73,
+      "pixels": [
+        640,
+        384
+      ]
+    },
+    "V3_odd_592x368_T14": {
+      "latent_grid": [
+        14,
+        23,
+        37
+      ],
+      "frames": 47,
+      "pixels": [
+        592,
+        368
+      ]
+    },
+    "V2_512x320_39f": {
+      "latent_grid": [
+        12,
+        20,
+        32
+      ],
+      "frames": 39,
+      "pixels": [
+        512,
+        320
+      ]
+    }
+  },
+  "latent_source": "random",
+  "pass_db": 80.0,
+  "a_floor_db": 40.0,
+  "selfcheck": {
+    "file": "outputs/h3-sol-spike-2026-11-23/runs/selfcheck/result.json",
+    "passed": true,
+    "finished_at": "2026-11-23T15:53:34+09:00",
+    "git_head": "f8e0514fed3f4566141f1c5693435775277d5255"
+  },
+  "gate": {
+    "at": "2026-11-23T15:53:42+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "compute_apps": {
+        "count": 30,
+        "python_or_uvicorn_present": false,
+        "python_or_uvicorn_count": 0
+      },
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "769",
+        "16376"
+      ],
+      "memory_used_mib": 769
+    },
+    "engine_workers": []
+  },
+  "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "precision": {
+    "matmul_allow_tf32": false,
+    "cudnn_allow_tf32": false,
+    "float32_matmul_precision": "highest"
+  },
+  "latents": {
+    "V1_640x384_73f": {
+      "shape": [
+        1,
+        24,
+        22,
+        24,
+        40
+      ],
+      "mean": -0.0007739966080114291,
+      "std": 1.001739765623588,
+      "max_abs": 4.934398174285889,
+      "nan": 0,
+      "inf": 0
+    },
+    "V3_odd_592x368_T14": {
+      "shape": [
+        1,
+        24,
+        14,
+        23,
+        37
+      ],
+      "mean": 0.0024732411235669207,
+      "std": 1.0008844682411366,
+      "max_abs": 5.117133140563965,
+      "nan": 0,
+      "inf": 0
+    },
+    "V2_512x320_39f": {
+      "shape": [
+        1,
+        24,
+        12,
+        20,
+        32
+      ],
+      "mean": 0.00443441129586569,
+      "std": 0.9993383638032145,
+      "max_abs": 4.408141613006592,
+      "nan": 0,
+      "inf": 0
+    }
+  },
+  "loads": {
+    "ref": {
+      "seconds": 7.66,
+      "keys": 297,
+      "after_load_alloc_mib": 6171
+    },
+    "F32": {
+      "path_name": "minimax_h3_sol_vae_fp16.safetensors",
+      "num_layers": 24,
+      "int8_layers": 0,
+      "loaded_tensors": 297,
+      "loaded_mib": 3085.7,
+      "read_seconds": 0.96,
+      "seconds": 1.59,
+      "after_load_alloc_mib": 6180
+    },
+    "A": {
+      "path_name": "minimax_h3_sol_vae_fp16.safetensors",
+      "num_layers": 24,
+      "int8_layers": 0,
+      "loaded_tensors": 297,
+      "loaded_mib": 3085.7,
+      "read_seconds": 0.93,
+      "seconds": 1.42,
+      "after_load_alloc_mib": 3094
+    }
+  },
+  "backends": {
+    "cuda": {
+      "available": true,
+      "disabled": false
+    },
+    "triton": {
+      "available": true,
+      "disabled": true
+    },
+    "ascend": {
+      "available": false,
+      "disabled": false
+    },
+    "hip": {
+      "available": false,
+      "disabled": false
+    },
+    "eager": {
+      "available": true,
+      "disabled": true
+    }
+  },
+  "runs": {
+    "V1_640x384_73f": {
+      "ref": {
+        "result": "done",
+        "seconds": 5.23,
+        "peak": {
+          "alloc_mib": 13186,
+          "reserved_mib": 14324
+        },
+        "frames": 73
+      },
+      "F32": {
+        "result": "done",
+        "seconds": 3.91,
+        "peak": {
+          "alloc_mib": 7250,
+          "reserved_mib": 8582
+        },
+        "frames": 73
+      },
+      "A": {
+        "result": "done",
+        "seconds": 1.46,
+        "peak": {
+          "alloc_mib": 3634,
+          "reserved_mib": 3768
+        },
+        "frames": 73
+      }
+    },
+    "V3_odd_592x368_T14": {
+      "ref": {
+        "result": "done",
+        "seconds": 3.03,
+        "peak": {
+          "alloc_mib": 10608,
+          "reserved_mib": 13096
+        },
+        "frames": 47
+      },
+      "F32": {
+        "result": "done",
+        "seconds": 2.21,
+        "peak": {
+          "alloc_mib": 7076,
+          "reserved_mib": 7372
+        },
+        "frames": 47
+      },
+      "A": {
+        "result": "done",
+        "seconds": 0.72,
+        "peak": {
+          "alloc_mib": 3543,
+          "reserved_mib": 3684
+        },
+        "frames": 47
+      }
+    },
+    "V2_512x320_39f": {
+      "ref": {
+        "result": "done",
+        "seconds": 2.06,
+        "peak": {
+          "alloc_mib": 9256,
+          "reserved_mib": 10708
+        },
+        "frames": 39
+      },
+      "F32": {
+        "result": "done",
+        "seconds": 1.41,
+        "peak": {
+          "alloc_mib": 6845,
+          "reserved_mib": 7134
+        },
+        "frames": 39
+      },
+      "A": {
+        "result": "done",
+        "seconds": 0.46,
+        "peak": {
+          "alloc_mib": 3427,
+          "reserved_mib": 3558
+        },
+        "frames": 39
+      }
+    }
+  },
+  "compare_vs_ref": {
+    "V1_640x384_73f": {
+      "clipped": {
+        "ref": {
+          "at_0": 0.049858,
+          "at_1": 0.027835
+        },
+        "F32": {
+          "at_0": 0.049858,
+          "at_1": 0.027835
+        },
+        "A": {
+          "at_0": 0.049847,
+          "at_1": 0.027851
+        }
+      },
+      "F32": {
+        "float": {
+          "psnr_db": 129.73,
+          "max_abs": 4.5299530029296875e-06,
+          "mean_abs": 2.3485291799738766e-07
+        },
+        "uint8": {
+          "psnr_db": 90.316,
+          "per_frame_min_db": 88.883,
+          "per_frame_mean_db": 90.385,
+          "max_abs": 1
+        }
+      },
+      "A": {
+        "float": {
+          "psnr_db": 70.821,
+          "max_abs": 0.004873514175415039,
+          "mean_abs": 0.00020195130167533504
+        },
+        "uint8": {
+          "psnr_db": 61.02,
+          "per_frame_min_db": 60.733,
+          "per_frame_mean_db": 61.022,
+          "max_abs": 2
+        }
+      }
+    },
+    "V3_odd_592x368_T14": {
+      "clipped": {
+        "ref": {
+          "at_0": 0.050064,
+          "at_1": 0.02722
+        },
+        "F32": {
+          "at_0": 0.050063,
+          "at_1": 0.02722
+        },
+        "A": {
+          "at_0": 0.050045,
+          "at_1": 0.027233
+        }
+      },
+      "F32": {
+        "float": {
+          "psnr_db": 129.952,
+          "max_abs": 4.827976226806641e-06,
+          "mean_abs": 2.285238443135345e-07
+        },
+        "uint8": {
+          "psnr_db": 90.547,
+          "per_frame_min_db": 88.88,
+          "per_frame_mean_db": 90.598,
+          "max_abs": 1
+        }
+      },
+      "A": {
+        "float": {
+          "psnr_db": 70.764,
+          "max_abs": 0.005074620246887207,
+          "mean_abs": 0.00020351631113464777
+        },
+        "uint8": {
+          "psnr_db": 60.986,
+          "per_frame_min_db": 60.666,
+          "per_frame_mean_db": 60.989,
+          "max_abs": 1
+        }
+      }
+    },
+    "V2_512x320_39f": {
+      "clipped": {
+        "ref": {
+          "at_0": 0.050061,
+          "at_1": 0.027234
+        },
+        "F32": {
+          "at_0": 0.050061,
+          "at_1": 0.027234
+        },
+        "A": {
+          "at_0": 0.050042,
+          "at_1": 0.027246
+        }
+      },
+      "F32": {
+        "float": {
+          "psnr_db": 129.718,
+          "max_abs": 4.649162292480469e-06,
+          "mean_abs": 2.3541739039470315e-07
+        },
+        "uint8": {
+          "psnr_db": 90.555,
+          "per_frame_min_db": 89.136,
+          "per_frame_mean_db": 90.646,
+          "max_abs": 1
+        }
+      },
+      "A": {
+        "float": {
+          "psnr_db": 70.773,
+          "max_abs": 0.004472613334655762,
+          "mean_abs": 0.00020322299655023155
+        },
+        "uint8": {
+          "psnr_db": 60.989,
+          "per_frame_min_db": 60.733,
+          "per_frame_mean_db": 60.992,
+          "max_abs": 1
+        }
+      }
+    }
+  },
+  "judged_conditions": [
+    "V1_640x384_73f",
+    "V3_odd_592x368_T14",
+    "V2_512x320_39f"
+  ],
+  "failures": [],
+  "passed": true,
+  "finished_at": "2026-11-23T15:54:18+09:00"
+}

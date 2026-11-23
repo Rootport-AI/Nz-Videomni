@@ -70,14 +70,14 @@ function Harness({
   onClose,
   serverStatus,
   engineFamily,
-  piH3Unsupported,
+  fastVaeUnsupported,
 }: {
   bridge: ReturnType<typeof createMockBridge>;
   onSaved: () => void;
   onClose: () => void;
   serverStatus: ServerStatusState;
   engineFamily: string;
-  piH3Unsupported: boolean;
+  fastVaeUnsupported: boolean;
 }) {
   const accelerationControls = useAccelerationSettings();
   return (
@@ -114,12 +114,13 @@ function Harness({
       // 2.5). Same "supported" case as the two rows above; the hiding is
       // covered in `AppShell.featureScope.test.tsx`.
       vram16Unsupported={false}
-      onPiH3Change={accelerationControls.setPiH3}
-      // Ruling 107: hidden on an engine that publishes `pi_h3` (LTX 2.3 / 2.5).
+      onFastVaeChange={accelerationControls.setFastVae}
+      // Ruling 107 / Sol-H3-VAE: hidden on an engine that publishes `pi_h3` or
+      // `sol_vae` (LTX 2.3 / 2.5).
       // `false` (the "supported" case) unless a test asks for the hidden one;
       // the hiding through the fixture server is in
       // `AppShell.featureScope.test.tsx`.
-      piH3Unsupported={piH3Unsupported}
+      fastVaeUnsupported={fastVaeUnsupported}
       onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
       // §3-166: the base-model dropdown is fed by `AppShell` in production;
       // these direct-render tests hand it an empty list (its placeholder). The
@@ -144,7 +145,7 @@ function renderPanel(
   onClose = vi.fn(),
   serverStatus: ServerStatusState = { kind: "online", status: statusWithSage(true) },
   engineFamily = "",
-  piH3Unsupported = false,
+  fastVaeUnsupported = false,
 ) {
   const rendered = render(
     // N8: `SettingsPanel` now also calls `useTheme()` (theme toggle, next to
@@ -168,7 +169,7 @@ function renderPanel(
                 onClose={onClose}
                 serverStatus={serverStatus}
                 engineFamily={engineFamily}
-                piH3Unsupported={piH3Unsupported}
+                fastVaeUnsupported={fastVaeUnsupported}
               />
             </JobsProvider>
           </ToastProvider>
@@ -392,6 +393,7 @@ describe("SettingsPanel", () => {
         keepResidentEmbeddings: false,
         vram16Mode: true,
         piH3: "off",
+        solVae: false,
         embedMp4Metadata: true,
       });
     });
@@ -504,6 +506,7 @@ describe("SettingsPanel", () => {
         keepResidentEmbeddings: false,
         vram16Mode: true,
         piH3: "off",
+        solVae: false,
         embedMp4Metadata: true,
       });
     });
@@ -593,6 +596,7 @@ describe("SettingsPanel", () => {
         keepResidentEmbeddings: false,
         vram16Mode: true,
         piH3: "off",
+        solVae: false,
         embedMp4Metadata: true,
       });
     });
@@ -714,6 +718,7 @@ describe("SettingsPanel", () => {
         keepResidentEmbeddings: false,
         vram16Mode: true,
         piH3: "off",
+        solVae: false,
         embedMp4Metadata: true,
       });
     });
@@ -755,81 +760,138 @@ describe("SettingsPanel", () => {
         keepResidentEmbeddings: false,
         vram16Mode: false,
         piH3: "off",
+        solVae: false,
         embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().vram16Mode).toBe(false);
   });
 
-  // Ruling 107 (2026-11-23): pi-H3. Three buttons (off / 4steps / 2steps),
-  // default off; a red bold note only while a choice other than off is on.
-  it("pi-H3 defaults to off with no note; 4steps / 2steps show the red bold note and persist", async () => {
+  // Ruling 107 (2026-11-23) / Sol-H3-VAE (2026-11-24): the "Fast VAE" row.
+  // Four buttons (Off / pi-H3_4s / pi-H3_2s / Sol), default Off. Under them ONE
+  // paragraph: the choice's note (none for Off); for the two pi-H3 choices
+  // only, the plain sentence and then the red bold warning in the same paragraph.
+  const PI_H3_WARNING = "pi-H3 is not recommended when using Turbo LoRA or Turbo models.";
+  const PI_H3_DETAIL = "Generation is faster, but video quality is reduced.";
+  const SOL_NOTE =
+    "A lightweight decoder (Sol-H3-VAE) speeds up generation. Output quality may be slightly reduced. When Sol cannot be used (e.g. the video is too long), the standard VAE is used instead.";
+
+  /** The pi-H3 paragraph: one <p class="field-hint"> reading note, detail,
+   * warning in that order, with the red bold <strong> being only the warning. */
+  function expectPiH3Paragraph(note: string, detail: string, warning: string, separator: string) {
+    const strong = screen.getByText(warning);
+    expect(strong.tagName).toBe("STRONG");
+    expect(strong).toHaveClass("field-hint-error");
+    const paragraph = strong.parentElement!;
+    expect(paragraph.tagName).toBe("P");
+    expect(paragraph).toHaveClass("field-hint");
+    expect(paragraph).not.toHaveClass("field-hint-error");
+    expect(paragraph.querySelectorAll("strong")).toHaveLength(1);
+    expect(paragraph.textContent).toBe(note + separator + detail + separator + warning);
+    expect(paragraph.lastChild).toBe(strong);
+    expect(document.querySelectorAll("p.field-hint-error, p > strong.field-hint-error")).toHaveLength(1);
+    return paragraph;
+  }
+
+  it("Fast VAE: four buttons, per-choice notes, the warning for pi-H3 only, and both fields persisted", async () => {
     const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
     const user = userEvent.setup();
     renderPanel(bridge);
 
     await screen.findByDisplayValue("http://127.0.0.1:18620");
-    const piH3 = within(screen.getByRole("group", { name: "pi-H3" }));
-    expect(piH3.getAllByRole("button").map((b) => b.textContent)).toEqual(["off", "4steps", "2steps"]);
-    expect(piH3.getByRole("button", { name: "off" })).toHaveAttribute("aria-pressed", "true");
-    expect(piH3.getByRole("button", { name: "4steps" })).toHaveAttribute("aria-pressed", "false");
-    expect(piH3.getByRole("button", { name: "2steps" })).toHaveAttribute("aria-pressed", "false");
-    const NOTE = "pi-H3 is not recommended when using Turbo LoRA or Turbo models.";
-    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    const groupElement = screen.getByRole("group", { name: "Fast VAE" });
+    const row = within(groupElement);
+    expect(row.getAllByRole("button").map((b) => b.textContent)).toEqual(["Off", "pi-H3_4s", "pi-H3_2s", "Sol"]);
+    const pressed = () => row.getAllByRole("button").filter((b) => b.getAttribute("aria-pressed") === "true");
+    expect(pressed().map((b) => b.textContent)).toEqual(["Off"]);
+    expect(screen.queryByText("pi-H3 4steps model.", { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(SOL_NOTE)).not.toBeInTheDocument();
+    expect(screen.queryByText(PI_H3_WARNING)).not.toBeInTheDocument();
 
-    await user.click(piH3.getByRole("button", { name: "4steps" }));
+    await user.click(row.getByRole("button", { name: "pi-H3_4s" }));
+    await waitFor(() => expect(pressed().map((b) => b.textContent)).toEqual(["pi-H3_4s"]));
+    const paragraph4 = expectPiH3Paragraph("pi-H3 4steps model.", PI_H3_DETAIL, PI_H3_WARNING, " ");
+    // Buttons, then the one paragraph.
+    expect(groupElement.compareDocumentPosition(paragraph4) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await waitFor(() => {
-      expect(piH3.getByRole("button", { name: "4steps" })).toHaveAttribute("aria-pressed", "true");
-    });
-    const note = screen.getByText(NOTE);
-    // Red (the existing error hint class) and bold (a <strong> inside it).
-    expect(note.tagName).toBe("STRONG");
-    expect(note.parentElement).toHaveClass("field-hint", "field-hint-error");
-    await waitFor(() => {
-      expect(readStoredAcceleration().piH3).toBe("4steps");
+      expect(readStoredAcceleration()).toMatchObject({ piH3: "4steps", solVae: false });
     });
 
-    await user.click(piH3.getByRole("button", { name: "2steps" }));
+    await user.click(row.getByRole("button", { name: "pi-H3_2s" }));
+    await waitFor(() => expect(pressed().map((b) => b.textContent)).toEqual(["pi-H3_2s"]));
+    const paragraph2 = expectPiH3Paragraph("pi-H3 2steps model.", PI_H3_DETAIL, PI_H3_WARNING, " ");
+    expect(paragraph2.textContent).not.toContain("4steps");
     await waitFor(() => {
-      expect(piH3.getByRole("button", { name: "2steps" })).toHaveAttribute("aria-pressed", "true");
-    });
-    expect(screen.getByText(NOTE)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(readStoredAcceleration().piH3).toBe("2steps");
+      expect(readStoredAcceleration()).toMatchObject({ piH3: "2steps", solVae: false });
     });
 
-    await user.click(piH3.getByRole("button", { name: "off" }));
+    // Sol: its note only — no warning, and pi-H3 goes off in the same click.
+    await user.click(row.getByRole("button", { name: "Sol" }));
+    await waitFor(() => expect(pressed().map((b) => b.textContent)).toEqual(["Sol"]));
+    const solNote = screen.getByText(SOL_NOTE);
+    expect(solNote).toHaveClass("field-hint");
+    expect(solNote).not.toHaveClass("field-hint-error");
+    expect(screen.queryByText("pi-H3 2steps model.", { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(PI_H3_WARNING)).not.toBeInTheDocument();
+    expect(screen.queryByText(PI_H3_DETAIL, { exact: false })).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(piH3.getByRole("button", { name: "off" })).toHaveAttribute("aria-pressed", "true");
+      expect(readStoredAcceleration()).toMatchObject({ piH3: "off", solVae: true });
     });
-    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+
+    await user.click(row.getByRole("button", { name: "Off" }));
+    await waitFor(() => expect(pressed().map((b) => b.textContent)).toEqual(["Off"]));
+    expect(screen.queryByText(SOL_NOTE)).not.toBeInTheDocument();
+    expect(screen.queryByText(PI_H3_WARNING)).not.toBeInTheDocument();
     await waitFor(() => {
-      expect(readStoredAcceleration().piH3).toBe("off");
+      expect(readStoredAcceleration()).toMatchObject({ piH3: "off", solVae: false });
     });
   });
 
-  it("pi-H3's note reads the owner's Japanese wording in Japanese", async () => {
+  it("Fast VAE's pi-H3 note and warning read the owner's Japanese wording in Japanese", async () => {
     window.localStorage.setItem(LANG_STORAGE_KEY, "ja");
     window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "2steps" }));
     const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
     renderPanel(bridge);
 
     await screen.findByDisplayValue("http://127.0.0.1:18620");
-    const piH3 = within(screen.getByRole("group", { name: "pi-H3" }));
-    expect(piH3.getByRole("button", { name: "2steps" })).toHaveAttribute("aria-pressed", "true");
-    const note = screen.getByText("pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。");
-    expect(note.tagName).toBe("STRONG");
-    expect(note.parentElement).toHaveClass("field-hint", "field-hint-error");
+    const row = within(screen.getByRole("group", { name: "Fast VAE" }));
+    expect(row.getAllByRole("button").map((b) => b.textContent)).toEqual(["Off", "pi-H3_4s", "pi-H3_2s", "Sol"]);
+    expect(row.getByRole("button", { name: "pi-H3_2s" })).toHaveAttribute("aria-pressed", "true");
+    expectPiH3Paragraph(
+      "pi-H3 の 2 ステップ版で生成します。",
+      "生成が高速になる代わりに、動画の品質は劣化します。",
+      "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。",
+      "",
+    );
   });
 
-  it("hides the pi-H3 row and its note on an engine that refuses pi_h3", async () => {
+  it("Fast VAE's Sol note reads the owner's Japanese wording verbatim, with no warning", async () => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, "ja");
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ solVae: true }));
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const row = within(screen.getByRole("group", { name: "Fast VAE" }));
+    expect(row.getByRole("button", { name: "Sol" })).toHaveAttribute("aria-pressed", "true");
+    expect(row.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByText(
+        "軽量化した復元処理（Sol-H3-VAE）で生成を高速化します。出力品質がわずかに低下する可能性があります。Solを使えない場合（動画が長すぎる等）には、代わりに通常のVAEが使われます。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。")).not.toBeInTheDocument();
+  });
+
+  it("hides the Fast VAE row and its notes on an engine that refuses pi_h3 / sol_vae", async () => {
     window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "4steps" }));
     const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
     renderPanel(bridge, vi.fn(), vi.fn(), { kind: "online", status: statusWithSage(true) }, "", true);
 
     await screen.findByDisplayValue("http://127.0.0.1:18620");
-    expect(screen.queryByRole("group", { name: "pi-H3" })).not.toBeInTheDocument();
-    expect(screen.queryByText("pi-H3 is not recommended when using Turbo LoRA or Turbo models.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Fast VAE" })).not.toBeInTheDocument();
+    expect(screen.queryByText("pi-H3 4steps model.")).not.toBeInTheDocument();
+    expect(screen.queryByText(PI_H3_WARNING)).not.toBeInTheDocument();
     // The neighbouring row is still there.
     expect(screen.getByRole("group", { name: "VRAM 16GB mode" })).toBeInTheDocument();
   });

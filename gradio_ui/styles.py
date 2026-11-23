@@ -207,14 +207,15 @@ body.dark .spill-warning {
 }
 
 /* ---- .pi-h3-warning -------------------------------------------------------
-   The pi-H3 note under the Settings radio (shown while pi-H3 is on): red
-   bold text, the operation panel's look, in the same no-box style as
-   .spill-warning above. */
-.pi-h3-warning {
+   The pi-H3 note under the Settings radio (shown while pi-H3 is on): its
+   warning (the <strong>) in red bold text, the operation panel's look, in the
+   same no-box style as .spill-warning above; the sentence after it in the
+   plain text. */
+.pi-h3-warning strong {
     color: #cf222e;
     font-weight: 700;
 }
-body.dark .pi-h3-warning {
+body.dark .pi-h3-warning strong {
     color: #ff7b72;
 }
 """

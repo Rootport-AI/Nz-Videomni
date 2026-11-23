@@ -1,0 +1,942 @@
+{
+  "item": "S3",
+  "title": "ふだんの使い方（Turbo LoRA 0.8・4 ステップ・1280×768・124 フレーム × 5 本）の Off と Sol",
+  "rule": "2 本とも完了（532 フレーム・音声）。Sol は sol_vae_used on。復号の段の秒と VRAM の山を記録",
+  "started_at": "2026-11-23T23:36:24+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T23:36:24+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 812,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 28,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "S3_off",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+        "width": 1280,
+        "height": 768,
+        "seed": 1234,
+        "clips": [
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          }
+        ],
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-23T23:36:34+09:00",
+      "submit_http": 202,
+      "job_id": "4e50394b-19d7-4a63-9dd0-941a25fa1b4f",
+      "seconds_wall": 756.8,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 30.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 55.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 80.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 100.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 125.3,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 150.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 175.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 200.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 220.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 245.6,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 270.7,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 295.7,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 320.8,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 340.8,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 365.9,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 391.0,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 416.0,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 436.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 461.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 486.2,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 506.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 531.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 556.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 581.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 601.4,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 756.8,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": null,
+      "mp4": "outputs/h3-sol-gates-2026-11-23/runs/S3/S3_off.mp4",
+      "metadata_file": "outputs/h3-sol-gates-2026-11-23/runs/S3/S3_off.metadata.json",
+      "finished_at": "2026-11-23T23:49:10+09:00",
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 751.85,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": null,
+          "denoise": 496.88,
+          "decode": 151.2,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            6430,
+            7596
+          ],
+          "denoise": [
+            4634,
+            6238
+          ],
+          "decode": [
+            6430,
+            7596
+          ]
+        },
+        "rss_peak_gib": 24.55,
+        "commit_peak_gib": 36.08,
+        "sequence": {
+          "text": 61,
+          "cond": 0,
+          "audio": 414,
+          "video": 35520,
+          "total": 35995,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            40
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14025,
+          "num_ooms": 0
+        },
+        "vae_source": "file",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "per_clip_denoise_seconds": [
+          108.6,
+          97.07,
+          97.46,
+          97.06,
+          96.69
+        ],
+        "chain_clips": [
+          {
+            "latents_sha256": {
+              "video": "597d3406cdfa2740e213824231c3af1bbcd44928ce582631f5d4a93caaab3ce6",
+              "audio": "d8d4c8f6d6e411e101ae641d2c3d40238a97c400fe7f0ff35bd4e7e1d59f9d2d"
+            },
+            "head_equals_prev_tail": null,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "c4f72e36b7b16834294c756803613c0c284fe31742cb9a9666116763744f41cf",
+              "audio": "755fcbc9bdc7d80ca3b163fba2a53444560cd9087bd032a797d31da87cff8aa4"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "3c31c84b945b0a6580a97da059406f465ee000462a431aa3e8ca409ee856022b",
+              "audio": "7d7d01165b4e9392e860ab3b9d3a0e407c5c5fb23e72b8a9e6ead03f1e454bce"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "23c7bdb3c32a1b1a170230368e792cbaa5f58e134101eff4c656256889d5a55a",
+              "audio": "738f4dfa748e3859183b0f13a48becb2aeb0af1845d803ff779e07524712393d"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "2133f66e99f0a3e416bc451c50f204666dcb4f04eae609f3e4def4431d592de5",
+              "audio": "d3fefbf28bfec4663dec8fec92de18b9bfc5407d1257d20707f23b28aba7ecc8"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          }
+        ],
+        "chain_total_frames": 532,
+        "retake": null,
+        "v2v": null,
+        "inpaint": null,
+        "outpaint": null
+      },
+      "sol": {
+        "sol_vae_used": null,
+        "sol_vae": null,
+        "vae_source": "file",
+        "decode_seconds": 151.2,
+        "decode_vram_mib": [
+          6430,
+          7596
+        ],
+        "request_sol_vae": false
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-sol-gates-2026-11-23/runs/S3/S3_off.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "22.166667",
+            "nb_read_frames": 532
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "22.167000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      }
+    },
+    {
+      "job": "S3_sol",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+        "width": 1280,
+        "height": 768,
+        "seed": 1234,
+        "clips": [
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          }
+        ],
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "sol_vae": true,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      },
+      "started_at": "2026-11-23T23:49:12+09:00",
+      "submit_http": 202,
+      "job_id": "e519aa6b-fe35-4a22-b24f-c6a5691371ff",
+      "seconds_wall": 611.7,
+      "stages": [
+        {
+          "t": 0.0,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.0,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 30.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 55.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 75.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 100.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 125.3,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 145.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 170.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 195.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 215.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 240.7,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 260.7,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 285.8,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 310.8,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 330.9,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 355.9,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 376.0,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 401.1,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 426.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 446.2,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 471.3,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 496.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 516.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 541.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 566.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 586.6,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 4,
+          "total": 4
+        },
+        {
+          "t": 591.6,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 611.7,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": null,
+      "mp4": "outputs/h3-sol-gates-2026-11-23/runs/S3/S3_sol.mp4",
+      "metadata_file": "outputs/h3-sol-gates-2026-11-23/runs/S3/S3_sol.metadata.json",
+      "finished_at": "2026-11-23T23:59:24+09:00",
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 610.05,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": null,
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": null,
+          "denoise": 486.71,
+          "decode": 23.13,
+          "dwd": null
+        },
+        "vram_peak_mib": {
+          "job": [
+            4948,
+            6238
+          ],
+          "denoise": [
+            4634,
+            6238
+          ],
+          "decode": [
+            4948,
+            5048
+          ]
+        },
+        "rss_peak_gib": 25.61,
+        "commit_peak_gib": 36.45,
+        "sequence": {
+          "text": 61,
+          "cond": 0,
+          "audio": 414,
+          "video": 35520,
+          "total": 35995,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            24,
+            40
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14001,
+          "num_ooms": 0
+        },
+        "vae_source": "sol",
+        "dwd_chunks": [],
+        "dwd_head": null,
+        "pi_h3": null,
+        "a2v": null,
+        "vsf": null,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "per_clip_denoise_seconds": [
+          106.07,
+          95.09,
+          95.25,
+          95.15,
+          95.15
+        ],
+        "chain_clips": [
+          {
+            "latents_sha256": {
+              "video": "597d3406cdfa2740e213824231c3af1bbcd44928ce582631f5d4a93caaab3ce6",
+              "audio": "d8d4c8f6d6e411e101ae641d2c3d40238a97c400fe7f0ff35bd4e7e1d59f9d2d"
+            },
+            "head_equals_prev_tail": null,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "c4f72e36b7b16834294c756803613c0c284fe31742cb9a9666116763744f41cf",
+              "audio": "755fcbc9bdc7d80ca3b163fba2a53444560cd9087bd032a797d31da87cff8aa4"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "3c31c84b945b0a6580a97da059406f465ee000462a431aa3e8ca409ee856022b",
+              "audio": "7d7d01165b4e9392e860ab3b9d3a0e407c5c5fb23e72b8a9e6ead03f1e454bce"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "23c7bdb3c32a1b1a170230368e792cbaa5f58e134101eff4c656256889d5a55a",
+              "audio": "738f4dfa748e3859183b0f13a48becb2aeb0af1845d803ff779e07524712393d"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          },
+          {
+            "latents_sha256": {
+              "video": "2133f66e99f0a3e416bc451c50f204666dcb4f04eae609f3e4def4431d592de5",
+              "audio": "d3fefbf28bfec4663dec8fec92de18b9bfc5407d1257d20707f23b28aba7ecc8"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": null,
+            "a2v": null
+          }
+        ],
+        "chain_total_frames": 532,
+        "retake": null,
+        "v2v": null,
+        "inpaint": null,
+        "outpaint": null
+      },
+      "sol": {
+        "sol_vae_used": "on",
+        "sol_vae": {
+          "used": "on",
+          "decoder": {
+            "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+            "int8_layers": 96,
+            "loaded_tensors": 393,
+            "loaded_mib": 1552.2,
+            "seconds": 1.08
+          },
+          "latent_tokens": 602880,
+          "nonfinite_pixels": 0,
+          "seconds": 16.56
+        },
+        "vae_source": "sol",
+        "decode_seconds": 23.13,
+        "decode_vram_mib": [
+          4948,
+          5048
+        ],
+        "request_sol_vae": true
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-sol-gates-2026-11-23/runs/S3/S3_sol.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 768,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "22.166667",
+            "nb_read_frames": 532
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "22.167000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      }
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "name": "default",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 3.2
+    }
+  ],
+  "server": {
+    "port": 18699,
+    "pid": 67044,
+    "config": "outputs/h3-sol-gates-2026-11-23/_rt/config.h3solgates.yaml",
+    "started_at": "2026-11-23T23:36:27+09:00",
+    "stop": {
+      "at": "2026-11-23T23:59:25+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T23:59:27+09:00",
+  "workers_after": []
+}

@@ -32,6 +32,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     keepResidentEmbeddings: false,
     vram16Mode: true,
     piH3: "off",
+    solVae: false,
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -131,6 +132,20 @@ describe("resolveComfortRow", () => {
           });
         }
       }
+    });
+
+    it("Sol-H3-VAE does not move the comfort line: solVae on or off resolves the same row (or none)", () => {
+      for (const family of ["ltx", "ltx25"]) {
+        for (const weightClass of ["4bit", "8bit", "q6k"]) {
+          for (const base of [ACCELERATION_DEFAULTS, allOn()]) {
+            const off = resolveComfortRow(limitsWith(), family, { ...base, solVae: false }, true, weightClass);
+            const on = resolveComfortRow(limitsWith(), family, { ...base, solVae: true }, true, weightClass);
+            expect(on, `${family} ${weightClass}`).toEqual(off);
+          }
+        }
+      }
+      // And a matched row stays matched with Sol on.
+      expect(resolveComfortRow(limitsWith(), "ltx", allOn({ solVae: true }), true, "4bit")?.rowIndex).toBe(0);
     });
 
     it("reads alpha_gen_budget as `null` unless it is a positive finite number (no fallback constant)", () => {

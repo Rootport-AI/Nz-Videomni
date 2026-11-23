@@ -382,6 +382,54 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await generate(bridge, { ...BODY, pi_h3: "4steps", num_inference_steps: 4 })).status).toBe(202);
   });
 
+  // 2026-11-24: Sol-H3-VAE.
+  it("publishes `sol_vae` in both LTX engines' unsupported_features, not MiniMax H3's", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    expect(blocksFeature(blocks, "MiniMaxH3")).not.toContain("sol_vae");
+    for (const id of ["LTX23", "LTX25"]) expect(blocksFeature(blocks, id)).toContain("sol_vae");
+  });
+
+  it("refuses sol_vae: true on LTX (single and chain) with 422 FEATURE_UNSUPPORTED; false passes", async () => {
+    for (const id of ["LTX23", "LTX25"]) {
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const single = await generate(bridge, { ...BODY, num_frames: 121, width: 1280, height: 704, sol_vae: true });
+      expect(single.status).toBe(422);
+      const error = (single.body as { error: { code: string; detail?: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.detail).toBe("Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。");
+      const chained = await chain(bridge, { sol_vae: true }, [{ num_frames: 121 }]);
+      expect(chained.status).toBe(422);
+      expect((chained.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const offChain = await chain(bridge, { sol_vae: false }, [{ num_frames: 121 }]);
+      expect(offChain.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+    }
+  });
+
+  it("accepts sol_vae on MiniMax H3 with the sampling values sent, and refuses it together with pi_h3", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const pair = await generate(bridge, { ...BODY, pi_h3: "4steps", sol_vae: true });
+    expect(pair.status).toBe(422);
+    const error = (pair.body as { error: { code: string; detail: Array<{ msg: string }> } }).error;
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.detail[0]!.msg).toContain('pi_h3="4steps" と sol_vae=true は同時に指定できません。');
+    expect((await generate(bridge, { ...BODY, sol_vae: true, num_inference_steps: 20 })).status).toBe(202);
+  });
+
+  it("refuses a MiniMax H3 chain with sol_vae together with pi_h3, and accepts sol_vae alone", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const pair = await chain(bridge, { pi_h3: "2steps", sol_vae: true });
+    expect(pair.status).toBe(422);
+    const error = (pair.body as { error: { code: string; detail: Array<{ msg: string }> } }).error;
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.detail[0]!.msg).toContain('pi_h3="2steps" と sol_vae=true は同時に指定できません。');
+    expect((await chain(bridge, { sol_vae: true, num_inference_steps: 20, shift_video: 12, shift_audio: 3 })).status).toBe(
+      202,
+    );
+  });
+
   // §1-109: a clip's own `references` on POST /generate/chain.
   it("refuses a clip's `references` on LTX with 422 FEATURE_UNSUPPORTED; H3 checks each clip's shape", async () => {
     const references = [{ kind: "picture", id: "mock-image-1", slot: 1 }];

@@ -366,6 +366,7 @@ try {
             Write-Info '取得と利用は、取得する方ご自身の責任で、ライセンスに従って行ってください。'
             Write-Info 'ライセンス本文: https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE'
             Write-Info '高速化の pi-H3（配布元 Lakonik/pi-H3）も、MiniMax H3 Community License の下の派生物として公開されています。'
+            Write-Info '高速化の Sol-H3-VAE の重み（配布元 Comfy-Org/MiniMax-H3）も、MiniMax H3 のライセンスに従います。'
             Write-Info ('（本文の写しは ' + (Join-Path $ModelsDir 'MiniMaxH3\LICENSE') + ' にも保存します。）')
             Write-Host ''
             # LoRA の置き場所（台帳 §1-104 裁定 7）。空のフォルダを作るだけで、

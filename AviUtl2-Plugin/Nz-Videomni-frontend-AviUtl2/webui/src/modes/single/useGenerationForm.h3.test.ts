@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppConfig, BaseModelConstraints } from "../../api/types";
 import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
 import { suggestFramesForAudio } from "../chained/chainUtils";
-import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import { ACCELERATION_DEFAULTS, fastVaeSettings } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
@@ -354,6 +354,33 @@ describe("useGenerationForm — pi-H3 (ruling 107)", () => {
     expect(result.current.sourceAudioStrength).toBe(0.8);
     const body = result.current.toGenerateRequest();
     expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+    expect(body).not.toHaveProperty("pi_h3");
+  });
+
+  // Sol-H3-VAE (2026-11-24): Sol keeps `piH3` at off, so the pi-H3 lock never
+  // engages for it — no change to the lock's code was needed.
+  it("switching pi-H3_4s -> Sol unlocks the sliders at the defaults, and they move and ride along", () => {
+    // Mounted on 4s (the first render never resets), with an off-default value
+    // held under the lock: only the 4s -> Sol switch itself can bring it back.
+    const { result, rerender } = renderPi({ ...ACCELERATION_DEFAULTS, ...fastVaeSettings("4steps") });
+    act(() => {
+      result.current.setSamplingValue("numInferenceSteps", 30);
+      result.current.setSamplingValue("shiftAudio", 5);
+    });
+    expect(result.current.fixedSampling).toEqual({ numInferenceSteps: 4, shiftVideo: 12, shiftAudio: 3 });
+    expect(result.current.values.sampling).toEqual({ numInferenceSteps: 30, shiftVideo: 12, shiftAudio: 5 });
+
+    rerender({ acceleration: { ...ACCELERATION_DEFAULTS, ...fastVaeSettings("sol") } });
+    expect(result.current.fixedSampling).toBeNull();
+    expect(result.current.values.sampling).toEqual({ numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 });
+
+    act(() => {
+      result.current.setSamplingValue("numInferenceSteps", 8);
+      result.current.setSamplingValue("shiftVideo", 9);
+    });
+    expect(result.current.values.sampling).toEqual({ numInferenceSteps: 8, shiftVideo: 9, shiftAudio: 3 });
+    const body = result.current.toGenerateRequest();
+    expect(body).toMatchObject({ sol_vae: true, num_inference_steps: 8, shift_video: 9, shift_audio: 3 });
     expect(body).not.toHaveProperty("pi_h3");
   });
 });

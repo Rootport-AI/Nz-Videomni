@@ -45,6 +45,10 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   pi_h3。"off"〔既定〕/ "4steps" / "2steps"）も選べ、有効のあいだはステップ数と
   shift を指定せず選択の値（4steps は 4 / 12 / 3、2steps は 2 / 12 / 3。正本は
   list_models の constraints.pi_h3）で動きます（詳細は submit_generate の説明）。
+  H3 では高速化の Sol-H3-VAE（submit_generate と submit_chain の sol_vae。
+  既定 false）も選べ、復号だけを軽量版に差し替えます（pi_h3 とは同時に
+  指定できません。重みが無い、または動画が大きすぎるときは通常の VAE で
+  復号し、メタデータの sol_vae_used が "on->off" になります）。
   H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
   既定 on。切るときだけ false）も選べ、収まらないときはジョブが failed になり、
   job_status の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を
@@ -73,8 +77,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   H3 では loras の各要素の audio_strength は無視されます（422 にはならず、
   サーバーが None に直します）。
   LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と、
-  MiniMax H3 専用の vram16_mode=true・source_audio_id・pi_h3（"off" 以外）だけです
-  （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
+  MiniMax H3 専用の vram16_mode=true・source_audio_id・pi_h3（"off" 以外）・
+  sol_vae=true だけです（422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
   は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /
   neg_method / vsf_scale も効きます）。
   ただし nag_alpha=0 にしても「NAG なし」とビット単位で同じ絵にはならないので、
@@ -103,7 +107,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   長尺IC-LoRAも含みます）が使えます。submit_chain のモードは、撮り直し
   （Retake）と end_source_video_id / end_source_image_id（素材（末尾））を
   含めて LTX 2.5 でもすべて使えます。submit_chain で LTX 2.5 では使えないのは
-  vae_mode（既定値以外）と、MiniMax H3 専用の pi_h3（"off" 以外）だけです（keep_resident・attention_backend・
+  vae_mode（既定値以外）と、MiniMax H3 専用の pi_h3（"off" 以外）・sol_vae=true だけです（keep_resident・attention_backend・
   nag_enabled は submit_chain でも使えます）。keep_resident_embeddings は
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
   撮り直し（Retake）は submit_chain の引数（retake_* の 6 引数）、画角拡張

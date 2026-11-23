@@ -334,6 +334,7 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
     # H3 single-generate A2V added the fourth: ``source_audio`` (H3 only; LTX
     # does A2V through the chain's source_audio). Ref2VA added the fifth:
     # ``references`` (H3 only). pi-H3 added the sixth: ``pi_h3`` (H3 only).
+    # Sol-H3-VAE added the seventh: ``sol_vae`` (H3 only).
     assert by_id["LTX23"]["unsupported_features"] == [
         "keep_resident_embeddings",
         "alpha_gen",
@@ -341,4 +342,5 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
         "source_audio",
         "references",
         "pi_h3",
+        "sol_vae",
     ]

@@ -2591,18 +2591,29 @@ export const en = {
      * note: reassurance, not a warning — precision does not change. */
     accelVram16Note:
       "For MiniMax H3 only. Splits the denoising computation so the job fits in 16GB of VRAM. Precision does not change.",
-    /** Acceleration (2026-11-23, ruling 107): pi-H3 — MiniMax H3 only. The row
-     * is HIDDEN on the engines that publish `pi_h3` in `unsupported_features`
-     * (LTX 2.3 / 2.5). The row name and the three button labels are the API's
-     * own words and stay the same in both languages. */
-    accelPiH3Label: "pi-H3",
-    accelPiH3Off: "off",
-    accelPiH3FourSteps: "4steps",
-    accelPiH3TwoSteps: "2steps",
-    /** Shown in red bold under the row while a choice other than off is
-     * selected (the owner's wording, ruling 107 ①). A note only — nothing stops
-     * the job. */
+    /** Acceleration (2026-11-24): "Fast VAE" — MiniMax H3 only, pi-H3
+     * (ruling 107) and Sol-H3-VAE on one row. The row is HIDDEN on the engines
+     * that publish `pi_h3` / `sol_vae` in `unsupported_features` (LTX 2.3 /
+     * 2.5). The row name and the four button labels are the owner's and stay
+     * the same in both languages. */
+    accelFastVaeLabel: "Fast VAE",
+    accelFastVaeOff: "Off",
+    accelFastVaePiH3FourSteps: "pi-H3_4s",
+    accelFastVaePiH3TwoSteps: "pi-H3_2s",
+    accelFastVaeSol: "Sol",
+    /** The plain note under the buttons, per choice (none for Off). */
+    accelFastVaePiH3FourStepsNote: "pi-H3 4steps model.",
+    accelFastVaePiH3TwoStepsNote: "pi-H3 2steps model.",
+    accelFastVaeSolNote:
+      "A lightweight decoder (Sol-H3-VAE) speeds up generation. Output quality may be slightly reduced. When Sol cannot be used (e.g. the video is too long), the standard VAE is used instead.",
+    /** Ends the note paragraph in red bold while a pi-H3 choice is selected
+     * (the owner's wording, ruling 107 ①). A note only — nothing stops the job. */
     accelPiH3Note: "pi-H3 is not recommended when using Turbo LoRA or Turbo models.",
+    /** Sits between the choice's note and {@link accelPiH3Note}, in the plain
+     * type (the owner's wording). The English text carries its own leading and
+     * trailing space to separate the three sentences; the Japanese is written
+     * without any. */
+    accelPiH3NoteDetail: " Generation is faster, but video quality is reduced. ",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -4138,11 +4149,17 @@ export const ja: Strings = {
     accelVram16On: "ON",
     accelVram16Off: "OFF",
     accelVram16Note: "MiniMax H3 専用。ノイズ除去の計算を分割して VRAM 16GB に収めます。精度は変えません。",
-    accelPiH3Label: "pi-H3",
-    accelPiH3Off: "off",
-    accelPiH3FourSteps: "4steps",
-    accelPiH3TwoSteps: "2steps",
+    accelFastVaeLabel: "Fast VAE",
+    accelFastVaeOff: "Off",
+    accelFastVaePiH3FourSteps: "pi-H3_4s",
+    accelFastVaePiH3TwoSteps: "pi-H3_2s",
+    accelFastVaeSol: "Sol",
+    accelFastVaePiH3FourStepsNote: "pi-H3 の 4 ステップ版で生成します。",
+    accelFastVaePiH3TwoStepsNote: "pi-H3 の 2 ステップ版で生成します。",
+    accelFastVaeSolNote:
+      "軽量化した復元処理（Sol-H3-VAE）で生成を高速化します。出力品質がわずかに低下する可能性があります。Solを使えない場合（動画が長すぎる等）には、代わりに通常のVAEが使われます。",
     accelPiH3Note: "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。",
+    accelPiH3NoteDetail: "生成が高速になる代わりに、動画の品質は劣化します。",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

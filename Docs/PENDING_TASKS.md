@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-23
+- 作成: 2026-07-15／最終更新: 2026-11-24
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -27,19 +27,23 @@
 
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。
+- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。Sol-H3-VAE（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-295。2026-11-24 にクローズ）の重みの取得の確認も、ここにまとめた。
 - **これからすること**: 検証用の別の機械で、下のインストーラーの確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
-- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。本節が実機確認の項目の正本。
+- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。本節が実機確認の項目の正本。
 
 #### インストーラー（main へ取り込んだあと、検証用の別の機械で）
 
-前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3 のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
+前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3・Sol-H3-VAE のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
 
 - [ ] `install-MiniMaxH3.bat` を実行する → 最後の表で `pi_h3_4steps` と `pi_h3_2steps` の 2 行が `PASS` になる。
 - [ ] （続き）`models\MiniMaxH3\VAE\pi-H3\` を見る → `pi_h3_4step_dwd_adapter_int8_convrot.safetensors` と `pi_h3_2step_dwd_adapter_int8_convrot.safetensors` の 2 本があり、どちらも 2,192,176,240 バイト。
 - [ ] （続き）PowerShell で 2 本の SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §18.2 の値と一致する。
-- [ ] その機械で、操作パネルか Gradio のどちらかで pi-H3 を 4steps にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
-- 補足: pi-H3 がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
+- [ ] （続き）`install-MiniMaxH3.bat` の最後の表（1 つ目の項目で見た表）で、`h3_sol_vae` の行が `PASS` になっている。
+- [ ] （続き）`models\MiniMaxH3\VAE\Sol\` を見る → `minimax_h3_sol_vae_int8_convrot.safetensors` があり、大きさが設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.8 の「重みと取得」のバイト数と一致する。
+- [ ] （続き）PowerShell でこのファイルの SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 設計正本 §6.8 の「重みと取得」の値と一致する。
+- [ ] その機械で、操作パネルか Gradio のどちらかで「Fast VAE」を pi-H3_4s にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
+- [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
+- 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
 
 ## 3. 将来の研究課題
 

@@ -46,6 +46,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "v2v",
         "vram16_mode",
         "pi_h3",
+        "sol_vae",
         "fused_gguf_dequant_kernel",
       ].sort(),
     );
@@ -180,14 +181,14 @@ describe("settingsRowsHiddenFor", () => {
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -197,40 +198,42 @@ describe("settingsRowsHiddenFor", () => {
       vae: true,
       keepResidentEmbeddings: false,
       vram16: false,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
       vae: false,
       keepResidentEmbeddings: true,
       vram16: false,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: true,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["fused_gguf_dequant_kernel"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: true,
     });
   });
 
-  it("maps pi_h3 onto the pi-H3 row alone (ruling 107)", () => {
-    expect(settingsRowsHiddenFor(["pi_h3"])).toEqual({
-      vae: false,
-      keepResidentEmbeddings: false,
-      vram16: false,
-      piH3: true,
-      fusedGgufDequantKernel: false,
-    });
+  it("maps pi_h3 and sol_vae, each alone and together, onto the one Fast VAE row", () => {
+    for (const names of [["pi_h3"], ["sol_vae"], ["pi_h3", "sol_vae"]]) {
+      expect(settingsRowsHiddenFor(names), names.join("+")).toEqual({
+        vae: false,
+        keepResidentEmbeddings: false,
+        vram16: false,
+        fastVae: true,
+        fusedGgufDequantKernel: false,
+      });
+    }
   });
 
   it("hides all four when all four are refused", () => {
@@ -242,7 +245,7 @@ describe("settingsRowsHiddenFor", () => {
       vae: true,
       keepResidentEmbeddings: true,
       vram16: true,
-      piH3: false,
+      fastVae: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -260,6 +263,8 @@ describe("accelerationResetsFor", () => {
     expect(accelerationResetsFor(["vram16_mode"])).toEqual(["vram16Mode"]);
     expect(accelerationResetsFor(["fused_gguf_dequant_kernel"])).toEqual(["fusedGgufDequantKernel"]);
     expect(accelerationResetsFor(["pi_h3"])).toEqual(["piH3"]);
+    expect(accelerationResetsFor(["sol_vae"])).toEqual(["solVae"]);
+    expect(accelerationResetsFor(["pi_h3", "sol_vae"])).toEqual(["piH3", "solVae"]);
   });
 
   it("collects both without duplicates", () => {

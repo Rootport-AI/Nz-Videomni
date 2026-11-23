@@ -11,6 +11,7 @@ import {
   VAE_MODE_DEFAULT,
   VRAM16_MODE_SERVER_DEFAULT,
   PI_H3_DEFAULT,
+  SOL_VAE_SERVER_DEFAULT,
 } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 
@@ -34,6 +35,7 @@ describe("useAccelerationSettings", () => {
       keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
       vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
       piH3: PI_H3_DEFAULT,
+      solVae: SOL_VAE_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     });
   });
@@ -70,6 +72,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -86,6 +89,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -109,6 +113,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -125,6 +130,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -170,6 +176,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -186,6 +193,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -278,6 +286,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -351,6 +360,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -396,6 +406,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: true,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -478,6 +489,7 @@ describe("useAccelerationSettings", () => {
         keepResidentEmbeddings: KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
+        solVae: SOL_VAE_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -519,14 +531,17 @@ describe("useAccelerationSettings", () => {
     expect(result2.current.acceleration.vram16Mode).toBe(false);
   });
 
-  // Ruling 107: pi-H3, persisted from its first day.
-  it("setPiH3 updates state, writes through, and survives a remount", async () => {
+  // Ruling 107 / 2026-11-24: the "Fast VAE" row's one setter writes pi-H3
+  // and Sol together, persisted from their first day.
+  it("setFastVae (a pi-H3 choice) updates state, writes through, and survives a remount", async () => {
     const { result, unmount } = renderHook(() => useAccelerationSettings());
     expect(result.current.acceleration.piH3).toBe("off");
+    expect(result.current.acceleration.solVae).toBe(false);
 
-    act(() => result.current.setPiH3("4steps"));
+    act(() => result.current.setFastVae("4steps"));
 
     expect(result.current.acceleration.piH3).toBe("4steps");
+    expect(result.current.acceleration.solVae).toBe(false);
     expect(result.current.acceleration.vram16Mode).toBe(VRAM16_MODE_SERVER_DEFAULT);
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).piH3).toBe("4steps");
@@ -536,15 +551,57 @@ describe("useAccelerationSettings", () => {
     const { result: result2 } = renderHook(() => useAccelerationSettings());
     expect(result2.current.acceleration.piH3).toBe("4steps");
 
-    act(() => result2.current.setPiH3("2steps"));
+    act(() => result2.current.setFastVae("2steps"));
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).piH3).toBe("2steps");
     });
   });
 
+  it("setFastVae(\"sol\") turns pi-H3 off and Sol on, persisted across a remount", async () => {
+    const { result, unmount } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setFastVae("4steps"));
+    act(() => result.current.setFastVae("sol"));
+
+    expect(result.current.acceleration.piH3).toBe("off");
+    expect(result.current.acceleration.solVae).toBe(true);
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!);
+      expect(stored.piH3).toBe("off");
+      expect(stored.solVae).toBe(true);
+    });
+    unmount();
+
+    const { result: result2 } = renderHook(() => useAccelerationSettings());
+    expect(result2.current.acceleration.piH3).toBe("off");
+    expect(result2.current.acceleration.solVae).toBe(true);
+  });
+
+  it("setFastVae from Sol to a pi-H3 choice or Off turns Sol off — the pair never forms", () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setFastVae("sol"));
+    act(() => result.current.setFastVae("2steps"));
+    expect(result.current.acceleration.piH3).toBe("2steps");
+    expect(result.current.acceleration.solVae).toBe(false);
+
+    act(() => result.current.setFastVae("sol"));
+    act(() => result.current.setFastVae("off"));
+    expect(result.current.acceleration.piH3).toBe("off");
+    expect(result.current.acceleration.solVae).toBe(false);
+  });
+
+  it("resetToServerDefaults([\"solVae\"]) writes Sol back to off and persists it", async () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setFastVae("sol"));
+    act(() => result.current.resetToServerDefaults(["solVae"]));
+    expect(result.current.acceleration.solVae).toBe(false);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).solVae).toBe(false);
+    });
+  });
+
   it("resetToServerDefaults([\"piH3\"]) writes pi-H3 back to off and persists it", async () => {
     const { result } = renderHook(() => useAccelerationSettings());
-    act(() => result.current.setPiH3("2steps"));
+    act(() => result.current.setFastVae("2steps"));
     act(() => result.current.resetToServerDefaults(["piH3"]));
     expect(result.current.acceleration.piH3).toBe("off");
     await waitFor(() => {

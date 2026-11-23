@@ -519,6 +519,8 @@ def test_refresh_hides_pi_h3_on_ltx_and_resets_it_to_off():
     # Both LTX families name pi_h3; a hidden radio is written back to "off"
     # (the handler sends the key only when it is not "off").
     assert hidden_controls(["pi_h3"]) == {"accel_pi_h3"}
+    # The same radio carries Sol-H3-VAE: either name closes it.
+    assert hidden_controls(["sol_vae"]) == {"accel_pi_h3"}
     updates = _refresh_with(_models_json_with(
         "LTX23", ["keep_resident_embeddings", "alpha_gen", "vram16_mode",
                   "source_audio", "references", "pi_h3"]))

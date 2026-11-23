@@ -221,9 +221,11 @@ def test_the_published_unsupported_features_are_unchanged():
         assert "source_audio" in adapter.UNSUPPORTED_FEATURES
         rows = [row for row in adapter.CHAIN_REJECT_TABLE if row[1] == "source_audio"]
         assert len(rows) == 1 and rows[0][0] == "clips"
-        # added last at the time; pi-H3's row (pi_h3) came after it.
-        assert adapter.CHAIN_REJECT_TABLE[-2][1] == "source_audio"
-        assert adapter.CHAIN_REJECT_TABLE[-1][1] == "pi_h3"
+        # added last at the time; pi-H3's row (pi_h3) came after it, then
+        # Sol-H3-VAE's (sol_vae).
+        assert adapter.CHAIN_REJECT_TABLE[-3][1] == "source_audio"
+        assert adapter.CHAIN_REJECT_TABLE[-2][1] == "pi_h3"
+        assert adapter.CHAIN_REJECT_TABLE[-1][1] == "sol_vae"
 
 
 def test_constraints_publish_the_clip_strength_for_h3_only():

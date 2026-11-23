@@ -1,0 +1,510 @@
+{
+  "item": "gen_d",
+  "script": "outputs/h3-sol-spike-2026-11-23/h3_sol_spike.py",
+  "started_at": "2026-11-23T16:06:23+09:00",
+  "status": "done",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "status_short": [],
+    "clean": true
+  },
+  "versions": {
+    "torch": "2.13.0+cu130",
+    "python": "3.12.9",
+    "comfy-kitchen": "0.2.37",
+    "safetensors": "0.8.0"
+  },
+  "title": "イラスト調（平坦な塗り）",
+  "conditions": {
+    "seed": 1234,
+    "steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "width": 896,
+    "height": 1152,
+    "num_frames": 124,
+    "frame_rate": 24,
+    "loras": "Turbo LoRA minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors 0.8",
+    "negative_prompt": "",
+    "attention_backend": "sdpa",
+    "vram16_mode": true,
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "blocks_on_gpu": 8,
+    "deterministic": true,
+    "kind": "i2v",
+    "prompt": "An anime-style illustration of a girl drawn with flat cel-shaded colors and clean line art. She blinks and gently tilts her head while smiling at the viewer; the plain background stays still. Soft indoor ambience. Steady camera.",
+    "paths": {
+      "transformer": {
+        "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "bytes": 20970379616
+      },
+      "text_encoder": {
+        "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "bytes": 27141342152
+      },
+      "video_vae": {
+        "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+        "bytes": 5207808496
+      },
+      "audio_vae": {
+        "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+        "bytes": 605254808
+      },
+      "tokenizer_dir": {
+        "path": "models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer",
+        "bytes": null
+      }
+    },
+    "image": {
+      "path": "uploads/h3-a2v-development/00043-2168133585.jpg",
+      "bytes": 220139
+    }
+  },
+  "gate": {
+    "at": "2026-11-23T16:06:23+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "compute_apps": {
+        "count": 30,
+        "python_or_uvicorn_present": false,
+        "python_or_uvicorn_count": 0
+      },
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "766",
+        "16376"
+      ],
+      "memory_used_mib": 766
+    },
+    "engine_workers": []
+  },
+  "gpu_name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+  "request_check": {
+    "validate": "passed",
+    "expected_latents": 37,
+    "frames": 124
+  },
+  "request": {
+    "prompt": "An anime-style illustration of a girl drawn with flat cel-shaded colors and clean line art. She blinks and gently tilts her head while smiling at the viewer; the plain background stays still. Soft indoor ambience. Steady camera.",
+    "seed": 1234,
+    "width": 896,
+    "height": 1152,
+    "num_frames": 124,
+    "output_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\h3-sol-spike-2026-11-23\\runs\\gen_d\\output.mp4",
+    "frame_rate": 24,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images": [
+      {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\uploads\\h3-a2v-development\\00043-2168133585.jpg",
+        "frame_idx": 0
+      }
+    ],
+    "keep_resident": false,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "vram16_mode": true,
+    "loras": [
+      {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8
+      }
+    ],
+    "source_audio": null,
+    "references": [],
+    "negative_prompt": "",
+    "vsf_scale": 1.5,
+    "outpaint": null,
+    "inpaint": null,
+    "pi_h3": null
+  },
+  "patch_in": true,
+  "build_report": {
+    "dit": {
+      "prefix": "",
+      "num_layers": 50,
+      "hidden_size": 5376,
+      "heads": 56,
+      "adaln_grid": 1025,
+      "adaln_rank": 8,
+      "quant_layers": 200,
+      "quant_layers_by_format": {
+        "int8_tensorwise": 200
+      },
+      "fp8_mode": null,
+      "quant_specs": [
+        "int8_tensorwise/convrot=True/g256"
+      ],
+      "unknown": []
+    },
+    "text_encoder": {
+      "num_layers": 50,
+      "int8_layers": 350,
+      "has_visual": true,
+      "metadata": {
+        "minimax_h3_te": {
+          "num_hidden_layers": 50,
+          "output": "unnormalized_hidden_after_layer_50"
+        }
+      }
+    },
+    "video_vae_tensors": 562,
+    "audio_vae_tensors": 917,
+    "options": {
+      "blocks_on_gpu": 8,
+      "attention_backend": "sdpa",
+      "block_swap_prefetch": true,
+      "deterministic": true
+    },
+    "quant_backends": {
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      }
+    },
+    "device": "cuda"
+  },
+  "load_seconds": 1.51,
+  "engine": {
+    "seconds": 303.5,
+    "peak_vram_mb": 6387,
+    "peak_vram_reserved_mb": 7638,
+    "full": {
+      "seed_used": 1234,
+      "sampler": "euler",
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "peak_vram_mb": 6387,
+      "peak_vram_reserved_mb": 7638,
+      "rss_peak_gib": 23.91,
+      "commit_gib": 5.16,
+      "commit_peak_gib": 35.46,
+      "seconds": 303.5,
+      "num_frames": 124,
+      "frame_rate": 24,
+      "width": 896,
+      "height": 1152,
+      "size_bytes": 2588966,
+      "attention_used": "sdpa",
+      "block_swap_prefetch_used": "on",
+      "keep_resident_used": "off",
+      "vram16_mode_used": "on",
+      "images_used": 1,
+      "h3": {
+        "phases": {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.33
+            },
+            "rss_after_load_gib": 0.93,
+            "commit_after_load_gib": 2.36,
+            "te_read": {
+              "read_gib": 25.28,
+              "read_seconds": 14.25,
+              "layers_read": 50,
+              "encode_seconds": 14.99,
+              "tokens": 1065,
+              "vision_tokens": 1008,
+              "vision_tokens_per_image": [
+                1008
+              ]
+            },
+            "rss_after_release_gib": 1.65,
+            "commit_after_release_gib": 3.36,
+            "text_tokens": 1065,
+            "seconds": 17.51,
+            "rss_end_gib": 1.65,
+            "rss_process_peak_gib": 2.48,
+            "commit_end_gib": 3.36,
+            "commit_process_peak_gib": 6.17,
+            "peak_vram_mb": 2665,
+            "peak_vram_reserved_mb": 2692
+          },
+          "image_encode": {
+            "latent_shape": [
+              1,
+              24,
+              1,
+              72,
+              56
+            ],
+            "vision_tokens": 1008,
+            "canvas": [
+              896,
+              1152
+            ],
+            "source_size": [
+              [
+                896,
+                1152
+              ]
+            ],
+            "seconds": 1.34,
+            "rss_end_gib": 2.06,
+            "rss_process_peak_gib": 2.48,
+            "commit_end_gib": 3.87,
+            "commit_process_peak_gib": 6.17,
+            "peak_vram_mb": 1055,
+            "peak_vram_reserved_mb": 1458
+          },
+          "denoise": {
+            "dit": {
+              "quant_linears": 200,
+              "loaded_tensors": 732,
+              "loaded_gib": 19.53,
+              "read_seconds": 11.71
+            },
+            "dit_source": "file",
+            "rss_after_load_gib": 21.38,
+            "commit_after_load_gib": 27.08,
+            "rss_after_place_gib": 23.34,
+            "commit_after_place_gib": 33.09,
+            "sequence": {
+              "text": 1065,
+              "cond": 1008,
+              "audio": 414,
+              "video": 37296,
+              "total": 39783,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                36,
+                28
+              ]
+            },
+            "m_per_step": [
+              2,
+              3,
+              3,
+              3
+            ],
+            "block_swap_prefetch_used": "on",
+            "vram16": {
+              "cap_fraction": 0.857,
+              "cap_mib": 14033,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "meta",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 657
+            },
+            "rss_after_release_gib": 22.57,
+            "commit_after_release_gib": 28.62,
+            "seconds": 244.39,
+            "rss_end_gib": 22.57,
+            "rss_process_peak_gib": 23.39,
+            "commit_end_gib": 28.62,
+            "commit_process_peak_gib": 35.46,
+            "peak_vram_mb": 4771,
+            "peak_vram_reserved_mb": 6408
+          },
+          "decode": {
+            "vae_source": "file",
+            "audio_samples": 165333,
+            "audio_samples_decoded": 165600,
+            "frames": 124,
+            "seconds": 40.04,
+            "rss_end_gib": 3.3,
+            "rss_process_peak_gib": 23.91,
+            "commit_end_gib": 5.21,
+            "commit_process_peak_gib": 35.46,
+            "peak_vram_mb": 6387,
+            "peak_vram_reserved_mb": 7638
+          }
+        },
+        "quant_backends": {
+          "eager": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true,
+            "w4a8_int8_linear": true,
+            "quantize_per_tensor_fp8": true
+          },
+          "cuda": {
+            "available": true,
+            "disabled": false,
+            "int8_linear": true,
+            "w4a8_int8_linear": true,
+            "quantize_per_tensor_fp8": true
+          },
+          "triton": {
+            "available": true,
+            "disabled": true,
+            "int8_linear": true,
+            "w4a8_int8_linear": true,
+            "quantize_per_tensor_fp8": true
+          },
+          "hip": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false,
+            "w4a8_int8_linear": false,
+            "quantize_per_tensor_fp8": false
+          },
+          "ascend": {
+            "available": false,
+            "disabled": false,
+            "int8_linear": false,
+            "w4a8_int8_linear": false,
+            "quantize_per_tensor_fp8": false
+          }
+        },
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ]
+      }
+    }
+  },
+  "restored": true,
+  "standard_decoder": {
+    "from_file": 1,
+    "decode": 1,
+    "standard_decode_seconds": 33.97,
+    "tiled_arg": true
+  },
+  "latent": {
+    "file": "outputs/h3-sol-spike-2026-11-23/runs/gen_d/latent.safetensors",
+    "stats": {
+      "shape": [
+        1,
+        24,
+        37,
+        72,
+        56
+      ],
+      "mean": 0.19437820441443673,
+      "std": 1.1017884110104197,
+      "max_abs": 5.279587268829346,
+      "nan": 0,
+      "inf": 0
+    },
+    "dtype_handed": "torch.float32",
+    "channel_std": [
+      0.71441,
+      0.7004,
+      1.0342,
+      0.74943,
+      0.71357,
+      0.64511,
+      1.01129,
+      0.90091,
+      0.90965,
+      0.84619,
+      0.99543,
+      0.80939,
+      1.01848,
+      0.89538,
+      0.97746,
+      0.94089,
+      0.74156,
+      0.55205,
+      0.72441,
+      0.87974,
+      0.69687,
+      0.5235,
+      1.21861,
+      0.88498
+    ]
+  },
+  "outputs": {
+    "mp4": "outputs/h3-sol-spike-2026-11-23/runs/gen_d/output.mp4",
+    "probe": {
+      "path": "outputs/h3-sol-spike-2026-11-23/runs/gen_d/output.mp4",
+      "video": {
+        "codec_name": "h264",
+        "width": 896,
+        "height": 1152,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "nb_read_frames": "124"
+      }
+    }
+  },
+  "self_check": {
+    "passed": true,
+    "failures": []
+  },
+  "finished_at": "2026-11-23T16:11:30+09:00"
+}

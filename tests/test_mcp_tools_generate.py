@@ -784,6 +784,47 @@ def test_pi_h3_argument_default_matches_the_server():
     assert GenerateChainRequest.model_fields["pi_h3"].default == "off"
 
 
+def test_both_tools_expose_sol_vae_as_an_optional_bool_defaulting_to_the_server():
+    from api.models import GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        schema = tools[name].inputSchema
+        prop = schema["properties"]["sol_vae"]
+        assert prop["type"] == "boolean" and prop["default"] is False, name
+        assert "sol_vae" not in set(schema.get("required", [])), name
+        assert "on->off" in tools[name].description, name
+    assert GenerateRequest.model_fields["sol_vae"].default is False
+    assert GenerateChainRequest.model_fields["sol_vae"].default is False
+
+
+def test_sol_vae_sent_only_when_true():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+
+    set_client(_client_for_handler(handler))
+    anyio.run(functools.partial(generate.submit_generate, "p"))
+    assert "sol_vae" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", width=640, height=384, num_frames=124,
+                                sol_vae=True))
+    body = captured["body"]
+    assert body["sol_vae"] is True and "pi_h3" not in body
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name not in body
+    clips = [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+    anyio.run(generate.submit_chain, "p", clips)
+    assert "sol_vae" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_chain, "p", clips, sol_vae=True))
+    assert captured["body"]["sol_vae"] is True
+
+
 # --------------------------------------------------------------- submit_chain
 
 

@@ -37,6 +37,9 @@ FEATURE_UI: dict[str, tuple[str, ...]] = {
     # MiniMax H3 only: both LTX families name ``pi_h3``. The radio alone; its
     # warning line follows the radio's own .change (ui.py), not this table.
     "pi_h3": ("accel_pi_h3",),
+    # The same radio carries Sol-H3-VAE (the "Fast VAE" row); both LTX
+    # families name ``sol_vae`` too.
+    "sol_vae": ("accel_pi_h3",),
     # Published by the family without GGUF weights (MiniMax H3). The server
     # ignores the value rather than 422-ing it; it is hidden because the
     # control can do nothing there.

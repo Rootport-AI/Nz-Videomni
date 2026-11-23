@@ -37,6 +37,10 @@ trims; a retake is one clip, kept whole); the joined rows go to the single
 job's DWD decode once (``dwd.plan_chunks`` splits them). The video latents are
 still carried, joined and checked as before; they are not decoded. Without
 pi-H3 the chain is unchanged.
+
+Sol-H3-VAE (``base.sol_vae``): decided once at the start
+(``pipeline_h3.sol_start``) and handed to the single job's ``_decode`` with
+the joined latents, which judges their size; without it the chain is unchanged.
 """
 
 from __future__ import annotations
@@ -488,6 +492,8 @@ def run_chain_h3(
         # (only such a chain reads it), as in a single job.
         for req in requests:
             P.validate_request(req, dit_path=pipe.paths.transformer)
+        # Sol-H3-VAE: decided once for the chain's one decode (None without sol_vae).
+        sol = P.sol_start(base, pipe.device)
         pi_feats: list = []         # pi-H3: each clip's last-evaluation rows (CPU)
         pi_drop: list[int] = []     # pi-H3: how many of each clip's first latents are dropped
         pi_clip_records: list[dict] = []
@@ -774,7 +780,10 @@ def run_chain_h3(
                 f"chain: concatenated latents {list(video_cat.shape)} / {list(audio_cat.shape)}, expected "
                 f"{layout.total_latent_frames} video / {layout.total_audio_latents} audio latents"
             )
-        dwd_kw: dict = {}
+        decode_kw: dict = {}
+        if sol is not None:
+            # Only a sol_vae chain passes the key (the size is judged on the joined latents).
+            decode_kw["sol"] = sol
         if pi is not None:
             # The clips' rows joined (heads dropped from clip 1 on), checked as the latents are.
             joined = join_dwd_features(pi_feats, pi_drop)
@@ -784,7 +793,7 @@ def run_chain_h3(
                 raise RuntimeError(
                     f"chain: joined DWD rows of {t_join} latents, expected {layout.total_latent_frames} (5n+2)"
                 )
-            dwd_kw = {"dwd": {"path": pi.path, "features": joined}}
+            decode_kw["dwd"] = {"path": pi.path, "features": joined}
             del joined
         del prev_video, negative_hidden   # the negative's hidden states, reused by every clip
         if not keep:
@@ -802,13 +811,13 @@ def run_chain_h3(
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
                         source_wave=src_wave if retake_runtime["muxed_original_waveform"] else None, trim_head=0,
-                        **dwd_kw,
+                        **decode_kw,
                     )
                     src_wave = None
                 elif source is None:
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
-                        **dwd_kw,
+                        **decode_kw,
                     )
                 else:
                     # Video-to-video: the input video's context frames are cut off the
@@ -817,9 +826,9 @@ def run_chain_h3(
                     size_bytes = pipe._decode(
                         out_req, video_cat.to(pipe.device), audio_cat.to(pipe.device), entry, keep=keep,
                         trim_head=int(layout.trim_px), handle_path=str(out.with_name(out.stem + "_audio_handle.wav")),
-                        **dwd_kw,
+                        **decode_kw,
                     )
-        del video_cat, audio_cat, dwd_kw
+        del video_cat, audio_cat, decode_kw
         ok = True
     finally:
         if not (ok and keep):
@@ -841,6 +850,9 @@ def run_chain_h3(
         h3["pi_h3"] = {**pi_clip_records[0],
                        "dwd": {"chunks": len(dec_dwd.get("chunks", [])), "seconds": dec_dwd.get("seconds")}}
         extra["pi_h3_used"] = pi_clip_records[0].get("choice")
+    if base.sol_vae is not None:
+        # Only for a sol_vae chain: the one decode's record, as a single job's.
+        extra["sol_vae_used"], h3["sol_vae"] = P.sol_record(decode_phases.data.get("decode", {}))
     chain = layout.to_dict()
     v2v_layout = chain.pop("v2v", None)
     retake_layout = chain.pop("retake", None)

@@ -58,6 +58,22 @@ FIXED_CFG = 1.0
 
 #: The pi-H3 radio's "not in use" value (the server field's default).
 PI_H3_OFF = "off"
+#: The Fast VAE radio's Sol-H3-VAE value (it feeds ``sol_vae``, not ``pi_h3``).
+FAST_VAE_SOL = "sol"
+#: The pi-H3 choices of the Fast VAE radio (the server's ``pi_h3`` values).
+PI_H3_CHOICES = ("4steps", "2steps")
+
+
+def split_fast_vae(value) -> tuple[str, bool]:
+    """The Fast VAE radio's one value -> ``(pi_h3, sol_vae)``, the two request
+    fields: a pi-H3 choice is ``(choice, False)``, Sol is ``("off", True)``,
+    anything else ``("off", False)``. The one place the radio is split; what
+    follows reads the pi-H3 value as before."""
+    if value in PI_H3_CHOICES:
+        return value, False
+    if value == FAST_VAE_SOL:
+        return PI_H3_OFF, True
+    return PI_H3_OFF, False
 
 
 def _number(value) -> bool:

@@ -1,0 +1,134 @@
+{
+  "item": "S9",
+  "title": "Sol の重みの読み込みの時間",
+  "rule": "記録だけ（OS のファイルのキャッシュを通さない読み取りの秒と、from_file の 3 回の秒）",
+  "started_at": "2026-11-23T23:17:49+09:00",
+  "git": {
+    "head": "f8e0514fed3f4566141f1c5693435775277d5255",
+    "branch": "dev",
+    "status_porcelain": [
+      " M api/models.py",
+      " M engine_h3/chain_h3.py",
+      " M engine_h3/pipeline_h3.py",
+      " M engine_h3/worker.py",
+      " M gradio_ui/constraints.py",
+      " M gradio_ui/feature_scope.py",
+      " M gradio_ui/handlers.py",
+      " M gradio_ui/i18n.py",
+      " M gradio_ui/styles.py",
+      " M gradio_ui/ui.py",
+      " M mcp_server/server.py",
+      " M mcp_server/tools/generate.py",
+      " M scripts/install_model.ps1",
+      " M scripts/manifests/40-minimaxh3.json",
+      " M services/engines/h3/adapter.py",
+      " M services/engines/ltx/adapter.py",
+      " M services/engines/ltx25/adapter.py",
+      " M services/pipeline_manager.py",
+      " M tests/test_engine_dispatch.py",
+      " M tests/test_gradio_constraints.py",
+      " M tests/test_gradio_handlers.py",
+      " M tests/test_gradio_models.py",
+      " M tests/test_gradio_ui.py",
+      " M tests/test_h3_chain_a2v_api.py",
+      " M tests/test_h3_engine.py",
+      " M tests/test_ltx25_adapter.py",
+      " M tests/test_ltx25_api_guard.py",
+      " M tests/test_ltx_adapter_audit.py",
+      " M tests/test_mcp_tools_generate.py",
+      " M tests/test_mcp_tools_system.py",
+      " M tests/test_model_swap_load.py",
+      "?? engine_h3/sol_vae.py",
+      "?? tests/test_h3_sol_api.py",
+      "?? tests/test_h3_sol_engine.py"
+    ],
+    "dirty": true
+  },
+  "gate": {
+    "at": "2026-11-23T23:17:49+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 884,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "cmd": [
+    ".venv-engine-h3/Scripts/python.exe",
+    "-B",
+    "outputs/h3-sol-gates-2026-11-23/engine_items.py",
+    "--item",
+    "S9",
+    "--out",
+    "outputs/h3-sol-gates-2026-11-23/runs/S9"
+  ],
+  "exit_code": 0,
+  "seconds_wall": 5.8,
+  "engine": {
+    "item": "S9",
+    "dry_run": false,
+    "started": "2026-11-23T23:17:51",
+    "torch": "2.13.0+cu130",
+    "cuda_available": true,
+    "file": "models/MiniMaxH3/VAE/Sol/minimax_h3_sol_vae_int8_convrot.safetensors",
+    "bytes": 1988306504,
+    "no_buffering_read": {
+      "bytes": 1988306504,
+      "seconds": 0.37,
+      "mib_per_s": 5161.0
+    },
+    "from_file": [
+      {
+        "seconds_wall": 0.89,
+        "load_report": {
+          "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+          "int8_layers": 96,
+          "loaded_tensors": 393,
+          "loaded_mib": 1552.2,
+          "seconds": 0.88
+        }
+      },
+      {
+        "seconds_wall": 0.61,
+        "load_report": {
+          "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+          "int8_layers": 96,
+          "loaded_tensors": 393,
+          "loaded_mib": 1552.2,
+          "seconds": 0.61
+        }
+      },
+      {
+        "seconds_wall": 0.52,
+        "load_report": {
+          "file": "minimax_h3_sol_vae_int8_convrot.safetensors",
+          "int8_layers": 96,
+          "loaded_tensors": 393,
+          "loaded_mib": 1552.2,
+          "seconds": 0.52
+        }
+      }
+    ],
+    "ok": true,
+    "finished": "2026-11-23T23:17:56"
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T23:17:56+09:00",
+  "workers_after": []
+}

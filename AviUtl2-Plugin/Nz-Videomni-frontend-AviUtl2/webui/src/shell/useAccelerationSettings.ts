@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   effectiveAcceleration,
+  fastVaeSettings,
   readStoredAcceleration,
   withServerDefaults,
   writeStoredAcceleration,
 } from "./accelerationSettings";
-import type { AccelerationSettings, AttentionBackend, PiH3Mode, VaeMode } from "./accelerationSettings";
+import type { AccelerationSettings, AttentionBackend, FastVaeChoice, VaeMode } from "./accelerationSettings";
 
 export interface UseAccelerationSettingsResult {
   /** The EFFECTIVE settings (§1-10, 2026-08-03): the stored choices with
@@ -54,10 +55,12 @@ export interface UseAccelerationSettingsResult {
    * other six (台帳 §1-101, 2026-10-18). */
   setVram16Mode: (value: boolean) => void;
   /** Write-through to `localStorage`, same persistence rationale as
-   * {@link setVaeMode} — trading a little quality for a few-step sampler is a
-   * standing preference, persisted from its first day (ruling 107,
-   * 2026-11-23). */
-  setPiH3: (value: PiH3Mode) => void;
+   * {@link setVaeMode} — trading a little quality for speed is a standing
+   * preference. The "Fast VAE" row's ONE setter (2026-11-24): it writes
+   * `piH3` and `solVae` together (`fastVaeSettings` — `"sol"` is pi-H3 off +
+   * Sol on, any other choice is that pi-H3 choice + Sol off), so the two can
+   * never be on at once. */
+  setFastVae: (value: FastVaeChoice) => void;
   /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
    * panel's Output row — whether finished mp4s carry their generation
    * conditions. A standing preference, persisted like the rows above. */
@@ -92,8 +95,8 @@ export interface UseAccelerationSettingsResult {
  * §3-114) with its setter and its Settings row in the same change, so it never
  * spent a day in that state. `embedMp4Metadata` (§3-164, 2026-09-24) is the
  * Output row that shares this store; it too was persisted from its first day,
- * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), and `piH3` (ruling 107,
- * 2026-11-23).
+ * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), `piH3` (ruling 107,
+ * 2026-11-23) and `solVae` (Sol-H3-VAE, 2026-11-24).
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -129,6 +132,7 @@ export function useAccelerationSettings(
       keepResidentEmbeddings: stored.keepResidentEmbeddings,
       vram16Mode: stored.vram16Mode,
       piH3: stored.piH3,
+      solVae: stored.solVae,
       embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
@@ -146,6 +150,7 @@ export function useAccelerationSettings(
       keepResidentEmbeddings: acceleration.keepResidentEmbeddings,
       vram16Mode: acceleration.vram16Mode,
       piH3: acceleration.piH3,
+      solVae: acceleration.solVae,
       embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
@@ -157,6 +162,7 @@ export function useAccelerationSettings(
     acceleration.keepResidentEmbeddings,
     acceleration.vram16Mode,
     acceleration.piH3,
+    acceleration.solVae,
     acceleration.embedMp4Metadata,
   ]);
 
@@ -188,8 +194,8 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, vram16Mode: value }));
   }, []);
 
-  const setPiH3 = useCallback((value: PiH3Mode) => {
-    setAcceleration((prev) => ({ ...prev, piH3: value }));
+  const setFastVae = useCallback((value: FastVaeChoice) => {
+    setAcceleration((prev) => ({ ...prev, ...fastVaeSettings(value) }));
   }, []);
 
   const setEmbedMp4Metadata = useCallback((value: boolean) => {
@@ -224,7 +230,7 @@ export function useAccelerationSettings(
     setVaeMode,
     setKeepResidentEmbeddings,
     setVram16Mode,
-    setPiH3,
+    setFastVae,
     setEmbedMp4Metadata,
     resetToServerDefaults,
   };

@@ -41,7 +41,11 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   32 の倍数、fps は 24 固定で指定します（num_frames の既定 49 は LTX の値
   なので、H3 で省略すると 422 になります）。H3 では submit_generate の
   num_inference_steps / shift_video / shift_audio（省略で既定 20 / 12 / 3）
-  が選べます。H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
+  が選べます。H3 では高速化の pi-H3（submit_generate と submit_chain の
+  pi_h3。"off"〔既定〕/ "4steps" / "2steps"）も選べ、有効のあいだはステップ数と
+  shift を指定せず選択の値（4steps は 4 / 12 / 3、2steps は 2 / 12 / 3。正本は
+  list_models の constraints.pi_h3）で動きます（詳細は submit_generate の説明）。
+  H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
   既定 on。切るときだけ false）も選べ、収まらないときはジョブが failed になり、
   job_status の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を
   下げるか、VRAM 16GB mode を切ってください）を含みます。LTX で vram16_mode=true を送ると 422
@@ -50,7 +54,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   と単発の A2V（submit_generate の source_audio_id と
   source_audio_strength。H3 専用）と、クリップの連結（submit_chain。
   重なりは 22 フレーム固定・2 本目以降は 39 フレーム以上。ステップ数と shift は
-  既定の 20 / 12 / 3 で動き、MCP からは変えられません）に対応します。連結の
+  既定の 20 / 12 / 3 で動き、MCP からは変えられません。pi_h3 を選んだときは
+  選択の値で動きます）に対応します。連結の
   冒頭画像（clips[0].conditioning_images。strength は指定しない。指定すると
   422 FEATURE_UNSUPPORTED の keyframe_strength）も使えます。V2V
   （source_video_id）は H3 では引き継ぐフレーム数が 22 固定なので、
@@ -67,8 +72,8 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
   H3 では loras の各要素の audio_strength は無視されます（422 にはならず、
   サーバーが None に直します）。
-  LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と
-  vram16_mode=true だけです
+  LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と、
+  MiniMax H3 専用の vram16_mode=true・source_audio_id・pi_h3（"off" 以外）だけです
   （422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
   は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /
   neg_method / vsf_scale も効きます）。
@@ -98,7 +103,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   長尺IC-LoRAも含みます）が使えます。submit_chain のモードは、撮り直し
   （Retake）と end_source_video_id / end_source_image_id（素材（末尾））を
   含めて LTX 2.5 でもすべて使えます。submit_chain で LTX 2.5 では使えないのは
-  vae_mode（既定値以外）だけです（keep_resident・attention_backend・
+  vae_mode（既定値以外）と、MiniMax H3 専用の pi_h3（"off" 以外）だけです（keep_resident・attention_backend・
   nag_enabled は submit_chain でも使えます）。keep_resident_embeddings は
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
   撮り直し（Retake）は submit_chain の引数（retake_* の 6 引数）、画角拡張

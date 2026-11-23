@@ -10,7 +10,8 @@ MiniMax H3 には CFG そのものが無いため。``num_inference_steps`` と 
 MiniMax H3 では利用者の選ぶ値なので、``submit_generate`` に限り任意引数で
 公開する（既定 ``None`` は送らない＝ベースモデルの既定値。LTX では 8 以外は 422）。
 ``submit_chain`` には出さない: H3 の連結生成は送らないとき H3 の既定（20 ステップ・
-shift 12 / 3）で動くので、MCP からは Turbo LoRA の 8 ステップを指定できない。
+shift 12 / 3）で動くので、MCP からは Turbo LoRA の 8 ステップを指定できない
+（``pi_h3`` を選んだときは、選択の値〔4steps は 4・12・3、2steps は 2・12・3〕で動く）。
 一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
 区画）はすべて公開する（同書 §2 の D12・D22）--
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
@@ -45,6 +46,11 @@ VERIFICATION_LOG §52。公開はオーナー裁定で、``Docs/PRUNAVAED_WORKOR
 任意引数で公開する（既定 ``None`` は送らない＝ベースモデルの既定値。H3 では on。
 LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結生成では
 送らないので既定の on で動く）。``Docs/MCP_SERVER_DESIGN.md`` §2 の D28）。
+
+``pi_h3``（MiniMax H3 の高速化 pi-H3。``"off"`` / ``"4steps"`` / ``"2steps"``）は
+``submit_generate`` と ``submit_chain`` の引数の最後に置き、``"off"`` 以外のときだけ
+送る（``vae_mode`` と同じ規則）。ステップ数・shift との食い違いは送る前に検査せず、
+サーバーの 422 に任せる。LTX では ``"off"`` 以外が 422。
 
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
@@ -244,6 +250,7 @@ async def submit_generate(
     vram16_mode: bool | None = None,
     source_audio_id: str | None = None,
     source_audio_strength: float | None = None,
+    pi_h3: Literal["off", "4steps", "2steps"] = "off",
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -252,8 +259,8 @@ async def submit_generate(
     ``fused_gguf_dequant_kernel``）。どの機能が使えないかは
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
-    （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``
-    だけです。**``nag_enabled``（ネガティブプロンプト。
+    （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
+    ``source_audio_id``・``pi_h3``（``"off"`` 以外）だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -313,6 +320,8 @@ async def submit_generate(
       * ``num_inference_steps`` / ``shift_video`` / ``shift_audio`` は省略
         （``None``）すると送らず、ベースモデルの既定値になります（H3 は
         20 / 12 / 3。範囲は ``constraints.sampling`` の各 ``min``〜``max``）。
+        ``pi_h3`` を ``"off"`` 以外にしたときは、選択の値（4steps は 4 / 12 / 3、
+        2steps は 2 / 12 / 3）になります（下の ``pi_h3`` の項）。
       * LTX（``sampling`` が null）ではステップ数は distilled の 8 に固定で、
         8 以外を送ると 422 になります。shift は LTX には無い概念で、送っても
         無視されます。
@@ -375,7 +384,8 @@ async def submit_generate(
         ``constraints``）。元動画の縦横は偶数であること（奇数は422）。
         **LoRA は不要で、このツールは何も注入しません**（Turbo などの LoRA は
         いつもどおり ``loras`` で指定できます）。ステップ数と shift は
-        ``num_inference_steps`` / ``shift_*`` で指定できます。音声は
+        ``num_inference_steps`` / ``shift_*`` で指定できます（``pi_h3`` が
+        ``"off"`` 以外のときは指定せず、選択の値で動きます）。音声は
         ``outpaint_audio_strength``（0〜1、省略でサーバーの既定 0.5）で決めます。
         **``outpaint_freeze_source_audio`` は送らないでください**（指定すると
         送られ、H3 では 422 になります）。音声トラックの無い元動画では
@@ -600,7 +610,8 @@ async def submit_generate(
             書き込んだ内容は ``get_mp4_info`` で読めます。
         num_inference_steps: ステップ数（MiniMax H3 用。省略で送らない＝
             ベースモデルの既定値。H3 は既定 20・範囲 1〜50。LTX は 8 固定で、
-            8 以外は 422）。
+            8 以外は 422）。``pi_h3`` が ``"off"`` 以外のときは、この引数と
+            ``shift_video`` / ``shift_audio`` は省略してください（選択の値で動きます）。
         shift_video: 映像のノイズスケジュールの shift（MiniMax H3 用。省略で
             送らない＝既定値。H3 は既定 12・範囲 1〜20。LTX では無視）。
         shift_audio: 音声のノイズスケジュールの shift（MiniMax H3 用。省略で
@@ -624,6 +635,23 @@ async def submit_generate(
             とセット）。省略すると送らず、サーバー側の既定 0.5 になる。1.0 は音声を固定して元の波形を
             出力に付け、1.0 未満はモデルが解釈し直した音声になる。
             ``source_audio_id`` なしで指定すると POST 前に ToolError。
+        pi_h3: MiniMax H3 の高速化 pi-H3（少ないステップで仕上がるように蒸留した
+            差分と、動画VAE の復号器を使わずに画素を出す復号）。``"off"``（既定）・
+            ``"4steps"``・``"2steps"``。**既定の ``"off"`` のままならキーは
+            サーバーへ送られません。** **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で
+            ``"off"`` 以外を指定すると 422 FEATURE_UNSUPPORTED になります。**
+            **有効のあいだは ``num_inference_steps`` / ``shift_video`` /
+            ``shift_audio`` を指定しないでください**（選択の値で動きます。
+            4steps は 4・12・3、2steps は 2・12・3。正本は ``list_models`` の
+            ``constraints.pi_h3``。違う値を明示すると 422 VALIDATION_ERROR）。
+            **Turbo LoRA や Turbo モデルとの併用は非推奨です**（断られは
+            しません）。**2steps は品質に課題があります**（細部が潰れたり、
+            収束しきらない靄が残ったりします）。先頭に置いた絵から、絵柄や背景が
+            変わることがあります。
+            重みのファイルが無いと 422 MODEL_FILE_MISSING
+            （``install-MiniMaxH3.bat`` で取得します）、本体の重みと合わないと
+            422 MODEL_INCOMPATIBLE です。実際に使われたかは、ジョブ完了後の
+            メタデータの ``pi_h3_used``（pi-H3 のジョブにだけ入ります）。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -748,6 +776,11 @@ async def submit_generate(
     # against EMBED_MP4_METADATA_DEFAULT.
     if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
         payload["embed_mp4_metadata"] = embed_mp4_metadata
+    # pi_h3 (MiniMax H3): the vae_mode rule, against the "off" literal (the
+    # server declares it inline, GenerateRequest.pi_h3). No check against the
+    # step count / shifts here: the server's 422 is the source of truth.
+    if pi_h3 != "off":
+        payload["pi_h3"] = pi_h3
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -932,6 +965,7 @@ async def submit_chain(
         "w25", "w28", "w31", "w34", "w37", "w40", "w43",
         "w46", "w49", "w52", "w55", "w58", "w61",
     ] = "standard",
+    pi_h3: Literal["off", "4steps", "2steps"] = "off",
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -953,7 +987,8 @@ async def submit_chain(
     連結生成では1本の ``negative_prompt`` が全クリップ・全ステージに効きます）。
     ただし次の引数は使えず、既定値以外にすると 422 FEATURE_UNSUPPORTED に
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
-    で LTX 2.3 に切り替えてください。
+    で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
+    ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -974,7 +1009,8 @@ async def submit_chain(
     以上、幅と高さは 32 の倍数、``frame_rate`` は 24 です。ステップ数と shift と
     VRAM 16GB mode はこのツールに引数が無いので、H3 の既定（20 ステップ・
     shift 12 / 3・VRAM 16GB mode on）で動きます（Turbo LoRA の 8 ステップは
-    指定できません）。``overlap_frames`` / ``overlap_strength`` /
+    指定できません）。``pi_h3`` を ``"off"`` 以外にしたときは、選択の値
+    （4steps は 4・12・3、2steps は 2・12・3）で動きます。``overlap_frames`` / ``overlap_strength`` /
     ``stage2_window`` / ``chunked_upsample`` は H3 では無視されます。
     ``clips[0].conditioning_images``（冒頭画像）は H3 でも使えます（``strength``
     は指定しない。指定すると 422 FEATURE_UNSUPPORTED の ``keyframe_strength``）。
@@ -1265,6 +1301,21 @@ async def submit_chain(
             送信しません）。
         stage2_window: Stage-2 の窓の名前（上の「Stage-2 の窓」の節。既定
             ``"standard"`` のときは送信しません）。
+        pi_h3: submit_generate と同じ意味（MiniMax H3 の高速化 pi-H3。
+            ``"off"``（既定）・``"4steps"``・``"2steps"``。**既定のままなら
+            キーは送りません。** 連結・V2V・撮り直しの全クリップに 1 つの選択が
+            効きます）。**MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``"off"`` 以外を
+            指定すると 422 FEATURE_UNSUPPORTED になります。** このツールには
+            ステップ数と shift の引数が無いので、指定するだけで選択の値
+            （4steps は 4・12・3、2steps は 2・12・3。正本は ``list_models`` の
+            ``constraints.pi_h3``）で動きます。**Turbo LoRA や Turbo モデルとの
+            併用は非推奨です**（断られはしません）。**2steps は品質に課題が
+            あります**（細部が潰れたり、収束しきらない靄が残ったりします）。
+            先頭に置いた絵から、絵柄や背景が変わることがあります。重みの
+            ファイルが無いと 422 MODEL_FILE_MISSING（``install-MiniMaxH3.bat``
+            で取得します）、本体の重みと合わないと 422 MODEL_INCOMPATIBLE です。
+            実際に使われたかは、ジョブ完了後のメタデータの ``pi_h3_used``
+            （pi-H3 のジョブにだけ入ります）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1354,6 +1405,10 @@ async def submit_chain(
     # embed_mp4_metadata: same rule as submit_generate.
     if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
         payload["embed_mp4_metadata"] = embed_mp4_metadata
+    # pi_h3: same rule as submit_generate (sent only when not "off"; no
+    # pre-check, the server's 422 is the source of truth).
+    if pi_h3 != "off":
+        payload["pi_h3"] = pi_h3
     # stage2_window: same rule as vae_mode (sent only when it differs from the
     # server default "standard"). No pre-check here: the server's 422 is the
     # single source of truth (full_length shape / V2V context / retake window).

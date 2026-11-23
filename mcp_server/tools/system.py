@@ -127,7 +127,10 @@ async def list_models() -> dict[str, Any]:
             8n+1、MiniMax H3 は ``{1, 0}``＝0〜num_frames−1 の任意のフレーム）、
             ``prompt_token_limit``（プロンプトのトークン数の上限。LTX は開始
             トークン込みで 1024、MiniMax H3 は null＝上限を確かめていない。
-            サーバーはこの値で要求を検査しない））。ほかに
+            サーバーはこの値で要求を検査しない）、``pi_h3``（MiniMax H3 だけ。
+            submit_generate / submit_chain の ``pi_h3`` の選択ごとに、それで動く
+            ``{num_inference_steps, shift_video, shift_audio}``。4steps は 4・12・3、
+            2steps は 2・12・3。LTX には鍵が無い））。ほかに
             ``engine_family`` / ``present`` / ``category_order`` /
             ``categories`` を含みます。
             ``unsupported_features`` に載っている機能を submit_generate /

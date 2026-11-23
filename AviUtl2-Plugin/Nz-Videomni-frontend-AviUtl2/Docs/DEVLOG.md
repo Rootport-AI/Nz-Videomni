@@ -6851,7 +6851,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - **Settings の「Acceleration: / 生成の高速化:」に、MiniMax H3 の pi-H3 の行（off／4steps／2steps。既定は off）が出るようになりました。** 選んでいるあいだ、行の下に赤い太字の注意書きが出て、ステップ数と shift のスライダーはサーバーが配る値で固定されます。単発・Chained・Retake・Outpainting・Inpainting で同じ動きです。
 - 作り（どう動くか）の正本は、バックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.7 の「操作パネル（段 3）」で、本節には写しません。裁定は同 裁定 107 です。
-- 機械の確認の数値は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §226 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-293 にだけ書きます。**実機への配置は済み、オーナーの実機での確認は未了です。**
+- 機械の確認の数値とオーナーの実機での確認の結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §226 にだけ、確認の項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-293 にだけ書きます。**実機に配置し、オーナーの実機での確認は全項目合格しました（2026-11-23）。**
 - 変えたのは操作パネルだけです。プラグイン本体（C++）と言語ファイルは変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。
 
 ### 178.2 進め方とコミット
@@ -6901,4 +6901,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 ### 178.6 実機の門
 
-- 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-293 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-293）。
+- 実機への配置（`scripts/deploy.ps1`）は済みました。項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-293 でした（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-293）。
+- （その後、2026-11-23 に全項目合格。台帳は閉じた。生成品質についてのオーナーの所見 2 件を含めて、記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §226.9）

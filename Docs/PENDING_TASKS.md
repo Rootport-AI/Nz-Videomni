@@ -21,56 +21,11 @@
 - **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
 - **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
 
-## 2. 実装済み・ユーザーのテスト待ち
+### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
-
-### 1-293. MiniMax H3 の pi-H3 を、操作パネルの Settings から選べるようにする（起票：2026-11-23）
-
-- **概要**: Settings の「生成の高速化:」に pi-H3 の行（off・4steps・2steps。既定は off）を足し、4steps か 2steps を選んでいるあいだは、ステップ数と Shift のスライダーをサーバーの値で固定するようにした（dev の `c1afd187`、配布用の aux2 は `2dd7b12f`）。残るのはオーナーの実機での確認。
-- **これからすること**: この案件の残りは段 4（Gradio・MCP・インストーラーの案内・API の文書など。未着手）。細目は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「段の切り方と、まだ無いもの」。
-- **出典**: 裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 107、操作パネルの作りは同 §6.7 の「操作パネル（段 3）」、機械の確認は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §226、実装の記録はフロントエンド `Docs/DEVLOG.md` §178。本節が実機確認の項目の正本。
-
-前提: 実機への配置は済んでいる（実機のプラグインは配布用の aux2 と同じ中身）。バックエンドのサーバーを前から起動したままの場合は、起動し直してから確認する。画面上部のベースモデルの欄は MiniMax H3 にし、FL2VA の重みを読み込んでおく。操作パネルの言語は日本語にする。「（続き）」で始まる項目は、直前の項目の状態から続けて行う。
-
-#### Settings の行と注意書き
-
-- [ ] Settings を開く → 「生成の高速化:」の欄に「pi-H3」の行（off・4steps・2steps のボタン）があり、off が選ばれていて、行の下に赤い文は出ていない。
-- [ ] （続き）4steps を押す → 行の下に赤い太字で「pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」が出る。表示を英語に切り替えると「pi-H3 is not recommended when using Turbo LoRA or Turbo models.」になる（確かめたら日本語に戻す）。
-
-#### スライダーの固定と、既定値への復帰
-
-- [ ] （続き）Settings を閉じて Single タブを見る → Steps 4・Shift（映像）12・Shift（音声）3 のスライダーが灰色で、つまんでも動かない。マウスを乗せると「Settings の pi-H3 が有効のため固定」と出る。
-- [ ] （続き）Chained タブ、Edit タブの Outpainting と Inpainting のサブタブを順に開く → どれも Single タブと同じ値で灰色になり、スライダーが動かない。
-- [ ] （続き）タイムラインの動画を右クリックして Retake に送り、Retake のサブタブを見る → Single タブと同じ値で灰色になり、スライダーが動かない。
-- [ ] Settings で 2steps を押してから Single タブを見る → Steps が 2 になっていて（Shift は 12・3）、スライダーが動かない。
-- [ ] Settings で off を押し、Single タブで Steps を 30 に動かす。Settings で 4steps を押し、もう一度 off を押してから Single タブを見る → Steps は 30 ではなく 20、Shift は 12・3 で、スライダーを動かせる。
-
-#### 生成と記録
-
-- [ ] Settings で 4steps を押し、Single タブでプロンプトに場面を 1 文書いて生成し、できた mp4 を Toolbox の mp4 info に落とす → 表示の中に `"pi_h3_used": "4steps"` と `"num_inference_steps": 4` がある。
-- [ ] 4steps のまま、Chained タブで 2 クリップの連結を生成する → 断られずにジョブが完了し、できた mp4 を mp4 info に落とすと `"pi_h3_used": "4steps"` がある。
-- [ ] 4steps のまま、タイムラインの動画を右クリックして Retake に送り、生成する → 断られずにジョブが完了し、できた mp4 を mp4 info に落とすと `"pi_h3_used": "4steps"` がある。
-- [ ] 4steps のまま、Inventory の LoRA の棚の `minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16` のカードを押してプロンプト欄にタグを入れ、Single タブで生成を押す → 止められずにジョブが始まる。
-
-#### ベースモデルの切り替えと、選択の保存
-
-- [ ] Settings で 4steps を押したまま、画面上部のベースモデルの欄を LTX 2.3 に切り替えて Settings を開く → pi-H3 の行が無い。
-- [ ] （続き）ベースモデルの欄を MiniMax H3 に戻して Settings を開く → pi-H3 の行で off が選ばれている。
-- [ ] Settings で 4steps を押し、AviUtl2 を終了して起動し直してから Settings を開く → 4steps が選ばれたまま。
-
-#### バッチ
-
-- [ ] Settings で 4steps を押し、バッチ i2v を 2 行以上で始め、1 行目の生成中に Settings で off を押す → 2 行目以降も pi-H3 で生成される（どの行の mp4 も、mp4 info に落とすと `"pi_h3_used": "4steps"` がある）。
-- [ ] Settings の pi-H3 を off にし、「生成したmp4に生成条件をメタデータとして書き込む」だけを OFF にして、バッチ i2v を 1 行回す → できた mp4 を mp4 info に落としても、生成条件が表示されない（確かめたら ON に戻す）。
-
-#### 断られたときの表示
-
-- [ ] `models\MiniMaxH3\VAE\pi-H3\pi_h3_4step_dwd_adapter_int8_convrot.safetensors` の名前を一時的に変え、Settings で 4steps を押して Single タブで生成を押す → 「生成」の下に、ファイル名の入った日本語の文が出て、ジョブの一覧にジョブが増えない（確かめたら名前を戻す）。
-
-#### オーナー判断待ち
-
-- [ ] 動かせないスライダーのツールチップの文言は、日本語「Settings の pi-H3 が有効のため固定」、英語「Fixed because pi-H3 is enabled in Settings」でよいか。
+- **概要**: pi-H3 は API と操作パネルで使えるようになった。残りの段 4 として、Gradio・MCP・インストーラーでの取得の確認・文書（仕様書・README・快適上限の表・MCP とフロントエンドの文書）・台帳を対応する。
+- **判断材料**: 範囲と細目は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「段の切り方と、まだ無いもの」、裁定は同 裁定 107（⑤ Gradio と MCP、④ インストーラー）。段 3 までの記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §224〜§226。
+- **出典**: オーナー裁定 2026-11-22〜23（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 107）。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293 の残り。
 
 ## 3. 将来の研究課題
 
@@ -120,6 +75,7 @@
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」が全件実行で 1 回、5 秒の時限切れで落ちた（負荷による）。単独（4 件）と 2 回目の全件実行では合格（2026-11-02。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/chained/ChainEndSourcePanel.test.tsx` の「📁 attaches whatever the native dialog returned」が全件実行で 1 回落ち（`getByAltText(t.videoPlaceholderAlt)` が要素を見つけられない）、単独（32 件）と最後の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §218.6）。同じ日のもう 1 回の全件実行でも 1 件落ちたが、落ちたテストの名前は控えていない。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「a video truncated to the 15 s total carries max_sec; the shorter one before it does not」（上の「✒ … right-clicked video opens the accordion」とは別のテスト）と、`webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」（2026-11-02 の追記と同じテストの再発）が、同じ全件実行で 1 回ずつ約 5 秒の時限切れで落ちた（負荷による）。単独（2 ファイル・21 件）と 2 回目の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §220.5）。
+- **既知の不安定なテスト（追記）**: `webui/src/shell/AppShell.minimaxH3.test.tsx` の、Chained の右クリックに関する 1 件が、全件実行でまれに落ちる。単独では毎回合格（2026-11-23。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §226.3）。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
@@ -195,8 +151,11 @@
   - (b) キャンセル前の早期終了（`services/pipeline_manager.py` の `run_job`・`run_chain_job` の冒頭）が、読み込み済みかを見ずに state を READY に書く。
   - (c) `OutpaintSpec.source_video_id` が空文字を通す（`api/models.py`）。空文字はスキーマでは LTX の形に見え、受付では H3 の枝に入ります。`InpaintSpec.source_video_id` は `min_length=1` で拒むようにしたので、Outpainting 側も揃える（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 の「API とフィーチャースコープ」）。
   - (d) 操作パネルの型の定義（`webui/src/api/types.ts` の重みの種類の列挙 `TransformerQuantClass`）と説明のコメントに、バックエンドが返すようになった `"bf16_blocks"` が無い。値は辞書の鍵として引くだけなので動作には影響しません。次に操作パネルを直す機会に足す（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222.3）。
+  - (e) 操作パネルの開発用の模擬（`webui/src/bridge/mockBridge.ts` の `featureUnsupported`）の拒否の文が、LTX 2.3 のときも「LTX 2.5は…」で始まる（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §226.4）。
+  - (f) `webui/src/shell/SettingsPanel.tsx` の VRAM 16GB mode の行の注釈が、すぐ上の行として Embeddings processor の常駐の行を挙げているが、いまは間に pi-H3 の行がある（同 §226.4）。
+  - (g) `webui/src/modes/batch/buildA2vChainPayload.ts` の `A2vChainPayload` の注釈が、生成の高速化の欄を「6 つ」とし「`accelerationRequestFields` が出す欄は全部ここに要る（無いと型検査で落ちる）」と書くが、その関数は `vram16_mode`・`embed_mp4_metadata`・`pi_h3` も出し、ここに無くても型検査は通る。
   - (a)・(b) の事実と場所は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11（1 と 2）。
-- **前提**: (a)・(b) は 1-279 の敵対的レビューで見つかり（記録簿 §206.6 の提-3）、コードの読解で確かめました。(c) は 1-124 の実装で見つかりました。(d) は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292 の実装で残したものです。どれも実害の観測はありません。
+- **前提**: (a)・(b) は 1-279 の敵対的レビューで見つかり（記録簿 §206.6 の提-3）、コードの読解で確かめました。(c) は 1-124 の実装で見つかりました。(d) は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292 の、(e)〜(g) は同 1-293 の実装で見つけたものです。どれも実害の観測はありません。
 - **留意**: 直すときは 1-279 の原則「終端の状態は後片付けの後に最後に書く」（記録簿 §206.4・§206.5）に揃える。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。
 
@@ -204,6 +163,7 @@
 
 - **概要**: 再現はするが実害が小さい症状の原因究明を溜め、ある程度の数が溜まったところでまとめて調べる受け皿です（オーナー指示 2026-11-11）。いま溜まっているもの。
   - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。原因は調べていません。
+  - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。
 - **留意**: 調べるときは仮説を立てて順番に潰す（先行の設計変更へ跳ばない）。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。

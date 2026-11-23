@@ -27,15 +27,9 @@
 
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。MCP の実機の確認と、Gradio の実機での確認は、下の 1 項目を除いて済んだ。
-- **これからすること**: 下の Gradio の 1 項目の確認。アプリの試験を全件 1 回回してから main へ取り込み、そのあと検証用の別の機械で、下のインストーラーの確認を行う。
+- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。MCP の実機の確認と、Gradio の実機での確認は済んだ。
+- **これからすること**: 全件の試験で見つかった 1 件の古い期待値を直してから main へ取り込み（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.12）、そのあと検証用の別の機械で、下のインストーラーの確認を行う。
 - **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。本節が実機確認の項目の正本。
-
-#### Gradio のベースモデルの切り替え
-
-前提: バックエンドのサーバーを前から起動したままの場合は、起動し直してから確認する（Gradio の画面は、サーバーの起動のときに組み立てられる）。ブラウザーで Gradio UI（`/ui`）を開き、言語を日本語にする。「設定」タブの「モデル」の区画で、ベースモデルを MiniMax H3、動画モデル (checkpoint) を FL2VA の重み（`minimax_h3_fl2va_pruned_int8_convrot`）にして「選択したモデルを読込」を押しておく。
-
-- [ ] 「設定」タブで pi-H3 の 4steps を選んだまま、「モデル」の区画でベースモデルを LTX 2.3 にして「選択したモデルを読込」を押し、読み込みが終わったら、続けてベースモデルを MiniMax H3 に戻して「選択したモデルを読込」を押す → 「設定」タブの pi-H3 は off になっている。「生成」タブは「ステップ数」20・「Shift（映像）」12・「Shift（音声）」3 で、スライダーを動かせる。
 
 #### インストーラー（main へ取り込んだあと、検証用の別の機械で）
 

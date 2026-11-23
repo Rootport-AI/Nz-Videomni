@@ -27,7 +27,7 @@
 
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。Sol-H3-VAE（1-295）の重みの取得の確認も、ここにまとめた。
+- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。Sol-H3-VAE（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-295。2026-11-24 にクローズ）の重みの取得の確認も、ここにまとめた。
 - **これからすること**: 検証用の別の機械で、下のインストーラーの確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
 - **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。本節が実機確認の項目の正本。
 
@@ -44,19 +44,6 @@
 - [ ] その機械で、操作パネルか Gradio のどちらかで「Fast VAE」を pi-H3_4s にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
 - [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
 - 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
-
-### 1-295. MiniMax H3 の Sol-H3-VAE（軽量化した映像の復元処理）を、操作パネルと Gradio から選べるようにする（起票：2026-11-24）
-
-- **概要**: サーバー側に高速化 Sol-H3-VAE（要求の欄 `sol_vae`）を足し（dev の `d0df8b87`）、操作パネルの Settings の pi-H3 の行を「Fast VAE」（Off・pi-H3_4s・pi-H3_2s・Sol）に改めた（`1e839faa`。配布用の aux2 を含む）。Gradio と MCP も対応した。オーナーの実機での確認は済んだ（2026-11-24）。そのあとのオーナーの指示で、操作パネルの pi-H3_4s・pi-H3_2s を選んだときの文の並びを直し、機械の確認と実機への配置も済んだ。残るのは、その 1 点のオーナーの確認。インストーラーの取得の確認は 1-294 にまとめた。
-- **これからすること**: 下の確認を行う。合格したら、全件の試験を回して main へ取り込み、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
-- **出典**: 裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 108、作りは同 §6.8、サーバー側の確認は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §229、操作パネルの機械の確認と配置は同 §230、オーナーの実機での確認の結果と文の並びの指示は同 §231、操作パネルの実装の記録はフロントエンド `Docs/DEVLOG.md` §179（文の並びの直しは §180）。本節が実機確認の項目の正本。
-
-前提: 文の並びを直した操作パネルの実機への配置は済んでいる（実機のプラグインは配布用の aux2 と同じ中身）。操作パネルの言語は日本語にし、画面上部のベースモデルの欄は MiniMax H3 にする。「（続き）」で始まる項目は、直前の項目の状態から続けて行う。
-
-#### Settings の「Fast VAE」の行の文の並び
-
-- [ ] Settings を開いて「Fast VAE」の pi-H3_4s を押す → ボタンの下に段落が 1 つだけ出る。中身は「pi-H3 の 4 ステップ版で生成します。生成が高速になる代わりに、動画の品質は劣化します。pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」で、途中に改行が無く、赤い太字なのは最後の「pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」だけ。
-- [ ] （続き）pi-H3_2s を押す → 最初の文が「pi-H3 の 2 ステップ版で生成します。」に替わり、ほかは pi-H3_4s のときと同じ（段落は 1 つ・途中に改行が無い・赤い太字は最後の文だけ）。
 
 ## 3. 将来の研究課題
 

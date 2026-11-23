@@ -1042,7 +1042,7 @@ export function buildChainRequest(params: BuildChainRequestParams): GenerateChai
     seed: params.seed,
     // §1-106: `{}` while the loaded base model publishes no sampling block
     // (LTX), keeping this request byte-identical to before.
-    ...samplingRequestFields(params.sampling ?? null),
+    ...samplingRequestFields(params.sampling ?? null, params.acceleration),
     ...(ltxSeam ? { overlap_frames: ltxSeam.overlap_frames, overlap_strength: ltxSeam.overlap_strength } : {}),
     clips,
     // Always sent explicitly — see `chunkedUpsample`'s JSDoc above; omitting

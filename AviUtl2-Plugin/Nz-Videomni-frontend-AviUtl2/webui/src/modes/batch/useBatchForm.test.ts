@@ -1408,6 +1408,28 @@ describe("useBatchForm", () => {
       const body = await startAndCapture({ ...ACCELERATION_DEFAULTS, keepResidentEmbeddings: true });
       expect(body.keep_resident_embeddings).toBe(true);
     });
+
+    // Ruling 107 (2026-11-23): the hand-written OR-list was replaced by "any
+    // key `accelerationRequestFields` emits", so the three cases below are the
+    // ones the old list could not see (or did not list).
+    it("VRAM 16GB mode off: every row body carries vram16_mode", async () => {
+      const body = await startAndCapture({ ...ACCELERATION_DEFAULTS, vram16Mode: false });
+      expect(body.vram16_mode).toBe(false);
+    });
+
+    it("pi-H3: every row body carries pi_h3 (ruling 107)", async () => {
+      const body = await startAndCapture({ ...ACCELERATION_DEFAULTS, piH3: "4steps" });
+      expect(body.pi_h3).toBe("4steps");
+    });
+
+    it("mp4 metadata OFF alone: every row body carries embed_mp4_metadata: false (the old OR-list missed it)", async () => {
+      const body = await startAndCapture({ ...ACCELERATION_DEFAULTS, embedMp4Metadata: false });
+      expect(body.embed_mp4_metadata).toBe(false);
+      // Nothing else rides along with it.
+      expect(body).not.toHaveProperty("attention_backend");
+      expect(body).not.toHaveProperty("vram16_mode");
+      expect(body).not.toHaveProperty("pi_h3");
+    });
   });
 
   // §3-153 出力クロップの継承 (2026-09-16): Batchにクロップ欄は無く、Create画面の
@@ -2155,6 +2177,57 @@ describe("useBatchForm", () => {
 
       expect(submits[0]!.path).toBe("/api/v1/generate");
       expect(submits[0]!.body.vram16_mode).toBe(false);
+    });
+
+    // Ruling 107: the same "any key the builder emits" condition feeds Batch
+    // i2v's `/generate` rows.
+    describe("acceleration reaches the i2v row body (ruling 107)", () => {
+      async function startI2v(acceleration?: AccelerationSettings): Promise<Record<string, unknown>> {
+        const base = createMockBridge({ delayMs: 0, fs: imageFolder(["cover.jpg"]) });
+        const { wrapped, submits } = captureSubmitBridge(base);
+        const rendered = renderBatchForm(wrapped, { ...(acceleration ? { acceleration } : {}) });
+        await act(async () => {
+          await rendered.result.current.setImgDir(I2V_IMG_DIR);
+        });
+        await act(async () => {
+          await rendered.result.current.scan();
+        });
+        const { result } = rendered;
+        expect(result.current.canStart).toBe(true);
+        act(() => {
+          result.current.start();
+        });
+        await waitFor(() => expect(submits).toHaveLength(1));
+        await waitFor(() => expect(result.current.runnerState).toBe("idle"));
+        expect(submits[0]!.path).toBe("/api/v1/generate");
+        return submits[0]!.body;
+      }
+
+      it("all defaults: no acceleration key at all", async () => {
+        for (const body of [await startI2v(), await startI2v(ACCELERATION_DEFAULTS)]) {
+          for (const key of [
+            "attention_backend",
+            "block_swap_prefetch",
+            "keep_resident",
+            "fused_gguf_dequant_kernel",
+            "vae_mode",
+            "keep_resident_embeddings",
+            "vram16_mode",
+            "pi_h3",
+            "embed_mp4_metadata",
+          ]) {
+            expect(body).not.toHaveProperty(key);
+          }
+        }
+      });
+
+      it("pi-H3: the row body carries pi_h3", async () => {
+        expect((await startI2v({ ...ACCELERATION_DEFAULTS, piH3: "2steps" })).pi_h3).toBe("2steps");
+      });
+
+      it("mp4 metadata OFF alone: the row body carries embed_mp4_metadata: false (the old OR-list missed it)", async () => {
+        expect((await startI2v({ ...ACCELERATION_DEFAULTS, embedMp4Metadata: false })).embed_mp4_metadata).toBe(false);
+      });
     });
 
     it("start()はmodeを走行スナップショットへ凍結し、走行中のリマウントで復元される", async () => {

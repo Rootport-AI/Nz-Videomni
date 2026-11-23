@@ -722,6 +722,68 @@ def test_submit_generate_vram16_mode_sent_only_when_given():
     assert captured["body"]["vram16_mode"] is True
 
 
+def test_both_tools_expose_pi_h3_as_an_optional_enum_defaulting_to_off():
+    # MiniMax H3's pi-H3: the three API literals, default "off", not required,
+    # on submit_generate AND submit_chain.
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        schema = tools[name].inputSchema
+        prop = schema["properties"]["pi_h3"]
+        assert prop["enum"] == ["off", "4steps", "2steps"], name
+        assert prop["default"] == "off", name
+        assert "pi_h3" not in set(schema.get("required", [])), name
+
+
+def test_submit_generate_pi_h3_sent_only_when_not_off_and_no_sampling_invented():
+    captured: dict = {}
+    set_client(_client_for_handler(_sampling_capture_handler(captured)))
+    anyio.run(functools.partial(generate.submit_generate, "p"))
+    assert "pi_h3" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", pi_h3="off"))
+    assert "pi_h3" not in captured["body"]
+    anyio.run(functools.partial(
+        generate.submit_generate, "p", width=640, height=384, num_frames=124, pi_h3="4steps"))
+    body = captured["body"]
+    assert body["pi_h3"] == "4steps"
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name not in body
+
+
+def test_submit_chain_pi_h3_sent_only_when_not_off():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+
+    set_client(_client_for_handler(handler))
+    clips = [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+    anyio.run(generate.submit_chain, "p", clips)
+    assert "pi_h3" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_chain, "p", clips, pi_h3="2steps"))
+    body = captured["body"]
+    assert body["pi_h3"] == "2steps"
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name not in body
+
+
+def test_pi_h3_argument_default_matches_the_server():
+    from api.models import GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        assert tools[name].inputSchema["properties"]["pi_h3"]["default"] == "off"
+    assert GenerateRequest.model_fields["pi_h3"].default == "off"
+    assert GenerateChainRequest.model_fields["pi_h3"].default == "off"
+
+
 # --------------------------------------------------------------- submit_chain
 
 

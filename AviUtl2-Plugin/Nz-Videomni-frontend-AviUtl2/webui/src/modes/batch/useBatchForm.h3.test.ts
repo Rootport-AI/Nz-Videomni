@@ -5,6 +5,8 @@ import type { BridgeMethod, NativeBridge, ParamsOf, ResultOf } from "../../bridg
 import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { useKeyframes } from "../single/useKeyframes";
 import { __resetRunLockForTests } from "../../shell/runLock";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { __resetBatchRuntimeForTests } from "./runtime";
 import { useBatchForm } from "./useBatchForm";
 import type { BatchEngineRules, BatchGenerationValues } from "./useBatchForm";
@@ -56,7 +58,10 @@ function captureSubmitBridge(base: NativeBridge): {
   return { wrapped, submits };
 }
 
-function render(bridge: NativeBridge, opts: { gen?: BatchGenerationValues; engine?: BatchEngineRules | undefined } = {}) {
+function render(
+  bridge: NativeBridge,
+  opts: { gen?: BatchGenerationValues; engine?: BatchEngineRules | undefined; acceleration?: AccelerationSettings } = {},
+) {
   const gen = opts.gen ?? GEN;
   const engine = "engine" in opts ? opts.engine : H3_ENGINE;
   return renderHook(() => {
@@ -64,6 +69,7 @@ function render(bridge: NativeBridge, opts: { gen?: BatchGenerationValues; engin
     return useBatchForm(FALLBACK_APP_CONFIG, "a prompt", gen, keyframes, {
       nativeBridge: bridge,
       ...(engine ? { engine } : {}),
+      ...(opts.acceleration ? { acceleration: opts.acceleration } : {}),
     });
   });
 }
@@ -154,6 +160,33 @@ describe("useBatchForm — §1-126 MiniMax H3", () => {
     expect(body.conditioning_images).toEqual([{ image_id: expect.stringMatching(/^mock-image-/), frame_idx: 0 }]);
     expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
     expect(body).not.toHaveProperty("clips");
+  });
+
+  it("pi-H3 (ruling 107): the a2v row carries pi_h3 and none of the three sampling values", async () => {
+    const base = createMockBridge({ delayMs: 0, fs: audioFs({ "a.wav": 5 }) });
+    const { wrapped, submits } = captureSubmitBridge(base);
+    const { result } = render(wrapped, { acceleration: { ...ACCELERATION_DEFAULTS, piH3: "4steps" } });
+    await scanAudio(result);
+    act(() => {
+      result.current.updateRowImage(0, "cover.png");
+    });
+    await act(async () => {
+      await result.current.setOutDir("C:\\out\\h3");
+    });
+    expect(result.current.canStart).toBe(true);
+    await act(async () => {
+      result.current.start();
+    });
+    await act(async () => {
+      for (let i = 0; i < 50 && submits.length === 0; i += 1) await new Promise((r) => setTimeout(r, 5));
+    });
+    expect(submits).toHaveLength(1);
+    const { path, body } = submits[0]!;
+    expect(path).toBe("/api/v1/generate");
+    expect(body.pi_h3).toBe("4steps");
+    expect(body).not.toHaveProperty("num_inference_steps");
+    expect(body).not.toHaveProperty("shift_video");
+    expect(body).not.toHaveProperty("shift_audio");
   });
 
   it("the size gate uses the engine's multiple (32): 544 passes on H3 and fails on LTX", async () => {

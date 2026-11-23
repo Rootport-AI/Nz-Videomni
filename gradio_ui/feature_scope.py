@@ -34,6 +34,9 @@ FEATURE_UI: dict[str, tuple[str, ...]] = {
     "prune_vaed": ("accel_vae",),
     "keep_resident_embeddings": ("accel_keep_resident_embeddings",),
     "vram16_mode": ("accel_vram16",),
+    # MiniMax H3 only: both LTX families name ``pi_h3``. The radio alone; its
+    # warning line follows the radio's own .change (ui.py), not this table.
+    "pi_h3": ("accel_pi_h3",),
     # Published by the family without GGUF weights (MiniMax H3). The server
     # ignores the value rather than 422-ing it; it is hidden because the
     # control can do nothing there.
@@ -57,6 +60,9 @@ RESET_VALUES: dict[str, str | bool | float] = {
     # when the box is OFF, so a hidden box at its default puts nothing on the
     # wire and LTX never sees vram16_mode.
     "accel_vram16": True,
+    # Reset to "off" (the server default): the handler sends the key only
+    # when it is not "off", so a hidden radio puts nothing on the wire.
+    "accel_pi_h3": "off",
     # Reset to the default (on): the handlers send the key only when the box
     # is OFF, so a hidden box puts nothing on the wire.
     "accel_fused_dequant": True,

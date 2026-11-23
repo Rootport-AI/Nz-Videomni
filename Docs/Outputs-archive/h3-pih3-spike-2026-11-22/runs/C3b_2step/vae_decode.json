@@ -1,0 +1,85 @@
+{
+  "item": "C3b_2step",
+  "mode": "vae_decode",
+  "script": "outputs\\h3-pih3-spike-2026-11-22\\h3_pih3_spike.py",
+  "started_at": "2026-11-22T22:02:23+09:00",
+  "status": "done",
+  "gate": {
+    "at": "2026-11-22T22:02:23+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "blocking": [],
+      "nvidia_smi_compute_apps": "(removed for privacy)",
+      "returncode": 0,
+      "gpu": [
+        "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "1294",
+        "16376"
+      ],
+      "memory_used_mib": 1294,
+      "python_like_others": []
+    },
+    "engine_workers": []
+  },
+  "latent_file": {
+    "video_latent": {
+      "shape": [
+        1,
+        24,
+        67,
+        24,
+        40
+      ],
+      "dtype": "torch.float32"
+    }
+  },
+  "video_vae_file": "minimax_h3_video_vae_fp16.safetensors",
+  "decode_seconds": 13.11,
+  "peak_vram_mb": 5069.3,
+  "peak_vram_reserved_mb": 5400.0,
+  "latent_used": {
+    "shape": [
+      1,
+      24,
+      67,
+      24,
+      40
+    ],
+    "dtype": "torch.float32"
+  },
+  "frames": 226,
+  "frames_shape": [
+    226,
+    384,
+    640,
+    3
+  ],
+  "mux": {
+    "returncode": 0,
+    "stderr": "",
+    "audio_from": "output.mp4 (-c copy)"
+  },
+  "output_probe": {
+    "path": "outputs\\h3-pih3-spike-2026-11-22\\runs\\C3b_2step\\output_vae.mp4",
+    "video": {
+      "codec_name": "h264",
+      "width": 640,
+      "height": 384,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "24/1",
+      "duration": "9.416667",
+      "nb_read_frames": "226"
+    },
+    "audio": {
+      "codec_name": "aac",
+      "sample_rate": "32000",
+      "channels": 2,
+      "duration": "9.417000"
+    }
+  },
+  "finished_at": "2026-11-22T22:02:41+09:00"
+}

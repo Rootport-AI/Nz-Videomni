@@ -342,6 +342,46 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await generate(bridge, { ...BODY, references })).status).toBe(202);
   });
 
+  // Ruling 107 (2026-11-23): pi-H3.
+  it("publishes constraints.pi_h3 for MiniMax H3 only, and `pi_h3` in both LTX engines' unsupported_features", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    expect(blocks.find((b) => b.id === "MiniMaxH3")?.constraints?.pi_h3).toEqual({
+      "4steps": { num_inference_steps: 4, shift_video: 12, shift_audio: 3 },
+      "2steps": { num_inference_steps: 2, shift_video: 12, shift_audio: 3 },
+    });
+    expect(blocksFeature(blocks, "MiniMaxH3")).not.toContain("pi_h3");
+    for (const id of ["LTX23", "LTX25"]) {
+      expect(blocks.find((b) => b.id === id)?.constraints?.pi_h3).toBeUndefined();
+      expect(blocksFeature(blocks, id)).toContain("pi_h3");
+    }
+  });
+
+  it("refuses pi_h3 on LTX (single and chain) with 422 FEATURE_UNSUPPORTED; \"off\" passes", async () => {
+    for (const id of ["LTX23", "LTX25"]) {
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const single = await generate(bridge, { ...BODY, num_frames: 121, width: 1280, height: 704, pi_h3: "4steps" });
+      expect(single.status).toBe(422);
+      const error = (single.body as { error: { code: string; message: string; detail?: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.detail).toBe("pi-H3 は MiniMax H3 専用です。LTX では使えません。");
+      const chained = await chain(bridge, { pi_h3: "2steps" }, [{ num_frames: 121 }]);
+      expect(chained.status).toBe(422);
+      expect((chained.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const offChain = await chain(bridge, { pi_h3: "off" }, [{ num_frames: 121 }]);
+      expect(offChain.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+    }
+  });
+
+  it("accepts pi_h3 on MiniMax H3 with the sampling values omitted, and refuses an explicit different one", async () => {
+    const bridge = createMockBridge({ delayMs: 0 });
+    expect((await load(bridge, "MiniMaxH3")).status).toBe(200);
+    const mismatch = await generate(bridge, { ...BODY, pi_h3: "4steps", num_inference_steps: 20 });
+    expect(mismatch.status).toBe(422);
+    expect((mismatch.body as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    expect((await generate(bridge, { ...BODY, pi_h3: "4steps", num_inference_steps: 4 })).status).toBe(202);
+  });
+
   // §1-109: a clip's own `references` on POST /generate/chain.
   it("refuses a clip's `references` on LTX with 422 FEATURE_UNSUPPORTED; H3 checks each clip's shape", async () => {
     const references = [{ kind: "picture", id: "mock-image-1", slot: 1 }];

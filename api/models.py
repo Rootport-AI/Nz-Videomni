@@ -723,6 +723,26 @@ class GenerateRequest(BaseModel):
     # 同じ形で置く（H3 の連結で効く。LTX の連結は true を断る）。
     vram16_mode: bool | None = Field(None)
 
+    # pi_h3: MiniMax H3 の高速化 pi-H3（少ないステップで仕上がるように蒸留した
+    # 差分を本体の重みに当て、動画VAE の復号器を使わずに隠れ状態から画素を出す
+    # DWD〔Decoding Without a Decoder〕で復号する）。"4steps" / "2steps" は
+    # ステップ数の選択で、既定は "off"（今日の生成と一切変わらない）。
+    # 【重要】pi-H3 は**生成結果が変わる**（別の重みと別の復号器で作るため）。
+    # 有効のときのステップ数と shift は選択で決まる: 省略された
+    # num_inference_steps / shift_video / shift_audio は選択の値で埋まり
+    # （値の正本は GET /models の constraints.pi_h3）、違う値を明示すると 422
+    # で断る。重みのファイルは記述子の assets（models/MiniMaxH3/VAE/pi-H3/）で、
+    # 無いとき・読み込み中の本体の重みと名前や形が合わないときも受付で断る
+    # （services/engines/h3/adapter.py の preflight_request）。標準の動画VAE への
+    # 格下げはしない。既定と違うときだけワーカーへ送る加算的コントラクトで、
+    # 実際に効いたかどうかは metadata.json の pi_h3_used で確認できる
+    # （pi-H3 のジョブだけに入る。off のジョブには無い）。
+    # 【エンジン差】H3 専用の機能で、LTX 2.3／2.5 は "off" 以外を 422
+    # FEATURE_UNSUPPORTED で断る（各アダプタの REJECT_TABLE）。
+    # 連結スキーマにはまだ置かない（単発だけ）。GET /status には載せない
+    # （vae_mode と同じ規律——重みの有無は「環境の能力」とは性質が違う）。
+    pi_h3: Literal["off", "4steps", "2steps"] = "off"
+
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1432,6 +1452,15 @@ class GenerateChainRequest(BaseModel):
     # vram16_mode: 詳細は GenerateRequest の同名フィールドを参照。
     # H3 の validate_chain が既定値を書き戻す。
     vram16_mode: bool | None = Field(None)
+    # pi_h3: 詳細は GenerateRequest の同名フィールドを参照（MiniMax H3 の
+    # 高速化 pi-H3。既定 "off" は今日の連結と一切変わらない）。連結・V2V・
+    # Retake の全クリップに 1 つの選択が効く。有効のとき、送られなかった
+    # num_inference_steps と、省略された shift_video / shift_audio は選択の値で
+    # 埋まり（H3 の validate_chain）、違う値を明示すると 422 で断る。ファイルの
+    # 有無と本体の重みとの照合も単発と同じく受付で行う。LTX 2.3／2.5 は "off"
+    # 以外を 422 FEATURE_UNSUPPORTED で断る（各アダプタの CHAIN_REJECT_TABLE）。
+    # 実際に効いたかどうかは metadata.json の pi_h3_used（pi-H3 のジョブだけ）。
+    pi_h3: Literal["off", "4steps", "2steps"] = "off"
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1888,7 +1917,8 @@ class GenerateChainRequest(BaseModel):
         this per-clip copy — this transcription only feeds the stored record.
         ``embed_mp4_metadata`` is transcribed for the same reason (the stored
         record would otherwise claim the default), and so are ``vram16_mode``,
-        ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX).
+        ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX) and
+        ``pi_h3`` (MiniMax H3's; ``"off"`` on LTX, which refuses any other).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -1935,6 +1965,7 @@ class GenerateChainRequest(BaseModel):
             vae_mode=self.vae_mode,
             embed_mp4_metadata=self.embed_mp4_metadata,
             vram16_mode=self.vram16_mode,
+            pi_h3=self.pi_h3,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

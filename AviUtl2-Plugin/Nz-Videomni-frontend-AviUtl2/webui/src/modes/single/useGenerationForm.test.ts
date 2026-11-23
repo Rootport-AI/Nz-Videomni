@@ -593,6 +593,7 @@ describe("useGenerationForm", () => {
       keepResidentEmbeddings: false,
       // §3-164: the Output row, at its server default; not part of the match.
       vram16Mode: true,
+      piH3: "off",
       embedMp4Metadata: true,
     };
 

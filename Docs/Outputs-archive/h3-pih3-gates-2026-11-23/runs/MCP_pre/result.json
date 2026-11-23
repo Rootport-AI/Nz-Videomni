@@ -1,0 +1,475 @@
+{
+  "phase": "pre",
+  "started_at": "2026-11-23T12:46:58+09:00",
+  "git": {
+    "head": "9ab8cc56c304b653a9e006f3270bcecb46fcc02a",
+    "branch": "dev",
+    "status_porcelain": [
+      " M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md",
+      " M Docs/COMFORT_LIMIT_TABLE.md",
+      " M Docs/MCP_SERVER_DESIGN.md",
+      " M Docs/MINIMAX_H3_DESIGN.md",
+      " M Docs/VERIFICATION_LOG.md",
+      " M Videomni_Backend_Specification.md"
+    ],
+    "dirty": true
+  },
+  "state_before": {
+    "status_http": 200,
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "pipeline_loaded": true,
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 11,
+      "failed": 0
+    },
+    "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "h3_constraints_pi_h3": {
+      "4steps": {
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      },
+      "2steps": {
+        "num_inference_steps": 2,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      }
+    },
+    "gpu": {
+      "memory_used_mib": 960,
+      "compute_apps_count": 33,
+      "python_like_count": 1
+    }
+  },
+  "gate_blocking": [],
+  "server_info": {
+    "name": "nz-videomni",
+    "protocol": "2025-11-25"
+  },
+  "tool_count": 25,
+  "pi_h3_param": {
+    "submit_generate": {
+      "default": "off",
+      "enum": [
+        "off",
+        "4steps",
+        "2steps"
+      ],
+      "title": "Pi H3",
+      "type": "string"
+    },
+    "submit_chain": {
+      "default": "off",
+      "enum": [
+        "off",
+        "4steps",
+        "2steps"
+      ],
+      "title": "Pi H3",
+      "type": "string"
+    }
+  },
+  "item1": {
+    "h3_constraints_pi_h3": {
+      "4steps": {
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      },
+      "2steps": {
+        "num_inference_steps": 2,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      }
+    },
+    "ltx_unsupported_has_pi_h3": {
+      "LTX23": true,
+      "LTX25": true
+    },
+    "active_base_model": "MiniMaxH3"
+  },
+  "item3": {
+    "error_text": "Error executing tool submit_generate: VALIDATION_ERROR: Request validation failed — [{'loc': ['body'], 'msg': 'Value error, num_inference_steps=20 differs from the value pi_h3=\"4steps\" uses (num_inference_steps=4)', 'type': 'value_error'}]",
+    "returned": null,
+    "jobs_before": 11,
+    "jobs_after": 11
+  },
+  "item5": {
+    "off_payload": {
+      "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+      "width": 1280,
+      "height": 768,
+      "num_frames": 73,
+      "frame_rate": 24.0,
+      "seed": 1234,
+      "vram16_mode": true,
+      "attention_backend": "sage"
+    },
+    "4steps_payload": {
+      "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+      "width": 1280,
+      "height": 768,
+      "num_frames": 73,
+      "frame_rate": 24.0,
+      "seed": 1234,
+      "vram16_mode": true,
+      "attention_backend": "sage",
+      "pi_h3": "4steps"
+    },
+    "off_has_pi_h3_key": false,
+    "4steps_has_steps_or_shift": []
+  },
+  "calls": [
+    {
+      "tool": "list_models",
+      "args": {},
+      "is_error": false,
+      "seconds": 0.2
+    },
+    {
+      "tool": "list_jobs",
+      "args": {},
+      "is_error": false,
+      "seconds": 0.0,
+      "result": {
+        "jobs": [
+          {
+            "job_id": "70d3a0e8-f681-4113-ae00-6a29d32918e4",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": null,
+            "clip_count": null,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:22:52Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "a77d17e2-c0d6-4533-a3b0-69cb8d867b6d",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:26:30Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "2b3a6678-3215-428d-b93f-3a20638c5172",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 1,
+            "clip_count": 1,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:33:57Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "f90b4664-afcd-4f37-b1c5-0da8d2d56e1f",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": null,
+            "clip_count": null,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:38:08Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "15ad63fd-bb12-4bc9-b8cd-383c6ee89208",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": null,
+            "clip_count": null,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:45:45Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "4feb30b4-bf1d-40d9-95aa-175f3ddb0139",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:50:04Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "c59ea936-45e6-44d2-ae7f-6e3c9332a3f6",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:52:48Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "a4185f37-a6ae-4b51-882f-562bdea1f795",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:06:26Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "127a528a-a5e7-4828-bbb7-ffa5c9a7a0b2",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:09:04Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "2ad074a6-6af9-4e46-86a8-f5fd4077ce87",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:16:56Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "5fc933c2-ac31-40aa-afae-73f36c488f3a",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:20:50Z",
+            "error": null,
+            "has_result": true
+          }
+        ],
+        "counts": {
+          "queued": 0,
+          "running": 0,
+          "completed": 11,
+          "failed": 0,
+          "cancelled": 0
+        }
+      }
+    },
+    {
+      "tool": "submit_generate",
+      "args": {
+        "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 1234,
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "pi_h3": "4steps",
+        "num_inference_steps": 20
+      },
+      "is_error": true,
+      "seconds": 0.0,
+      "error_text": "Error executing tool submit_generate: VALIDATION_ERROR: Request validation failed — [{'loc': ['body'], 'msg': 'Value error, num_inference_steps=20 differs from the value pi_h3=\"4steps\" uses (num_inference_steps=4)', 'type': 'value_error'}]"
+    },
+    {
+      "tool": "list_jobs",
+      "args": {},
+      "is_error": false,
+      "seconds": 0.01,
+      "result": {
+        "jobs": [
+          {
+            "job_id": "70d3a0e8-f681-4113-ae00-6a29d32918e4",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": null,
+            "clip_count": null,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:22:52Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "a77d17e2-c0d6-4533-a3b0-69cb8d867b6d",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:26:30Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "2b3a6678-3215-428d-b93f-3a20638c5172",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 1,
+            "clip_count": 1,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:33:57Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "f90b4664-afcd-4f37-b1c5-0da8d2d56e1f",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": null,
+            "clip_count": null,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:38:08Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "15ad63fd-bb12-4bc9-b8cd-383c6ee89208",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": null,
+            "clip_count": null,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:45:45Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "4feb30b4-bf1d-40d9-95aa-175f3ddb0139",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:50:04Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "c59ea936-45e6-44d2-ae7f-6e3c9332a3f6",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T01:52:48Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "a4185f37-a6ae-4b51-882f-562bdea1f795",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:06:26Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "127a528a-a5e7-4828-bbb7-ffa5c9a7a0b2",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:09:04Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "2ad074a6-6af9-4e46-86a8-f5fd4077ce87",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:16:56Z",
+            "error": null,
+            "has_result": true
+          },
+          {
+            "job_id": "5fc933c2-ac31-40aa-afae-73f36c488f3a",
+            "status": "completed",
+            "progress": 1.0,
+            "stage": null,
+            "clip": 2,
+            "clip_count": 2,
+            "is_v2v": false,
+            "joined": false,
+            "created_at": "2026-11-23T02:20:50Z",
+            "error": null,
+            "has_result": true
+          }
+        ],
+        "counts": {
+          "queued": 0,
+          "running": 0,
+          "completed": 11,
+          "failed": 0,
+          "cancelled": 0
+        }
+      }
+    }
+  ],
+  "finished_at": "2026-11-23T12:47:00+09:00"
+}

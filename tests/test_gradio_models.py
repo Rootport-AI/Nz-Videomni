@@ -515,6 +515,35 @@ def test_refresh_shows_vram16_on_an_engine_that_does_not_name_it():
     assert "value" not in update
 
 
+def test_refresh_hides_pi_h3_on_ltx_and_resets_it_to_off():
+    # Both LTX families name pi_h3; a hidden radio is written back to "off"
+    # (the handler sends the key only when it is not "off").
+    assert hidden_controls(["pi_h3"]) == {"accel_pi_h3"}
+    updates = _refresh_with(_models_json_with(
+        "LTX23", ["keep_resident_embeddings", "alpha_gen", "vram16_mode",
+                  "source_audio", "references", "pi_h3"]))
+    update = _gated_update(updates, "accel_pi_h3")
+    assert update["visible"] is False
+    assert update["value"] == RESET_VALUES["accel_pi_h3"] == "off"
+
+
+def test_refresh_shows_pi_h3_on_h3():
+    # MiniMax H3 does not publish pi_h3: the radio shows and keeps its value.
+    models_json = dict(SAMPLE_MODELS_MULTI, active_base_model="MiniMaxH3",
+                       base_models=[
+                           {"id": "LTX23", "display_name": "LTX 2.3",
+                            "active": False, "unsupported_features": ["pi_h3"]},
+                           {"id": "MiniMaxH3", "display_name": "MiniMax H3",
+                            "active": True,
+                            "unsupported_features": ["keyframe_strength",
+                                                     "prune_vaed"]},
+                       ])
+    updates = _refresh_with(models_json)
+    update = _gated_update(updates, "accel_pi_h3")
+    assert update["visible"] is True
+    assert "value" not in update
+
+
 _KF_STRENGTH_CONTROLS = [f"kf_strength_{i}" for i in range(1, KF_MAX_SLOTS + 1)]
 
 

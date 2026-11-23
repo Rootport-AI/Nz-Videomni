@@ -4,16 +4,7 @@ import { bridge as defaultBridge, BridgeError } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { parseLoraPrompt } from "../../lora/loraTags";
 import { isNagNegativeEmpty, NAG_OFF } from "../../shell/nagSettings";
-import {
-  ACCELERATION_DEFAULTS,
-  ATTENTION_BACKEND_DEFAULT,
-  BLOCK_SWAP_PREFETCH_SERVER_DEFAULT,
-  FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT,
-  KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT,
-  KEEP_RESIDENT_SERVER_DEFAULT,
-  VAE_MODE_DEFAULT,
-  VRAM16_MODE_SERVER_DEFAULT,
-} from "../../shell/accelerationSettings";
+import { ACCELERATION_DEFAULTS, accelerationRequestFields } from "../../shell/accelerationSettings";
 import { RUN_LOCK_OWNER_BATCH_A2V, getRunLockOwner, subscribeRunLock } from "../../shell/runLock";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
@@ -910,28 +901,18 @@ export function useBatchForm(
       // accordion currently holds — only threaded through while enabled, so
       // an OFF NAG state stays a no-op for every row's payload.
       ...(nag.enabled ? { nag } : {}),
-      // Acceleration (2026-07-31; block-swap prefetch added 2026-08-01,
-      // keep-resident 2026-08-02, fused GGUF dequant kernel 2026-08-04,
-      // PrunaVAED 2026-08-05, keep-resident-embeddings 2026-09-03): only
-      // threaded through when it would
-      // actually change the payload, so an all-defaults choice stays a no-op
-      // for every row (`accelerationRequestFields` would return `{}` anyway —
-      // this keeps the settings object itself minimal too). Checked
-      // field-by-field: any ONE field moved off its own server default is
-      // enough to thread the whole object through. EVERY new real field must
-      // be added to this OR-list too — omitting it makes the toggle work
-      // everywhere except Batch A2V. (The list feeds BOTH modes: §1-101's
-      // `vram16Mode` is read by MiniMax H3, which since §1-126 runs both modes
-      // here, every row on its single `/generate` route.)
-      ...(acceleration.attentionBackend !== ATTENTION_BACKEND_DEFAULT ||
-      acceleration.blockSwapPrefetch !== BLOCK_SWAP_PREFETCH_SERVER_DEFAULT ||
-      acceleration.keepResident !== KEEP_RESIDENT_SERVER_DEFAULT ||
-      acceleration.fusedGgufDequantKernel !== FUSED_GGUF_DEQUANT_KERNEL_SERVER_DEFAULT ||
-      acceleration.vaeMode !== VAE_MODE_DEFAULT ||
-      acceleration.keepResidentEmbeddings !== KEEP_RESIDENT_EMBEDDINGS_SERVER_DEFAULT ||
-      acceleration.vram16Mode !== VRAM16_MODE_SERVER_DEFAULT
-        ? { acceleration }
-        : {}),
+      // Acceleration (2026-07-31) and the Output row that shares its store:
+      // threaded through only when it would actually change the payload, so
+      // an all-defaults choice stays a no-op for every row and the settings
+      // object itself stays minimal. The test is the request-field builder
+      // itself — the whole object rides along as soon as
+      // `accelerationRequestFields` would emit ANY key — so a field added to
+      // that builder reaches Batch (both modes, both routes) with no edit
+      // here. (Ruling 107, 2026-11-23: this replaced a field-by-field OR-list
+      // that had to be extended by hand, and that had missed the Output row's
+      // `embedMp4Metadata`.) The settings it freezes are also what drops the
+      // three sampling values while pi-H3 is on (`samplingRequestFields`).
+      ...(Object.keys(accelerationRequestFields(acceleration)).length > 0 ? { acceleration } : {}),
       // §1-126 (MiniMax H3): the single-route A2V and Create's own omissions
       // and sampling values, frozen with the rest. Absent on LTX, so an LTX
       // run's settings (and every body built from them) are unchanged.

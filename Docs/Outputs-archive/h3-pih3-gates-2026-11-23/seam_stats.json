@@ -1,0 +1,99 @@
+{
+  "C3b_4step (spike)": {
+    "frames": 226,
+    "seams": [
+      {
+        "seam_frame": 124,
+        "yavg_before": 159.44,
+        "yavg_after": 160.35,
+        "yavg_diff": 0.91,
+        "satavg_before": 10.63,
+        "satavg_after": 10.89,
+        "satavg_diff": 0.26
+      }
+    ]
+  },
+  "LONG": {
+    "frames": 532,
+    "seams": [
+      {
+        "seam_frame": 124,
+        "yavg_before": 137.0,
+        "yavg_after": 138.41,
+        "yavg_diff": 1.41,
+        "satavg_before": 10.65,
+        "satavg_after": 11.14,
+        "satavg_diff": 0.49
+      },
+      {
+        "seam_frame": 226,
+        "yavg_before": 124.1,
+        "yavg_after": 123.87,
+        "yavg_diff": -0.23,
+        "satavg_before": 12.47,
+        "satavg_after": 12.92,
+        "satavg_diff": 0.46
+      },
+      {
+        "seam_frame": 328,
+        "yavg_before": 124.73,
+        "yavg_after": 124.06,
+        "yavg_diff": -0.67,
+        "satavg_before": 20.17,
+        "satavg_after": 21.84,
+        "satavg_diff": 1.66
+      },
+      {
+        "seam_frame": 430,
+        "yavg_before": 125.91,
+        "yavg_after": 124.98,
+        "yavg_diff": -0.93,
+        "satavg_before": 18.04,
+        "satavg_after": 19.29,
+        "satavg_diff": 1.25
+      }
+    ]
+  },
+  "ACH": {
+    "frames": 226,
+    "seams": [
+      {
+        "seam_frame": 124,
+        "yavg_before": 159.44,
+        "yavg_after": 160.35,
+        "yavg_diff": 0.91,
+        "satavg_before": 10.63,
+        "satavg_after": 10.89,
+        "satavg_diff": 0.26
+      }
+    ]
+  },
+  "E3b4": {
+    "frames": 226,
+    "seams": [
+      {
+        "seam_frame": 124,
+        "yavg_before": 159.44,
+        "yavg_after": 160.35,
+        "yavg_diff": 0.91,
+        "satavg_before": 10.63,
+        "satavg_after": 10.89,
+        "satavg_diff": 0.26
+      }
+    ]
+  },
+  "E3b2": {
+    "frames": 226,
+    "seams": [
+      {
+        "seam_frame": 124,
+        "yavg_before": 151.41,
+        "yavg_after": 167.1,
+        "yavg_diff": 15.69,
+        "satavg_before": 7.61,
+        "satavg_after": 11.05,
+        "satavg_diff": 3.44
+      }
+    ]
+  }
+}

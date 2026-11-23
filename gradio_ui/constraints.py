@@ -56,6 +56,9 @@ SAMPLING_FIELDS: tuple[str, ...] = ("num_inference_steps", "shift_video", "shift
 FIXED_STEPS = 8
 FIXED_CFG = 1.0
 
+#: The pi-H3 radio's "not in use" value (the server field's default).
+PI_H3_OFF = "off"
+
 
 def _number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -89,6 +92,20 @@ def normalize_constraints(raw) -> dict:
     if isinstance(sampling, dict) and all(_usable_slider(sampling.get(f))
                                           for f in SAMPLING_FIELDS):
         out["sampling"] = {f: dict(sampling[f]) for f in SAMPLING_FIELDS}
+    # pi-H3 (MiniMax H3): ``{choice: {num_inference_steps, shift_video,
+    # shift_audio}}``, the sampling values each choice runs with. Kept only
+    # in that shape (each entry with all three numbers); a missing or broken
+    # block adds no key, so a server without pi-H3 (LTX) reads as before.
+    pi_h3 = raw.get("pi_h3")
+    if isinstance(pi_h3, dict):
+        presets = {
+            choice: {f: values[f] for f in SAMPLING_FIELDS}
+            for choice, values in pi_h3.items()
+            if isinstance(choice, str) and choice != PI_H3_OFF
+            and isinstance(values, dict) and all(_number(values.get(f)) for f in SAMPLING_FIELDS)
+        }
+        if presets:
+            out["pi_h3"] = presets
     return out
 
 
@@ -197,7 +214,67 @@ def sampling_payload(constraints: dict, steps, shift_video, shift_audio) -> dict
     return out
 
 
-def single_scope_updates(constraints: dict, lang: str = _DEFAULT_LANG) -> tuple:
+def pi_h3_locked_values(constraints: dict, choice) -> dict | None:
+    """The sampling values a pi-H3 ``choice`` locks the Single tab to, or
+    ``None`` when it locks nothing.
+
+    Locked only when the choice is not "off", the constraints carry
+    ``sampling`` and the served ``pi_h3`` block has an entry for the choice;
+    the values are that entry (``{num_inference_steps, shift_video,
+    shift_audio}``), never numbers of this UI's own. The ONE judgment behind
+    both the locked sliders (:func:`pi_h3_sampling_updates`) and the request
+    (handlers.generate sends ``pi_h3`` instead of the three values), so the
+    screen and the wire cannot disagree."""
+    if not isinstance(choice, str) or choice == PI_H3_OFF:
+        return None
+    c = normalize_constraints(constraints)
+    if c["sampling"] is None:
+        return None
+    values = (c.get("pi_h3") or {}).get(choice)
+    return dict(values) if values else None
+
+
+def pi_h3_sampling_updates(constraints: dict, choice) -> tuple:
+    """``gr.update``s for the steps, shift (video) and shift (audio) sliders
+    and the "fixed because pi-H3" caption, for these constraints and this
+    pi-H3 ``choice`` -- the part both wirings share (the scope change through
+    :func:`single_scope_updates`, and the pi-H3 radio's own change).
+
+    Locked (:func:`pi_h3_locked_values`): the three sliders show the choice's
+    values and cannot be moved, and the caption is shown. Otherwise exactly
+    what the constraints give: with sampling sliders, live sliders at their
+    served range and default (turning pi-H3 off writes the defaults back);
+    without (LTX), steps fixed at 8 and no shift sliders. The caption is
+    hidden."""
+    c = normalize_constraints(constraints)
+    sampling = c["sampling"]
+    if sampling is None:
+        return (
+            gr.update(minimum=1, maximum=50, step=1, value=FIXED_STEPS,
+                      interactive=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
+    locked = pi_h3_locked_values(c, choice)
+
+    def _slider(field):
+        spec = sampling[field]
+        value = spec["default"] if locked is None else locked[field]
+        return gr.update(minimum=spec["min"], maximum=spec["max"],
+                         step=spec["step"], value=value,
+                         interactive=locked is None, visible=True)
+
+    return (
+        _slider("num_inference_steps"),
+        _slider("shift_video"),
+        _slider("shift_audio"),
+        gr.update(visible=locked is not None),
+    )
+
+
+def single_scope_updates(constraints: dict, lang: str = _DEFAULT_LANG,
+                         pi_h3=PI_H3_OFF) -> tuple:
     """``gr.update``s for the Single tab when the loaded base model's
     constraints change, in this order: steps slider, CFG slider, shift
     (video) slider, shift (audio) slider, the "fixed at 8 / 1.0" caption,
@@ -207,31 +284,22 @@ def single_scope_updates(constraints: dict, lang: str = _DEFAULT_LANG) -> tuple:
     range and default (a base-model switch resets them to the defaults), the
     decorative CFG slider and its "fixed" caption are hidden. Without: exactly
     the LTX look -- steps 1-50 fixed at 8, CFG fixed at 1.0, no shift sliders.
-    The width / height / frames labels and spinner steps follow the grid."""
+    The width / height / frames labels and spinner steps follow the grid.
+    With a pi-H3 choice that locks (``pi_h3``, the Settings radio's value;
+    :func:`pi_h3_locked_values`), the three sliders keep the choice's values
+    and stay locked instead (:func:`pi_h3_sampling_updates`), so a reload onto
+    another H3 weight does not make them movable again."""
     c = normalize_constraints(constraints)
     labels = field_labels(c, lang)
-    sampling = c["sampling"]
-    if sampling is None:
-        slider_updates = (
-            gr.update(minimum=1, maximum=50, step=1, value=FIXED_STEPS,
-                      interactive=False),
-            gr.update(visible=True),
-            gr.update(visible=False),
-            gr.update(visible=False),
-            gr.update(visible=True),
-        )
-    else:
-        def _live(spec):
-            return gr.update(minimum=spec["min"], maximum=spec["max"],
-                             step=spec["step"], value=spec["default"],
-                             interactive=True, visible=True)
-        slider_updates = (
-            _live(sampling["num_inference_steps"]),
-            gr.update(visible=False),
-            _live(sampling["shift_video"]),
-            _live(sampling["shift_audio"]),
-            gr.update(visible=False),
-        )
+    steps_u, shift_video_u, shift_audio_u, _caption = pi_h3_sampling_updates(c, pi_h3)
+    no_sampling = c["sampling"] is None
+    slider_updates = (
+        steps_u,
+        gr.update(visible=no_sampling),
+        shift_video_u,
+        shift_audio_u,
+        gr.update(visible=no_sampling),
+    )
     m = c["dimension_multiple"]
     return slider_updates + (
         gr.update(label=labels["width"], step=m),

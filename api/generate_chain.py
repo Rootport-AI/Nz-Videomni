@@ -25,7 +25,7 @@ from api.errors import (
     source_audio_not_found,
     source_video_not_found,
 )
-from api.generate import check_references_exist, spawn_job_thread
+from api.generate import check_references_exist, preflight_engine_files, spawn_job_thread
 from api.models import GenerateChainRequest, GenerateChainResponse
 from services import engines
 
@@ -64,6 +64,10 @@ def generate_chain(
     # defaults back (MiniMax H3's steps / shifts / VRAM 16GB mode / source_video.context_frames), so the job
     # record, the log and the adapter see numbers.
     engines.validate_chain_for_family(family, request)
+    # The engine-side files the chain needs (MiniMax H3's pi-H3: the file is
+    # there and matches the selected transformer), with the single path's
+    # check, before a job exists. Chained, V2V and Retake all come through here.
+    preflight_engine_files(context, request)
 
     # Validate clip-0 conditioning images exist up front (only clip 0 may carry
     # them; the model validator already enforces that).

@@ -1480,7 +1480,7 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
     dep = next(d for d in demo.fns.values()
                if getattr(d.fn, "__name__", "") == "dispatch")
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
-    # The 46 scalar positionals in ui.py's dispatch() order (no keyframe tail).
+    # The 47 scalar positionals in ui.py's dispatch() order (no keyframe tail).
     args = [
         "prompt <lora:x:1.0>", "",          # prompt_v, negative_v
         500, 320, False, 0, 0,              # width..crop_h (width not ÷64)
@@ -1491,12 +1491,13 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
         "same", "", "add", "", True,        # out_mode..chunked_upsample
         {}, 8, 12.0, 3.0,                   # gen_scope, steps, shift x2
         True,                               # accel_vram16 (single-only)
+        "off",                              # accel_pi_h3 (single-only)
         False, 11.0, 2.5, 0.25,             # nag_enabled, scale, tau, alpha
         "nag", 1.0, "sdpa", False,          # method, vsf, attention, prefetch
         False, False, "default", False,     # keep_resident..keep_res_embeds
         False,                              # embed_mp4_metadata
     ]
-    assert len(args) == 46
+    assert len(args) == 47
     out = list(dep.fn(*args))
     assert out == [(LABELS["en"]["msg_bad_dimension"], "", None)]
     assert calls["n"] == 0  # not even list_loras for the <lora:> token
@@ -1564,3 +1565,85 @@ def test_vram16_checkbox_default_hidden_and_wired_into_generate_only():
                        and c.label == en["lbl_shift_audio"])
     inputs = list(deps[0].inputs)
     assert inputs[inputs.index(shift_audio) + 1] is box
+
+
+# --------------------------------------------------------------------------- #
+# pi-H3 (MiniMax H3): the Settings radio, its warning and the Generate tab's
+# lock caption.
+# --------------------------------------------------------------------------- #
+def _pi_h3_parts(demo):
+    en = LABELS["en"]
+    radios = [c for c in demo.blocks.values()
+              if isinstance(c, gr.Radio) and c.label == en["accel_lbl_pi_h3"]]
+    assert len(radios) == 1, "pi-H3 radio not found"
+    registry = demo.label_registry
+    warning = next(c for c, k, _a in registry if k == "accel_warn_pi_h3")
+    caption = next(c for c, k, _a in registry if k == "cap_pi_h3_lock")
+    return radios[0], warning, caption
+
+
+def test_pi_h3_radio_default_hidden_and_wired_into_generate_only():
+    demo = _demo()
+    en = LABELS["en"]
+    radio, warning, caption = _pi_h3_parts(demo)
+    assert [v for _l, v in radio.choices] == ["off", "4steps", "2steps"]
+    assert radio.value == "off"
+    assert radio.visible is False
+    assert radio.info == en["accel_info_pi_h3"]
+    assert warning.visible is False and "pi-h3-warning" in (warning.elem_classes or [])
+    assert caption.visible is False
+    names = sorted(getattr(d.fn, "__name__", "")
+                   for d in demo.fns.values() if radio in getattr(d, "inputs", []))
+    # The single Generate flow's dispatch (no chain_dispatch, no batch), plus
+    # the two pure UI wirings that lock the sliders.
+    assert names == ["dispatch", "on_gen_scope_change", "on_pi_h3_change"]
+    dispatch_dep = next(d for d in demo.fns.values()
+                        if getattr(d.fn, "__name__", "") == "dispatch")
+    vram16 = next(c for c in demo.blocks.values()
+                  if isinstance(c, gr.Checkbox) and c.label == en["accel_lbl_vram16"])
+    inputs = list(dispatch_dep.inputs)
+    assert inputs[inputs.index(vram16) + 1] is radio
+
+
+def test_pi_h3_radio_change_outputs_only_the_sliders_caption_and_warning():
+    demo = _demo()
+    en = LABELS["en"]
+    radio, warning, caption = _pi_h3_parts(demo)
+    dep = next(d for d in demo.fns.values()
+               if getattr(d.fn, "__name__", "") == "on_pi_h3_change")
+    # The Generate tab's sliders, as the scope-change wiring names them
+    # (steps, cfg, shift video, shift audio, ...).
+    scope_dep = next(d for d in demo.fns.values()
+                     if getattr(d.fn, "__name__", "") == "on_gen_scope_change")
+    steps, _cfg, shift_video, shift_audio = list(scope_dep.outputs)[:4]
+    assert steps.label == en["lbl_steps"] and shift_audio.label == en["lbl_shift_audio"]
+    assert list(dep.outputs) == [steps, shift_video, shift_audio, caption, warning]
+    # Locked on an H3 scope that serves the choice's values.
+    scope = {"engine_family": "h3", "constraints": {
+        "sampling": {
+            "num_inference_steps": {"min": 1, "max": 50, "step": 1, "default": 20},
+            "shift_video": {"min": 1, "max": 20, "step": 0.1, "default": 12},
+            "shift_audio": {"min": 1, "max": 20, "step": 0.1, "default": 3},
+        },
+        "pi_h3": {"4steps": {"num_inference_steps": 4, "shift_video": 12.0, "shift_audio": 3.0}},
+    }}
+    steps_u, sv_u, sa_u, cap_u, warn_u = dep.fn("4steps", scope)
+    assert (steps_u["value"], steps_u["interactive"]) == (4, False)
+    assert cap_u["visible"] is True and warn_u["visible"] is True
+    steps_u, _sv, _sa, cap_u, warn_u = dep.fn("off", scope)
+    assert (steps_u["value"], steps_u["interactive"]) == (20, True)
+    assert cap_u["visible"] is False and warn_u["visible"] is False
+
+
+def test_pi_h3_texts_switch_language_with_the_owners_wording():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key in ("accel_warn_pi_h3", "cap_pi_h3_lock"):
+        idx = next(i for i, (_c, k, _a) in enumerate(registry) if k == key)
+        assert updates[idx]["value"] == LABELS["ja"][key]
+    assert LABELS["ja"]["accel_warn_pi_h3"] == "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。"
+    assert LABELS["en"]["accel_warn_pi_h3"] == (
+        "pi-H3 is not recommended when using Turbo LoRA or Turbo models.")
+    assert LABELS["ja"]["cap_pi_h3_lock"] == "Settings の pi-H3 が有効のため固定"
+    assert LABELS["en"]["cap_pi_h3_lock"] == "Fixed because pi-H3 is enabled in Settings"

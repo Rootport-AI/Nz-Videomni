@@ -1,0 +1,249 @@
+{
+  "phase": "chain",
+  "started_at": "2026-11-23T12:51:02+09:00",
+  "git": {
+    "head": "9ab8cc56c304b653a9e006f3270bcecb46fcc02a",
+    "branch": "dev",
+    "status_porcelain": [
+      " M AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/Docs/API_REFERENCE.md",
+      " M Docs/COMFORT_LIMIT_TABLE.md",
+      " M Docs/MCP_SERVER_DESIGN.md",
+      " M Docs/MINIMAX_H3_DESIGN.md",
+      " M Docs/PENDING_TASKS.md",
+      " M Docs/VERIFICATION_LOG.md",
+      " M README.md",
+      " M Videomni_Backend_Specification.md"
+    ],
+    "dirty": true
+  },
+  "state_before": {
+    "status_http": 200,
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "pipeline_loaded": true,
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 13,
+      "failed": 0
+    },
+    "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "h3_constraints_pi_h3": {
+      "4steps": {
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      },
+      "2steps": {
+        "num_inference_steps": 2,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      }
+    },
+    "gpu": {
+      "memory_used_mib": 959,
+      "compute_apps_count": 33,
+      "python_like_count": 1
+    }
+  },
+  "gate_blocking": [],
+  "mcp_args": {
+    "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+    "clips": [
+      {
+        "num_frames": 124
+      },
+      {
+        "num_frames": 124
+      }
+    ],
+    "width": 640,
+    "height": 384,
+    "seed": 1234,
+    "attention_backend": "sage",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "pi_h3": "4steps"
+  },
+  "mcp_job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc",
+  "mcp_final": {
+    "status": "completed",
+    "error": null
+  },
+  "mcp_seconds_wall": 95.3,
+  "mcp_video_path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\212351bc-4bce-4011-8b4a-96fd52b29edc\\output.mp4",
+  "calls": [
+    {
+      "tool": "submit_chain",
+      "args": {
+        "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+        "clips": [
+          {
+            "num_frames": 124
+          },
+          {
+            "num_frames": 124
+          }
+        ],
+        "width": 640,
+        "height": 384,
+        "seed": 1234,
+        "attention_backend": "sage",
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "pi_h3": "4steps"
+      },
+      "is_error": false,
+      "seconds": 0.2,
+      "result": {
+        "job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc",
+        "status": "running",
+        "created_at": "2026-11-23T03:51:03Z",
+        "num_clips": 2,
+        "next": "wait_for_job(job_id) を呼ぶ"
+      }
+    },
+    {
+      "tool": "wait_for_job",
+      "args": {
+        "job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc",
+        "timeout_sec": 45,
+        "poll_interval_sec": 5
+      },
+      "is_error": false,
+      "seconds": 45.03
+    },
+    {
+      "tool": "wait_for_job",
+      "args": {
+        "job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc",
+        "timeout_sec": 45,
+        "poll_interval_sec": 5
+      },
+      "is_error": false,
+      "seconds": 45.03
+    },
+    {
+      "tool": "wait_for_job",
+      "args": {
+        "job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc",
+        "timeout_sec": 45,
+        "poll_interval_sec": 5
+      },
+      "is_error": false,
+      "seconds": 5.02
+    },
+    {
+      "tool": "get_job_video_path",
+      "args": {
+        "job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc"
+      },
+      "is_error": false,
+      "seconds": 0.0,
+      "result": {
+        "path": "S:\\OriginalApps\\12_Nz-LTX23-AviUtl2\\Nz-Videomni\\outputs\\212351bc-4bce-4011-8b4a-96fd52b29edc\\output.mp4",
+        "exists": true,
+        "size_bytes": 2172205,
+        "status": "completed"
+      }
+    }
+  ],
+  "probe": {
+    "path": "outputs/h3-pih3-gates-2026-11-23/runs/MCP4/mcp.mp4",
+    "video": {
+      "codec_name": "h264",
+      "width": 640,
+      "height": 384,
+      "pix_fmt": "yuv420p",
+      "r_frame_rate": "24/1",
+      "duration": "9.416667",
+      "nb_read_frames": 226
+    },
+    "audio": {
+      "codec_name": "aac",
+      "sample_rate": "32000",
+      "channels": 2,
+      "duration": "9.417000"
+    }
+  },
+  "mcp_meta": {
+    "pi_h3_used": "4steps",
+    "steps_shift": [
+      4,
+      12.0,
+      3.0
+    ],
+    "attention_used": "sage",
+    "vram16_mode_used": "on",
+    "generation_time_seconds": 91.53,
+    "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "pi_h3": {
+      "choice": "4steps",
+      "steps": 4,
+      "file": "pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+      "dwd": {
+        "chunks": 1,
+        "seconds": 2.3
+      }
+    },
+    "request": {
+      "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+      "negative_prompt": "",
+      "nag_enabled": false,
+      "nag_scale": 11.0,
+      "nag_tau": 2.5,
+      "nag_alpha": 0.25,
+      "neg_method": "nag",
+      "vsf_scale": 1.5,
+      "attention_backend": "sage",
+      "block_swap_prefetch": true,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "fused_gguf_dequant_kernel": true,
+      "vae_mode": "default",
+      "embed_mp4_metadata": true,
+      "vram16_mode": true,
+      "pi_h3": "4steps",
+      "width": 640,
+      "height": 384,
+      "crop_output": null,
+      "frame_rate": 24.0,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "guidance_scale": 1.0,
+      "seed": 1234,
+      "pipeline": "distilled",
+      "overlap_frames": 3,
+      "overlap_strength": 0.5,
+      "clips": [
+        {
+          "prompt": null,
+          "num_frames": 124,
+          "conditioning_images": [],
+          "references": [],
+          "source_audio": null
+        },
+        {
+          "prompt": null,
+          "num_frames": 124,
+          "conditioning_images": [],
+          "references": [],
+          "source_audio": null
+        }
+      ],
+      "source_video": null,
+      "source_audio": null,
+      "retake": null,
+      "end_source": null,
+      "loras": [],
+      "reference_video_id": null,
+      "conditioning_attention_strength": null,
+      "reference_video_strength": null,
+      "chunked_upsample": true,
+      "stage2_window": "standard"
+    }
+  },
+  "finished_at": "2026-11-23T12:52:39+09:00"
+}

@@ -147,6 +147,7 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
   // 台帳 §1-101: like `keepResidentEmbeddings`, no row's `requires` names it,
   // so it stays at the server default (H3's `true`).
   vram16Mode: true,
+  piH3: "off",
   // Output setting sharing the store (§3-164); the comfort matcher ignores it.
   embedMp4Metadata: true,
 };

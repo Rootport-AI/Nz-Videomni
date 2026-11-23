@@ -642,6 +642,7 @@ export function EditScreen({
                   <div className="card card-error">
                     <p className="error-code">{retakeSubmitState.code}</p>
                     <p>{retakeSubmitState.message}</p>
+                    {retakeSubmitState.detail !== undefined && <p>{retakeSubmitState.detail}</p>}
                   </div>
                 ))}
               <GenerateReasonsNote reasons={retakeForm.validityReasons} messages={retakeReasonMessages} />
@@ -667,6 +668,7 @@ export function EditScreen({
                   <div className="card card-error">
                     <p className="error-code">{submitState.code}</p>
                     <p>{submitState.message}</p>
+                    {submitState.detail !== undefined && <p>{submitState.detail}</p>}
                   </div>
                 ))}
               <GenerateReasonsNote reasons={outpaintForm.validityReasons} messages={outpaintReasonMessages} />
@@ -700,6 +702,7 @@ export function EditScreen({
                   <div className="card card-error">
                     <p className="error-code">{inpaintSubmitState.code}</p>
                     <p>{inpaintSubmitState.message}</p>
+                    {inpaintSubmitState.detail !== undefined && <p>{inpaintSubmitState.detail}</p>}
                   </div>
                 ))}
               <GenerateReasonsNote reasons={inpaintForm.validityReasons} messages={inpaintReasonMessages} />
@@ -724,6 +727,7 @@ export function EditScreen({
                 <div className="card card-error">
                   <p className="error-code">{alphaGenSubmitState.code}</p>
                   <p>{alphaGenSubmitState.message}</p>
+                  {alphaGenSubmitState.detail !== undefined && <p>{alphaGenSubmitState.detail}</p>}
                 </div>
               )}
               <GenerateReasonsNote reasons={alphaGenForm.validityReasons} messages={alphaGenReasonMessages} />

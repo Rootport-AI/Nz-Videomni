@@ -96,7 +96,7 @@ export function buildI2vGeneratePayload(params: BuildI2vGeneratePayloadParams): 
     num_frames: params.numFrames,
     frame_rate: params.frameRate,
     seed: params.seed,
-    ...samplingRequestFields(params.sampling ?? null),
+    ...samplingRequestFields(params.sampling ?? null, params.acceleration),
     ...nagRequestFields(params.nag),
     ...accelerationRequestFields(params.acceleration),
     ...(params.loras && params.loras.length > 0 ? { loras: params.loras } : {}),

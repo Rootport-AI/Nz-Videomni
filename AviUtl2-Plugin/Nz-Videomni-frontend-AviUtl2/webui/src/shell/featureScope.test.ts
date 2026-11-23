@@ -45,6 +45,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "retake",
         "v2v",
         "vram16_mode",
+        "pi_h3",
         "fused_gguf_dequant_kernel",
       ].sort(),
     );
@@ -179,12 +180,14 @@ describe("settingsRowsHiddenFor", () => {
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
+      piH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
+      piH3: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -194,25 +197,39 @@ describe("settingsRowsHiddenFor", () => {
       vae: true,
       keepResidentEmbeddings: false,
       vram16: false,
+      piH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
       vae: false,
       keepResidentEmbeddings: true,
       vram16: false,
+      piH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: true,
+      piH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["fused_gguf_dequant_kernel"])).toEqual({
       vae: false,
       keepResidentEmbeddings: false,
       vram16: false,
+      piH3: false,
       fusedGgufDequantKernel: true,
+    });
+  });
+
+  it("maps pi_h3 onto the pi-H3 row alone (ruling 107)", () => {
+    expect(settingsRowsHiddenFor(["pi_h3"])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      piH3: true,
+      fusedGgufDequantKernel: false,
     });
   });
 
@@ -225,6 +242,7 @@ describe("settingsRowsHiddenFor", () => {
       vae: true,
       keepResidentEmbeddings: true,
       vram16: true,
+      piH3: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -241,6 +259,7 @@ describe("accelerationResetsFor", () => {
     expect(accelerationResetsFor(["keep_resident_embeddings"])).toEqual(["keepResidentEmbeddings"]);
     expect(accelerationResetsFor(["vram16_mode"])).toEqual(["vram16Mode"]);
     expect(accelerationResetsFor(["fused_gguf_dequant_kernel"])).toEqual(["fusedGgufDequantKernel"]);
+    expect(accelerationResetsFor(["pi_h3"])).toEqual(["piH3"]);
   });
 
   it("collects both without duplicates", () => {

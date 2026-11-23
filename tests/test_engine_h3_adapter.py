@@ -330,6 +330,11 @@ H3_CONSTRAINTS = {
         "audio_strength": {"min": 0.0, "max": 1.0, "step": 0.05, "default": 0.5},
         "blend_dilation_stage1": {"min": 0, "max": 15, "step": 1, "default": 1},
     },
+    # pi-H3's sampling values per choice. H3 only: LTX has no key.
+    "pi_h3": {
+        "4steps": {"num_inference_steps": 4, "shift_video": 12.0, "shift_audio": 3.0},
+        "2steps": {"num_inference_steps": 2, "shift_video": 12.0, "shift_audio": 3.0},
+    },
 }
 LTX_CONSTRAINTS = {
     "num_frames": {"step": 8, "offset": 1, "min": 9, "max": 481},

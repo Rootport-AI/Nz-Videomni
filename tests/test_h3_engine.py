@@ -1141,6 +1141,8 @@ GOLDEN_GENERATE_NAG_KEYS = ["nag"]
 GOLDEN_GENERATE_OUTPAINT_KEYS = ["outpaint"]
 #: Inpainting's ``inpaint`` (台帳 §1-124), sent only for that job.
 GOLDEN_GENERATE_INPAINT_KEYS = ["inpaint"]
+#: pi-H3's ``pi_h3`` (VERIFICATION_LOG §223), sent only for that job.
+GOLDEN_GENERATE_PI_H3_KEYS = ["pi_h3"]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
@@ -1177,7 +1179,8 @@ def test_golden_generate_message_keys():
     assert list(msg) == GOLDEN_GENERATE_KEYS            # a job without the optional keys: as before
     assert worker._GENERATE_FIELDS == frozenset(
         GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS + GOLDEN_GENERATE_REFERENCE_KEYS
-        + GOLDEN_GENERATE_NAG_KEYS + GOLDEN_GENERATE_OUTPAINT_KEYS + GOLDEN_GENERATE_INPAINT_KEYS)
+        + GOLDEN_GENERATE_NAG_KEYS + GOLDEN_GENERATE_OUTPAINT_KEYS + GOLDEN_GENERATE_INPAINT_KEYS
+        + GOLDEN_GENERATE_PI_H3_KEYS)
     args = _selftest_args()
     args.source_audio, args.audio_strength = "a.wav", 0.5
     msg = worker._selftest_generate_message(args, "o.mp4")

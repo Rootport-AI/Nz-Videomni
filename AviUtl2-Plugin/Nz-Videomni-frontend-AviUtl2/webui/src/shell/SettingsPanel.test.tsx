@@ -70,12 +70,14 @@ function Harness({
   onClose,
   serverStatus,
   engineFamily,
+  piH3Unsupported,
 }: {
   bridge: ReturnType<typeof createMockBridge>;
   onSaved: () => void;
   onClose: () => void;
   serverStatus: ServerStatusState;
   engineFamily: string;
+  piH3Unsupported: boolean;
 }) {
   const accelerationControls = useAccelerationSettings();
   return (
@@ -112,6 +114,12 @@ function Harness({
       // 2.5). Same "supported" case as the two rows above; the hiding is
       // covered in `AppShell.featureScope.test.tsx`.
       vram16Unsupported={false}
+      onPiH3Change={accelerationControls.setPiH3}
+      // Ruling 107: hidden on an engine that publishes `pi_h3` (LTX 2.3 / 2.5).
+      // `false` (the "supported" case) unless a test asks for the hidden one;
+      // the hiding through the fixture server is in
+      // `AppShell.featureScope.test.tsx`.
+      piH3Unsupported={piH3Unsupported}
       onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
       // §3-166: the base-model dropdown is fed by `AppShell` in production;
       // these direct-render tests hand it an empty list (its placeholder). The
@@ -136,6 +144,7 @@ function renderPanel(
   onClose = vi.fn(),
   serverStatus: ServerStatusState = { kind: "online", status: statusWithSage(true) },
   engineFamily = "",
+  piH3Unsupported = false,
 ) {
   const rendered = render(
     // N8: `SettingsPanel` now also calls `useTheme()` (theme toggle, next to
@@ -159,6 +168,7 @@ function renderPanel(
                 onClose={onClose}
                 serverStatus={serverStatus}
                 engineFamily={engineFamily}
+                piH3Unsupported={piH3Unsupported}
               />
             </JobsProvider>
           </ToastProvider>
@@ -381,6 +391,7 @@ describe("SettingsPanel", () => {
         vaeMode: "prune_vaed",
         keepResidentEmbeddings: false,
         vram16Mode: true,
+        piH3: "off",
         embedMp4Metadata: true,
       });
     });
@@ -492,6 +503,7 @@ describe("SettingsPanel", () => {
         vaeMode: "default",
         keepResidentEmbeddings: false,
         vram16Mode: true,
+        piH3: "off",
         embedMp4Metadata: true,
       });
     });
@@ -580,6 +592,7 @@ describe("SettingsPanel", () => {
         vaeMode: "default",
         keepResidentEmbeddings: false,
         vram16Mode: true,
+        piH3: "off",
         embedMp4Metadata: true,
       });
     });
@@ -700,6 +713,7 @@ describe("SettingsPanel", () => {
         vaeMode: "default",
         keepResidentEmbeddings: false,
         vram16Mode: true,
+        piH3: "off",
         embedMp4Metadata: true,
       });
     });
@@ -740,10 +754,84 @@ describe("SettingsPanel", () => {
         vaeMode: "default",
         keepResidentEmbeddings: false,
         vram16Mode: false,
+        piH3: "off",
         embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().vram16Mode).toBe(false);
+  });
+
+  // Ruling 107 (2026-11-23): pi-H3. Three buttons (off / 4steps / 2steps),
+  // default off; a red bold note only while a choice other than off is on.
+  it("pi-H3 defaults to off with no note; 4steps / 2steps show the red bold note and persist", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const piH3 = within(screen.getByRole("group", { name: "pi-H3" }));
+    expect(piH3.getAllByRole("button").map((b) => b.textContent)).toEqual(["off", "4steps", "2steps"]);
+    expect(piH3.getByRole("button", { name: "off" })).toHaveAttribute("aria-pressed", "true");
+    expect(piH3.getByRole("button", { name: "4steps" })).toHaveAttribute("aria-pressed", "false");
+    expect(piH3.getByRole("button", { name: "2steps" })).toHaveAttribute("aria-pressed", "false");
+    const NOTE = "pi-H3 is not recommended when using Turbo LoRA or Turbo models.";
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+
+    await user.click(piH3.getByRole("button", { name: "4steps" }));
+    await waitFor(() => {
+      expect(piH3.getByRole("button", { name: "4steps" })).toHaveAttribute("aria-pressed", "true");
+    });
+    const note = screen.getByText(NOTE);
+    // Red (the existing error hint class) and bold (a <strong> inside it).
+    expect(note.tagName).toBe("STRONG");
+    expect(note.parentElement).toHaveClass("field-hint", "field-hint-error");
+    await waitFor(() => {
+      expect(readStoredAcceleration().piH3).toBe("4steps");
+    });
+
+    await user.click(piH3.getByRole("button", { name: "2steps" }));
+    await waitFor(() => {
+      expect(piH3.getByRole("button", { name: "2steps" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(readStoredAcceleration().piH3).toBe("2steps");
+    });
+
+    await user.click(piH3.getByRole("button", { name: "off" }));
+    await waitFor(() => {
+      expect(piH3.getByRole("button", { name: "off" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(readStoredAcceleration().piH3).toBe("off");
+    });
+  });
+
+  it("pi-H3's note reads the owner's Japanese wording in Japanese", async () => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, "ja");
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "2steps" }));
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const piH3 = within(screen.getByRole("group", { name: "pi-H3" }));
+    expect(piH3.getByRole("button", { name: "2steps" })).toHaveAttribute("aria-pressed", "true");
+    const note = screen.getByText("pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。");
+    expect(note.tagName).toBe("STRONG");
+    expect(note.parentElement).toHaveClass("field-hint", "field-hint-error");
+  });
+
+  it("hides the pi-H3 row and its note on an engine that refuses pi_h3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "4steps" }));
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    renderPanel(bridge, vi.fn(), vi.fn(), { kind: "online", status: statusWithSage(true) }, "", true);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    expect(screen.queryByRole("group", { name: "pi-H3" })).not.toBeInTheDocument();
+    expect(screen.queryByText("pi-H3 is not recommended when using Turbo LoRA or Turbo models.")).not.toBeInTheDocument();
+    // The neighbouring row is still there.
+    expect(screen.getByRole("group", { name: "VRAM 16GB mode" })).toBeInTheDocument();
   });
 
   // §3-164 (2026-09-24): the Output group's one row, between Acceleration and

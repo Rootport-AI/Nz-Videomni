@@ -669,6 +669,54 @@ describe("AppShell — base-model feature scope", () => {
     await waitFor(() => expect(readStoredAcceleration().vram16Mode).toBe(true));
   });
 
+  // -- Ruling 107 (2026-11-23): pi-H3, MiniMax H3's own row -----------------
+  //
+  // Scoped like VRAM 16GB mode (both LTX engines publish `pi_h3`), but the
+  // default is off — so the write-back lands on `"off"`, and the note shows
+  // only while a choice is on.
+
+  function piH3Row() {
+    return screen.queryByRole("group", { name: /^pi-H3$/ });
+  }
+
+  function piH3Note() {
+    return screen.queryByText("pi-H3 is not recommended when using Turbo LoRA or Turbo models.");
+  }
+
+  it("hides the pi-H3 row AND its note on LTX 2.3 and 2.5, and shows them on MiniMax H3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "4steps" }));
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(piH3Row()).toBeNull();
+    expect(piH3Note()).toBeNull();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(piH3Row()).toBeNull();
+    expect(piH3Note()).toBeNull();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(piH3Row()).toBeInTheDocument());
+    // The leftover 4steps was written back to off on LTX, and stays off on H3.
+    expect(within(piH3Row()!).getByRole("button", { name: "off" })).toHaveAttribute("aria-pressed", "true");
+    expect(piH3Note()).toBeNull();
+    await user.click(within(piH3Row()!).getByRole("button", { name: "4steps" }));
+    await waitFor(() => expect(piH3Note()).toBeInTheDocument());
+  });
+
+  it("writes a leftover pi-H3 choice back to off on LTX 2.3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: "2steps" }));
+    expect(readStoredAcceleration().piH3).toBe("2steps");
+    const { select } = await renderApp(AS_LTX25);
+    // LTX 2.3 is the active base model (it publishes `pi_h3`).
+    expect(select.value).toBe("LTX23");
+
+    await waitFor(() => expect(readStoredAcceleration().piH3).toBe("off"));
+  });
+
   // -- 台帳 §1-100: Fused GGUF Dequantization Kernel, hidden on MiniMax H3 -----
   //
   // MiniMax H3 has no GGUF weights, so it publishes `fused_gguf_dequant_kernel`

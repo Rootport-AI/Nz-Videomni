@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-22
+- 作成: 2026-07-15／最終更新: 2026-11-23
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -20,6 +20,26 @@
 - **概要**: 一部のブロックを BF16 のまま残した重み（種類 `bf16_blocks`。`Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49`・`10Eros_Max_h3_8stepTURBO_beta7_int8HQ`）の快適上限の線は、概算による暫定の値である。この暫定の線を、実機で測った境界に基づく線で置き換える。1920×1088 と 2560×1472 で、快適の上端とその 1 段上の OOM の点を測り、記述子の `bf16_blocks` の値を決める。
 - **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
 - **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
+
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
+
+### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
+
+- **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。main へ取り込む前の確認（機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件）は済んだ。
+- **これからすること**: main へ取り込んだあとに、検証用の別の機械で、下のインストーラーの確認を行う。
+- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。本節が実機確認の項目の正本。
+
+#### インストーラー（main へ取り込んだあと、検証用の別の機械で）
+
+前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3 のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
+
+- [ ] `install-MiniMaxH3.bat` を実行する → 最後の表で `pi_h3_4steps` と `pi_h3_2steps` の 2 行が `PASS` になる。
+- [ ] （続き）`models\MiniMaxH3\VAE\pi-H3\` を見る → `pi_h3_4step_dwd_adapter_int8_convrot.safetensors` と `pi_h3_2step_dwd_adapter_int8_convrot.safetensors` の 2 本があり、どちらも 2,192,176,240 バイト。
+- [ ] （続き）PowerShell で 2 本の SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §18.2 の値と一致する。
+- [ ] その機械で、操作パネルか Gradio のどちらかで pi-H3 を 4steps にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
+- 補足: pi-H3 がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
 
 ## 3. 将来の研究課題
 
@@ -69,6 +89,7 @@
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」が全件実行で 1 回、5 秒の時限切れで落ちた（負荷による）。単独（4 件）と 2 回目の全件実行では合格（2026-11-02。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193）。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/chained/ChainEndSourcePanel.test.tsx` の「📁 attaches whatever the native dialog returned」が全件実行で 1 回落ち（`getByAltText(t.videoPlaceholderAlt)` が要素を見つけられない）、単独（32 件）と最後の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §218.6）。同じ日のもう 1 回の全件実行でも 1 件落ちたが、落ちたテストの名前は控えていない。
 - **既知の不安定なテスト（追記）**: `webui/src/modes/single/SingleScreen.reference.test.tsx` の「a video truncated to the 15 s total carries max_sec; the shorter one before it does not」（上の「✒ … right-clicked video opens the accordion」とは別のテスト）と、`webui/src/modes/single/SingleScreen.prefill.test.tsx` の「R1: passes both trim parameters…」（2026-11-02 の追記と同じテストの再発）が、同じ全件実行で 1 回ずつ約 5 秒の時限切れで落ちた（負荷による）。単独（2 ファイル・21 件）と 2 回目の全件実行では合格（2026-11-22。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §220.5）。
+- **既知の不安定なテスト（追記）**: `webui/src/shell/AppShell.minimaxH3.test.tsx` の、Chained の右クリックに関する 1 件が、全件実行でまれに落ちる。単独では毎回合格（2026-11-23。[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §226.3）。
 - **状態**: 未着手（最初の一手は棚卸し）。
 - **範囲**: テストとモックのみ（製品コードは不変）。
 - **出典**: [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §163（実測と裁定）・§160.5・§162.4（不安定の記録）、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-234・3-236（直した前例）。
@@ -144,8 +165,12 @@
   - (b) キャンセル前の早期終了（`services/pipeline_manager.py` の `run_job`・`run_chain_job` の冒頭）が、読み込み済みかを見ずに state を READY に書く。
   - (c) `OutpaintSpec.source_video_id` が空文字を通す（`api/models.py`）。空文字はスキーマでは LTX の形に見え、受付では H3 の枝に入ります。`InpaintSpec.source_video_id` は `min_length=1` で拒むようにしたので、Outpainting 側も揃える（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.7 の「API とフィーチャースコープ」）。
   - (d) 操作パネルの型の定義（`webui/src/api/types.ts` の重みの種類の列挙 `TransformerQuantClass`）と説明のコメントに、バックエンドが返すようになった `"bf16_blocks"` が無い。値は辞書の鍵として引くだけなので動作には影響しません。次に操作パネルを直す機会に足す（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222.3）。
+  - (e) 操作パネルの開発用の模擬（`webui/src/bridge/mockBridge.ts` の `featureUnsupported`）の拒否の文が、LTX 2.3 のときも「LTX 2.5は…」で始まる（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §226.4）。
+  - (f) `webui/src/shell/SettingsPanel.tsx` の VRAM 16GB mode の行の注釈が、すぐ上の行として Embeddings processor の常駐の行を挙げているが、いまは間に pi-H3 の行がある（同 §226.4）。
+  - (g) `webui/src/modes/batch/buildA2vChainPayload.ts` の `A2vChainPayload` の注釈が、生成の高速化の欄を「6 つ」とし「`accelerationRequestFields` が出す欄は全部ここに要る（無いと型検査で落ちる）」と書くが、その関数は `vram16_mode`・`embed_mp4_metadata`・`pi_h3` も出し、ここに無くても型検査は通る。
+  - (h) Gradio の Settings の pi-H3 の注意書きが、赤い太字で表示されない（文言は正しい。オーナーの実機での確認 2026-11-23 で、オーナーは合格扱いとした。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.11）。部品（`gradio_ui/ui.py` の `gr.Markdown`）にはクラス `pi-h3-warning` を付けてあり、`gradio_ui/styles.py` に同じ名前の定義（赤の文字色と太字）がある。
   - (a)・(b) の事実と場所は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11（1 と 2）。
-- **前提**: (a)・(b) は 1-279 の敵対的レビューで見つかり（記録簿 §206.6 の提-3）、コードの読解で確かめました。(c) は 1-124 の実装で見つかりました。(d) は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292 の実装で残したものです。どれも実害の観測はありません。
+- **前提**: (a)・(b) は 1-279 の敵対的レビューで見つかり（記録簿 §206.6 の提-3）、コードの読解で確かめました。(c) は 1-124 の実装で見つかりました。(d) は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-292 の、(e)〜(g) は同 1-293 の実装で、(h) は台帳 §1-294 のオーナーの実機での確認で見つけたものです。どれも実害の観測はありません。
 - **留意**: 直すときは 1-279 の原則「終端の状態は後片付けの後に最後に書く」（記録簿 §206.4・§206.5）に揃える。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。
 
@@ -153,6 +178,8 @@
 
 - **概要**: 再現はするが実害が小さい症状の原因究明を溜め、ある程度の数が溜まったところでまとめて調べる受け皿です（オーナー指示 2026-11-11）。いま溜まっているもの。
   - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。原因は調べていません。
+  - Gradio の試験（`tests/test_gradio_*.py`）の実行中に、試験の既定の向き先（`http://127.0.0.1:8000/api/v1/loras/reload`）への 500 の警告が出る（変更の前からある。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.7）。どの試験が実際の通信を出しているかは調べていません。
+  - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。
 - **留意**: 調べるときは仮説を立てて順番に潰す（先行の設計変更へ跳ばない）。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。

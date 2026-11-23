@@ -1740,6 +1740,7 @@ function ChainedScreenBody({
           <SamplingFields
             constraints={form.samplingConstraints}
             values={form.sampling}
+            fixedValues={form.fixedSampling}
             disabled={disabled}
             onChange={form.setSamplingValue}
           />
@@ -2008,6 +2009,7 @@ function ChainedScreenBody({
           <div className="card card-error">
             <p className="error-code">{submitState.code}</p>
             <p>{submitState.message}</p>
+            {submitState.detail !== undefined && <p>{submitState.detail}</p>}
           </div>
         )}
         <JobLedger baseUrl={baseUrl} highlightedJobId={highlightedJobId} nativeBridge={nativeBridge} />

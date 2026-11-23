@@ -1807,6 +1807,9 @@ export const en = {
       steps: "Steps",
       shiftVideo: "Shift (video)",
       shiftAudio: "Shift (audio)",
+      /** Ruling 107: the tooltip on the three rows while the Settings panel's
+       * pi-H3 choice fixes them (the server fills these values). */
+      fixedTooltip: "Fixed because pi-H3 is enabled in Settings",
     },
     /** Notes for the parts of Create the loaded base
      * model's engine cannot use (greyed, not hidden). Same shape as
@@ -2588,6 +2591,18 @@ export const en = {
      * note: reassurance, not a warning — precision does not change. */
     accelVram16Note:
       "For MiniMax H3 only. Splits the denoising computation so the job fits in 16GB of VRAM. Precision does not change.",
+    /** Acceleration (2026-11-23, ruling 107): pi-H3 — MiniMax H3 only. The row
+     * is HIDDEN on the engines that publish `pi_h3` in `unsupported_features`
+     * (LTX 2.3 / 2.5). The row name and the three button labels are the API's
+     * own words and stay the same in both languages. */
+    accelPiH3Label: "pi-H3",
+    accelPiH3Off: "off",
+    accelPiH3FourSteps: "4steps",
+    accelPiH3TwoSteps: "2steps",
+    /** Shown in red bold under the row while a choice other than off is
+     * selected (the owner's wording, ruling 107 ①). A note only — nothing stops
+     * the job. */
+    accelPiH3Note: "pi-H3 is not recommended when using Turbo LoRA or Turbo models.",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -3732,6 +3747,7 @@ export const ja: Strings = {
       steps: "ステップ数",
       shiftVideo: "Shift（映像）",
       shiftAudio: "Shift（音声）",
+      fixedTooltip: "Settings の pi-H3 が有効のため固定",
     },
     unavailableOnBaseModel: {
       sourceAudio:
@@ -4122,6 +4138,11 @@ export const ja: Strings = {
     accelVram16On: "ON",
     accelVram16Off: "OFF",
     accelVram16Note: "MiniMax H3 専用。ノイズ除去の計算を分割して VRAM 16GB に収めます。精度は変えません。",
+    accelPiH3Label: "pi-H3",
+    accelPiH3Off: "off",
+    accelPiH3FourSteps: "4steps",
+    accelPiH3TwoSteps: "2steps",
+    accelPiH3Note: "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

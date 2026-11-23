@@ -24,7 +24,8 @@ import { fixedFrameRate, LTX_GENERATION_CONSTRAINTS } from "../../shell/generati
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { SamplingConstraints } from "../../api/types";
 import { MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
-import { clampSamplingValue, samplingDefaults } from "../single/samplingValues";
+import { clampSamplingValue, piH3FixedSampling, samplingDefaults } from "../single/samplingValues";
+import { usePiH3SamplingReset } from "../single/usePiH3SamplingReset";
 import type { SamplingValues } from "../single/samplingValues";
 import { estimateGenerationSeconds, formatEstimate } from "../single/estimateUtils";
 import {
@@ -730,6 +731,9 @@ export interface UseChainFormResult {
   sampling: SamplingValues | null;
   /** The served sampling ranges, or `null` (LTX). */
   samplingConstraints: SamplingConstraints | null;
+  /** Ruling 107: the values the Settings panel's pi-H3 choice fixes the sliders
+   * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
+  fixedSampling: SamplingValues | null;
   /** Sets one sampling slider, clamped into the served range (the step count
    * rounded to a whole number). A no-op while {@link sampling} is `null`. */
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
@@ -1389,6 +1393,14 @@ export function useChainForm(
     },
     [samplingConstraints],
   );
+
+  // Ruling 107: the same rule as Create (`useGenerationForm`) — locked to the
+  // pi-H3 choice's served values while it is not off (and not sent,
+  // `samplingRequestFields`); a change of the choice puts the step count and
+  // the shifts, and nothing else, back to the served defaults.
+  const piH3 = acceleration.piH3;
+  const fixedSampling = piH3FixedSampling(piH3, rules.piH3);
+  usePiH3SamplingReset(piH3, () => setSampling(samplingDefaults(rules.sampling)));
 
   const [gettingSize, setGettingSize] = useState(false);
   const [getSizeError, setGetSizeError] = useState<string | null>(null);
@@ -3302,6 +3314,7 @@ export function useChainForm(
     fixedFrameRate: fixedFps,
     sampling,
     samplingConstraints,
+    fixedSampling,
     setSamplingValue,
     clipAudioDriftFlags,
     chunkedUpsample,

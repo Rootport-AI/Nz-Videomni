@@ -55,6 +55,7 @@ export type UiTarget =
   | "settingsRow.vae"
   | "settingsRow.keepResidentEmbeddings"
   | "settingsRow.vram16"
+  | "settingsRow.piH3"
   | "settingsRow.fusedGgufDequantKernel"
   | "chainPanel.startImageStrength";
 
@@ -206,6 +207,7 @@ export const FEATURE_UI = {
     resets: "keepResidentEmbeddings",
   },
   vram16_mode: { disables: ["settingsRow.vram16"], resets: "vram16Mode" },
+  pi_h3: { disables: ["settingsRow.piH3"], resets: "piH3" },
   fused_gguf_dequant_kernel: {
     disables: ["settingsRow.fusedGgufDequantKernel"],
     resets: "fusedGgufDequantKernel",
@@ -464,14 +466,16 @@ export interface SettingsRowsHidden {
   keepResidentEmbeddings: boolean;
   /** MiniMax H3's VRAM 16GB mode row (`vram16_mode`). */
   vram16: boolean;
+  /** MiniMax H3's pi-H3 row and its ON-only note (`pi_h3`). */
+  piH3: boolean;
   /** The Fused GGUF Dequantization Kernel row and its ON-only note
    * (`fused_gguf_dequant_kernel`). */
   fusedGgufDequantKernel: boolean;
 }
 
 /**
- * Which of {@link SettingsRowsHidden}'s rows `unsupportedFeatures` hides — four
- * `false`s for the ordinary case.
+ * Which of {@link SettingsRowsHidden}'s rows `unsupportedFeatures` hides — all
+ * `false` for the ordinary case.
  *
  * Read off the published `unsupported_features`, never off a base-model id:
  * which engine lacks which part is the server's fact to state. Hiding is only
@@ -484,6 +488,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     vae: disabled.has("settingsRow.vae"),
     keepResidentEmbeddings: disabled.has("settingsRow.keepResidentEmbeddings"),
     vram16: disabled.has("settingsRow.vram16"),
+    piH3: disabled.has("settingsRow.piH3"),
     fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };
 }

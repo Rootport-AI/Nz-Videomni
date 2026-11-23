@@ -10,7 +10,7 @@ import { BridgeError, TIMELINE_MASK_PROGRESS_EVENT, bridge as defaultBridge } fr
 import type { NativeBridge, TimelineMaskProgressData } from "../../bridge";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
 import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
-import { accelerationRequestFields } from "../../shell/accelerationSettings";
+import { ACCELERATION_DEFAULTS, accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { comfortFramesForBudget, resolveSequenceRowsBudget } from "../../shell/comfortTable";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
@@ -33,7 +33,8 @@ import { FALLBACK_APP_CONFIG } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
 import { FRAME_RATE_FALLBACK, LTX_FRAME_GRID, clamp, snapFrameRate, snapNumFrames } from "../single/paramUtils";
 import type { FrameGrid } from "../single/paramUtils";
-import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import { clampSamplingValue, piH3FixedSampling, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import { usePiH3SamplingReset } from "../single/usePiH3SamplingReset";
 import type { SamplingValues } from "../single/samplingValues";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが動かさない
 // —— `useOutpaintForm` / `useRetakeForm` が同じ理由（chained/ は別ワークストリーム
@@ -225,6 +226,9 @@ export interface UseInpaintFormResult {
   /** 台帳 §1-124: サンプリングの 3 項目（H3 だけ。Outpainting の H3 と同じ部品）。 */
   sampling: SamplingValues | null;
   samplingConstraints: SamplingConstraints | null;
+  /** Ruling 107: the values the Settings panel's pi-H3 choice fixes the sliders
+   * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
+  fixedSampling: SamplingValues | null;
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
 
   /** 確定した窓（毎描画導出。置けなければ `null`）。 */
@@ -384,6 +388,14 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     },
     [samplingConstraints],
   );
+
+  // Ruling 107: the same rule as Create (`useGenerationForm`) — locked to the
+  // pi-H3 choice's served values while it is not off (and not sent,
+  // `samplingRequestFields`); a change of the choice puts the step count and
+  // the shifts, and nothing else, back to the served defaults.
+  const piH3 = (acceleration ?? ACCELERATION_DEFAULTS).piH3;
+  const fixedSampling = piH3FixedSampling(piH3, h3 ? (deps.constraints?.piH3 ?? null) : null);
+  usePiH3SamplingReset(piH3, () => setSampling(samplingDefaults(samplingConstraints)));
 
   // --- 対象動画のアップロード（対象 1 つにつき 1 回） ------------------------
   const source = useSourceUpload("video", nativeBridge ? { nativeBridge } : {});
@@ -714,8 +726,8 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
           num_frames: numFrames,
           frame_rate: frameRate,
           seed,
-          // サンプリングの 3 項目。配信があるときだけ 3 つとも送る。
-          ...samplingRequestFields(sampling),
+          // サンプリングの 3 項目。配信があるときだけ 3 つとも送る（pi-H3 が有効なら送らない。裁定 107）。
+          ...samplingRequestFields(sampling, acceleration),
           inpaint: {
             mask_video_id: maskVideoId,
             source_video_id: targetVideoId ?? "",
@@ -820,6 +832,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     setAudioStrength,
     sampling,
     samplingConstraints,
+    fixedSampling,
     setSamplingValue,
     window: placedWindow,
     mapping,

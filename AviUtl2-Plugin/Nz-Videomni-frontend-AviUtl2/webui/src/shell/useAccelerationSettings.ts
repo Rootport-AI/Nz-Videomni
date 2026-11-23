@@ -5,7 +5,7 @@ import {
   withServerDefaults,
   writeStoredAcceleration,
 } from "./accelerationSettings";
-import type { AccelerationSettings, AttentionBackend, VaeMode } from "./accelerationSettings";
+import type { AccelerationSettings, AttentionBackend, PiH3Mode, VaeMode } from "./accelerationSettings";
 
 export interface UseAccelerationSettingsResult {
   /** The EFFECTIVE settings (§1-10, 2026-08-03): the stored choices with
@@ -53,6 +53,11 @@ export interface UseAccelerationSettingsResult {
    * machine-level fact (its VRAM), so it should survive a reload like the
    * other six (台帳 §1-101, 2026-10-18). */
   setVram16Mode: (value: boolean) => void;
+  /** Write-through to `localStorage`, same persistence rationale as
+   * {@link setVaeMode} — trading a little quality for a few-step sampler is a
+   * standing preference, persisted from its first day (ruling 107,
+   * 2026-11-23). */
+  setPiH3: (value: PiH3Mode) => void;
   /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
    * panel's Output row — whether finished mp4s carry their generation
    * conditions. A standing preference, persisted like the rows above. */
@@ -87,7 +92,8 @@ export interface UseAccelerationSettingsResult {
  * §3-114) with its setter and its Settings row in the same change, so it never
  * spent a day in that state. `embedMp4Metadata` (§3-164, 2026-09-24) is the
  * Output row that shares this store; it too was persisted from its first day,
- * and so was `vram16Mode` (台帳 §1-101, 2026-10-18).
+ * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), and `piH3` (ruling 107,
+ * 2026-11-23).
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -122,6 +128,7 @@ export function useAccelerationSettings(
       vaeMode: stored.vaeMode,
       keepResidentEmbeddings: stored.keepResidentEmbeddings,
       vram16Mode: stored.vram16Mode,
+      piH3: stored.piH3,
       embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
@@ -138,6 +145,7 @@ export function useAccelerationSettings(
       vaeMode: acceleration.vaeMode,
       keepResidentEmbeddings: acceleration.keepResidentEmbeddings,
       vram16Mode: acceleration.vram16Mode,
+      piH3: acceleration.piH3,
       embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
@@ -148,6 +156,7 @@ export function useAccelerationSettings(
     acceleration.vaeMode,
     acceleration.keepResidentEmbeddings,
     acceleration.vram16Mode,
+    acceleration.piH3,
     acceleration.embedMp4Metadata,
   ]);
 
@@ -177,6 +186,10 @@ export function useAccelerationSettings(
 
   const setVram16Mode = useCallback((value: boolean) => {
     setAcceleration((prev) => ({ ...prev, vram16Mode: value }));
+  }, []);
+
+  const setPiH3 = useCallback((value: PiH3Mode) => {
+    setAcceleration((prev) => ({ ...prev, piH3: value }));
   }, []);
 
   const setEmbedMp4Metadata = useCallback((value: boolean) => {
@@ -211,6 +224,7 @@ export function useAccelerationSettings(
     setVaeMode,
     setKeepResidentEmbeddings,
     setVram16Mode,
+    setPiH3,
     setEmbedMp4Metadata,
     resetToServerDefaults,
   };

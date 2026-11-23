@@ -146,6 +146,8 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("source_audio", "source_audio", lambda r: r.source_audio is not None),
     # MiniMax H3 only (Ref2VA). The field's default is [].
     ("references", "references", lambda r: bool(r.references)),
+    # MiniMax H3 only (the pi-H3 acceleration). The field's default is "off".
+    ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
 )
 
 #: The 422 message for a feature that belongs to neither LTX: the generic one
@@ -155,6 +157,7 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "vram16_mode": "VRAM 16GB mode は MiniMax H3 専用です。LTX では使えません。",
     "source_audio": "単発の A2V は MiniMax H3 専用です。LTX の A2V は Chained の音声で使えます。",
     "references": "参照素材（Ref2VA）は MiniMax H3 専用です。",
+    "pi_h3": "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
 }
 
 #: The chain twin of :data:`H3_ONLY_REFUSALS`, read by both LTX families'
@@ -262,6 +265,9 @@ CHAIN_REJECT_TABLE: tuple[
     # ``source_audio`` (already published), the sentence the chain's
     # (:data:`H3_ONLY_CHAIN_REFUSALS`).
     ("clips", "source_audio", lambda r: any(clip.source_audio is not None for clip in r.clips)),
+    # MiniMax H3 only (the pi-H3 acceleration), the single path's row on the
+    # chain schema. The field's default is "off". LAST, for the same reason.
+    ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
@@ -704,6 +710,11 @@ class GenerationOutcome:
     # ("off" | "on"). Same relay discipline as ``block_swap_prefetch_used``.
     # Always None on LTX (the field is refused there) and on the mock backend.
     vram16_mode_used: str | None = None
+    # Acceleration, MiniMax H3 ONLY: which pi-H3 ran ("4steps" | "2steps"),
+    # reported by the worker's ``done`` event for a pi-H3 job only (the H3 mock
+    # echoes the request's choice). None for every other job, and then
+    # metadata.json carries no ``pi_h3_used`` key at all.
+    pi_h3_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).

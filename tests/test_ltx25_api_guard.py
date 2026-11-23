@@ -1062,8 +1062,8 @@ def test_no_chain_mode_is_refused_any_more():
         "nag_enabled",
     }
     # vram16_mode は MiniMax H3 専用(台帳 §1-106)で、両方の LTX が断る。
-    # clips の行(クリップごとの references。台帳 §1-109)も同じ。
-    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips"}
+    # clips の行(クリップごとの references。台帳 §1-109)も同じ。pi_h3 も同じ。
+    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3"}
 
 
 @pytest.mark.parametrize("case", sorted(CHAIN_ACCEPTED_RETAKE))
@@ -1638,6 +1638,7 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
         "vram16_mode",
         "source_audio",
         "references",
+        "pi_h3",
     ]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
@@ -1677,7 +1678,8 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     assert "vram16_mode" in features
     assert "source_audio" in features  # 単発 A2V（MiniMax H3 専用）
     assert "references" in features  # Ref2VA（MiniMax H3 専用）
-    assert len(features) == 5
+    assert "pi_h3" in features  # pi-H3（MiniMax H3 専用）
+    assert len(features) == 6
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

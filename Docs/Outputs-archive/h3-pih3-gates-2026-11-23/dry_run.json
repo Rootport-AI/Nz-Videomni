@@ -1,0 +1,896 @@
+{
+  "made_at": "2026-11-23T07:52:27+09:00",
+  "git": {
+    "head": "1738e8cf4e473e4589db4f3a6f3346a11e40a8bd",
+    "branch": "dev",
+    "status_porcelain": [],
+    "dirty": false
+  },
+  "order": [
+    "C0",
+    "M3",
+    "E3b4",
+    "E3b2",
+    "ER1",
+    "EI1",
+    "EO1",
+    "ACH",
+    "AV2V",
+    "ART",
+    "AIN",
+    "AOUT",
+    "AAUD",
+    "R05",
+    "LONG"
+  ],
+  "items": {
+    "C0": {
+      "title": "段 2: off の連結（2026-10-29 の G-C0。2026-11-09 の GA0 と同じ本文）",
+      "group": 1,
+      "kind": "api",
+      "rule": "完了し、mp4 の sha256 が G-C0 の 4a98be08… と一致し、3 クリップの潜在の照合値が GA0 の記録と一致",
+      "done": false,
+      "jobs": [
+        {
+          "job": "C0",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+            "width": 640,
+            "height": 384,
+            "seed": 42,
+            "attention_backend": "sdpa",
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "clips": [
+              {
+                "num_frames": 124
+              },
+              {
+                "num_frames": 124,
+                "prompt": "She turns and walks slowly along the street, humming a tune."
+              },
+              {
+                "num_frames": 124,
+                "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>"
+              }
+            ],
+            "embed_mp4_metadata": false
+          },
+          "uploads": [],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 20,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "off",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 9335,
+            "text_tokens": 41,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "M3": {
+      "title": "段 2: off の Retake（昨日の R1c をエンジン直呼びで回し直す）",
+      "group": 1,
+      "kind": "engine_direct",
+      "rule": "完了し、映像と音声のストリームの MD5 が昨日の R1c の output.mp4 と一致",
+      "done": false,
+      "engine_direct": {
+        "cmd": [
+          ".venv-engine-h3/Scripts/python.exe",
+          "-I",
+          "-B",
+          "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+          "--source",
+          "outputs/h3-pih3-spike-2026-11-22/runs/R1c/result.json",
+          "--out",
+          "outputs/h3-pih3-gates-2026-11-23/_dry/M3",
+          "--dry-run"
+        ],
+        "source": "outputs/h3-pih3-spike-2026-11-22/runs/R1c/result.json",
+        "exit_code": 0,
+        "seconds_wall": 1.9,
+        "plan": {
+          "validate_request": "passed",
+          "missing_paths": [],
+          "cuda_visible_devices": "-1",
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          }
+        }
+      }
+    },
+    "E3b4": {
+      "title": "段 2: 実験の C3b_4step の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "kind": "engine_direct",
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "done": false,
+      "engine_direct": {
+        "cmd": [
+          ".venv-engine-h3/Scripts/python.exe",
+          "-I",
+          "-B",
+          "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+          "--source",
+          "outputs/h3-pih3-spike-2026-11-22/runs/C3b_4step/result.json",
+          "--out",
+          "outputs/h3-pih3-gates-2026-11-23/_dry/E3b4",
+          "--dry-run"
+        ],
+        "source": "outputs/h3-pih3-spike-2026-11-22/runs/C3b_4step/result.json",
+        "exit_code": 0,
+        "seconds_wall": 1.7,
+        "plan": {
+          "validate_request": "passed",
+          "missing_paths": [],
+          "cuda_visible_devices": "-1",
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          }
+        }
+      }
+    },
+    "E3b2": {
+      "title": "段 2: 実験の C3b_2step の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "kind": "engine_direct",
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "done": false,
+      "engine_direct": {
+        "cmd": [
+          ".venv-engine-h3/Scripts/python.exe",
+          "-I",
+          "-B",
+          "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+          "--source",
+          "outputs/h3-pih3-spike-2026-11-22/runs/C3b_2step/result.json",
+          "--out",
+          "outputs/h3-pih3-gates-2026-11-23/_dry/E3b2",
+          "--dry-run"
+        ],
+        "source": "outputs/h3-pih3-spike-2026-11-22/runs/C3b_2step/result.json",
+        "exit_code": 0,
+        "seconds_wall": 1.7,
+        "plan": {
+          "validate_request": "passed",
+          "missing_paths": [],
+          "cuda_visible_devices": "-1",
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          }
+        }
+      }
+    },
+    "ER1": {
+      "title": "段 2: 実験の R1 の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "kind": "engine_direct",
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "done": false,
+      "engine_direct": {
+        "cmd": [
+          ".venv-engine-h3/Scripts/python.exe",
+          "-I",
+          "-B",
+          "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+          "--source",
+          "outputs/h3-pih3-spike-2026-11-22/runs/R1/result.json",
+          "--out",
+          "outputs/h3-pih3-gates-2026-11-23/_dry/ER1",
+          "--dry-run"
+        ],
+        "source": "outputs/h3-pih3-spike-2026-11-22/runs/R1/result.json",
+        "exit_code": 0,
+        "seconds_wall": 1.7,
+        "plan": {
+          "validate_request": "passed",
+          "missing_paths": [],
+          "cuda_visible_devices": "-1",
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          }
+        }
+      }
+    },
+    "EI1": {
+      "title": "段 2: 実験の I1 の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "kind": "engine_direct",
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "done": false,
+      "engine_direct": {
+        "cmd": [
+          ".venv-engine-h3/Scripts/python.exe",
+          "-I",
+          "-B",
+          "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+          "--source",
+          "outputs/h3-pih3-spike-2026-11-22/runs/I1/result.json",
+          "--out",
+          "outputs/h3-pih3-gates-2026-11-23/_dry/EI1",
+          "--dry-run"
+        ],
+        "source": "outputs/h3-pih3-spike-2026-11-22/runs/I1/result.json",
+        "exit_code": 0,
+        "seconds_wall": 1.7,
+        "plan": {
+          "validate_request": "passed",
+          "missing_paths": [],
+          "cuda_visible_devices": "-1",
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          }
+        }
+      }
+    },
+    "EO1": {
+      "title": "段 2: 実験の O1 の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "kind": "engine_direct",
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "done": false,
+      "engine_direct": {
+        "cmd": [
+          ".venv-engine-h3/Scripts/python.exe",
+          "-I",
+          "-B",
+          "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+          "--source",
+          "outputs/h3-pih3-spike-2026-11-22/runs/O1/result.json",
+          "--out",
+          "outputs/h3-pih3-gates-2026-11-23/_dry/EO1",
+          "--dry-run"
+        ],
+        "source": "outputs/h3-pih3-spike-2026-11-22/runs/O1/result.json",
+        "exit_code": 0,
+        "seconds_wall": 1.7,
+        "plan": {
+          "validate_request": "passed",
+          "missing_paths": [],
+          "cuda_visible_devices": "-1",
+          "options": {
+            "blocks_on_gpu": 8,
+            "attention_backend": "sage",
+            "block_swap_prefetch": true,
+            "deterministic": false
+          }
+        }
+      }
+    },
+    "ACH": {
+      "title": "段 2: API の連結（実験の C3b と同じ条件・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、226 フレームと音声。記録（pi_h3_used・h3.pi_h3・クリップごとの pi_h3・DWD の塊）",
+      "done": false,
+      "jobs": [
+        {
+          "job": "ACH",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+            "width": 640,
+            "height": 384,
+            "seed": 1234,
+            "clips": [
+              {
+                "num_frames": 124
+              },
+              {
+                "num_frames": 124
+              }
+            ],
+            "pi_h3": "4steps",
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false
+          },
+          "uploads": [],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 9355,
+            "text_tokens": 61,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "AV2V": {
+      "title": "段 2: API の V2V（2026-11-02 の門 ① の素材と文・56＋39・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、51 フレームと音声。記録が揃う",
+      "done": false,
+      "jobs": [
+        {
+          "job": "AV2V",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "コスプレイヤーの日本人女性が、こちらに向かって歩き続ける。彼女は片手を伸ばしたまま、こちらに微笑みかける。",
+            "width": 640,
+            "height": 384,
+            "seed": 1234,
+            "clips": [
+              {
+                "num_frames": 56
+              },
+              {
+                "num_frames": 39
+              }
+            ],
+            "source_video": {
+              "video_id": "dry"
+            },
+            "pi_h3": "4steps",
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false
+          },
+          "uploads": [
+            "outputs/0b57ea7d-b494-43ea-a504-2a5637380581/output.mp4"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 4301,
+            "text_tokens": 35,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "ART": {
+      "title": "段 2: API の Retake（実験の R1 と同じ素材・文・窓・Strength 1.0・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、124 フレームと音声。記録が揃う",
+      "done": false,
+      "jobs": [
+        {
+          "job": "ART",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+            "width": 1280,
+            "height": 768,
+            "seed": 1234,
+            "clips": [
+              {
+                "num_frames": 124
+              }
+            ],
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "pi_h3": "4steps",
+            "retake": {
+              "video_id": "dry",
+              "window_start_sec": 4.0,
+              "audio_strength": 1.0
+            }
+          },
+          "uploads": [
+            "uploads/h3-ref-calibration/H3-Ref-1080p-15s.mp4"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 35970,
+            "text_tokens": 36,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "AIN": {
+      "title": "段 2: API の Inpainting（実験の I1 と同じ素材・文・Strength 1.0・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、73 フレームと音声。h3.inpaint と pi-H3 の記録が揃う",
+      "done": false,
+      "jobs": [
+        {
+          "job": "AIN",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate",
+          "body": {
+            "prompt": "Four young girls walking toward the camera on a sunny beach. The girl on the far right has blonde hair and wears a red dress, red outfit. Steady camera.",
+            "width": 1280,
+            "height": 768,
+            "num_frames": 73,
+            "frame_rate": 24.0,
+            "seed": 1234,
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "pi_h3": "4steps",
+            "inpaint": {
+              "source_video_id": "dry",
+              "mask_video_id": "dry",
+              "window_start_sec": 0.0,
+              "audio_strength": 1.0
+            }
+          },
+          "uploads": [
+            "uploads/h3-inpaint-development/inpaint-base.mp4",
+            "uploads/h3-inpaint-development/mask-768p.mp4"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 21398,
+            "text_tokens": 34,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "AOUT": {
+      "title": "段 2: API の Outpainting（実験の O1 の切り出し・文・左右 128／上下 96・Strength 1.0・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、124 フレームと音声。h3.outpaint と pi-H3 の記録が揃う",
+      "done": false,
+      "jobs": [
+        {
+          "job": "AOUT",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate",
+          "body": {
+            "prompt": "A wide shot of a young woman in a black-and-white maid costume talking cheerfully to the camera in a spacious pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+            "width": 1280,
+            "height": 768,
+            "num_frames": 124,
+            "frame_rate": 24.0,
+            "seed": 1234,
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "pi_h3": "4steps",
+            "outpaint": {
+              "source_video_id": "dry",
+              "pad_left": 128,
+              "pad_right": 128,
+              "pad_top": 96,
+              "pad_bottom": 96,
+              "audio_strength": 1.0
+            }
+          },
+          "uploads": [
+            "outputs/h3-pih3-spike-2026-11-22/_material/O1_source_1024x576_124f.mp4"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 35975,
+            "text_tokens": 41,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "AAUD": {
+      "title": "段 2: API のクリップごとに音声を指定した連結（2026-11-09 の GA2 の本文・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、345 フレームと音声。クリップごとの a2v と pi-H3 の記録",
+      "done": false,
+      "jobs": [
+        {
+          "job": "AAUD",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+            "width": 640,
+            "height": 384,
+            "seed": 42,
+            "pi_h3": "4steps",
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "clips": [
+              {
+                "num_frames": 124,
+                "source_audio": {
+                  "audio_id": "dry",
+                  "strength": 1.0,
+                  "offset_frames": 0
+                }
+              },
+              {
+                "num_frames": 141,
+                "prompt": "She turns and walks slowly along the street, humming a tune.",
+                "source_audio": {
+                  "audio_id": "dry",
+                  "strength": 1.0,
+                  "offset_frames": 102
+                }
+              },
+              {
+                "num_frames": 124,
+                "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>",
+                "source_audio": {
+                  "audio_id": "dry",
+                  "strength": 1.0,
+                  "offset_frames": 221
+                }
+              }
+            ]
+          },
+          "uploads": [
+            "uploads/h3-a2v-development/ref-voice-patra001.wav",
+            "uploads/h3-a2v-development/ref-voice-patra001.wav",
+            "uploads/h3-a2v-development/ref-voice-patra001.wav"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 10591,
+            "text_tokens": 41,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "R05": {
+      "title": "段 2: 音声の Strength 0.5 の Retake（R1 の条件・pi-H3 4steps と Turbo LoRA 0.8 の 4 ステップ）",
+      "group": 8,
+      "kind": "api",
+      "rule": "2 本とも完了し、124 フレームと音声（目と耳の確認はオーナー）",
+      "done": false,
+      "jobs": [
+        {
+          "job": "R05_pi",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+            "width": 1280,
+            "height": 768,
+            "seed": 1234,
+            "clips": [
+              {
+                "num_frames": 124
+              }
+            ],
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "pi_h3": "4steps",
+            "retake": {
+              "video_id": "dry",
+              "window_start_sec": 4.0,
+              "audio_strength": 0.5
+            }
+          },
+          "uploads": [
+            "uploads/h3-ref-calibration/H3-Ref-1080p-15s.mp4"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 35970,
+            "text_tokens": 36,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        },
+        {
+          "job": "R05_turbo",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A young woman in a black-and-white maid costume talks cheerfully to the camera in a pastel room decorated with sweets and flowers; natural head and hand movement, steady camera.",
+            "width": 1280,
+            "height": 768,
+            "seed": 1234,
+            "clips": [
+              {
+                "num_frames": 124
+              }
+            ],
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false,
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "retake": {
+              "video_id": "dry",
+              "window_start_sec": 4.0,
+              "audio_strength": 0.5
+            },
+            "loras": [
+              {
+                "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+                "strength": 0.8
+              }
+            ]
+          },
+          "uploads": [
+            "uploads/h3-ref-calibration/H3-Ref-1080p-15s.mp4"
+          ],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "off",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 35970,
+            "text_tokens": 36,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    },
+    "LONG": {
+      "title": "段 2: 長い連結（5 本×124 フレーム・1280×768・全クリップ同じ文・4steps）",
+      "group": 8,
+      "kind": "api",
+      "rule": "完了し、532 フレームと音声。主記憶と VRAM の山、復号の段、DWD の塊、クリップごとの行数を記録",
+      "done": false,
+      "jobs": [
+        {
+          "job": "LONG",
+          "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+          "endpoint": "/generate/chain",
+          "body": {
+            "prompt": "A young girl in a white summer dress and a straw hat walks along a sandy beach at the water's edge on a sunny day. Gentle waves wash ashore with the sound of surf, seagulls call in the distance, and her footsteps are soft on the wet sand. Steady tracking camera.",
+            "width": 1280,
+            "height": 768,
+            "seed": 1234,
+            "clips": [
+              {
+                "num_frames": 124
+              },
+              {
+                "num_frames": 124
+              },
+              {
+                "num_frames": 124
+              },
+              {
+                "num_frames": 124
+              },
+              {
+                "num_frames": 124
+              }
+            ],
+            "pi_h3": "4steps",
+            "attention_backend": "sage",
+            "vram16_mode": true,
+            "block_swap_prefetch": true,
+            "keep_resident": false
+          },
+          "uploads": [],
+          "uploads_missing": [],
+          "family_rules": "passed",
+          "filled": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "pi_h3": "4steps",
+            "vram16_mode": true,
+            "keep_resident": false
+          },
+          "comfort": {
+            "rows_estimate": 35995,
+            "text_tokens": 61,
+            "budget_rows": 219516,
+            "inside": true
+          }
+        }
+      ]
+    }
+  },
+  "gate_unit": {
+    "blocking": {
+      "free": [],
+      "python_on_gpu": [
+        "GPU を別の python／uvicorn が使っている（1 件）"
+      ],
+      "busy": [
+        "GPU の使用量 5000 MiB が 3072 MiB を超えている"
+      ],
+      "smi_failed": [
+        "nvidia-smi が失敗（1/0）"
+      ]
+    },
+    "ok": true
+  },
+  "gate_now": {
+    "at": "2026-11-23T07:52:27+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 470,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "halt_marker": null,
+  "files": {
+    "spike runs": {
+      "outputs/h3-pih3-spike-2026-11-22/runs/P1/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/P2/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/P3/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/P4/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/I1c/output.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/runs/O1c/output.mp4": true
+    },
+    "spike materials": {
+      "outputs/h3-pih3-spike-2026-11-22/_material/I1_source_1280x768_73f.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/_material/I1_mask_1280x768_73f.mp4": true,
+      "outputs/h3-pih3-spike-2026-11-22/_material/O1_source_1024x576_124f.mp4": true
+    },
+    "R1 record": {
+      "Docs/Outputs-archive/h3-mixed-int8-2026-11-22/summary.json": true,
+      "outputs/h3-mixed-int8-gate-2026-11-22/runs/R1/output.mp4": true
+    },
+    "weights": {
+      "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/Weights/Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors": true,
+      "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/Weights/10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors": true,
+      "models/MiniMaxH3/VAE/pi-H3/pi_h3_4step_dwd_adapter_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/VAE/pi-H3/pi_h3_2step_dwd_adapter_int8_convrot.safetensors": true,
+      "models/MiniMaxH3/LoRA/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors": true
+    },
+    "materials": {
+      "outputs/h3-gate2/i2v_input.png": true,
+      "outputs/h3-keyframes-2026-10-19/kf_first.png": true,
+      "outputs/h3-keyframes-2026-10-19/kf_last.png": true,
+      "Docs/Outputs-archive/h3-ref2va-2026-10-28/17fde0c1-image.png": true,
+      "uploads/h3-a2v-development/00043-2168133585.jpg": true,
+      "uploads/h3-a2v-development/実験の成功、楽しみにしていますね.wav": true
+    },
+    "venvs": {
+      ".venv/Scripts/python.exe": true,
+      ".venv-engine-h3/Scripts/python.exe": true
+    }
+  },
+  "r1_md5": {
+    "video": "dc4d54641a648eb359dc74001be3bf5c",
+    "audio": "0717000179fb6bb4cb0f2800d824f490"
+  },
+  "pi_match": {
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors + 4steps": [],
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors + 2steps": [],
+    "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors + 4steps": [],
+    "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors + 2steps": [],
+    "minimax_h3_ref2va_pruned_int8_convrot.safetensors + 4steps": [],
+    "minimax_h3_ref2va_pruned_int8_convrot.safetensors + 2steps": [],
+    "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors + 4steps": [],
+    "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors + 2steps": []
+  },
+  "quant_class": {
+    "minimax_h3_fl2va_pruned_int8_convrot.safetensors": "int8",
+    "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors": "bf16_blocks",
+    "minimax_h3_ref2va_pruned_int8_convrot.safetensors": "int8",
+    "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors": "w4a8"
+  },
+  "problems": [],
+  "ok": true
+}

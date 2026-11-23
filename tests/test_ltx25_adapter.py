@@ -275,6 +275,7 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     "vram16_mode": {"vram16_mode": True},
     "source_audio": {"source_audio": {"audio_id": "aud-123"}},
     "references": {"references": [{"kind": "picture", "id": "img-123", "slot": 1}]},
+    "pi_h3": {"pi_h3": "4steps"},
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -623,8 +624,8 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # BACK TO TWO with 台帳 §3-150, which built the 2.5 driver and took it off
     # again. THREE with VRAM 16GB mode (``vram16_mode``, MiniMax H3 only — a
     # feature name, not a mode). FOUR with ``source_audio`` (single-shot A2V, H3 only).
-    # FIVE with ``references`` (Ref2VA, H3 only).
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 5
+    # FIVE with ``references`` (Ref2VA, H3 only). SIX with ``pi_h3`` (H3 only).
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 6
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -757,6 +758,7 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
         "vram16_mode",
         "source_audio",
         "references",
+        "pi_h3",
     }
 
 
@@ -781,7 +783,7 @@ def test_alpha_gen_is_honoured_and_says_so_in_every_table():
     assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
     assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 5
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 6
     # The needle the generic honoured-read audit below also relies on, named
     # here so a reader of this feature's tests sees it.
     assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)
@@ -915,6 +917,8 @@ CHAIN_OVERRIDES: dict[str, dict] = {
             {"num_frames": 25, "source_audio": {"audio_id": "aud-1", "offset_frames": 3}},
         ]
     },
+    # MiniMax H3 only (pi-H3), on the chain schema too.
+    "pi_h3": {"pi_h3": "4steps"},
 }
 
 
@@ -1221,8 +1225,9 @@ def test_no_chain_mode_is_refused_any_more():
     # left it with the NAG/VSF increment, which is asserted by its own
     # acceptance test below rather than only by this set shrinking.
     # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX, and
-    # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109).
-    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips"}
+    # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109), and so is
+    # ``pi_h3`` (MiniMax H3's pi-H3).
+    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3"}
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))

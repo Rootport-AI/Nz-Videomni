@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { AppConfig, BaseModelConstraints } from "../../api/types";
 import { createMockBridge, createMockFs } from "../../bridge/mockBridge";
 import { suggestFramesForAudio } from "../chained/chainUtils";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import type { H3SequenceShape } from "../../shell/h3SequenceRows";
@@ -302,5 +304,56 @@ describe("useGenerationForm — single-clip A2V (constraints.source_audio)", () 
     });
     const expected = suggestFramesForAudio(3.886, ltx.result.current.values.frameRate);
     await waitFor(() => expect(ltx.result.current.values.numFrames).toBe(expected));
+  });
+});
+
+// Ruling 107 (2026-11-23): pi-H3. Locked to the choice's served values while
+// on; a change of the choice puts the step count and the shifts — and nothing
+// else — back to the served defaults.
+describe("useGenerationForm — pi-H3 (ruling 107)", () => {
+  const H3_PI = resolveGenerationConstraints({
+    ...H3_BLOCK,
+    source_audio: { strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
+    pi_h3: {
+      "4steps": { num_inference_steps: 4, shift_video: 12, shift_audio: 3 },
+      "2steps": { num_inference_steps: 2, shift_video: 12, shift_audio: 3 },
+    },
+  });
+
+  function renderPi(initial: AccelerationSettings) {
+    const nativeBridge = createMockBridge({ delayMs: 0 });
+    return renderHook(
+      ({ acceleration }: { acceleration: AccelerationSettings }) =>
+        useGenerationForm(FALLBACK_APP_CONFIG, "a prompt", {
+          nativeBridge,
+          constraints: H3_PI,
+          engineFamily: "h3",
+          acceleration,
+        }),
+      { initialProps: { acceleration: initial } },
+    );
+  }
+
+  it("exposes the fixed values while on and null while off", () => {
+    const { result, rerender } = renderPi(ACCELERATION_DEFAULTS);
+    expect(result.current.fixedSampling).toBeNull();
+    rerender({ acceleration: { ...ACCELERATION_DEFAULTS, piH3: "2steps" } });
+    expect(result.current.fixedSampling).toEqual({ numInferenceSteps: 2, shiftVideo: 12, shiftAudio: 3 });
+  });
+
+  it("turning it off lands the step count and shifts on the defaults, leaving the A2V Strength alone", () => {
+    const { result, rerender } = renderPi(ACCELERATION_DEFAULTS);
+    act(() => {
+      result.current.setSamplingValue("numInferenceSteps", 30);
+      result.current.setSamplingValue("shiftAudio", 5);
+      result.current.setSourceAudioStrength(0.8);
+    });
+    rerender({ acceleration: { ...ACCELERATION_DEFAULTS, piH3: "4steps" } });
+    rerender({ acceleration: ACCELERATION_DEFAULTS });
+    expect(result.current.values.sampling).toEqual({ numInferenceSteps: 20, shiftVideo: 12, shiftAudio: 3 });
+    expect(result.current.sourceAudioStrength).toBe(0.8);
+    const body = result.current.toGenerateRequest();
+    expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
+    expect(body).not.toHaveProperty("pi_h3");
   });
 });

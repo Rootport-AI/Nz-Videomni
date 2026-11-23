@@ -11,7 +11,7 @@ import type {
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import { omitLoraAudioStrength, parseLoraPrompt } from "../../lora/loraTags";
-import { accelerationRequestFields } from "../../shell/accelerationSettings";
+import { ACCELERATION_DEFAULTS, accelerationRequestFields } from "../../shell/accelerationSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { resolveSequenceRowsBudget } from "../../shell/comfortTable";
 import {
@@ -37,7 +37,8 @@ import {
   snapNumFrames,
 } from "../single/paramUtils";
 import type { FrameGrid } from "../single/paramUtils";
-import { clampSamplingValue, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import { clampSamplingValue, piH3FixedSampling, samplingDefaults, samplingRequestFields } from "../single/samplingValues";
+import { usePiH3SamplingReset } from "../single/usePiH3SamplingReset";
 import type { SamplingValues } from "../single/samplingValues";
 // クロスモード import。`useSourceUpload` は `modes/chained/` にあるが、ファイル
 // 移動はしない —— 他ワークストリームが chained/ を占有しているため、ここで動かす
@@ -219,6 +220,9 @@ export interface UseOutpaintFormResult {
    * served (LTX). */
   sampling: SamplingValues | null;
   samplingConstraints: SamplingConstraints | null;
+  /** Ruling 107: the values the Settings panel's pi-H3 choice fixes the sliders
+   * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
+  fixedSampling: SamplingValues | null;
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
 
   /** The `num_frames` that will actually be sent: the stored value capped by
@@ -362,6 +366,14 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     },
     [samplingConstraints],
   );
+
+  // Ruling 107: the same rule as Create (`useGenerationForm`) — locked to the
+  // pi-H3 choice's served values while it is not off (and not sent,
+  // `samplingRequestFields`); a change of the choice puts the step count and
+  // the shifts, and nothing else, back to the served defaults.
+  const piH3 = (acceleration ?? ACCELERATION_DEFAULTS).piH3;
+  const fixedSampling = piH3FixedSampling(piH3, rules.piH3);
+  usePiH3SamplingReset(piH3, () => setSampling(samplingDefaults(samplingConstraints)));
 
   const source = useSourceUpload("video", nativeBridge ? { nativeBridge } : {});
   const { uploadPath } = source;
@@ -627,8 +639,8 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
         num_frames: numFrames,
         frame_rate: frameRate,
         seed,
-        // サンプリングの 3 項目。配信があるときだけ 3 つとも送る。
-        ...samplingRequestFields(sampling),
+        // サンプリングの 3 項目。配信があるときだけ 3 つとも送る（pi-H3 が有効なら送らない。裁定 107）。
+        ...samplingRequestFields(sampling, acceleration),
         outpaint: {
           pad_left: pads.left,
           pad_right: pads.right,
@@ -709,6 +721,7 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     setAudioStrength,
     sampling,
     samplingConstraints,
+    fixedSampling,
     setSamplingValue,
     numFrames,
     numFramesCeiling,

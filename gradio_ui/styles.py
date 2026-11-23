@@ -205,4 +205,16 @@ body.dark .duration-line p {
 body.dark .spill-warning {
     color: #d29922;
 }
+
+/* ---- .pi-h3-warning -------------------------------------------------------
+   The pi-H3 note under the Settings radio (shown while pi-H3 is on): red
+   bold text, the operation panel's look, in the same no-box style as
+   .spill-warning above. */
+.pi-h3-warning {
+    color: #cf222e;
+    font-weight: 700;
+}
+body.dark .pi-h3-warning {
+    color: #ff7b72;
+}
 """

@@ -429,6 +429,13 @@ const MOCK_CONSTRAINTS_BY_FAMILY: Record<string, BaseModelConstraints> = {
       audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 },
       blend_dilation_stage1: { min: 0, max: 15, step: 1, default: 1 },
     },
+    // Ruling 107: the sampling values each pi-H3 choice runs with, as the real
+    // `GET /models` publishes them (`services/engines/h3/adapter.py`'s
+    // `pi_h3_sampling`). LTX publishes no `pi_h3` block.
+    pi_h3: {
+      "4steps": { num_inference_steps: 4, shift_video: 12.0, shift_audio: 3.0 },
+      "2steps": { num_inference_steps: 2, shift_video: 12.0, shift_audio: 3.0 },
+    },
   },
 };
 
@@ -520,6 +527,10 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "source_audio",
     // §1-107: `references` (H3 Ref2VA's Reference cards) likewise.
     "references",
+    // Ruling 107: `pi_h3` (MiniMax H3's pi-H3) likewise — last, in the
+    // server's REJECT_TABLE order. Hides the Settings row; the chain refusal
+    // has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
+    "pi_h3",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -593,6 +604,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "source_audio",
     // §1-107: `references` — see the LTX23 entry above.
     "references",
+    // Ruling 107: `pi_h3` — see the LTX23 entry above.
+    "pi_h3",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -738,6 +751,10 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
     isSet: (v) =>
       Array.isArray(v) && v.some((clip) => (clip as { source_audio?: unknown } | null)?.source_audio != null),
   },
+  // Ruling 107: pi-H3 (MiniMax H3 only — both LTX engines declare `pi_h3`).
+  // Last, like the real LTX `CHAIN_REJECT_TABLE` row. A string defaulting to
+  // `"off"`, hence a predicate of its own (the `vae_mode` case).
+  { field: "pi_h3", feature: "pi_h3", isSet: (v) => v != null && v !== "off" },
 ];
 
 /** §1-120: a clip's `source_audio` shape check only (`audio_id` a non-empty
@@ -1973,6 +1990,53 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
     if (req.source_audio != null) {
       const shapeError = mockClipSourceAudioShapeError(req.source_audio);
       if (shapeError !== null) return validationError("source_audio", shapeError);
+    }
+
+    // Ruling 107: pi-H3. LTX engines refuse any choice but "off" (the
+    // server's REJECT_TABLE row); H3 refuses an explicit sampling value that
+    // differs from the choice's (`prefill_request`, a VALIDATION_ERROR) and
+    // fills an omitted one — the fixture only stores the body as sent, so the
+    // fill has nothing to do here.
+    const piH3 = req.pi_h3;
+    if (piH3 != null && piH3 !== "off") {
+      if ((MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("pi_h3")) {
+        return {
+          status: 422,
+          body: {
+            error: {
+              code: "FEATURE_UNSUPPORTED",
+              message: "'pi_h3' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+              detail: "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
+            },
+          },
+        };
+      }
+      const choice = rules.pi_h3?.[piH3 as "4steps" | "2steps"];
+      if (choice) {
+        for (const field of ["num_inference_steps", "shift_video", "shift_audio"] as const) {
+          const given = req[field];
+          if (typeof given === "number" && given !== choice[field]) {
+            // `request_validation_failed`'s shape: `loc ["body"]` (a model-level
+            // ValueError), not a field location.
+            return {
+              status: 422,
+              body: {
+                error: {
+                  code: "VALIDATION_ERROR",
+                  message: "Request validation failed",
+                  detail: [
+                    {
+                      loc: ["body"],
+                      msg: `Value error, ${field}=${given} differs from the value pi_h3="${piH3}" uses (${field}=${choice[field]})`,
+                      type: "value_error",
+                    },
+                  ],
+                },
+              },
+            };
+          }
+        }
+      }
     }
 
     jobCounter += 1;

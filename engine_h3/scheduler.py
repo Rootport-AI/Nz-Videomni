@@ -41,6 +41,46 @@ def sigma_schedule(n_steps: int, shift: float) -> torch.Tensor:
     return torch.cat([sigmas, torch.zeros(1, dtype=torch.float32)])
 
 
+#: pi-H3's sigma lists (Docs/MINIMAX_H3_RESEARCH_NOTES.md §18.4): the first raw
+#: t per step count, the last raw t of 0 and the final step's size factor.
+PI_H3_MAX_RAW_T = {2: 0.93, 4: 0.96}
+PI_H3_MIN_RAW_T = 0.0
+PI_H3_FINAL_STEP_SIZE_SCALE = 0.6
+
+
+def _time_shift(shift: float, t: float) -> float:
+    """``s t / (1 + (s - 1) t)`` in Python floats (the identity at s = 1)."""
+    if shift == 1.0:
+        return t
+    return shift * t / (1 + (shift - 1) * t)
+
+
+def pi_h3_sigma_schedule(n_steps: int, shift: float) -> torch.Tensor:
+    """float32 ``[n_steps + 1]``: pi-H3's n evaluated sigmas, then a terminal 0.
+
+    ``raw = linspace(max_raw_t, max_raw_t * f / (n - 1 + f), n)`` (float32, f
+    = 0.6, ``max_raw_t`` 0.93 for 2 steps and 0.96 for 4) and ``sigma =
+    s r / (1 + (s - 1) r)`` of each raw value, with the terminal 0 of
+    :func:`sigma_schedule`'s contract. Only 2 and 4 steps exist (the
+    distilled files are made for those); any other count is refused. The
+    computation is the one the experiment ran (VERIFICATION_LOG §223.5: within
+    3e-8 of the closed form in float64). :func:`sigma_schedule` is unchanged.
+    """
+    n = int(n_steps)
+    if n not in PI_H3_MAX_RAW_T:
+        raise ValueError(f"pi-H3 のシグマの列は 2 ステップと 4 ステップだけです（{n_steps}）")
+    s = float(shift)
+    if not s > 0.0:
+        raise ValueError(f"shift は正の値にしてください（{shift}）")
+    max_t, min_t, f = PI_H3_MAX_RAW_T[n], PI_H3_MIN_RAW_T, PI_H3_FINAL_STEP_SIZE_SCALE
+    raw = torch.linspace(max_t, (max_t - min_t) * f / (n - 1 + f) + min_t, n)
+    sig = []
+    for t in raw.tolist():
+        percent = 1.0 - t
+        sig.append(1.0 if percent <= 0.0 else 0.0 if percent >= 1.0 else _time_shift(s, 1.0 - percent))
+    return torch.cat([torch.tensor(sig, dtype=torch.float32), torch.zeros(1, dtype=torch.float32)])
+
+
 def euler_step(x: torch.Tensor, v: torch.Tensor, sigma: float, sigma_next: float) -> torch.Tensor:
     """One Euler step in the model's direction: ``x + (sigma - sigma_next) * v``.
 

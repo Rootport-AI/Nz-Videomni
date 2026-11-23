@@ -20,7 +20,7 @@ import httpx
 from .adapters import ADAPTER_NONE, _FALLBACK_MAX_VIDEO_MB, _FALLBACK_VIDEO_EXTS
 from .adapters import MODEL_CATEGORIES, MODEL_DEFAULT
 from .api_client import ApiClient
-from .constraints import sampling_payload, single_shape_error
+from .constraints import PI_H3_OFF, pi_h3_locked_values, sampling_payload, single_shape_error
 from .formatting import format_api_error
 from .i18n import L, _DEFAULT_LANG
 from .presets import KF_STRENGTH_DEFAULT
@@ -752,7 +752,13 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # Acceleration (keyword, last): the Settings-tab MiniMax H3
                  # "VRAM 16GB mode" checkbox (hidden on LTX). Keyword-only from
                  # ui.py's dispatch(), appended after the sampling sliders.
-                 vram16_mode=VRAM16_MODE_DEFAULT_H3):
+                 vram16_mode=VRAM16_MODE_DEFAULT_H3,
+                 # Acceleration (keyword, last): the Settings-tab MiniMax H3
+                 # pi-H3 radio ("off" / "4steps" / "2steps"; hidden and "off"
+                 # on LTX). Keyword-only from ui.py's dispatch(), appended
+                 # after vram16_mode. Single /generate only: the A2V branch
+                 # below (POST /generate/chain) never carries it.
+                 pi_h3=PI_H3_OFF):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs. They are optional, so a call that omits them (e.g. a unit
         # test) falls back to the build-time default language and
@@ -1022,9 +1028,14 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # Sampling: a base model whose constraints carry ``sampling`` takes the
         # three sliders' values -- all three, always (one rule); otherwise no
         # step count is sent and the server writes the loaded family's default
-        # back (LTX: 8).
-        payload.update(sampling_payload(constraints, num_inference_steps,
-                                        shift_video, shift_audio))
+        # back (LTX: 8). With a pi-H3 choice that locks the sliders (the same
+        # judgment as the locked look, constraints.pi_h3_locked_values), none
+        # of the three is sent: the server fills them with the choice's values
+        # (an explicit other value would be a 422), and ``pi_h3`` rides last.
+        pi_h3_on = pi_h3_locked_values(constraints, pi_h3) is not None
+        if not pi_h3_on:
+            payload.update(sampling_payload(constraints, num_inference_steps,
+                                            shift_video, shift_audio))
         # loras: combine the adapter-dropdown control LoRA (IC-LoRA) with the
         # prompt <lora:...> style/character LoRAs. Adapter first, then prompt
         # order; deduped last-wins by name. The "loras" key is added ONLY when the
@@ -1101,6 +1112,10 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # see its definition), so the key rides only as ``false``.
         if bool(vram16_mode) != VRAM16_MODE_DEFAULT_H3:
             payload["vram16_mode"] = bool(vram16_mode)
+        # pi-H3 (MiniMax H3, additive, conditional): appended last, only when
+        # the choice locks the sliders (see the sampling block above).
+        if pi_h3_on:
+            payload["pi_h3"] = pi_h3
         try:
             resp = api.generate(payload)
         except Exception as exc:

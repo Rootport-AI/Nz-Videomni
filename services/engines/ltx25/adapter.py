@@ -151,6 +151,8 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("source_audio", "source_audio", lambda r: r.source_audio is not None),
     # MiniMax H3 only (Ref2VA). The field's default is [].
     ("references", "references", lambda r: bool(r.references)),
+    # MiniMax H3 only (the pi-H3 acceleration). The field's default is "off".
+    ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -348,6 +350,9 @@ CHAIN_REJECT_TABLE: tuple[
     # ``source_audio`` (already published), the sentence the chain's
     # (``H3_ONLY_CHAIN_REFUSALS``).
     ("clips", "source_audio", lambda r: any(clip.source_audio is not None for clip in r.clips)),
+    # MiniMax H3 only (the pi-H3 acceleration), the single path's row on the
+    # chain schema. The field's default is "off". LAST, for the same reason.
+    ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
 )
 
 #: The ignore-and-log half. Field-for-field the same as

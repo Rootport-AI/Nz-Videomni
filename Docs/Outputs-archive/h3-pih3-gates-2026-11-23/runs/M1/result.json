@@ -1,0 +1,79 @@
+{
+  "item": "M1",
+  "title": "マスクのある off（昨日の I1c をエンジン直呼びで回し直す）",
+  "group": 1,
+  "rule": "完了し、映像と音声のストリームの MD5 が昨日の I1c の output.mp4 と一致",
+  "started_at": "2026-11-23T01:14:58+09:00",
+  "git": {
+    "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+    "branch": "dev",
+    "status_porcelain": [],
+    "dirty": false
+  },
+  "gate": {
+    "at": "2026-11-23T01:14:58+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 320,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "cmd": [
+    ".venv-engine-h3/Scripts/python.exe",
+    "-I",
+    "-B",
+    "outputs/h3-pih3-gates-2026-11-23/engine_direct.py",
+    "--source",
+    "outputs/h3-pih3-spike-2026-11-22/runs/I1c/result.json",
+    "--out",
+    "outputs/h3-pih3-gates-2026-11-23/runs/M1"
+  ],
+  "source": "outputs/h3-pih3-spike-2026-11-22/runs/I1c/result.json",
+  "exit_code": 0,
+  "seconds_wall": 164.8,
+  "error": null,
+  "engine": {
+    "seconds": 160.58,
+    "peak_vram_mb": 6334,
+    "peak_vram_reserved_mb": 7492,
+    "attention_used": "sage",
+    "vram16_mode_used": "on",
+    "keep_resident_used": "off"
+  },
+  "pi_h3_keys": [],
+  "compare": {
+    "label": "spike I1c",
+    "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/I1c/output.mp4",
+    "md5": {
+      "video": "f07173f1222a57294ab2d71009a5c906",
+      "audio": "30134d410d2a07abd93e8ae71390db7a"
+    },
+    "ref_md5": {
+      "video": "f07173f1222a57294ab2d71009a5c906",
+      "audio": "30134d410d2a07abd93e8ae71390db7a"
+    },
+    "video_equal": true,
+    "audio_equal": true,
+    "equal": true
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T01:17:44+09:00",
+  "workers_after": []
+}

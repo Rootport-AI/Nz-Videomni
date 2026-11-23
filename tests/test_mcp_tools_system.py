@@ -333,11 +333,12 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
     # VRAM 16GB mode added the third: ``vram16_mode`` (MiniMax H3 only).
     # H3 single-generate A2V added the fourth: ``source_audio`` (H3 only; LTX
     # does A2V through the chain's source_audio). Ref2VA added the fifth:
-    # ``references`` (H3 only).
+    # ``references`` (H3 only). pi-H3 added the sixth: ``pi_h3`` (H3 only).
     assert by_id["LTX23"]["unsupported_features"] == [
         "keep_resident_embeddings",
         "alpha_gen",
         "vram16_mode",
         "source_audio",
         "references",
+        "pi_h3",
     ]

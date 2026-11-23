@@ -1,0 +1,95 @@
+{
+  "item": "F0",
+  "title": "基準の出力の照合値（ワーカーの自己試験）",
+  "group": 1,
+  "rule": "終了コード 0 で、mp4 の sha256 が 0da6111c… と一致",
+  "started_at": "2026-11-23T01:07:32+09:00",
+  "git": {
+    "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+    "branch": "dev",
+    "status_porcelain": [],
+    "dirty": false
+  },
+  "gate": {
+    "at": "2026-11-23T01:07:32+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 474,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "cmd": [
+    ".venv-engine-h3/Scripts/python.exe",
+    "-B",
+    "-m",
+    "engine_h3.worker",
+    "--selftest-generate",
+    "--transformer",
+    "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "--text-encoder",
+    "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "--video-vae",
+    "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+    "--audio-vae",
+    "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+    "--tokenizer-dir",
+    "models/MiniMaxH3/TextEncoder/qwen3vl_tokenizer",
+    "--width",
+    "640",
+    "--height",
+    "384",
+    "--num-frames",
+    "124",
+    "--seed",
+    "42",
+    "--steps",
+    "20",
+    "--shift-video",
+    "12",
+    "--shift-audio",
+    "3",
+    "--attention-backend",
+    "sdpa",
+    "--vram16",
+    "--prompt",
+    "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+    "--output",
+    "outputs/h3-pih3-gates-2026-11-23/runs/F0/f0.mp4",
+    "--report",
+    "outputs/h3-pih3-gates-2026-11-23/runs/F0/selftest.json"
+  ],
+  "exit_code": 0,
+  "seconds_wall": 159.4,
+  "sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9",
+  "stream_md5": {
+    "video": "a6088fcf5df85f76cbc613e6fdb34101",
+    "audio": "e6986afe4718d835a41e371aa69b7e76"
+  },
+  "done": {
+    "seconds": 154.72,
+    "peak_vram_mb": 5065,
+    "peak_vram_reserved_mb": 5382,
+    "vram16_mode_used": "on"
+  },
+  "fingerprint_equal": true,
+  "verdict": "pass",
+  "finished_at": "2026-11-23T01:10:13+09:00",
+  "workers_after": []
+}

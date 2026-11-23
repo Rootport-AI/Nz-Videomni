@@ -1,0 +1,3864 @@
+{
+  "made_at": "2026-11-23T08:50:09+09:00",
+  "items": {
+    "F0": {
+      "title": "基準の出力の照合値（ワーカーの自己試験）",
+      "group": 1,
+      "rule": "終了コード 0 で、mp4 の sha256 が 0da6111c… と一致",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:10:13+09:00",
+      "numbers": {
+        "sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9",
+        "seconds": 154.72,
+        "peak_vram_mb": 5065,
+        "peak_vram_reserved_mb": 5382,
+        "vram16_mode_used": "on"
+      }
+    },
+    "F1": {
+      "title": "API の off の単発（2026-11-22 の門の R1 と同じ条件）",
+      "group": 1,
+      "rule": "完了し、映像と音声のストリームの MD5 が R1 の記録と一致。記録に pi-H3 の鍵が無い",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:14:58+09:00",
+      "jobs": [
+        {
+          "job": "F1",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 240.6,
+          "generation_time_seconds": 236.86,
+          "seconds": {
+            "encode": 21.42,
+            "denoise": 191.45,
+            "decode": 23.84,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6332,
+              7484
+            ],
+            "denoise": [
+              3780,
+              4536
+            ],
+            "decode": [
+              6332,
+              7484
+            ]
+          },
+          "rss_peak_gib": 22.24,
+          "dwd_chunks": null,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "2026-11-22 gate R1 (record)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "M1": {
+      "title": "マスクのある off（昨日の I1c をエンジン直呼びで回し直す）",
+      "group": 1,
+      "rule": "完了し、映像と音声のストリームの MD5 が昨日の I1c の output.mp4 と一致",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:17:44+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 160.58,
+          "peak_vram_mb": 6334,
+          "peak_vram_reserved_mb": 7492,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off"
+        },
+        "compare": {
+          "label": "spike I1c",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/I1c/output.mp4",
+          "md5": {
+            "video": "f07173f1222a57294ab2d71009a5c906",
+            "audio": "30134d410d2a07abd93e8ae71390db7a"
+          },
+          "ref_md5": {
+            "video": "f07173f1222a57294ab2d71009a5c906",
+            "audio": "30134d410d2a07abd93e8ae71390db7a"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "P1": {
+      "title": "実験の P1 の再現（FL2VA・4steps）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数・音声が違う。あわせて記録（pi_h3_used・h3.pi_h3）が揃うこと",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T01:19:26+09:00",
+      "jobs": [
+        {
+          "job": "P1",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.2,
+          "generation_time_seconds": 78.04,
+          "seconds": {
+            "encode": 18.01,
+            "denoise": 55.09,
+            "decode": 4.79,
+            "dwd": 3.03
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P1",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true,
+            "sigmas_equal_spike": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.03
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P2": {
+      "title": "実験の P2 の再現（FL2VA・2steps）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数・音声が違う。あわせて記録（pi_h3_used・h3.pi_h3）が揃うこと",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T01:20:38+09:00",
+      "jobs": [
+        {
+          "job": "P2",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 60.2,
+          "generation_time_seconds": 58.38,
+          "seconds": {
+            "encode": 18.67,
+            "denoise": 34.78,
+            "decode": 4.78,
+            "dwd": 3.19
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P2",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true,
+            "sigmas_equal_spike": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "2steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.993766725063324,
+              "sigma0_audio": 0.9755244851112366,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.19
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P3": {
+      "title": "実験の P3 の再現（Sulphur-3・4steps）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数・音声が違う。あわせて記録（pi_h3_used・h3.pi_h3）が揃うこと",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T01:22:15+09:00",
+      "jobs": [
+        {
+          "job": "P3",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 85.2,
+          "generation_time_seconds": 84.08,
+          "seconds": {
+            "encode": 18.58,
+            "denoise": 60.44,
+            "decode": 4.9,
+            "dwd": 3.06
+          },
+          "vram_peak_mib": {
+            "job": [
+              6027,
+              7080
+            ],
+            "denoise": [
+              6027,
+              7080
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 26.93,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 160472,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P3",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true,
+            "sigmas_equal_spike": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.06
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P4": {
+      "title": "実験の P4 の再現（Sulphur-3・2steps）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数・音声が違う。あわせて記録（pi_h3_used・h3.pi_h3）が揃うこと",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T01:23:32+09:00",
+      "jobs": [
+        {
+          "job": "P4",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 65.2,
+          "generation_time_seconds": 61.27,
+          "seconds": {
+            "encode": 16.92,
+            "denoise": 39.12,
+            "decode": 5.04,
+            "dwd": 2.23
+          },
+          "vram_peak_mib": {
+            "job": [
+              6027,
+              7080
+            ],
+            "denoise": [
+              6027,
+              7080
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 26.93,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 160472,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P4",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true,
+            "sigmas_equal_spike": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "2steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.993766725063324,
+              "sigma0_audio": 0.9755244851112366,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.23
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "R": {
+      "title": "常駐 on での切り替え（off → 4steps → 2steps → off）",
+      "group": 3,
+      "rule": "4 本とも完了し、それぞれストリームの MD5 が単独の実行と一致（off は F1、4steps は P1、2steps は P2）",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T01:34:14+09:00",
+      "jobs": [
+        {
+          "job": "R1_off",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 235.7,
+          "generation_time_seconds": 232.66,
+          "seconds": {
+            "encode": 17.06,
+            "denoise": 190.98,
+            "decode": 24.48,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6332,
+              7484
+            ],
+            "denoise": [
+              3780,
+              4536
+            ],
+            "decode": [
+              6332,
+              7484
+            ]
+          },
+          "rss_peak_gib": 28.06,
+          "dwd_chunks": null,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "F1 (this script)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true,
+            "keep_resident_on": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        },
+        {
+          "job": "R2_4steps",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.2,
+          "generation_time_seconds": 76.98,
+          "seconds": {
+            "encode": 21.34,
+            "denoise": 52.23,
+            "decode": 3.23,
+            "dwd": 1.99
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 28.91,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "P1 (this script)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "keep_resident_on": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 1.99
+            }
+          },
+          "a2v_mask_value": null
+        },
+        {
+          "job": "R3_2steps",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 60.2,
+          "generation_time_seconds": 58.14,
+          "seconds": {
+            "encode": 23.28,
+            "denoise": 31.59,
+            "decode": 3.09,
+            "dwd": 1.95
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 29.02,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "P2 (this script)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "keep_resident_on": true
+          },
+          "pi_h3": {
+            "choice": "2steps",
+            "dit_source": "file",
+            "resident_dropped": "4steps",
+            "initial_state": {
+              "sigma0_video": 0.993766725063324,
+              "sigma0_audio": 0.9755244851112366,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 1.95
+            }
+          },
+          "a2v_mask_value": null
+        },
+        {
+          "job": "R4_off",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 230.7,
+          "generation_time_seconds": 229.09,
+          "seconds": {
+            "encode": 22.38,
+            "denoise": 185.89,
+            "decode": 20.67,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6335,
+              7568
+            ],
+            "denoise": [
+              3780,
+              4536
+            ],
+            "decode": [
+              6335,
+              7568
+            ]
+          },
+          "rss_peak_gib": 29.31,
+          "dwd_chunks": null,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "F1 (this script)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true,
+            "keep_resident_on": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L1": {
+      "title": "大きな画角 1920×1088・124 フレーム（FL2VA・4steps）",
+      "group": 4,
+      "rule": "快適上限の線の内側で、完了し、フレーム数と音声が期待どおり。DWD の段の VRAM・時間・塊の数を記録",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:39:13+09:00",
+      "jobs": [
+        {
+          "job": "L1",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 285.9,
+          "generation_time_seconds": 281.17,
+          "seconds": {
+            "encode": 18.83,
+            "denoise": 250.7,
+            "decode": 11.5,
+            "dwd": 7.19
+          },
+          "vram_peak_mib": {
+            "job": [
+              6120,
+              9140
+            ],
+            "denoise": [
+              6120,
+              9140
+            ],
+            "decode": [
+              4268,
+              5270
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 75947,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 7.19
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L2": {
+      "title": "大きな画角 2560×1472・73 フレーム（FL2VA・4steps）",
+      "group": 4,
+      "rule": "L1 と同じ",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:44:53+09:00",
+      "jobs": [
+        {
+          "job": "L2",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 320.9,
+          "generation_time_seconds": 319.01,
+          "seconds": {
+            "encode": 30.29,
+            "denoise": 277.75,
+            "decode": 10.81,
+            "dwd": 7.44
+          },
+          "vram_peak_mib": {
+            "job": [
+              6356,
+              9590
+            ],
+            "denoise": [
+              6356,
+              9590
+            ],
+            "decode": [
+              6319,
+              7468
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 81257,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 7.44
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L3": {
+      "title": "大きな画角 1920×1088・158 フレーム（FL2VA・4steps。DWD を分けて通す経路）",
+      "group": 4,
+      "rule": "L1 と同じ（DWD の塊が 2 個以上になること）",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:52:22+09:00",
+      "jobs": [
+        {
+          "job": "L3",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 436.2,
+          "generation_time_seconds": 432.67,
+          "seconds": {
+            "encode": 19.1,
+            "denoise": 361.61,
+            "decode": 51.81,
+            "dwd": 47.98
+          },
+          "vram_peak_mib": {
+            "job": [
+              6999,
+              10842
+            ],
+            "denoise": [
+              6999,
+              10842
+            ],
+            "decode": [
+              4531,
+              9786
+            ]
+          },
+          "rss_peak_gib": 22.23,
+          "dwd_chunks": 10,
+          "rows": 96459,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 10,
+              "seconds": 47.98
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "I2V1": {
+      "title": "I2V（先頭の画像。2026-10-19 の門の素材と文）",
+      "group": 5,
+      "rule": "完了し、フレーム数と音声が期待どおり。images_used 1・pi_h3_used 4steps",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:53:59+09:00",
+      "jobs": [
+        {
+          "job": "I2V1",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 85.2,
+          "generation_time_seconds": 82.91,
+          "seconds": {
+            "encode": 17.77,
+            "denoise": 58.93,
+            "decode": 4.77,
+            "dwd": 2.38
+          },
+          "vram_peak_mib": {
+            "job": [
+              3983,
+              5012
+            ],
+            "denoise": [
+              3983,
+              5012
+            ],
+            "decode": [
+              2109,
+              2676
+            ]
+          },
+          "rss_peak_gib": 22.53,
+          "dwd_chunks": 1,
+          "rows": 23333,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.38
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "I2V2": {
+      "title": "先頭と末尾の画像（2026-10-19 の門の素材と文）",
+      "group": 5,
+      "rule": "完了し、フレーム数と音声が期待どおり。images_used 2・pi_h3_used 4steps",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:55:40+09:00",
+      "jobs": [
+        {
+          "job": "I2V2",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 90.3,
+          "generation_time_seconds": 89.44,
+          "seconds": {
+            "encode": 19.18,
+            "denoise": 63.49,
+            "decode": 4.52,
+            "dwd": 2.27
+          },
+          "vram_peak_mib": {
+            "job": [
+              4138,
+              5060
+            ],
+            "denoise": [
+              4138,
+              5060
+            ],
+            "decode": [
+              2109,
+              2676
+            ]
+          },
+          "rss_peak_gib": 22.52,
+          "dwd_chunks": 1,
+          "rows": 25261,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.27
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "REF": {
+      "title": "Ref2VA（Ref2VA の重み・2026-10-28 の G-R1 の素材と条件）",
+      "group": 5,
+      "rule": "完了し、フレーム数と音声が期待どおり。references の件数 1・pi_h3_used 4steps",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T01:58:21+09:00",
+      "jobs": [
+        {
+          "job": "REF",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 135.4,
+          "generation_time_seconds": 133.63,
+          "seconds": {
+            "encode": 20.36,
+            "denoise": 105.59,
+            "decode": 6.2,
+            "dwd": 4.29
+          },
+          "vram_peak_mib": {
+            "job": [
+              4604,
+              6222
+            ],
+            "denoise": [
+              4604,
+              6222
+            ],
+            "decode": [
+              2423,
+              3058
+            ]
+          },
+          "rss_peak_gib": 22.59,
+          "dwd_chunks": 1,
+          "rows": 39786,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "references": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 4.29
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "NEG": {
+      "title": "ネガティブプロンプトつき（VSF・P1 の条件）",
+      "group": 5,
+      "rule": "完了し、フレーム数と音声が期待どおり。h3.vsf が記録され pi_h3_used 4steps",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:00:02+09:00",
+      "jobs": [
+        {
+          "job": "NEG",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 90.3,
+          "generation_time_seconds": 88.96,
+          "seconds": {
+            "encode": 29.97,
+            "denoise": 54.15,
+            "decode": 4.7,
+            "dwd": 2.31
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.54,
+          "dwd_chunks": 1,
+          "rows": 21422,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "vsf_recorded": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.31
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "V16OFF": {
+      "title": "VRAM 16GB mode off（P1 の条件。メモリ不足なら 640×384・124 フレーム）",
+      "group": 5,
+      "rule": "完了し、フレーム数と音声が期待どおり。vram16_mode_used off・pi_h3_used 4steps",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:01:34+09:00",
+      "jobs": [
+        {
+          "job": "V16OFF",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.3,
+          "generation_time_seconds": 77.82,
+          "seconds": {
+            "encode": 19.13,
+            "denoise": 53.91,
+            "decode": 4.62,
+            "dwd": 3.11
+          },
+          "vram_peak_mib": {
+            "job": [
+              9395,
+              11552
+            ],
+            "denoise": [
+              9395,
+              11552
+            ],
+            "decode": [
+              2109,
+              2676
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "vram16_off": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.11
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "Q1": {
+      "title": "w4a8 の層を含む重み（任意。Turbo を融合した重み）",
+      "group": 5,
+      "rule": "完了し、フレーム数と音声が期待どおり（受付で断られたら、その文を記録）",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:03:06+09:00",
+      "jobs": [
+        {
+          "job": "Q1",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.3,
+          "generation_time_seconds": 77.29,
+          "seconds": {
+            "encode": 19.56,
+            "denoise": 53.21,
+            "decode": 4.33,
+            "dwd": 2.7
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 15.66,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 203092,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.7
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "A2V": {
+      "title": "A2V の音声の Strength 0.5（2026-10-25 の G3 の run B の素材と条件）",
+      "group": 6,
+      "rule": "2 本とも完了し、フレーム数と音声が期待どおり（目と耳の確認はオーナー）",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:07:14+09:00",
+      "jobs": [
+        {
+          "job": "A2V_pi",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 100.4,
+          "generation_time_seconds": 95.95,
+          "seconds": {
+            "encode": 14.84,
+            "denoise": 74.27,
+            "decode": 4.96,
+            "dwd": 3.25
+          },
+          "vram_peak_mib": {
+            "job": [
+              4132,
+              5370
+            ],
+            "denoise": [
+              4132,
+              5370
+            ],
+            "decode": [
+              2263,
+              2692
+            ]
+          },
+          "rss_peak_gib": 22.89,
+          "dwd_chunks": 1,
+          "rows": 29562,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 300
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.25
+            }
+          },
+          "a2v_mask_value": 0.5
+        },
+        {
+          "job": "A2V_turbo",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 135.5,
+          "generation_time_seconds": 132.65,
+          "seconds": {
+            "encode": 16.08,
+            "denoise": 85.46,
+            "decode": 29.36,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6380,
+              7582
+            ],
+            "denoise": [
+              4298,
+              5592
+            ],
+            "decode": [
+              6380,
+              7582
+            ]
+          },
+          "rss_peak_gib": 24.48,
+          "dwd_chunks": null,
+          "rows": 29562,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true,
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": 0.5
+        }
+      ]
+    },
+    "X1": {
+      "title": "切り分け: A2V_pi と同じ要求で音声なし（先頭の画像だけの I2V）",
+      "group": 7,
+      "rule": "完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:13:46+09:00",
+      "jobs": [
+        {
+          "job": "X1",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 105.3,
+          "generation_time_seconds": 102.83,
+          "seconds": {
+            "encode": 19.6,
+            "denoise": 75.6,
+            "decode": 6.2,
+            "dwd": 4.24
+          },
+          "vram_peak_mib": {
+            "job": [
+              4132,
+              5370
+            ],
+            "denoise": [
+              4132,
+              5370
+            ],
+            "decode": [
+              2263,
+              2692
+            ]
+          },
+          "rss_peak_gib": 22.54,
+          "dwd_chunks": 1,
+          "rows": 29562,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 4.24
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "X2": {
+      "title": "切り分け: A2V_pi と同じ要求で音声の Strength 1.0",
+      "group": 7,
+      "rule": "完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:15:39+09:00",
+      "jobs": [
+        {
+          "job": "X2",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 100.4,
+          "generation_time_seconds": 98.52,
+          "seconds": {
+            "encode": 17.34,
+            "denoise": 74.57,
+            "decode": 4.56,
+            "dwd": 3.37
+          },
+          "vram_peak_mib": {
+            "job": [
+              4132,
+              5370
+            ],
+            "denoise": [
+              4132,
+              5370
+            ],
+            "decode": [
+              2263,
+              2692
+            ]
+          },
+          "rss_peak_gib": 22.63,
+          "dwd_chunks": 1,
+          "rows": 29562,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.37
+            }
+          },
+          "a2v_mask_value": 0.0
+        }
+      ]
+    },
+    "X3": {
+      "title": "切り分け: A2V_pi と同じ要求（Strength 0.5）で 2steps",
+      "group": 7,
+      "rule": "完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:17:01+09:00",
+      "jobs": [
+        {
+          "job": "X3",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 70.3,
+          "generation_time_seconds": 68.78,
+          "seconds": {
+            "encode": 17.73,
+            "denoise": 44.19,
+            "decode": 5.05,
+            "dwd": 3.47
+          },
+          "vram_peak_mib": {
+            "job": [
+              4132,
+              5370
+            ],
+            "denoise": [
+              4132,
+              5370
+            ],
+            "decode": [
+              2263,
+              2692
+            ]
+          },
+          "rss_peak_gib": 22.63,
+          "dwd_chunks": 1,
+          "rows": 29562,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {
+            "images_used": true
+          },
+          "pi_h3": {
+            "choice": "2steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.993766725063324,
+              "sigma0_audio": 0.9755244851112366,
+              "partial_rows": {
+                "video": 0,
+                "audio": 300
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.47
+            }
+          },
+          "a2v_mask_value": 0.5
+        }
+      ]
+    },
+    "REFc": {
+      "title": "切り分け: REF と同じ要求を pi-H3 なしで（G-R1 の条件: 20 ステップ・sdpa）",
+      "group": 7,
+      "rule": "完了し、フレーム数と音声が期待どおり。G-R1 の出力と比べる（記録）",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T02:35:36+09:00",
+      "jobs": [
+        {
+          "job": "REFc",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 1103.1,
+          "generation_time_seconds": 1100.59,
+          "seconds": {
+            "encode": 17.6,
+            "denoise": 1044.27,
+            "decode": 37.28,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6389,
+              7618
+            ],
+            "denoise": [
+              4370,
+              5954
+            ],
+            "decode": [
+              6389,
+              7618
+            ]
+          },
+          "rss_peak_gib": 22.48,
+          "dwd_chunks": null,
+          "rows": 39786,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "2026-10-28 G-R1 (selftest output)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true,
+            "references": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P1b": {
+      "title": "P1 の回し直し（分割の塊の上限を変えたあと）",
+      "group": 7,
+      "rule": "ストリームの MD5 が実験の P1 と一致",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T02:39:43+09:00",
+      "jobs": [
+        {
+          "job": "P1b",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.3,
+          "generation_time_seconds": 79.19,
+          "seconds": {
+            "encode": 19.63,
+            "denoise": 54.79,
+            "decode": 4.61,
+            "dwd": 2.35
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.42,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P1",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.35
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "REFt": {
+      "title": "切り分け: REF と同じ要求を pi-H3 なし・Turbo LoRA 0.8 の 4 ステップで",
+      "group": 7,
+      "rule": "完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:42:56+09:00",
+      "jobs": [
+        {
+          "job": "REFt",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 180.5,
+          "generation_time_seconds": 177.46,
+          "seconds": {
+            "encode": 18.04,
+            "denoise": 120.39,
+            "decode": 37.47,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6390,
+              7614
+            ],
+            "denoise": [
+              4770,
+              6482
+            ],
+            "decode": [
+              6390,
+              7614
+            ]
+          },
+          "rss_peak_gib": 23.54,
+          "dwd_chunks": null,
+          "rows": 39786,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true,
+            "references": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L3b": {
+      "title": "大きな画角 1920×1088・158 フレーム（FL2VA・4steps。塊の上限を変えたあと）",
+      "group": 7,
+      "rule": "快適上限の線の内側で、完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T02:49:44+09:00",
+      "jobs": [
+        {
+          "job": "L3b",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 396.0,
+          "generation_time_seconds": 393.88,
+          "seconds": {
+            "encode": 19.14,
+            "denoise": 362.25,
+            "decode": 12.33,
+            "dwd": 8.51
+          },
+          "vram_peak_mib": {
+            "job": [
+              6999,
+              10842
+            ],
+            "denoise": [
+              6999,
+              10842
+            ],
+            "decode": [
+              4595,
+              5202
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 96459,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 8.51
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L4": {
+      "title": "大きな画角 1920×1088・243 フレーム（FL2VA・4steps。塊の上限を変えたあと）",
+      "group": 7,
+      "rule": "快適上限の線の内側で、完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T03:02:54+09:00",
+      "jobs": [
+        {
+          "job": "L4",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 777.2,
+          "generation_time_seconds": 773.49,
+          "seconds": {
+            "encode": 18.89,
+            "denoise": 721.42,
+            "decode": 33.02,
+            "dwd": 27.58
+          },
+          "vram_peak_mib": {
+            "job": [
+              9498,
+              11862
+            ],
+            "denoise": [
+              9498,
+              11862
+            ],
+            "decode": [
+              5027,
+              7874
+            ]
+          },
+          "rss_peak_gib": 22.58,
+          "dwd_chunks": 4,
+          "rows": 147743,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 4,
+              "seconds": 27.58
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L5": {
+      "title": "大きな画角 2560×1472・158 フレーム（FL2VA・4steps。塊の上限を変えたあと）",
+      "group": 7,
+      "rule": "快適上限の線の内側で、完了し、フレーム数と音声が期待どおり",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T03:23:27+09:00",
+      "jobs": [
+        {
+          "job": "L5",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 1218.4,
+          "generation_time_seconds": 1215.82,
+          "seconds": {
+            "encode": 17.87,
+            "denoise": 949.96,
+            "decode": 247.84,
+            "dwd": 241.78
+          },
+          "vram_peak_mib": {
+            "job": [
+              10757,
+              16928
+            ],
+            "denoise": [
+              10757,
+              13468
+            ],
+            "decode": [
+              7674,
+              16928
+            ]
+          },
+          "rss_peak_gib": 22.79,
+          "dwd_chunks": 10,
+          "rows": 173539,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 10,
+              "seconds": 241.78
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P1c": {
+      "title": "P1 の回し直し（塊ごとのキャッシュ解放のあと）",
+      "group": 7,
+      "rule": "ストリームの MD5 が実験の P1 と一致",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T03:30:01+09:00",
+      "jobs": [
+        {
+          "job": "P1c",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.3,
+          "generation_time_seconds": 78.27,
+          "seconds": {
+            "encode": 19.05,
+            "denoise": 54.43,
+            "decode": 4.64,
+            "dwd": 3.17
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.16,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P1",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.17
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L4b": {
+      "title": "L4 の回し直し（塊ごとのキャッシュ解放のあと）",
+      "group": 7,
+      "rule": "完了し、ストリームの MD5 が前回の L4 と一致",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T03:43:11+09:00",
+      "jobs": [
+        {
+          "job": "L4b",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 777.1,
+          "generation_time_seconds": 774.35,
+          "seconds": {
+            "encode": 19.66,
+            "denoise": 721.3,
+            "decode": 33.25,
+            "dwd": 27.8
+          },
+          "vram_peak_mib": {
+            "job": [
+              9498,
+              11862
+            ],
+            "denoise": [
+              9498,
+              11862
+            ],
+            "decode": [
+              5027,
+              5768
+            ]
+          },
+          "rss_peak_gib": 22.53,
+          "dwd_chunks": 4,
+          "rows": 147743,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "L4 (this script, before the cache release)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 4,
+              "seconds": 27.8
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "L5b": {
+      "title": "L5 の回し直し（塊ごとのキャッシュ解放のあと）",
+      "group": 7,
+      "rule": "完了し、ストリームの MD5 が前回の L5 と一致",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T04:01:08+09:00",
+      "jobs": [
+        {
+          "job": "L5b",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 1062.8,
+          "generation_time_seconds": 1061.24,
+          "seconds": {
+            "encode": 18.96,
+            "denoise": 949.49,
+            "decode": 92.64,
+            "dwd": 86.78
+          },
+          "vram_peak_mib": {
+            "job": [
+              10757,
+              13468
+            ],
+            "denoise": [
+              10757,
+              13468
+            ],
+            "decode": [
+              7674,
+              8806
+            ]
+          },
+          "rss_peak_gib": 22.79,
+          "dwd_chunks": 10,
+          "rows": 173539,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "L5 (this script, before the cache release)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 10,
+              "seconds": 86.78
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "F1d": {
+      "title": "F1 の回し直し（照合のモジュールを移したあと）",
+      "group": 7,
+      "rule": "ストリームの MD5 が R1 の記録と一致し、記録に pi-H3 の鍵が無い",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T04:30:49+09:00",
+      "jobs": [
+        {
+          "job": "F1d",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 235.7,
+          "generation_time_seconds": 232.67,
+          "seconds": {
+            "encode": 20.54,
+            "denoise": 188.47,
+            "decode": 23.52,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6332,
+              7484
+            ],
+            "denoise": [
+              3780,
+              4536
+            ],
+            "decode": [
+              6332,
+              7484
+            ]
+          },
+          "rss_peak_gib": 22.24,
+          "dwd_chunks": null,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "2026-11-22 gate R1 (record)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P1d": {
+      "title": "P1 の回し直し（照合のモジュールを移したあと）",
+      "group": 7,
+      "rule": "ストリームの MD5 が実験の P1 と一致",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T04:32:22+09:00",
+      "jobs": [
+        {
+          "job": "P1d",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 80.3,
+          "generation_time_seconds": 78.01,
+          "seconds": {
+            "encode": 19.01,
+            "denoise": 54.15,
+            "decode": 4.69,
+            "dwd": 3.01
+          },
+          "vram_peak_mib": {
+            "job": [
+              3828,
+              4782
+            ],
+            "denoise": [
+              3828,
+              4782
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.43,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P1",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.01
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "P3d": {
+      "title": "P3 の回し直し（照合のモジュールを移したあと）",
+      "group": 7,
+      "rule": "ストリームの MD5 が実験の P3 と一致",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T04:33:59+09:00",
+      "jobs": [
+        {
+          "job": "P3d",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 85.2,
+          "generation_time_seconds": 83.56,
+          "seconds": {
+            "encode": 19.44,
+            "denoise": 59.24,
+            "decode": 4.72,
+            "dwd": 2.11
+          },
+          "vram_peak_mib": {
+            "job": [
+              6027,
+              7080
+            ],
+            "denoise": [
+              6027,
+              7080
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 27.22,
+          "dwd_chunks": 1,
+          "rows": 21417,
+          "comfort": {
+            "budget_rows": 160472,
+            "inside": true
+          },
+          "compare": {
+            "label": "spike P3",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.11
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "C0": {
+      "title": "段 2: off の連結（2026-10-29 の G-C0。2026-11-09 の GA0 と同じ本文）",
+      "group": 1,
+      "rule": "完了し、mp4 の sha256 が G-C0 の 4a98be08… と一致し、3 クリップの潜在の照合値が GA0 の記録と一致",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T07:59:47+09:00",
+      "jobs": [
+        {
+          "job": "C0",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 406.0,
+          "generation_time_seconds": 403.68,
+          "seconds": {
+            "encode": null,
+            "denoise": 308.82,
+            "decode": 25.02,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              5075,
+              5382
+            ],
+            "denoise": [
+              3783,
+              3792
+            ],
+            "decode": [
+              5075,
+              5382
+            ]
+          },
+          "rss_peak_gib": 23.71,
+          "dwd_chunks": null,
+          "rows": 9335,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": {
+            "label": "2026-10-29 G-C0 / 2026-11-09 GA0 (record)",
+            "video_equal": true,
+            "audio_equal": true
+          },
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "M3": {
+      "title": "段 2: off の Retake（昨日の R1c をエンジン直呼びで回し直す）",
+      "group": 1,
+      "rule": "完了し、映像と音声のストリームの MD5 が昨日の R1c の output.mp4 と一致",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:04:02+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 247.42,
+          "peak_vram_mb": 6344,
+          "peak_vram_reserved_mb": 7506,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off",
+          "rss_peak_gib": 24.22,
+          "commit_peak_gib": 36.12,
+          "num_frames": 124,
+          "decode": {
+            "seconds": 37.73,
+            "peak_vram_mb": 6344,
+            "peak_vram_reserved_mb": 7506,
+            "vae_source": "file"
+          },
+          "dwd_chunks": null
+        },
+        "compare": {
+          "label": "spike R1c",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/R1c/output.mp4",
+          "md5": {
+            "video": "26528a118789d9de7b61ad131a713f5a",
+            "audio": "4208770f069c58516fe267678af29ead"
+          },
+          "ref_md5": {
+            "video": "26528a118789d9de7b61ad131a713f5a",
+            "audio": "4208770f069c58516fe267678af29ead"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "E3b4": {
+      "title": "段 2: 実験の C3b_4step の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T08:05:43+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 94.4,
+          "peak_vram_mb": 3829,
+          "peak_vram_reserved_mb": 3840,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off",
+          "rss_peak_gib": 24.17,
+          "commit_peak_gib": 32.16,
+          "num_frames": 226,
+          "decode": {
+            "seconds": 4.79,
+            "peak_vram_mb": 1441,
+            "peak_vram_reserved_mb": 2130,
+            "vae_source": "dwd"
+          },
+          "dwd_chunks": 1
+        },
+        "compare": {
+          "label": "spike C3b_4step",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/C3b_4step/output.mp4",
+          "md5": {
+            "video": "92b70c16e3d8f28bea938f8f37f8848f",
+            "audio": "4cb6dfc85b60d3d31391f386a6676b70"
+          },
+          "ref_md5": {
+            "video": "92b70c16e3d8f28bea938f8f37f8848f",
+            "audio": "4cb6dfc85b60d3d31391f386a6676b70"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "E3b2": {
+      "title": "段 2: 実験の C3b_2step の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T08:07:02+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 72.45,
+          "peak_vram_mb": 3829,
+          "peak_vram_reserved_mb": 3840,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off",
+          "rss_peak_gib": 24.16,
+          "commit_peak_gib": 32.17,
+          "num_frames": 226,
+          "decode": {
+            "seconds": 4.68,
+            "peak_vram_mb": 1441,
+            "peak_vram_reserved_mb": 2130,
+            "vae_source": "dwd"
+          },
+          "dwd_chunks": 1
+        },
+        "compare": {
+          "label": "spike C3b_2step",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/C3b_2step/output.mp4",
+          "md5": {
+            "video": "310822d700d5fef644e24f2a04622eb0",
+            "audio": "7be09168db677f38de577b55c11e9409"
+          },
+          "ref_md5": {
+            "video": "310822d700d5fef644e24f2a04622eb0",
+            "audio": "7be09168db677f38de577b55c11e9409"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "ER1": {
+      "title": "段 2: 実験の R1 の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T08:10:33+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 204.08,
+          "peak_vram_mb": 4463,
+          "peak_vram_reserved_mb": 5988,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off",
+          "rss_peak_gib": 23.55,
+          "commit_peak_gib": 34.77,
+          "num_frames": 124,
+          "decode": {
+            "seconds": 5.99,
+            "peak_vram_mb": 2342,
+            "peak_vram_reserved_mb": 2950,
+            "vae_source": "dwd"
+          },
+          "dwd_chunks": 1
+        },
+        "compare": {
+          "label": "spike R1",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/R1/output.mp4",
+          "md5": {
+            "video": "ce9a9a8bdb04d2dd635a4856b1542d88",
+            "audio": "4208770f069c58516fe267678af29ead"
+          },
+          "ref_md5": {
+            "video": "ce9a9a8bdb04d2dd635a4856b1542d88",
+            "audio": "4208770f069c58516fe267678af29ead"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "EI1": {
+      "title": "段 2: 実験の I1 の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T08:12:56+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 136.29,
+          "peak_vram_mb": 4331,
+          "peak_vram_reserved_mb": 5672,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off",
+          "rss_peak_gib": 22.6,
+          "commit_peak_gib": 32.93,
+          "num_frames": 73,
+          "decode": {
+            "seconds": 8.14,
+            "peak_vram_mb": 2108,
+            "peak_vram_reserved_mb": 2678,
+            "vae_source": "dwd"
+          },
+          "dwd_chunks": 1
+        },
+        "compare": {
+          "label": "spike I1",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/I1/output.mp4",
+          "md5": {
+            "video": "988282ec2ad2bb5e6c817c0f2bfb115b",
+            "audio": "30134d410d2a07abd93e8ae71390db7a"
+          },
+          "ref_md5": {
+            "video": "988282ec2ad2bb5e6c817c0f2bfb115b",
+            "audio": "30134d410d2a07abd93e8ae71390db7a"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "EO1": {
+      "title": "段 2: 実験の O1 の再現（エンジン直呼び・製品の pi-H3 の経路）",
+      "group": 2,
+      "rule": "一致＝ストリームの MD5 が実験と一致。違えば「差あり」で数値。破綻＝フレームの PSNR の最小が 30 dB 未満か、フレーム数が違う",
+      "verdict": "equal",
+      "finished_at": "2026-11-23T08:16:11+09:00",
+      "numbers": {
+        "engine": {
+          "seconds": 182.05,
+          "peak_vram_mb": 4464,
+          "peak_vram_reserved_mb": 5990,
+          "attention_used": "sage",
+          "vram16_mode_used": "on",
+          "keep_resident_used": "off",
+          "rss_peak_gib": 22.76,
+          "commit_peak_gib": 34.25,
+          "num_frames": 124,
+          "decode": {
+            "seconds": 9.53,
+            "peak_vram_mb": 2342,
+            "peak_vram_reserved_mb": 2950,
+            "vae_source": "dwd"
+          },
+          "dwd_chunks": 1
+        },
+        "compare": {
+          "label": "spike O1",
+          "ref_mp4": "outputs/h3-pih3-spike-2026-11-22/runs/O1/output.mp4",
+          "md5": {
+            "video": "8918cb6bcf810546f40a8c4dde777468",
+            "audio": "571f4ef3dc25511924cfbdece8d59ff6"
+          },
+          "ref_md5": {
+            "video": "8918cb6bcf810546f40a8c4dde777468",
+            "audio": "571f4ef3dc25511924cfbdece8d59ff6"
+          },
+          "video_equal": true,
+          "audio_equal": true,
+          "equal": true
+        }
+      }
+    },
+    "ACH": {
+      "title": "段 2: API の連結（実験の C3b と同じ条件・4steps）",
+      "group": 8,
+      "rule": "完了し、226 フレームと音声。記録（pi_h3_used・h3.pi_h3・クリップごとの pi_h3・DWD の塊）",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:18:01+09:00",
+      "jobs": [
+        {
+          "job": "ACH",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 95.3,
+          "generation_time_seconds": 93.11,
+          "seconds": {
+            "encode": null,
+            "denoise": 45.47,
+            "decode": 4.62,
+            "dwd": 2.01
+          },
+          "vram_peak_mib": {
+            "job": [
+              3829,
+              3840
+            ],
+            "denoise": [
+              3829,
+              3840
+            ],
+            "decode": [
+              1441,
+              2130
+            ]
+          },
+          "rss_peak_gib": 24.17,
+          "dwd_chunks": 1,
+          "rows": 9355,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.01
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "AV2V": {
+      "title": "段 2: API の V2V（2026-11-02 の門 ① の素材と文・56＋39・4steps）",
+      "group": 8,
+      "rule": "完了し、51 フレームと音声。記録が揃う",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:19:27+09:00",
+      "jobs": [
+        {
+          "job": "AV2V",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 75.3,
+          "generation_time_seconds": 72.85,
+          "seconds": {
+            "encode": null,
+            "denoise": 26.93,
+            "decode": 2.77,
+            "dwd": 1.19
+          },
+          "vram_peak_mib": {
+            "job": [
+              4168,
+              5090
+            ],
+            "denoise": [
+              3825,
+              3836
+            ],
+            "decode": [
+              1267,
+              2046
+            ]
+          },
+          "rss_peak_gib": 24.39,
+          "dwd_chunks": 1,
+          "rows": 4301,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 1.19
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "ART": {
+      "title": "段 2: API の Retake（実験の R1 と同じ素材・文・窓・Strength 1.0・4steps）",
+      "group": 8,
+      "rule": "完了し、124 フレームと音声。記録が揃う",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:23:12+09:00",
+      "jobs": [
+        {
+          "job": "ART",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 212.2,
+          "generation_time_seconds": 205.93,
+          "seconds": {
+            "encode": null,
+            "denoise": 97.7,
+            "decode": 5.92,
+            "dwd": 4.57
+          },
+          "vram_peak_mib": {
+            "job": [
+              4463,
+              5988
+            ],
+            "denoise": [
+              4463,
+              5988
+            ],
+            "decode": [
+              2342,
+              2950
+            ]
+          },
+          "rss_peak_gib": 23.55,
+          "dwd_chunks": 1,
+          "rows": 35970,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 4.57
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "AIN": {
+      "title": "段 2: API の Inpainting（実験の I1 と同じ素材・文・Strength 1.0・4steps）",
+      "group": 8,
+      "rule": "完了し、73 フレームと音声。h3.inpaint と pi-H3 の記録が揃う",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:25:45+09:00",
+      "jobs": [
+        {
+          "job": "AIN",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 141.0,
+          "generation_time_seconds": 139.71,
+          "seconds": {
+            "encode": 19.01,
+            "denoise": 57.28,
+            "decode": 8.25,
+            "dwd": 3.54
+          },
+          "vram_peak_mib": {
+            "job": [
+              4331,
+              5672
+            ],
+            "denoise": [
+              3825,
+              4800
+            ],
+            "decode": [
+              2108,
+              2678
+            ]
+          },
+          "rss_peak_gib": 22.88,
+          "dwd_chunks": 1,
+          "rows": 21398,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 3.54
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "AOUT": {
+      "title": "段 2: API の Outpainting（実験の O1 の切り出し・文・左右 128／上下 96・Strength 1.0・4steps）",
+      "group": 8,
+      "rule": "完了し、124 フレームと音声。h3.outpaint と pi-H3 の記録が揃う",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:28:53+09:00",
+      "jobs": [
+        {
+          "job": "AOUT",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 176.0,
+          "generation_time_seconds": 173.89,
+          "seconds": {
+            "encode": 19.72,
+            "denoise": 97.44,
+            "decode": 9.52,
+            "dwd": 4.52
+          },
+          "vram_peak_mib": {
+            "job": [
+              4464,
+              5990
+            ],
+            "denoise": [
+              4464,
+              5990
+            ],
+            "decode": [
+              2342,
+              2950
+            ]
+          },
+          "rss_peak_gib": 22.76,
+          "dwd_chunks": 1,
+          "rows": 35975,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 4.52
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "AAUD": {
+      "title": "段 2: API のクリップごとに音声を指定した連結（2026-11-09 の GA2 の本文・4steps）",
+      "group": 8,
+      "rule": "完了し、345 フレームと音声。クリップごとの a2v と pi-H3 の記録",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:31:26+09:00",
+      "jobs": [
+        {
+          "job": "AAUD",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 140.6,
+          "generation_time_seconds": 135.79,
+          "seconds": {
+            "encode": null,
+            "denoise": 63.35,
+            "decode": 5.62,
+            "dwd": 2.96
+          },
+          "vram_peak_mib": {
+            "job": [
+              3831,
+              3840
+            ],
+            "denoise": [
+              3831,
+              3840
+            ],
+            "decode": [
+              1575,
+              2438
+            ]
+          },
+          "rss_peak_gib": 24.45,
+          "dwd_chunks": 1,
+          "rows": 9335,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 2.96
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "R05": {
+      "title": "段 2: 音声の Strength 0.5 の Retake（R1 の条件・pi-H3 4steps と Turbo LoRA 0.8 の 4 ステップ）",
+      "group": 8,
+      "rule": "2 本とも完了し、124 フレームと音声（目と耳の確認はオーナー）",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:39:33+09:00",
+      "jobs": [
+        {
+          "job": "R05_pi",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 212.2,
+          "generation_time_seconds": 208.49,
+          "seconds": {
+            "encode": null,
+            "denoise": 97.77,
+            "decode": 6.62,
+            "dwd": 4.75
+          },
+          "vram_peak_mib": {
+            "job": [
+              4463,
+              5988
+            ],
+            "denoise": [
+              4463,
+              5988
+            ],
+            "decode": [
+              2342,
+              2950
+            ]
+          },
+          "rss_peak_gib": 23.55,
+          "dwd_chunks": 1,
+          "rows": 35970,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 268
+              }
+            },
+            "dwd": {
+              "chunks": 1,
+              "seconds": 4.75
+            }
+          },
+          "a2v_mask_value": null
+        },
+        {
+          "job": "R05_turbo",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 262.3,
+          "generation_time_seconds": 258.68,
+          "seconds": {
+            "encode": null,
+            "denoise": 111.86,
+            "decode": 37.55,
+            "dwd": null
+          },
+          "vram_peak_mib": {
+            "job": [
+              6344,
+              7506
+            ],
+            "denoise": [
+              4631,
+              6230
+            ],
+            "decode": [
+              6344,
+              7506
+            ]
+          },
+          "rss_peak_gib": 24.97,
+          "dwd_chunks": null,
+          "rows": 35970,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": null,
+          "extra": {
+            "no_pi_keys": true
+          },
+          "pi_h3": {
+            "choice": null,
+            "dit_source": null,
+            "resident_dropped": null,
+            "initial_state": null,
+            "dwd": null
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    },
+    "LONG": {
+      "title": "段 2: 長い連結（5 本×124 フレーム・1280×768・全クリップ同じ文・4steps）",
+      "group": 8,
+      "rule": "完了し、532 フレームと音声。主記憶と VRAM の山、復号の段、DWD の塊、クリップごとの行数を記録",
+      "verdict": "pass",
+      "finished_at": "2026-11-23T08:49:08+09:00",
+      "jobs": [
+        {
+          "job": "LONG",
+          "status": "completed",
+          "error": null,
+          "failed_stage": null,
+          "seconds_wall": 561.3,
+          "generation_time_seconds": 556.76,
+          "seconds": {
+            "encode": null,
+            "denoise": 428.53,
+            "decode": 21.99,
+            "dwd": 15.66
+          },
+          "vram_peak_mib": {
+            "job": [
+              4467,
+              5996
+            ],
+            "denoise": [
+              4467,
+              5996
+            ],
+            "decode": [
+              3776,
+              4930
+            ]
+          },
+          "rss_peak_gib": 25.87,
+          "dwd_chunks": 2,
+          "rows": 35995,
+          "comfort": {
+            "budget_rows": 219516,
+            "inside": true
+          },
+          "compare": null,
+          "frames": null,
+          "audio": null,
+          "pi_checks": {
+            "pi_h3_used": true,
+            "record_choice_steps": true,
+            "lora_pairs_138": true,
+            "adapter_counts": true,
+            "sigmas_lengths": true,
+            "dwd_chunks_recorded": true,
+            "decode_by_dwd": true,
+            "steps_shift": true
+          },
+          "extra": {},
+          "pi_h3": {
+            "choice": "4steps",
+            "dit_source": "file",
+            "resident_dropped": null,
+            "initial_state": {
+              "sigma0_video": 0.9965397715568542,
+              "sigma0_audio": 0.9863013625144958,
+              "partial_rows": {
+                "video": 0,
+                "audio": 0
+              }
+            },
+            "dwd": {
+              "chunks": 2,
+              "seconds": 15.66
+            }
+          },
+          "a2v_mask_value": null
+        }
+      ]
+    }
+  },
+  "halt": null,
+  "invocations": [
+    {
+      "started_at": "2026-11-23T01:07:32+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "F0"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [],
+        "dirty": false
+      },
+      "items": {
+        "F0": "pass"
+      },
+      "finished_at": "2026-11-23T01:10:13+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T01:10:28+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "F1,M1"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [],
+        "dirty": false
+      },
+      "items": {
+        "F1": "pass",
+        "M1": "pass"
+      },
+      "finished_at": "2026-11-23T01:17:45+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T01:17:53+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "P1,P2,P3,P4"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [],
+        "dirty": false
+      },
+      "items": {
+        "P1": "equal",
+        "P2": "equal",
+        "P3": "equal",
+        "P4": "equal"
+      },
+      "finished_at": "2026-11-23T01:23:32+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T01:23:53+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "R,L1,L2,L3,I2V1,I2V2,REF,NEG,V16OFF,Q1,A2V"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [],
+        "dirty": false
+      },
+      "items": {
+        "R": "equal",
+        "L1": "pass",
+        "L2": "pass",
+        "L3": "pass",
+        "I2V1": "pass",
+        "I2V2": "pass",
+        "REF": "pass",
+        "NEG": "pass",
+        "V16OFF": "pass",
+        "Q1": "pass",
+        "A2V": "pass"
+      },
+      "finished_at": "2026-11-23T02:07:14+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T02:11:49+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "X1,X2,X3,REFc"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [
+          " M engine_h3/dwd.py",
+          " M tests/test_h3_pih3_engine.py"
+        ],
+        "dirty": true
+      },
+      "items": {
+        "X1": "pass",
+        "X2": "pass",
+        "X3": "pass",
+        "REFc": "equal"
+      },
+      "finished_at": "2026-11-23T02:35:36+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T02:38:11+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "P1b,REFt,L3b,L4,L5"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [
+          " M engine_h3/dwd.py",
+          " M tests/test_h3_pih3_engine.py"
+        ],
+        "dirty": true
+      },
+      "items": {
+        "P1b": "equal",
+        "REFt": "pass",
+        "L3b": "pass",
+        "L4": "pass",
+        "L5": "pass"
+      },
+      "finished_at": "2026-11-23T03:23:27+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T03:28:29+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "P1c,L4b,L5b"
+      ],
+      "git": {
+        "head": "38e389d4e0dc795a0ff10a4b89ba8a502cbf83b9",
+        "branch": "dev",
+        "status_porcelain": [
+          " M engine_h3/dwd.py",
+          " M tests/test_h3_pih3_engine.py"
+        ],
+        "dirty": true
+      },
+      "items": {
+        "P1c": "equal",
+        "L4b": "equal",
+        "L5b": "equal"
+      },
+      "finished_at": "2026-11-23T04:01:09+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T04:26:42+09:00",
+      "argv": [
+        "--live",
+        "--only",
+        "F1d,P1d,P3d"
+      ],
+      "git": {
+        "head": "ce9c29488305aa9aa8303f727ed354e3135123a1",
+        "branch": "dev",
+        "status_porcelain": [
+          " M Docs/MINIMAX_H3_DESIGN.md",
+          " M Docs/Outputs-archive/h3-pih3-spike-2026-11-22/README.md",
+          " M Docs/Outputs-archive/h3-pih3-spike-2026-11-22/h3_pih3_spike.py",
+          " M Docs/VERIFICATION_LOG.md",
+          " M engine_h3/dwd.py",
+          " D engine_h3/h3_pih3_format.py",
+          " M engine_h3/pi_h3.py",
+          " M engine_h3/pipeline_h3.py",
+          " M services/engines/h3/adapter.py",
+          " M tests/test_h3_pih3_api.py",
+          " M tests/test_h3_pih3_engine.py",
+          "?? Docs/Outputs-archive/h3-pih3-gates-2026-11-23/",
+          "?? Docs/Outputs-archive/h3-pih3-spike-2026-11-22/runs/head_bench/",
+          "?? h3_pih3_format.py"
+        ],
+        "dirty": true
+      },
+      "items": {
+        "F1d": "equal",
+        "P1d": "equal",
+        "P3d": "equal"
+      },
+      "finished_at": "2026-11-23T04:33:59+09:00",
+      "scrubbed": []
+    },
+    {
+      "started_at": "2026-11-23T07:52:49+09:00",
+      "argv": [
+        "--live",
+        "--stage2"
+      ],
+      "git": {
+        "head": "1738e8cf4e473e4589db4f3a6f3346a11e40a8bd",
+        "branch": "dev",
+        "status_porcelain": [],
+        "dirty": false
+      },
+      "items": {
+        "C0": "pass",
+        "M3": "pass",
+        "E3b4": "equal",
+        "E3b2": "equal",
+        "ER1": "equal",
+        "EI1": "equal",
+        "EO1": "equal",
+        "ACH": "pass",
+        "AV2V": "pass",
+        "ART": "pass",
+        "AIN": "pass",
+        "AOUT": "pass",
+        "AAUD": "pass",
+        "R05": "pass",
+        "LONG": "pass"
+      },
+      "finished_at": "2026-11-23T08:49:08+09:00",
+      "scrubbed": []
+    }
+  ]
+}

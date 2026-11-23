@@ -334,6 +334,17 @@ export interface GenerateRequest {
    * answer a `true` with a 422. Mirrored on {@link GenerateChainRequest}
    * since §1-106 (MiniMax H3 chains). */
   vram16_mode?: boolean;
+  /** Acceleration (2026-11-23, ruling 107): pi-H3 — MiniMax H3 only. Built
+   * exclusively by `shell/accelerationSettings.ts`'s
+   * `accelerationRequestFields` and spread in — omitted entirely while the
+   * server default (`"off"`) is selected, so this key only ever appears as
+   * `"4steps"` / `"2steps"`. While it rides along, the three sampling values
+   * are omitted (`modes/single/samplingValues.ts`'s `samplingRequestFields`)
+   * and the server fills them with the choice's (`constraints.pi_h3`); an
+   * explicit different value is a 422. LTX 2.3 / 2.5 publish `pi_h3` in
+   * `unsupported_features` and 422 any other value than `"off"`. Mirrored on
+   * {@link GenerateChainRequest}. */
+  pi_h3?: "off" | "4steps" | "2steps";
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
@@ -571,6 +582,10 @@ export interface GenerateChainRequest {
    * same single builder (`accelerationRequestFields`), same "sent only as
    * `false`" rule. */
   vram16_mode?: boolean;
+  /** pi-H3 (ruling 107): mirrors {@link GenerateRequest.pi_h3} — same single
+   * builder, same "never sent as `"off"`" rule; one choice covers every clip
+   * (Chained, V2V, Retake). */
+  pi_h3?: "off" | "4steps" | "2steps";
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;
@@ -1455,6 +1470,21 @@ export interface BaseModelConstraints {
     audio_strength: SamplingParamConstraint;
     blend_dilation_stage1: SamplingParamConstraint;
   } | null;
+  /** Ruling 107 (2026-11-23): the sampling values each pi-H3 choice runs with
+   * (`{"4steps": {num_inference_steps: 4, shift_video: 12, shift_audio: 3},
+   * "2steps": {…}}`). Present only for an engine that runs pi-H3 (MiniMax H3);
+   * absent/`null` = no pi-H3 (LTX, or a backend that predates the key). The
+   * screens show these numbers on the locked sliders and hold none of their
+   * own (`shell/generationConstraints.ts` flattens it). */
+  pi_h3?: Partial<Record<"4steps" | "2steps", PiH3SamplingConstraint>> | null;
+}
+
+/** One `BaseModelConstraints.pi_h3` entry: the three sampling values a pi-H3
+ * choice fixes. */
+export interface PiH3SamplingConstraint {
+  num_inference_steps: number;
+  shift_video: number;
+  shift_audio: number;
 }
 
 /** `BaseModelConstraints.reference`: the flat seven limits (supervisor ruling

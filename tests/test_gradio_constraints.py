@@ -375,3 +375,88 @@ def test_base_model_change_rebuilds_the_settings_table():
                if getattr(d.fn, "__name__", "") == "_spill_table_for_scope")
     assert dep.fn(_SPILL_CFG, _H3_SCOPE)["value"] == []
     assert dep.fn(_SPILL_CFG, _LTX_SCOPE)["value"] == [["1280x768", 257]]
+
+
+# -------------------------------------------------------------- pi-H3 ---
+
+from gradio_ui.constraints import (  # noqa: E402
+    pi_h3_locked_values,
+    pi_h3_sampling_updates,
+)
+
+#: The pi_h3 block as the server serves it (services/engines/h3/adapter.py's
+#: pi_h3_sampling): no "off" key.
+PI_H3_SERVED = {
+    "4steps": {"num_inference_steps": 4, "shift_video": 12.0, "shift_audio": 3.0},
+    "2steps": {"num_inference_steps": 2, "shift_video": 12.0, "shift_audio": 3.0},
+}
+H3_WITH_PI = dict(H3_CONSTRAINTS, pi_h3=PI_H3_SERVED)
+
+
+def test_normalize_keeps_a_well_formed_pi_h3_block():
+    assert normalize_constraints(H3_WITH_PI)["pi_h3"] == PI_H3_SERVED
+    # Without the block, the result is today's (no key at all).
+    assert "pi_h3" not in normalize_constraints(H3_CONSTRAINTS)
+    assert normalize_constraints(H3_CONSTRAINTS) == H3_CONSTRAINTS
+    assert "pi_h3" not in normalize_constraints(LTX_SERVED)
+
+
+def test_normalize_drops_a_broken_pi_h3_block():
+    for broken in (
+        None, [], "4steps", {},
+        {"4steps": {"num_inference_steps": 4, "shift_video": 12.0}},   # a value missing
+        {"4steps": {"num_inference_steps": "4", "shift_video": 12.0, "shift_audio": 3.0}},
+        {"4steps": None},
+        {"off": {"num_inference_steps": 20, "shift_video": 12.0, "shift_audio": 3.0}},
+    ):
+        assert "pi_h3" not in normalize_constraints(dict(H3_CONSTRAINTS, pi_h3=broken)), broken
+    # A broken entry beside a good one: only the good one stays.
+    mixed = dict(H3_CONSTRAINTS, pi_h3={**PI_H3_SERVED, "2steps": {"num_inference_steps": 2}})
+    assert normalize_constraints(mixed)["pi_h3"] == {"4steps": PI_H3_SERVED["4steps"]}
+
+
+def test_pi_h3_locked_values_judgment():
+    assert pi_h3_locked_values(H3_WITH_PI, "4steps") == PI_H3_SERVED["4steps"]
+    assert pi_h3_locked_values(H3_WITH_PI, "2steps") == PI_H3_SERVED["2steps"]
+    assert pi_h3_locked_values(H3_WITH_PI, "off") is None
+    # LTX (no sampling), a block without the choice, no block: nothing locks.
+    assert pi_h3_locked_values(dict(LTX_SERVED, pi_h3=PI_H3_SERVED), "4steps") is None
+    assert pi_h3_locked_values(dict(H3_CONSTRAINTS, pi_h3={"4steps": PI_H3_SERVED["4steps"]}),
+                               "2steps") is None
+    assert pi_h3_locked_values(H3_CONSTRAINTS, "4steps") is None
+    assert pi_h3_locked_values(None, "4steps") is None
+
+
+def test_pi_h3_sampling_updates_lock_and_release():
+    steps, sv, sa, cap = pi_h3_sampling_updates(H3_WITH_PI, "4steps")
+    assert [(u["value"], u["interactive"]) for u in (steps, sv, sa)] == [
+        (4, False), (12.0, False), (3.0, False)]
+    assert cap["visible"] is True
+    steps, sv, sa, cap = pi_h3_sampling_updates(H3_WITH_PI, "2steps")
+    assert [(u["value"], u["interactive"]) for u in (steps, sv, sa)] == [
+        (2, False), (12.0, False), (3.0, False)]
+    # off: the served defaults, movable again.
+    steps, sv, sa, cap = pi_h3_sampling_updates(H3_WITH_PI, "off")
+    assert [(u["value"], u["interactive"]) for u in (steps, sv, sa)] == [
+        (20, True), (12, True), (3, True)]
+    assert cap["visible"] is False
+    # LTX / no block for the choice: not locked (LTX keeps its fixed look).
+    steps, sv, sa, cap = pi_h3_sampling_updates(LTX_SERVED, "4steps")
+    assert (steps["value"], steps["interactive"]) == (8, False)
+    assert sv["visible"] is False and sa["visible"] is False and cap["visible"] is False
+    steps, _sv, _sa, cap = pi_h3_sampling_updates(H3_CONSTRAINTS, "4steps")
+    assert (steps["value"], steps["interactive"]) == (20, True) and cap["visible"] is False
+
+
+def test_scope_updates_keep_the_lock_and_their_eight_elements():
+    updates = single_scope_updates(H3_WITH_PI, "en", "4steps")
+    assert len(updates) == 8
+    steps, cfg, sv, sa, cap, _w, _h, nf = updates
+    assert (steps["value"], steps["interactive"]) == (4, False)
+    assert (sv["value"], sa["value"]) == (12.0, 3.0) and sv["interactive"] is False
+    assert cfg["visible"] is False and cap["visible"] is False
+    assert nf["step"] == 17
+    # Off (the default argument) is today's result.
+    assert single_scope_updates(H3_WITH_PI, "en") == single_scope_updates(H3_CONSTRAINTS, "en")
+    assert len(single_scope_updates(LTX_SERVED, "en", "4steps")) == 8
+    assert single_scope_updates(LTX_SERVED, "en", "4steps") == single_scope_updates(LTX_SERVED, "en")

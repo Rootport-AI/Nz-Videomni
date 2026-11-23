@@ -1,0 +1,725 @@
+{
+  "item": "AAUD",
+  "title": "段 2: API のクリップごとに音声を指定した連結（2026-11-09 の GA2 の本文・4steps）",
+  "group": 8,
+  "rule": "完了し、345 フレームと音声。クリップごとの a2v と pi-H3 の記録",
+  "started_at": "2026-11-23T08:28:54+09:00",
+  "git": {
+    "head": "1738e8cf4e473e4589db4f3a6f3346a11e40a8bd",
+    "branch": "dev",
+    "status_porcelain": [],
+    "dirty": false
+  },
+  "gate": {
+    "at": "2026-11-23T08:28:54+09:00",
+    "blocking": [],
+    "owner_server": {
+      "port": 18620,
+      "listening": false
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+      "memory_used_mib": 537,
+      "memory_total_mib": 16376,
+      "compute_apps_count": 30,
+      "python_like_count": 0,
+      "returncodes": [
+        0,
+        0
+      ],
+      "bound_mib": 3072,
+      "blocking": []
+    },
+    "engine_workers": {
+      "count": 0,
+      "pids": []
+    }
+  },
+  "jobs": [
+    {
+      "job": "AAUD",
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "request": {
+        "prompt": "A woman in a yellow raincoat stands on a wet city street at night, neon signs reflecting in puddles. She looks at the camera and says <d>[English] It finally stopped raining.</d>",
+        "width": 640,
+        "height": 384,
+        "seed": 42,
+        "pi_h3": "4steps",
+        "attention_backend": "sage",
+        "vram16_mode": true,
+        "block_swap_prefetch": true,
+        "keep_resident": false,
+        "clips": [
+          {
+            "num_frames": 124,
+            "source_audio": {
+              "audio_id": "70981401-1d03-4c4c-a55f-be5fda4d6ab8",
+              "strength": 1.0,
+              "offset_frames": 0
+            }
+          },
+          {
+            "num_frames": 141,
+            "prompt": "She turns and walks slowly along the street, humming a tune.",
+            "source_audio": {
+              "audio_id": "70981401-1d03-4c4c-a55f-be5fda4d6ab8",
+              "strength": 1.0,
+              "offset_frames": 102
+            }
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops under a shop awning, looks up and says <d>[English] Maybe I should go home now.</d>",
+            "source_audio": {
+              "audio_id": "70981401-1d03-4c4c-a55f-be5fda4d6ab8",
+              "strength": 1.0,
+              "offset_frames": 221
+            }
+          }
+        ]
+      },
+      "started_at": "2026-11-23T08:29:03+09:00",
+      "submit_http": 202,
+      "job_id": "f20eef3a-e163-4156-8440-6bddec5e2d1e",
+      "seconds_wall": 140.6,
+      "stages": [
+        {
+          "t": 0.2,
+          "status": "running",
+          "stage": null,
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 5.2,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 35.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 40.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 45.3,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 50.3,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 75.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 80.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 85.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 90.4,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 3,
+          "total": 4
+        },
+        {
+          "t": 95.4,
+          "status": "running",
+          "stage": "encode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 115.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 0,
+          "total": 4
+        },
+        {
+          "t": 120.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 1,
+          "total": 4
+        },
+        {
+          "t": 125.5,
+          "status": "running",
+          "stage": "stage1_denoise",
+          "step": 2,
+          "total": 4
+        },
+        {
+          "t": 130.5,
+          "status": "running",
+          "stage": "decode",
+          "step": null,
+          "total": null
+        },
+        {
+          "t": 140.6,
+          "status": "completed",
+          "stage": null,
+          "step": null,
+          "total": null
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "last_stage": null,
+      "worker_generate_line": null,
+      "mp4": "outputs/h3-pih3-gates-2026-11-23/runs/AAUD/output.mp4",
+      "metadata_file": "outputs/h3-pih3-gates-2026-11-23/runs/AAUD/AAUD.metadata.json",
+      "finished_at": "2026-11-23T08:31:24+09:00",
+      "comfort": {
+        "quant_class": "int8",
+        "budget_rows": 219516,
+        "rows_estimate": {
+          "video": 10080,
+          "cond": 0,
+          "audio": 470,
+          "text": 41,
+          "ref": 0,
+          "total": 10591
+        },
+        "text_tokens": 41,
+        "inside": true
+      },
+      "picks": {
+        "transformer": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "generation_time_seconds": 135.79,
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "pi_h3_used": "4steps",
+        "keep_resident_used": "off",
+        "vram16_mode_used": "on",
+        "attention_used": "sage",
+        "images_used": 0,
+        "references": null,
+        "seconds": {
+          "encode": null,
+          "denoise": 63.35,
+          "decode": 5.62,
+          "dwd": 2.96
+        },
+        "vram_peak_mib": {
+          "job": [
+            3831,
+            3840
+          ],
+          "denoise": [
+            3831,
+            3840
+          ],
+          "decode": [
+            1575,
+            2438
+          ]
+        },
+        "rss_peak_gib": 24.45,
+        "commit_peak_gib": 32.51,
+        "sequence": {
+          "text": 41,
+          "cond": 0,
+          "audio": 414,
+          "video": 8880,
+          "total": 9335,
+          "latent_frames": 37,
+          "audio_latents": 207,
+          "grid": [
+            12,
+            20
+          ]
+        },
+        "vram16": {
+          "cap_mib": 14023,
+          "num_ooms": 0
+        },
+        "vae_source": "dwd",
+        "dwd_chunks": [
+          {
+            "keep_blocks": [
+              0,
+              21
+            ],
+            "context_blocks": [
+              0,
+              21
+            ],
+            "latents": [
+              0,
+              102
+            ],
+            "frames": 345,
+            "seconds": 2.204
+          }
+        ],
+        "dwd_head": {
+          "loaded_tensors": 139,
+          "loaded_mib": 612.6,
+          "int8_layers": 32,
+          "seconds": 0.76
+        },
+        "pi_h3": {
+          "adapter": {
+            "quant_layers": {
+              "blocks.46.attn.out_proj": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.46.mlp.fc1": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.46.mlp.fc2": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.47.attn.out_proj": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.47.mlp.fc1": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.47.mlp.fc2": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.48.attn.out_proj": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.48.mlp.fc1": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.48.mlp.fc2": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.49.attn.out_proj": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.49.mlp.fc1": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              },
+              "blocks.49.mlp.fc2": {
+                "into": "H3Int8Linear (values replaced)",
+                "as_stored": "I8 weight + F32 weight_scale",
+                "spec": "int8_tensorwise/convrot=True/g256",
+                "spec_changed": false
+              }
+            },
+            "adaln": {
+              "set into nn.Linear float32": 50
+            },
+            "final": {
+              "final_layer.adaln_proj.linear.bias": {
+                "from": "float16",
+                "to": "float32",
+                "exact": true
+              },
+              "final_layer.adaln_proj.linear.weight": {
+                "from": "float16",
+                "to": "float32",
+                "exact": true
+              },
+              "final_layer.audio_out.bias": {
+                "from": "float16",
+                "to": "float32",
+                "exact": true
+              },
+              "final_layer.audio_out.weight": {
+                "from": "float16",
+                "to": "float32",
+                "exact": true
+              },
+              "final_layer.norm.weight": {
+                "from": "float16",
+                "to": "bfloat16",
+                "exact": false,
+                "changed_elements": 4763,
+                "max_abs_change": 0.00390625
+              },
+              "final_layer.video_out.bias": {
+                "from": "float16",
+                "to": "float32",
+                "exact": true
+              },
+              "final_layer.video_out.weight": {
+                "from": "float16",
+                "to": "float32",
+                "exact": true
+              }
+            },
+            "counts": {
+              "quant_layers": 12,
+              "adaln_weights": 50,
+              "adaln_biases": 4,
+              "final_tensors": 7
+            },
+            "conversions": {
+              "quant: I8+F32 -> H3Int8Linear (values replaced)": 12,
+              "adaln weight: float16->float32": 50,
+              "adaln bias (pi-H3): float16->float32": 4,
+              "final_layer.adaln_proj.linear.bias: float16->float32": 1,
+              "final_layer.adaln_proj.linear.weight: float16->float32": 1,
+              "final_layer.audio_out.bias: float16->float32": 1,
+              "final_layer.audio_out.weight: float16->float32": 1,
+              "final_layer.norm.weight: float16->bfloat16 (rounded)": 1,
+              "final_layer.video_out.bias: float16->float32": 1,
+              "final_layer.video_out.weight: float16->float32": 1
+            },
+            "rounding": [
+              {
+                "tensor": "final_layer.norm.weight",
+                "from": "float16",
+                "to": "bfloat16",
+                "exact": false,
+                "changed_elements": 4763,
+                "max_abs_change": 0.00390625
+              }
+            ],
+            "seconds": 0.76
+          },
+          "choice": "4steps",
+          "steps": 4,
+          "file": "pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+          "dit_source": "file",
+          "lora": {
+            "pairs_applied": 138,
+            "dtype": "F16",
+            "skipped": [
+              {
+                "module": "(unmapped keys)",
+                "reason": "268 key(s) outside the H3 targets or without a partner, e.g. blocks.0.adaln_proj.linear.weight"
+              }
+            ]
+          },
+          "initial_state": {
+            "sigma0_video": 0.9965397715568542,
+            "sigma0_audio": 0.9863013625144958,
+            "partial_rows": {
+              "video": 0,
+              "audio": 0
+            }
+          },
+          "sigmas": {
+            "video": [
+              0.9965397715568542,
+              0.9644513130187988,
+              0.8992974162101746,
+              0.695652186870575,
+              0.0
+            ],
+            "audio": [
+              0.9863013625144958,
+              0.8715083599090576,
+              0.6906474828720093,
+              0.3636363446712494,
+              0.0
+            ]
+          },
+          "dwd": {
+            "chunks": 1,
+            "seconds": 2.96
+          }
+        },
+        "a2v": {
+          "clips": [
+            {
+              "mask_value": 0.0,
+              "audio_latents": 207,
+              "fixed_head_latents": 0,
+              "start_sample": 0,
+              "required_samples": 165333,
+              "encoded_samples": 197600,
+              "channels_used": "stereo",
+              "resampler": "pyav",
+              "encoder_tensors": 134,
+              "audio_output": "decoded",
+              "source_audio_id": "70981401-1d03-4c4c-a55f-be5fda4d6ab8",
+              "strength": 1.0,
+              "offset_frames": 0,
+              "source": {
+                "duration_sec": 30.86415,
+                "sample_rate": 44100,
+                "channels": 2
+              }
+            },
+            {
+              "mask_value": 0.0,
+              "audio_latents": 235,
+              "fixed_head_latents": 37,
+              "start_sample": 136000,
+              "required_samples": 188000,
+              "encoded_samples": 220000,
+              "channels_used": "stereo",
+              "resampler": "pyav",
+              "encoder_tensors": 134,
+              "audio_output": "decoded",
+              "source_audio_id": "70981401-1d03-4c4c-a55f-be5fda4d6ab8",
+              "strength": 1.0,
+              "offset_frames": 102,
+              "source": {
+                "duration_sec": 30.86415,
+                "sample_rate": 44100,
+                "channels": 2
+              }
+            },
+            {
+              "mask_value": 0.0,
+              "audio_latents": 207,
+              "fixed_head_latents": 37,
+              "start_sample": 294400,
+              "required_samples": 165333,
+              "encoded_samples": 197600,
+              "channels_used": "stereo",
+              "resampler": "pyav",
+              "encoder_tensors": 134,
+              "audio_output": "decoded",
+              "source_audio_id": "70981401-1d03-4c4c-a55f-be5fda4d6ab8",
+              "strength": 1.0,
+              "offset_frames": 221,
+              "source": {
+                "duration_sec": 30.86415,
+                "sample_rate": 44100,
+                "channels": 2
+              }
+            }
+          ]
+        },
+        "vsf": null,
+        "loras": null,
+        "per_clip_denoise_seconds": [
+          29.36,
+          18.11,
+          15.88
+        ],
+        "chain_clips": [
+          {
+            "latents_sha256": {
+              "video": "80ebe5f1bb5a64c0ef8b20b8d98016a9d7f7c5c87e09fe04a4ac0e32d17003cb",
+              "audio": "d2620ac3438511c0a546e26262db263880249f76ba9c033acf78a1fcdc5c5159"
+            },
+            "head_equals_prev_tail": null,
+            "pi_h3": {
+              "dit_source": "file",
+              "initial_state": {
+                "sigma0_video": 0.9965397715568542,
+                "sigma0_audio": 0.9863013625144958,
+                "partial_rows": {
+                  "video": 0,
+                  "audio": 0
+                }
+              },
+              "hidden_rows": 8880,
+              "dropped_head_latents": 0
+            },
+            "a2v": {
+              "mask_value": 0.0,
+              "audio_latents": 207,
+              "fixed_head_latents": 0,
+              "start_sample": 0,
+              "required_samples": 165333,
+              "encoded_samples": 197600,
+              "channels_used": "stereo",
+              "resampler": "pyav",
+              "encoder_tensors": 134,
+              "audio_output": "decoded"
+            }
+          },
+          {
+            "latents_sha256": {
+              "video": "c6adbe533d46d0db9371e82c56ed4b95a2053978f5735c75360dc9698c8d3039",
+              "audio": "c3b9b496ae8bec612e1247dc1ef68c30a0a75e26725822ce9122bc21482824a9"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": {
+              "dit_source": "resident",
+              "initial_state": {
+                "sigma0_video": 0.9965397715568542,
+                "sigma0_audio": 0.9863013625144958,
+                "partial_rows": {
+                  "video": 0,
+                  "audio": 0
+                }
+              },
+              "hidden_rows": 10080,
+              "dropped_head_latents": 7
+            },
+            "a2v": {
+              "mask_value": 0.0,
+              "audio_latents": 235,
+              "fixed_head_latents": 37,
+              "start_sample": 136000,
+              "required_samples": 188000,
+              "encoded_samples": 220000,
+              "channels_used": "stereo",
+              "resampler": "pyav",
+              "encoder_tensors": 134,
+              "audio_output": "decoded"
+            }
+          },
+          {
+            "latents_sha256": {
+              "video": "69410f71d09e90c0f7a8f8a1c47b6c12b7ba2c4d0e6d9ba0f323b7dc6ace4cf3",
+              "audio": "cadd1a76985d23afcd945953016500d1755fa9808149d3742c6a2e46af76dfc6"
+            },
+            "head_equals_prev_tail": true,
+            "pi_h3": {
+              "dit_source": "resident",
+              "initial_state": {
+                "sigma0_video": 0.9965397715568542,
+                "sigma0_audio": 0.9863013625144958,
+                "partial_rows": {
+                  "video": 0,
+                  "audio": 0
+                }
+              },
+              "hidden_rows": 8880,
+              "dropped_head_latents": 7
+            },
+            "a2v": {
+              "mask_value": 0.0,
+              "audio_latents": 207,
+              "fixed_head_latents": 37,
+              "start_sample": 294400,
+              "required_samples": 165333,
+              "encoded_samples": 197600,
+              "channels_used": "stereo",
+              "resampler": "pyav",
+              "encoder_tensors": 134,
+              "audio_output": "decoded"
+            }
+          }
+        ],
+        "chain_total_frames": 345,
+        "retake": null,
+        "v2v": null,
+        "inpaint": null,
+        "outpaint": null
+      },
+      "checks": {
+        "probe": {
+          "path": "outputs/h3-pih3-gates-2026-11-23/runs/AAUD/output.mp4",
+          "video": {
+            "codec_name": "h264",
+            "width": 640,
+            "height": 384,
+            "pix_fmt": "yuv420p",
+            "r_frame_rate": "24/1",
+            "duration": "14.375000",
+            "nb_read_frames": 345
+          },
+          "audio": {
+            "codec_name": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "duration": "14.375000"
+          }
+        },
+        "frames_ok": true,
+        "size_ok": true,
+        "audio_ok": true
+      },
+      "pi_checks": {
+        "pi_h3_used": true,
+        "record_choice_steps": true,
+        "lora_pairs_138": true,
+        "adapter_counts": true,
+        "sigmas_lengths": true,
+        "dwd_chunks_recorded": true,
+        "decode_by_dwd": true,
+        "steps_shift": true
+      },
+      "extra": {},
+      "extra_ok": true
+    }
+  ],
+  "loads": [
+    {
+      "file": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "name": "default",
+      "load_http": 200,
+      "ok": true,
+      "seconds": 3.2
+    }
+  ],
+  "server": {
+    "port": 18698,
+    "pid": 48092,
+    "config": "outputs/h3-pih3-gates-2026-11-23/_rt/config.h3pih3gates.yaml",
+    "started_at": "2026-11-23T08:28:56+09:00",
+    "stop": {
+      "at": "2026-11-23T08:31:24+09:00",
+      "unload_http": 200,
+      "terminate": "ok",
+      "descendants_killed_after": []
+    }
+  },
+  "verdict": "pass",
+  "finished_at": "2026-11-23T08:31:26+09:00",
+  "workers_after": []
+}

@@ -6844,3 +6844,61 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 枠の幅と横スクロールの見え方は、テストの疑似ブラウザが幅を計算しないので確かめられません。実機確認に回しました（台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) 1-289）。
 - （その後、2026-11-22 に合格。台帳は閉じた。記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §220.8）
 - 門の結果は記録簿 §220.5 です。
+
+## 178. MiniMax H3 の pi-H3 を Settings から選べるようにする — 行と注意書き・ステップ数と shift のスライダーの固定・off で既定値へ・断られたときの補足の 1 行・バッチに設定を届ける条件の置き換え（設計正本 裁定 107 の段 3。2026-11-23）
+
+### 178.1 結論
+
+- **Settings の「Acceleration: / 生成の高速化:」に、MiniMax H3 の pi-H3 の行（off／4steps／2steps。既定は off）が出るようになりました。** 選んでいるあいだ、行の下に赤い太字の注意書きが出て、ステップ数と shift のスライダーはサーバーが配る値で固定されます。単発・Chained・Retake・Outpainting・Inpainting で同じ動きです。
+- 作り（どう動くか）の正本は、バックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.7 の「操作パネル（段 3）」で、本節には写しません。裁定は同 裁定 107 です。
+- 機械の確認の数値と、オーナーの実機での確認の項目は、記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §226 にだけ書きます。**実機への配置と、オーナーの実機での確認は未了です。**
+- 変えたのは操作パネルだけです。プラグイン本体（C++）と言語ファイルは変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。
+
+### 178.2 進め方とコミット
+
+計画は監督の計画ファイルにあります（オーナー了承 2026-11-23）。下調べのあと、独立の担当が計画を検証し、指摘 5 件をすべて採りました（下の 178.4 に反映）。実装のあと、別の担当がコードを確かめ、直すべき所は見つかりませんでした。コミットは dev です。
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト | `c1afd187` |
+| 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `2dd7b12f` |
+
+本節を含む文書は、別のコミットで入れました。
+
+### 178.3 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは省きました（178.5）。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts`・`shell/useAccelerationSettings.ts` | 設定 `piH3`（`"off"`／`"4steps"`／`"2steps"`。既定 `"off"`）。保存と読み戻し。off 以外のときだけ要求に `pi_h3` を載せる |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | PrunaVAED の行の直後に pi-H3 の行と注意書き。LTX では行と注意書きを隠す |
+| `shell/featureScope.ts` | 機能の名前 `pi_h3` で行を隠し、選択を off に戻す |
+| `shell/generationConstraints.ts`・`api/types.ts` | サーバーの `constraints.pi_h3` を、フォームの言葉（ステップ数・shift〔映像〕・shift〔音声〕）にして持つ。型 |
+| `modes/single/samplingValues.ts` | `piH3FixedSampling`（固定する値）。`samplingRequestFields` は pi-H3 が有効のあいだ 3 つの値を載せない（`acceleration` を必須の引数にした） |
+| `modes/single/CommonGenerationFields.tsx`・`modes/single/FloatSliderField.tsx` | 共有のスライダーの部品に、必須の受け口「固定の値」と、行のツールチップ |
+| `modes/single/usePiH3SamplingReset.ts`（新規） | 選択が変わったら、ステップ数と shift だけを既定値に戻す（最初の描画では働かない） |
+| `modes/single/useGenerationForm.ts`・`modes/chained/useChainForm.ts`・`modes/edit/useRetakeForm.ts`・`modes/edit/useOutpaintForm.ts`・`modes/edit/useInpaintForm.ts` と各画面（`GenerationForm.tsx`・`SingleScreen.tsx`・`ChainedScreen.tsx`・`EditScreen.tsx`・`RetakePanel.tsx`・`OutpaintingPanel.tsx`・`InpaintingPanel.tsx`） | 5 つのフォームが同じ書き方で、固定の値を渡し、上の部品を呼ぶ |
+| `modes/single/useGeneration.ts` ほか、受付の結果を出す 6 つのカード | 断られたとき、サーバーの補足の文（`detail`）があれば 1 行足す |
+| `modes/batch/useBatchForm.ts`・`modes/batch/buildI2vGeneratePayload.ts`・`modes/chained/chainUtils.ts` | バッチに設定を届ける条件を 1 行に置き換えた（178.4）。送信の経路の引数を合わせた |
+| `i18n/strings.ts` | 行の名前・ボタン・注意書き・ツールチップの文言（英語と日本語） |
+| `bridge/mockBridge.ts` | 開発用の模擬に、`constraints.pi_h3`、LTX の `unsupported_features` の `pi_h3`、LTX の拒否と、選択と違う値の拒否 |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 1 行 |
+
+### 178.4 採った選択と理由
+
+- **動かせないスライダーに理由を出す**: 灰色にするだけでは、なぜ動かないのかが分からないため、ツールチップで「Settings の pi-H3 が有効のため固定」と出します（Create の固定の fps の行と同じ、行の `title` の形）。
+- **固定の値の受け口を必須にする**（計画への指摘）: 5 つのフォームのどれかが渡し忘れると、その画面だけ固定されない。必須にして、渡し忘れを型検査で見つけます。要求から 3 つの値を落とす関数の `acceleration` も、同じ理由で必須の引数にしました。
+- **断られたときの表示は、補足の 1 行を足す（置き換えない）**（計画への指摘）: pi-H3 の拒否では、サーバーの補足の文（ファイル名の入った日本語の文など）に要点があります。一方、pi-H3 以外の拒否では、規則の説明が決まり文句の側にあるものが多いので、置き換えると説明が消えます。今の 2 行（コードと決まり文句）は残し、補足の文があるときだけ下に足します。分岐は「補足の文があるか」だけで、エラーの種類ごとの例外は作りません。
+- **off で既定値に戻すのは、ステップ数と shift だけ**: 「ベースモデルの規則が変わった」ときの既存の処理は、音声の Strength なども戻すので、別の小さな部品に分けました。5 つのフォームが同じ書き方で呼びます。
+- **バッチに設定を届ける条件の置き換え**（計画への指摘で、妥当と確かめた）: これまでは、設定の値を 1 つずつ既定と比べる並びで、設定を足すたびに並びも足す必要がありました。「要求に載せる設定が 1 つでもあれば入れる」の 1 行にして、要求を組む関数そのものを条件にしました。これで、**前からあった抜け**（「mp4 に生成の条件を書き込む」を OFF にしただけのとき、バッチ A2V・i2v にその設定が届かず、mp4 に書き込まれていた）も直りました。置き換えの前後で変わるのは、この 1 点だけです（独立の担当が確かめた）。
+- **pi-H3 が off のとき、操作パネルが送る要求は、上の 1 点を除いて変わらない**: 送信の経路のテスト（`shell/piH3.paths.test.ts`）で固定しました。
+
+### 178.5 テスト
+
+- 新しく固定したのは、行の表示と隠し方（LTX で隠れて off に戻る）、注意書き、保存と読み戻し、5 つのフォームのスライダーの固定と 3 つの値を送らないこと、off に戻したときの既定値への復帰（ほかの値に触れない・最初の描画で働かない）、補足の 1 行、バッチの条件の置き換え（「mp4 に生成の条件を書き込む」の抜けを含む）、off の送り物が変わらないことです。
+- 機械の確認の結果（型検査・書き方の検査・テストの件数、まれに落ちる既存のテスト、C++ のテスト、aux2 の大きさと SHA-256）は記録簿 §226.3 です。
+
+### 178.6 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）と、オーナーの実機での確認（14 項目）は未了です。項目の正本は記録簿 §226.6 です。

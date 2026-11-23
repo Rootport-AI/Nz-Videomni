@@ -21,11 +21,39 @@
 - **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
 - **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
 
+## 2. 実装済み・ユーザーのテスト待ち
+
+実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
+
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
-- **概要**: pi-H3 は API と操作パネルで使えるようになった。残りの段 4 として、Gradio・MCP・インストーラーでの取得の確認・文書（仕様書・README・快適上限の表・MCP とフロントエンドの文書）・台帳を対応する。
-- **判断材料**: 範囲と細目は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「段の切り方と、まだ無いもの」、裁定は同 裁定 107（⑤ Gradio と MCP、④ インストーラー）。段 3 までの記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §224〜§226。
-- **出典**: オーナー裁定 2026-11-22〜23（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 107）。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293 の残り。
+- **概要**: 実装と機械の確認まで済み（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した。
+- **これからすること**: 下のオーナーの実機での確認。そのあと、アプリの試験を全件 1 回回してから main へ取り込む。
+- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。本節が実機確認の項目の正本。
+
+前提: バックエンドのサーバーを前から起動したままの場合は、起動し直してから確認する（Gradio の画面は、サーバーの起動のときに組み立てられる）。ブラウザーで Gradio UI（`/ui`）を開く。Gradio UI の言語は日本語にする。「設定」タブの「モデル」の区画で、ベースモデルを MiniMax H3、動画モデル (checkpoint) を FL2VA の重み（`minimax_h3_fl2va_pruned_int8_convrot`）にして「選択したモデルを読込」を押しておく。「（続き）」で始まる項目は、直前の項目の状態から続けて行う。
+
+#### Gradio の pi-H3 の切り替え
+
+- [ ] 「設定」タブを開く → 「生成の高速化」の区画の最後に「pi-H3」の行（off・4steps・2steps）と説明「MiniMax H3 を 4 ステップまたは 2 ステップで生成します。」があり、off が選ばれていて、赤い文は出ていない。
+- [ ] （続き）4steps を選ぶ → 行の下に赤い太字で「pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。」が出る。「言語 (Language)」を英語に切り替えると「pi-H3 is not recommended when using Turbo LoRA or Turbo models.」になる（確かめたら日本語に戻す）。
+- [ ] （続き）「生成」タブを見る → 「ステップ数」4・「Shift（映像）」12・「Shift（音声）」3 で、スライダーを動かせない。スライダーの下に「Settings の pi-H3 が有効のため固定」の 1 行が出ている。
+- [ ] 「設定」タブで 2steps を選んでから「生成」タブを見る → 「ステップ数」が 2 になっていて（Shift は 12・3）、動かせない。
+- [ ] 「設定」タブで off を選んでから「生成」タブを見る → 「ステップ数」20・「Shift（映像）」12・「Shift（音声）」3 に戻り、スライダーを動かせる。固定の理由の行は出ていない。
+
+#### Gradio での生成と記録
+
+- [ ] 「設定」タブで 4steps を選び、「生成」タブでプロンプトに場面を 1 文書いて生成する（音声の素材とキーフレームの画像は付けない）。できた mp4 を「mp4 情報」タブの「mp4 ファイル」に入れる → 「メタデータ（生成条件）」の中に `"pi_h3_used": "4steps"` と `"num_inference_steps": 4` がある。
+
+#### ベースモデルの切り替え
+
+- [ ] 「設定」タブで 4steps を選んだまま、「モデル」の区画でベースモデルを LTX 2.3 にして「選択したモデルを読込」を押す → 「設定」タブの pi-H3 の行と赤い注意書きが消える。「生成」タブの「ステップ数」は 8 で動かせず、「8 / 1.0 に固定 (distilled)」の表示が出ていて、Shift のスライダーは無い。
+- [ ] （続き）ベースモデルを MiniMax H3 に戻して「選択したモデルを読込」を押す → 「設定」タブの pi-H3 は off になっている。「生成」タブは「ステップ数」20・「Shift（映像）」12・「Shift（音声）」3 で、スライダーを動かせる。
+
+#### インストーラー
+
+- [ ] そのまま `install-MiniMaxH3.bat` を実行する → `SKIP  .venv-engine-h3 already matches the pinned dependency set` の行が出て、H3 の Python の環境は飛ばされる。pi-H3 は `SKIP  MiniMax H3 pi-H3 (2 files)` で始まる行が出て、取り直さない。最後の表で `pi_h3_4steps` と `pi_h3_2steps` の 2 行が `PASS` になる。途中で `re-applying the freeze` と出たら、Python の環境の入れ直しが始まる合図なので、黒い画面を閉じて止め、知らせる。
+- [ ] （通信に時間がかかるので、省いてもよい）`models\MiniMaxH3\VAE\pi-H3` のフォルダを `models` の外へ一時的に移してから `install-MiniMaxH3.bat` を実行する → pi-H3 の 2 本だけが取得され（約 4.4GB）、ほかは `SKIP` になる。取得した 2 本の大きさ（各 2,192,176,240 バイト）と SHA-256 が、移しておいたファイルと一致する（照合値は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §18.2 にもある）。確かめたら、移しておいたフォルダを消す。
 
 ## 3. 将来の研究課題
 
@@ -163,6 +191,7 @@
 
 - **概要**: 再現はするが実害が小さい症状の原因究明を溜め、ある程度の数が溜まったところでまとめて調べる受け皿です（オーナー指示 2026-11-11）。いま溜まっているもの。
   - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。原因は調べていません。
+  - Gradio の試験（`tests/test_gradio_*.py`）の実行中に、試験の既定の向き先（`http://127.0.0.1:8000/api/v1/loras/reload`）への 500 の警告が出る（変更の前からある。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.7）。どの試験が実際の通信を出しているかは調べていません。
   - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。
 - **留意**: 調べるときは仮説を立てて順番に潰す（先行の設計変更へ跳ばない）。新しい件が見つかったら本項に足し、別番号を立てません。

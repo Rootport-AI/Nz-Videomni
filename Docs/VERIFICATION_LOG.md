@@ -25827,7 +25827,7 @@ VRAM の山（MiB。割り当て／予約）:
 
 ### 226.7 残っていること
 
-- **段 4（未着手）**: 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-294。中身は設計正本 §6.7 の「段の切り方と、まだ無いもの」です。
+- **段 4**: 実装と機械の確認は §227、オーナーの実機での確認の項目は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-294 です。
 
 ### 226.8 成果物の所在
 
@@ -25850,3 +25850,99 @@ VRAM の山（MiB。割り当て／予約）:
   - Turbo LoRA のタグつき: 「生成品質は、映像は目立った異常は感じない。一方、音楽は大音量でノイズの多いものになっていた。」
   - この 2 件の扱いの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」です。Retake の件は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-281 に足しました。
 - **台帳の扱い**: 1-293 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の §2 は空になったので見出しごと削除しました。この案件の残り（段 4）は同 §1-294 に起票しました。
+
+## 227. MiniMax H3 の pi-H3 を Gradio・MCP・インストーラーに広げる段 4 の実装と、機械の確認（2026-11-23）
+
+### 227.1 結論
+
+- **結論を先に**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足しました（dev の `941860c4`・`afb1f11d`・`9ab8cc56`）。あわせて、段 1 の取りこぼし（試験 2 本の古い期待値）を `0917e48a` で直しました。**機械の確認は、試験の側の書き誤り 1 件を直したあと、すべて合格でした。担当による MCP の道具の実機の確認（GPU）も、5 項目すべて合格でした**（227.8）。サーバーの側（API・アダプタ・エンジン）と操作パネルのコードは変えていません。
+- **まだ済んでいないこと**: オーナーの実機での確認（Gradio とインストーラー。項目は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-294）と、main へ取り込む前のアプリの試験の全件 1 回。
+- 作りと採った選択の正本は、設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」で、本節には写しません。**段 4 の機械の確認の数値の正本は本節です。**
+
+### 227.2 経緯と位置づけ
+
+- 段 3 の確認（§226.9）のあと、監督が段 4 の計画を立て、下調べのあと敵対的なレビューにかけました。骨組みを変える指摘は無く、7 件を「過剰な設計にならないか」「別の調査担当の裏づけが取れるか」の 2 点で採否にかけて、すべて採りました（裏づけはコードの現物で取れた。主な指摘は設計正本 §6.7 の「レビューで採った指摘」）。オーナーが計画を了承し（2026-11-23）、実装しました。段の切り方は設計正本の裁定 107 ⑪です。
+
+### 227.3 段 1 の取りこぼし（`0917e48a`）
+
+- **事実**: 段 1 で LTX の拒否表に `pi_h3` を足したとき、LTX 2.3 の断る機能の一覧を 5 件で固定していた試験 2 本（`tests/test_mcp_tools_system.py`・`tests/test_engine_dispatch.py`）が古いまま残っていました。直す前に名指しで回すと、2 本とも「Left contains one more item: 'pi_h3'」で落ちることを確かめ、6 件目を足して合格しました。製品の動きには影響しません。
+- **原因**: 段 1〜3 の機械の確認を、触ったファイルの試験だけを名指しで回す形にしていたことです。main へ取り込む前に、アプリの試験を全件 1 回回します（227.9）。
+
+### 227.4 コーディング担当の機械の確認
+
+- バックエンドのサーバーが動いていたので（止めていない）、`LTX_MCP_BASE_URL=http://127.0.0.1:1` と `CUDA_VISIBLE_DEVICES=-1` を付けて、名指しの 25 ファイルを回しました。結果は 1,458 件合格・1 件失敗・7 件スキップです（スキップは `tests/test_stage2_window.py` の、変更の前からあるもの）。
+- 失敗の 1 件は、新しく足した試験の側の書き誤りでした（音声つきの経路は最初に「音声を送っています」の表示を返すので、最初の 1 回で止めると要求を拾えない）。試験を直して `tests/test_gradio_handlers.py` を回し直し、263 件すべて合格しました。
+- ファイルごとの件数（`tests/` の下）:
+
+| ファイル | 件数 |
+|---|---|
+| `test_gradio_batch_fullstack`・`test_gradio_batch_manifest`・`test_gradio_batch_runner` | 8・23・59 |
+| `test_gradio_constraints`・`test_gradio_handlers`・`test_gradio_lora_parse` | 29・263・21 |
+| `test_gradio_models`・`test_gradio_presets`・`test_gradio_stage2_window` | 37・31・266 |
+| `test_gradio_style_tab`・`test_gradio_ui`・`test_gradio_v2v_a2v` | 15・77・33 |
+| `test_ltx25_api_guard`・`test_mcp_batch_planning`・`test_mcp_errors` | 104・16・5 |
+| `test_mcp_outputs`・`test_mcp_registration`・`test_mcp_tools_generate` | 19・3・155 |
+| `test_mcp_tools_jobs`・`test_mcp_tools_system`・`test_stage2_window` | 13・14・122（115 合格・7 スキップ） |
+| `test_engine_dispatch`・`test_h3_pih3_api`・`test_base_model_contract`・`test_weight_identity` | 27・89・10・27 |
+
+- MCP のサーバーを標準入力なしで起動すると（`python -m mcp_server < NUL`）、標準出力も標準エラーも 0 バイトで、終了コードは 0 でした。
+- 件数は、確認を回した担当の報告によります。試験の出力そのものは保管していません。
+
+### 227.5 独立の担当のコードの確認
+
+- 結論は「直すべき所なし」です。Gradio・MCP・古い期待値の試験の名指しのファイル（`tests/test_gradio_*.py`・`tests/test_mcp_*.py`・`tests/test_engine_dispatch.py`・`tests/test_h3_pih3_api.py`）を回し、1,203 件すべて合格しました。
+- 確かめた点:
+  - 表示と要求が、同じ 1 つの関数（`pi_h3_locked_values`）で決まる。
+  - off のときの画面の更新と要求が、変更の前と同じ（`single_scope_updates` の戻り値は 8 要素のまま）。
+  - `normalize_constraints` が、壊れた形の `pi_h3` を捨てる。
+  - MCP の説明文のエラーの名前と性質の記述が、コードと設計正本 §6.7 に合う。
+  - 単発の道具の「LTX 2.5 で使えない引数」に `source_audio_id` を足したのは、事実として正しい（LTX 2.5 の拒否表に `source_audio` の行がある）。
+  - `scripts/install_model.ps1` の BOM と改行が変わっていない。
+  - 既存の試験の期待値を変えたのは 3 か所（古い期待値の 2 本と、`dispatch` に位置で渡す引数の数 46 → 47）だけ。
+- **直さなかった点**（事実として記録する）:
+  1. Gradio の Generate タブで音声つき（A2V）にすると、要求は連結の入口へ行き、pi-H3 は載りません。H3 の連結は最上位の音声の指定を断る作り（`services/engines/h3/adapter.py` の `CHAIN_REJECT_TABLE` の最初の行）なので、Gradio の H3 の音声つきは、pi-H3 の選択によらず、変更の前から 422 で断られます。黙って pi-H3 なしで生成されることはありません（レビュー担当と別の調査担当が、コードで確かめた）。段 4 では触っていません。
+  2. H3 から LTX へ切り替えたとき、スライダーを更新する 2 つの経路が同じ応答の中で続けて動きます。どちらの順でも同じ結果になる作りですが、片方が更新の前の値を読まないことは、Gradio の動きに頼っています。オーナーの実機での確認の項目に入れました（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-294）。
+  3. Gradio の切り替えに、設計に無かった短い説明文（「MiniMax H3 を 4 ステップまたは 2 ステップで生成します。」）が付いています。同じ区画の既存の行と同じ形なので、そのままにしました。
+
+### 227.6 インストーラーの数字（記述子からの数え直し）
+
+- `scripts/install_model.ps1` は、記述子の `downloads[].files[]` の項目の数を「取得するファイル」の個数とし、各項目の `min`（最小の大きさ）の合計の 1.15 倍を GiB に切り上げて、必要な容量の目安にします。
+- MiniMax H3 の記述子では、段 1 で pi-H3 の 2 項目を足したので、個数は 7 → 9、目安は約 77GB → 約 82GB になりました（本節を書くときに記述子と台本で数え直した値）。
+
+### 227.7 範囲の外で気づいたこと
+
+- 試験の実行中に、Gradio の試験の既定の向き先（`http://127.0.0.1:8000/api/v1/loras/reload`）への 500 の警告が出ます。変更の前からあるもので、直していません。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-281 に足しました。
+
+### 227.8 担当による MCP の道具の実機の確認（2026-11-23）
+
+- **結論を先に**: 5 項目すべて合格でした（オーナーの了承済み）。
+- **条件**: オーナーが起動していたバックエンドのサーバーを、止めず・読み込みを切り替えずに使いました。読み込まれていた本体の重みは Ref2VA の刈り込み版（`minimax_h3_ref2va_pruned_int8_convrot.safetensors`）です。計画では FL2VA の刈り込み版を想定していましたが、オーナーのサーバーの読み込みを切り替えないことにしたので（監督の判断）、段 1・段 2 の FL2VA の結果とのビット単位の比較はせず、同じサーバー・同じ重みのまま、MCP が送る本文と同じ本文を API へ直接送った結果と比べました。道具は §39.6 の方法（標準入出力で `python -m mcp_server` を起動して道具を呼ぶ）で呼びました。道具は 25 個のままです。台本は `outputs/h3-pih3-gates-2026-11-23/mcp_check.py` です。
+
+| 項目 | 中身 | 結果 |
+|---|---|---|
+| 1 | `list_models` | 合格。H3 の `constraints.pi_h3` に 4steps（ステップ数 4・shift 12／3）と 2steps（ステップ数 2・shift 12／3）。LTX 2.3 と LTX 2.5 の `unsupported_features` に `pi_h3`（ベースモデルは切り替えずに見た） |
+| 2 | `submit_generate` で単発を 4steps（段 1 の T2V と同じ 1280×768・73 フレーム・種 1234・sage。ステップ数と shift は渡さない） | 合格。完了（サーバーの生成時間 81.44 秒）。`pi_h3_used` は `"4steps"`、ステップ数と shift は 4・12・3、`h3.pi_h3` の選択は 4steps・ファイルは `pi_h3_4step_dwd_adapter_int8_convrot.safetensors`、DWD の塊は 1 個 |
+| 3 | `pi_h3="4steps"` と `num_inference_steps=20` を一緒に渡す | 合格。422 で断られ、ジョブは作られなかった（ジョブの数は 11 のまま） |
+| 4 | `submit_chain` で連結の 2 クリップを 4steps（段 2 の連結と同じ文を 2 クリップとも・640×384・124 フレーム × 2・種 1234・sage） | 合格。完了（サーバーの生成時間 91.53 秒、待ち時間は約 95 秒）。226 フレーム・音声あり。`pi_h3_used` は `"4steps"`、ステップ数と shift は 4・12・3、DWD の塊は 1 個 |
+| 5 | off の経路（GPU を使わない） | 合格。道具が送る直前の本文を、送らずに取り出して確かめた。`pi_h3` を付けない要求には `pi_h3` の鍵が無く、`pi_h3="4steps"` の要求にはステップ数と shift の鍵が無い |
+
+- **項目 2 の API 直接との比較**: サーバーが記録した 2 つの要求は、すべての欄で同じでした。映像と音声のストリームの MD5 が一致しました（映像 `b99e011c…`・音声 `60742e15…`）。mp4 のファイル全体の SHA-256 は違います（mp4 に埋め込まれる生成条件〔ジョブの番号などを含む〕の分）。
+- **項目 3 で返ってきた文**（そのまま）: `Error executing tool submit_generate: VALIDATION_ERROR: Request validation failed — [{'loc': ['body'], 'msg': 'Value error, num_inference_steps=20 differs from the value pi_h3="4steps" uses (num_inference_steps=4)', 'type': 'value_error'}]`
+- **経過で起きたこと**: 項目 2 の 1 回目で、ジョブの完了のあとに、確認の台本が記録のフォルダーを作らないまま動画を写そうとして止まりました（台本の不備）。台本を直し、完了済みのジョブを読み直して続けました。生成はやり直していません。
+- **終わったあと**: 担当が起動したプロセスは残っていません。GPU の使用量は、始める前と同じ水準です。オーナーのサーバーには、確認のジョブが 3 件増えました（MCP の単発、API 直接の単発、MCP の連結。消していない）。
+- **道具の説明文で気づいた点**（直していない。事実として残す）:
+  1. 引数ごとの入力の形の定義には `pi_h3` の説明が無く、説明は道具全体の説明文の中にだけあります（ほかの引数も同じ作り）。
+  2. 説明文は「違う値を明示すると 422」と書いていて、動きと合っています。同じ値（4steps に 4）を明示した場合に断られないことは書かれていません。
+  3. `submit_chain` は、H3 では使われない欄（重なりのフレーム数など）も既定値のまま送ります。サーバーは読み飛ばすので、生成と記録に影響はありませんでした（変更の前からの動き）。
+  4. 断る文（422）は英語で、項目の名前・送った値・選択の値が書かれています。
+- **一次記録**: 保管庫 [`Outputs-archive/h3-pih3-gates-2026-11-23/`](Outputs-archive/h3-pih3-gates-2026-11-23/) の `mcp_check.py`・`summary_mcp.md`・`summary_mcp.json`・`runs/MCP_pre/result.json`・`runs/MCP2/result.json`・`runs/MCP4/result.json`（動画と `metadata.json` は写していません）。
+
+### 227.9 オーナーの実機での確認へ回した点（未了）
+
+- **オーナーの実機での確認**（Gradio とインストーラー）: 項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-294 のチェックリストです（本節には写しません）。
+- **main へ取り込む前に、アプリの試験を全件 1 回回します**（227.3）。
+
+### 227.10 成果物の所在
+
+- **コミット**: dev の `0917e48a`（試験の期待値）・`941860c4`（Gradio）・`afb1f11d`（MCP）・`9ab8cc56`（インストーラーの案内と記述子の注記）です。本節を含む文書は、監督がコミットします。
+- **文書**: 仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) v0.5.125（§6.2・§6.2b (i)・§6.6・§6.8・§6.10・§12.2）、MCP の設計の文書 [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D37、フロントエンドの `Docs/API_REFERENCE.md`、README、快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1。

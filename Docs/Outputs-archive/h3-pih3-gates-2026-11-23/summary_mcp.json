@@ -1,0 +1,180 @@
+{
+  "made_at": "2026-11-23T12:53:38+09:00",
+  "server": "owner's backend 127.0.0.1:18620 (not started / stopped / reloaded)",
+  "state_before": {
+    "status_http": 200,
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "pipeline_loaded": true,
+    "queue": {
+      "mode": "single_job_in_memory",
+      "pending": 0,
+      "running": 0,
+      "completed": 11,
+      "failed": 0
+    },
+    "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+    "h3_constraints_pi_h3": {
+      "4steps": {
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      },
+      "2steps": {
+        "num_inference_steps": 2,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      }
+    },
+    "gpu": {
+      "memory_used_mib": 960,
+      "compute_apps_count": 33,
+      "python_like_count": 1
+    }
+  },
+  "item1": {
+    "h3_constraints_pi_h3": {
+      "4steps": {
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      },
+      "2steps": {
+        "num_inference_steps": 2,
+        "shift_video": 12.0,
+        "shift_audio": 3.0
+      }
+    },
+    "ltx_unsupported_has_pi_h3": {
+      "LTX23": true,
+      "LTX25": true
+    },
+    "active_base_model": "MiniMaxH3"
+  },
+  "item3": {
+    "error_text": "Error executing tool submit_generate: VALIDATION_ERROR: Request validation failed — [{'loc': ['body'], 'msg': 'Value error, num_inference_steps=20 differs from the value pi_h3=\"4steps\" uses (num_inference_steps=4)', 'type': 'value_error'}]",
+    "returned": null,
+    "jobs_before": 11,
+    "jobs_after": 11
+  },
+  "item5": {
+    "off_has_pi_h3_key": false,
+    "4steps_has_steps_or_shift": [],
+    "off_payload": {
+      "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+      "width": 1280,
+      "height": 768,
+      "num_frames": 73,
+      "frame_rate": 24.0,
+      "seed": 1234,
+      "vram16_mode": true,
+      "attention_backend": "sage"
+    },
+    "4steps_payload": {
+      "prompt": "A busy city street at dusk seen from the sidewalk. Pedestrians walk past the camera, their footsteps clicking on the pavement; cars and a bus drive by with engine hum and tire noise, and a car horn honks in the distance. Steady camera.",
+      "width": 1280,
+      "height": 768,
+      "num_frames": 73,
+      "frame_rate": 24.0,
+      "seed": 1234,
+      "vram16_mode": true,
+      "attention_backend": "sage",
+      "pi_h3": "4steps"
+    }
+  },
+  "item2": {
+    "mcp_job_id": "eeb973ec-e460-4e8a-9ced-38576c191a6f",
+    "api_job_id": "720957cd-b1d4-4d5e-930d-e10b4cb754d6",
+    "mcp_meta": {
+      "pi_h3_used": "4steps",
+      "steps_shift": [
+        4,
+        12.0,
+        3.0
+      ],
+      "attention_used": "sage",
+      "vram16_mode_used": "on",
+      "generation_time_seconds": 81.44,
+      "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "pi_h3": {
+        "choice": "4steps",
+        "steps": 4,
+        "file": "pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+        "dwd": {
+          "chunks": 1,
+          "seconds": 3.2
+        }
+      }
+    },
+    "api_meta": {
+      "pi_h3_used": "4steps",
+      "steps_shift": [
+        4,
+        12.0,
+        3.0
+      ],
+      "attention_used": "sage",
+      "vram16_mode_used": "on",
+      "generation_time_seconds": 78.47,
+      "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "pi_h3": {
+        "choice": "4steps",
+        "steps": 4,
+        "file": "pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+        "dwd": {
+          "chunks": 1,
+          "seconds": 3.18
+        }
+      }
+    },
+    "request_diff": {},
+    "stream_md5": {
+      "mcp": {
+        "video": "b99e011c3ec627315bee30f3d7dc99ae",
+        "audio": "60742e157c1832464e7ce21ca4ec04db"
+      },
+      "api": {
+        "video": "b99e011c3ec627315bee30f3d7dc99ae",
+        "audio": "60742e157c1832464e7ce21ca4ec04db"
+      }
+    },
+    "stream_equal": true,
+    "file_sha256": {
+      "mcp": "8bba648fe4d89d6931f566aa1006e3a81a675b38f0a4d2db0e73a21fe96fb6a2",
+      "api": "603a99c81ee84eb2985c928de24b53d77152f4375e0b42c0108d406c369eb564"
+    },
+    "api_seconds_wall": 80.1
+  },
+  "item4": {
+    "mcp_job_id": "212351bc-4bce-4011-8b4a-96fd52b29edc",
+    "seconds_wall": 95.3,
+    "meta": {
+      "pi_h3_used": "4steps",
+      "steps_shift": [
+        4,
+        12.0,
+        3.0
+      ],
+      "attention_used": "sage",
+      "vram16_mode_used": "on",
+      "generation_time_seconds": 91.53,
+      "transformer": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "pi_h3": {
+        "choice": "4steps",
+        "steps": 4,
+        "file": "pi_h3_4step_dwd_adapter_int8_convrot.safetensors",
+        "dwd": {
+          "chunks": 1,
+          "seconds": 2.3
+        }
+      }
+    },
+    "frames": 226,
+    "audio": true
+  },
+  "jobs_added_to_owner_server": [
+    "eeb973ec-e460-4e8a-9ced-38576c191a6f",
+    "720957cd-b1d4-4d5e-930d-e10b4cb754d6",
+    "212351bc-4bce-4011-8b4a-96fd52b29edc"
+  ]
+}

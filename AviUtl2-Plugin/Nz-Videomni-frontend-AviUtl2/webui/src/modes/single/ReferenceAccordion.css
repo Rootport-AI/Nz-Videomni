@@ -76,7 +76,15 @@
 /* "Audio to video" while Enable is off: disabled (its check kept), like the
  * disabled radios in ToolboxScreen.css. */
 .ref-a2v-toggle input:disabled,
-.ref-a2v-toggle input:disabled + span {
+.ref-a2v-toggle input:disabled + span,
+.ref-follow-toggle input:disabled,
+.ref-follow-toggle input:disabled + span {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+/* The follow box's title sits on the label: the whole label shows the
+ * not-allowed pointer while the box is disabled (like `.field-reserved`). */
+.ref-follow-toggle:has(input:disabled) {
+  cursor: not-allowed;
 }

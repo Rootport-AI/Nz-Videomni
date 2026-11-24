@@ -698,6 +698,10 @@ export const en = {
       label: (startSec: string, endSec: string): string => `🎵 Window ${startSec}s – ${endSec}s`,
       tooltip: (overlapFrames: number): string => `Overlaps the neighbouring clip by ${overlapFrames} frames.`,
     },
+    clipReferenceFollow: {
+      label: "Use the same references for the following clips",
+      a2vBlocked: "A clip has Audio to video on.",
+    },
     minClipsError: (min: number): string => `At least ${min} clips are required (no source video attached).`,
     maxClipsReached: (max: number): string => `Maximum ${max} clips reached.`,
     totalFramesLabel: (total: number, max: number): string => `Total input: ${total} / ${max} frames`,
@@ -3136,6 +3140,10 @@ export const ja: Strings = {
     clipReferenceA2vWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当区間 ${startSec}〜${endSec}秒`,
       tooltip: (overlapFrames: number): string => `隣のクリップと ${overlapFrames} フレーム重なります。`,
+    },
+    clipReferenceFollow: {
+      label: "後続クリップにも同じ参照素材を使う",
+      a2vBlocked: "Audio to video が on のクリップがあります。",
     },
     minClipsError: (min: number): string => `最低 ${min} 本のクリップが必要です（元動画が未指定のため）。`,
     maxClipsReached: (max: number): string => `クリップは最大 ${max} 本までです。`,

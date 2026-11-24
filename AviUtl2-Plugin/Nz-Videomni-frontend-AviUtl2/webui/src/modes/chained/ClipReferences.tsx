@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo } from "react";
 import type { NativeBridge } from "../../bridge";
 import { ReferenceAccordion } from "../single/ReferenceAccordion";
-import type { ReferenceAccordionA2v } from "../single/ReferenceAccordion";
+import type { ReferenceAccordionA2v, ReferenceAccordionFollow } from "../single/ReferenceAccordion";
 import type {
   ReferenceKind,
   ReferenceRules,
@@ -30,8 +30,9 @@ export interface ClipReferencesProps {
   clipId: string;
   /** The last `constraints.reference` the screen has seen (kept through LTX). */
   rules: ReferenceRules;
-  /** Draw the accordion: the screen's References checkbox is on and the
-   * loaded base model takes references. Off = hidden, the cards are kept. */
+  /** Draw the accordion: the loaded base model takes references, the screen's
+   * References checkbox is on, and the clip is not after the clip whose
+   * references the following clips use. Off = hidden, the cards are kept. */
   referencesOn: boolean;
   nativeBridge?: NativeBridge | undefined;
   disabled: boolean;
@@ -41,6 +42,9 @@ export interface ClipReferencesProps {
    * `constraints.chain.source_audio`). Omitted = no box (LTX, or a backend
    * without the key) — the accordion then draws as before. */
   a2v?: ReferenceAccordionA2v | undefined;
+  /** The "use the same references for the following clips" box, handed to
+   * the accordion as is. Omitted = no box. */
+  follow?: ReferenceAccordionFollow | undefined;
   /** Stable callbacks from the screen (`useCallback`). */
   register: (clipId: string, entry: ClipReferenceEntry) => void;
   unregister: (clipId: string) => void;
@@ -66,6 +70,7 @@ export function ClipReferences({
   disabled,
   onAppendTag,
   a2v,
+  follow,
   register,
   unregister,
 }: ClipReferencesProps) {
@@ -96,6 +101,7 @@ export function ClipReferences({
       openSignal={0}
       onAppendTag={onAppendTag}
       a2v={a2v}
+      follow={follow}
       nativeBridge={nativeBridge}
       disabled={disabled}
     />

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { en } from "../../i18n/strings";
 import { ReferenceAccordion } from "./ReferenceAccordion";
 import type { ReferenceAccordionProps } from "./ReferenceAccordion";
 import { createInitialState, referenceReducer, summarizeReference } from "./referenceRules";
@@ -526,5 +527,61 @@ describe("ReferenceAccordion", () => {
     expect(details.open).toBe(false);
     details.open = true;
     expect(() => fireEvent(details, new Event("toggle"))).not.toThrow();
+  });
+
+  // A Chained clip's "use the same references for the following clips" box.
+  describe("follow", () => {
+    const FOLLOW = en.chained.clipReferenceFollow;
+    const followBox = () => screen.queryByRole("checkbox", { name: FOLLOW.label }) as HTMLInputElement | null;
+
+    it("not passed: no box", () => {
+      renderAccordion(makeApi(enabled(createInitialState(RULES))), { embedded: true });
+      expect(followBox()).toBeNull();
+    });
+
+    it("passed: drawn after the Audios row, and on / off reach onChange", () => {
+      const onChange = vi.fn();
+      const { rerender, props } = renderAccordion(makeApi(enabled(createInitialState(RULES))), {
+        embedded: true,
+        follow: { checked: false, a2vBlocked: false, onChange },
+      });
+      const box = followBox()!;
+      expect(box.closest("label")?.previousElementSibling).toBe(screen.getByTestId("ref-row-audio"));
+      expect(box).not.toBeChecked();
+      expect(box).toBeEnabled();
+      expect(box.closest("label")).not.toHaveAttribute("title");
+      fireEvent.click(box);
+      expect(onChange).toHaveBeenLastCalledWith(true);
+
+      rerender(
+        <LanguageProvider>
+          <ReferenceAccordion {...props} follow={{ checked: true, a2vBlocked: false, onChange }} />
+        </LanguageProvider>,
+      );
+      expect(followBox()).toBeChecked();
+      fireEvent.click(followBox()!);
+      expect(onChange).toHaveBeenLastCalledWith(false);
+    });
+
+    it("a2vBlocked: greyed out with the reason on the label", () => {
+      renderAccordion(makeApi(enabled(createInitialState(RULES))), {
+        embedded: true,
+        follow: { checked: false, a2vBlocked: true, onChange: vi.fn() },
+      });
+      const box = followBox()!;
+      expect(box).toBeDisabled();
+      expect(box.closest("label")).toHaveAttribute("title", FOLLOW.a2vBlocked);
+    });
+
+    it("a submit in flight: disabled, but no reason on the label", () => {
+      renderAccordion(makeApi(enabled(createInitialState(RULES))), {
+        embedded: true,
+        disabled: true,
+        follow: { checked: false, a2vBlocked: false, onChange: vi.fn() },
+      });
+      const box = followBox()!;
+      expect(box).toBeDisabled();
+      expect(box.closest("label")).not.toHaveAttribute("title");
+    });
   });
 });

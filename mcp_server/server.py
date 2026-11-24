@@ -39,9 +39,9 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   submit_generate(prompt=..., width=640, height=384, num_frames=124,
   frame_rate=24) のように、num_frames は 17n+5 かつ 22 以上、幅と高さは
   32 の倍数、fps は 24 固定で指定します（num_frames の既定 49 は LTX の値
-  なので、H3 で省略すると 422 になります）。H3 では submit_generate の
-  num_inference_steps / shift_video / shift_audio（省略で既定 20 / 12 / 3）
-  が選べます。H3 では高速化の pi-H3（submit_generate と submit_chain の
+  なので、H3 で省略すると 422 になります）。H3 では submit_generate と
+  submit_chain の num_inference_steps / shift_video / shift_audio（省略で
+  既定 20 / 12 / 3）が選べます。H3 では高速化の pi-H3（submit_generate と submit_chain の
   pi_h3。"off"〔既定〕/ "4steps" / "2steps"）も選べ、有効のあいだはステップ数と
   shift を指定せず選択の値（4steps は 4 / 12 / 3、2steps は 2 / 12 / 3。正本は
   list_models の constraints.pi_h3）で動きます（詳細は submit_generate の説明）。
@@ -66,8 +66,9 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   と単発の A2V（submit_generate の source_audio_id と
   source_audio_strength。H3 専用）と、クリップの連結（submit_chain。
   重なりは 22 フレーム固定・2 本目以降は 39 フレーム以上。ステップ数と shift は
-  既定の 20 / 12 / 3 で動き、MCP からは変えられません。pi_h3 を選んだときは
-  選択の値で動きます）に対応します。連結の
+  submit_chain の num_inference_steps / shift_video / shift_audio で選べ、
+  省略で既定の 20 / 12 / 3。pi_h3 を選んだときは選択の値で動きます）に
+  対応します。連結の
   冒頭画像（clips[0].conditioning_images。strength は指定しない。指定すると
   422 FEATURE_UNSUPPORTED の keyframe_strength）も使えます。V2V
   （source_video_id）は H3 では引き継ぐフレーム数が 22 固定なので、
@@ -80,7 +81,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   連結の最上位の source_audio_id・素材（末尾）・reference_video_id
   は 422 FEATURE_UNSUPPORTED になります（クリップごとの A2V は API と
   操作パネルだけ。使えない機能は
-  unsupported_features を見てください）。H3 でも submit_generate の loras（スタイル LoRA・
+  unsupported_features を見てください）。H3 でも submit_generate と submit_chain の loras（スタイル LoRA・
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
   H3 では loras の各要素の audio_strength は無視されます（422 にはならず、
   サーバーが None に直します）。

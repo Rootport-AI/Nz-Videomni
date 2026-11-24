@@ -25,7 +25,7 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mcp_server.client import BackendClient, set_client
-from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
+from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg, ReferenceArg
 from mcp_server.server import build_server
 from mcp_server.settings import Settings
 from mcp_server.tools import generate, jobs, uploads
@@ -2852,3 +2852,70 @@ def test_save_job_video_which_matte_missing_source_raises(tmp_path):
             functools.partial(outputs.save_job_video, "j1", str(tmp_path / "d"), which="matte")
         )
     assert "VIDEO_NOT_FOUND" in str(exc_info.value)
+
+
+# ------------------------------------------- references (Ref2VA, MiniMax H3)
+
+
+def test_submit_generate_references_are_sent_as_given_and_omitted_by_default():
+    assert "references" not in _capture_generate_body()
+    assert "references" not in _capture_generate_body(references=[])
+
+    body = _capture_generate_body(
+        references=[
+            ReferenceArg(kind="picture", id="img-1", slot=1),
+            ReferenceArg(kind="video", id="vid-1", slot=2, max_sec=6.5),
+            ReferenceArg(kind="audio", id="aud-1", slot=1),
+        ]
+    )
+    assert body["references"] == [
+        {"kind": "picture", "id": "img-1", "slot": 1},
+        {"kind": "video", "id": "vid-1", "slot": 2, "max_sec": 6.5},
+        {"kind": "audio", "id": "aud-1", "slot": 1},
+    ]
+
+
+def test_submit_chain_references_are_per_clip_and_the_same_id_can_repeat():
+    ref = ReferenceArg(kind="picture", id="img-same", slot=1)
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            202,
+            json={"job_id": "j1", "status": "queued", "created_at": "2026-01-01T00:00:00Z", "num_clips": 3},
+        )
+
+    set_client(_client_for_handler(handler))
+    anyio.run(
+        generate.submit_chain,
+        "a prompt",
+        [
+            ChainClipArg(num_frames=124, references=[ref]),
+            ChainClipArg(num_frames=124),
+            ChainClipArg(
+                num_frames=124,
+                references=[ref, ReferenceArg(kind="audio", id="aud-1", slot=1, max_sec=3.0)],
+            ),
+        ],
+    )
+    body = captured["body"]
+    clips = body["clips"]
+    assert clips[0]["references"] == [{"kind": "picture", "id": "img-same", "slot": 1}]
+    assert "references" not in clips[1]
+    assert clips[2]["references"] == [
+        {"kind": "picture", "id": "img-same", "slot": 1},
+        {"kind": "audio", "id": "aud-1", "slot": 1, "max_sec": 3.0},
+    ]
+    assert "references" not in body
+
+
+def test_reference_arg_fields_match_the_server_reference_input():
+    from api.models import ReferenceInput
+
+    assert list(ReferenceArg.model_fields) == list(ReferenceInput.model_fields)
+    for name, server_field in ReferenceInput.model_fields.items():
+        assert ReferenceArg.model_fields[name].is_required() == server_field.is_required(), name
+        assert ReferenceArg.model_fields[name].default == server_field.default, name
+    assert "references" in ChainClipArg.model_fields
+    assert ChainClipArg.model_fields["references"].default is None

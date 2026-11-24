@@ -87,7 +87,7 @@ from api.models import (
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
 )
 from mcp_server.client import get_client
-from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg
+from mcp_server.params import ChainClipArg, ConditioningImageArg, LoraArg, ReferenceArg
 
 _SUBMIT_TIMEOUT = 30.0
 _CHAIN_SUBMIT_TIMEOUT = 30.0
@@ -256,6 +256,7 @@ async def submit_generate(
     source_audio_strength: float | None = None,
     pi_h3: Literal["off", "4steps", "2steps"] = "off",
     sol_vae: bool = False,
+    references: list[ReferenceArg] | None = None,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -265,7 +266,8 @@ async def submit_generate(
     ``list_models`` の ``base_models[].unsupported_features`` を見てください。
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
-    ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True`` だけです。**``nag_enabled``（ネガティブプロンプト。
+    ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True``・
+    ``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -346,6 +348,39 @@ async def submit_generate(
         音声トラックは 422 SOURCE_AUDIO_SILENT です。
       * ``source_audio_strength`` だけを指定するとエラーです（HTTP を呼ぶ前に
         弾きます）。
+
+    参照素材からの生成（Ref2VA。**MiniMax H3 専用**）:
+      * ``references`` に参照の画像・動画・音声を1件ずつ書きます
+        （``{kind, id, slot, max_sec}``）。``id`` は種類ごとのアップロードの
+        ID です（``kind="picture"`` は ``upload_image`` の ``image_id``、
+        ``"video"`` は ``upload_video`` の ``video_id``、``"audio"`` は
+        ``upload_audio`` の ``audio_id``）。
+      * ``slot`` は**種類ごとの番号で、1 から**です。プロンプトには、その素材を
+        指す札を同じ番号で書きます（画像は ``<Picture n>``、動画は
+        ``<Video n>``、音声は ``<Audio n>``。``n`` は ``slot``）。
+      * 本数の上限と ``slot`` の範囲はサーバーが検査し、違反は 422
+        VALIDATION_ERROR です。上限の数は ``list_models`` の
+        ``base_models[].constraints.reference`` で分かります。
+      * ``max_sec`` は動画と音声で、先頭から使う秒数です（0 より大きい有限の
+        値。0 以下は 422）。省略なら 1 本 15 秒までです。合計の秒数はサーバーが
+        検査しません。画像に付けると 422 です。
+      * 参照を効かせるには、Ref2VA の重み（または重みの種別が判定されない
+        Hybrid）を読み込む必要があります。読み込んでいる transformer の種別は
+        ``list_models`` の ``base_models[].transformer_role``（``"ref2va"`` /
+        ``"fl2va"`` / null）で確かめます。切り替えは ``load_pipeline`` の
+        ``models={"transformer": "<名前>"}``（名前は ``list_models`` の
+        ``categories.transformer.entries``）です。FL2VA の重みのままでも 422
+        にはなりません。
+      * **4 ステップの Turbo では参照がほとんど効きません**。推奨は Turbo なしの
+        20〜25 ステップ（既定の 20 / 12 / 3 のまま）です。
+        **参照動画を使うときは、``vram16_mode`` を省略して on のままにして
+        ください**（off にすると参照の行が増えて約 10 万行を超えたときに
+        不正なメモリアクセスになる既知の限界があります）。
+      * LTX 2.3 / LTX 2.5 では 422 FEATURE_UNSUPPORTED です。存在しない ``id``
+        は 404 REFERENCE_NOT_FOUND、音声の参照で音声の流れが読めないときは 422
+        REFERENCE_AUDIO_NO_STREAM、全サンプルが 0 の無音のときは 422
+        REFERENCE_AUDIO_SILENT です。
+      * 連結（``submit_chain``）では、各クリップの ``references`` に同じ形で書きます。
 
     IC-LoRA:
       * ``conditioning_images`` を1件以上指定するとI2V（画像条件付け）に
@@ -667,6 +702,10 @@ async def submit_generate(
             ``sol_vae_used`` が ``"on->off"`` になります（生成は完走します。
             Sol で復号したときは ``"on"``。``sol_vae`` のジョブにだけ入ります）。
             重みは ``install-MiniMaxH3.bat`` で取得します。
+        references: Ref2VA の参照素材（``{kind, id, slot, max_sec}`` のリスト）。
+            **MiniMax H3 専用**で、LTX では 422 FEATURE_UNSUPPORTED。省略または
+            空ならキーごと送りません（``max_sec`` も省略するとキーごと送りません）。
+            使い方は上の「参照素材からの生成」の節。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -803,6 +842,9 @@ async def submit_generate(
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
+    if references:
+        # exclude_none: a picture reference must not carry ``max_sec: null``.
+        payload["references"] = [r.model_dump(exclude_none=True) for r in references]
     if loras:
         payload["loras"] = [lora.model_dump(exclude_none=True) for lora in loras]
     if reference_video_id:
@@ -927,12 +969,16 @@ def _serialize_chain_clip(clip: ChainClipArg) -> dict[str, Any]:
     """``ChainClipArg`` を送信用dictへ変換する。``prompt`` が None（=共通
     プロンプトだけを使う。指定時は共通プロンプトの後ろに追記される）と
     ``conditioning_images`` が None/空（=クリップ0以外、または画像なし）の
-    場合はキーごと省略する（「Noneまたは空は送らない」の送信規約）。"""
+    場合はキーごと省略する（「Noneまたは空は送らない」の送信規約）。
+    ``references`` も同じ規約で、あれば ``exclude_none=True`` で送る（画像の
+    参照に ``max_sec: null`` を載せないため）。"""
     d: dict[str, Any] = {"num_frames": clip.num_frames}
     if clip.prompt is not None:
         d["prompt"] = clip.prompt
     if clip.conditioning_images:
         d["conditioning_images"] = [ci.model_dump() for ci in clip.conditioning_images]
+    if clip.references:
+        d["references"] = [r.model_dump(exclude_none=True) for r in clip.references]
     return d
 
 
@@ -1041,6 +1087,15 @@ async def submit_chain(
     ``nag_enabled`` は H3 の連結でも ``neg_method="vsf"`` なら使えます（既定の
     ``"nag"`` は 422 FEATURE_UNSUPPORTED）。``source_audio_id``・``end_source_*``・
     ``reference_video_id`` などは H3 では 422 FEATURE_UNSUPPORTED です。
+    **参照素材（Ref2VA）は ``clips[i].references`` にクリップごとに書きます**
+    （形と使い方は ``submit_generate`` の「参照素材からの生成」の節。H3 専用で、
+    LTX ではいずれかのクリップに書くと 422 FEATURE_UNSUPPORTED）。各クリップの
+    ``references`` は**そのクリップだけ**に効き、本数の上限と ``slot`` の範囲の
+    検査もクリップごとです（連結全体の合計ではありません。違反の ``msg`` には
+    ``clips[i]: `` が付きます）。**全クリップで同じ素材を使うときは、各クリップの
+    ``references`` に同じ ``id`` を書いてください**（アップロードは 1 回でよく、
+    専用の切り替えはありません）。参照の読み込みの失敗は、そのクリップの番で
+    ジョブの失敗になります。
 
     複数クリップを1本の連続した動画に合成します（クリップ間はlatentレベルで
     継ぎ目なく繋がります――ピクセル領域での結合ではありません）。同時に実行
@@ -1209,7 +1264,7 @@ async def submit_chain(
             後ろに半角スペース1つで追記される。
         clips: クリップごとの指定（``num_frames`` は LTX の場合 8n+1・9〜481
             で、省略時は49。H3 は上の段落。``prompt`` /
-            ``conditioning_images`` は省略可）。
+            ``conditioning_images`` / ``references`` は省略可）。
             ``prompt`` が省略・空・空白だけのクリップは共通プロンプトだけ
             を使う。指定した ``prompt`` は Stage-1（クリップごとの生成）に
             だけ効き、Stage-2（全体の仕上げ）は共通プロンプトだけを使う。

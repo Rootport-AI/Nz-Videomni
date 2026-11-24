@@ -76,9 +76,12 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   Turbo LoRA。名前は H3 を選んでいるときの list_loras で確認）は使えます。
   H3 では loras の各要素の audio_strength は無視されます（422 にはならず、
   サーバーが None に直します）。
+  H3 では参照素材からの生成（Ref2VA）も使えます（submit_generate の references、
+  submit_chain の clips[i].references。詳細は submit_generate の説明）。
+  全クリップで同じ素材を使うときは、各クリップに同じ id を書きます。
   LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と、
   MiniMax H3 専用の vram16_mode=true・source_audio_id・pi_h3（"off" 以外）・
-  sol_vae=true だけです（422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
+  sol_vae=true・references（1 件以上）だけです（422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
   は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /
   neg_method / vsf_scale も効きます）。
   ただし nag_alpha=0 にしても「NAG なし」とビット単位で同じ絵にはならないので、

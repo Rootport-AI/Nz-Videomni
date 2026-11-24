@@ -3,14 +3,17 @@
 サーバー側（``api/models.py``）が既に全ての範囲・整合性チェックを持っている
 （422がそちらの正本）ので、ここには意図的にバリデータを置かない。フィールド
 名・既定値だけを ``api/models.py`` の対応するモデル（``ConditioningImage`` /
-``LoraSpec`` / ``ChainClip``）に合わせる。ここでの型はあくまで
+``LoraSpec`` / ``ChainClip`` / ``ReferenceInput``）に合わせる。ここでの型はあくまで
 「MCPクライアントに見せる引数の形」であり、``submit_generate`` / ``submit_chain``
 が実際のPOSTボディを組み立てる際に送信用の辞書へ変換される
-（``ConditioningImageArg`` / ``LoraArg`` は ``model_dump()``、``ChainClipArg`` は
+（``ConditioningImageArg`` / ``LoraArg`` は ``model_dump()``、``ReferenceArg`` は
+``model_dump(exclude_none=True)``、``ChainClipArg`` は
 ``tools/generate.py`` の ``_serialize_chain_clip``）。
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -54,6 +57,26 @@ class LoraArg(BaseModel):
     audio_strength: float | None = None
 
 
+class ReferenceArg(BaseModel):
+    """1件の参照素材（Ref2VA。``submit_generate`` / ``ChainClipArg`` 共通。
+    **MiniMax H3 専用**）。
+
+    ``kind`` は ``"picture"`` / ``"video"`` / ``"audio"``。``id`` はその種類の
+    アップロードのID（``picture`` は ``upload_image`` の ``image_id``、``video``
+    は ``upload_video`` の ``video_id``、``audio`` は ``upload_audio`` の
+    ``audio_id``）。``slot`` は種類ごとの番号（1 から。プロンプトの札
+    ``<Picture n>`` / ``<Video n>`` / ``<Audio n>`` の ``n`` と同じ）。
+    ``max_sec`` は動画と音声で、先頭から使う秒数（省略なら 1 本 15 秒まで）。画像に
+    付けると 422 になる。省略（``None``）のときは本文にキーごと載せない。
+    本数と ``slot`` の範囲はサーバーが検査する（ここにはバリデータを置かない）。
+    """
+
+    kind: Literal["picture", "video", "audio"]
+    id: str
+    slot: int
+    max_sec: float | None = None
+
+
 class ChainClipArg(BaseModel):
     """チェーンの1クリップ分の指定（``submit_chain`` の ``clips`` の1要素）。
 
@@ -64,8 +87,13 @@ class ChainClipArg(BaseModel):
     潜在表現を引き継ぐ後続セグメントのため）。
     ``num_frames`` の既定 49 は LTX の値（8n+1）。MiniMax H3 の連結は 17n+5
     なので、H3 で省略すると 422 VALIDATION_ERROR になる（必ず指定する）。
+    ``references``（参照素材。H3 専用）は**そのクリップだけ**に効き、本数と
+    ``slot`` の範囲の検査もクリップごとです。全クリップで同じ素材を使うときは、
+    各クリップの ``references`` に同じ ``id`` を書いてください（アップロードは
+    1 回でよく、専用の切り替えはありません）。
     """
 
     prompt: str | None = None
     num_frames: int = 49
     conditioning_images: list[ConditioningImageArg] | None = None
+    references: list[ReferenceArg] | None = None

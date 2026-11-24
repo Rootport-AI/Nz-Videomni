@@ -81,7 +81,9 @@ async def upload_image(file_path: str) -> dict[str, Any]:
     返る ``image_id`` は、``submit_generate`` の ``conditioning_images``
     （I2V／キーフレーム条件付け）や、``submit_chain`` の
     ``clips[0].conditioning_images``・``end_source_image_id``（素材（末尾））
-    に渡します。許可される拡張子・最大サイズはバックエンドの設定
+    に渡します。MiniMax H3 の Ref2VA では、この ``image_id`` を参照画像として
+    ``references``（``kind="picture"``）の ``id`` にも使えます。
+    許可される拡張子・最大サイズはバックエンドの設定
     （``config.yaml`` の ``upload:``）に従います（``get_config`` の
     ``upload`` セクションでも確認できます）。
 
@@ -106,13 +108,16 @@ async def upload_image(file_path: str) -> dict[str, Any]:
 async def upload_video(file_path: str, max_frames: int | None = None) -> dict[str, Any]:
     """ローカルの動画ファイルをアップロードします（POST /upload/video）。
 
-    4通りの用途で使う参照/継続動画のアップロードです:
+    5通りの用途で使う参照/継続動画のアップロードです:
     (1) ``submit_generate`` / ``submit_chain`` の ``reference_video_id``
         （IC-LoRA制御アダプタの参照動画。画角拡張〔outpaint〕の元動画も
         この口です）、
     (2) ``submit_chain`` の ``source_video_id``（V2V継続の元動画）、
     (3) ``submit_chain`` の ``end_source_video_id``（素材（末尾））、
-    (4) ``submit_chain`` の ``retake_video_id``（撮り直しの元動画）。
+    (4) ``submit_chain`` の ``retake_video_id``（撮り直しの元動画）、
+    (5) MiniMax H3 の Ref2VA の参照動画（``submit_generate`` の ``references``
+        と ``submit_chain`` の ``clips[i].references`` の ``kind="video"`` の
+        ``id``。この ``video_id`` を渡す）。
     許可される拡張子・最大サイズはバックエンドの設定に従います。
 
     **``max_frames``（1以上）を渡すと、尺（``frame_count``）と ``fps`` が
@@ -162,6 +167,8 @@ async def upload_audio(file_path: str) -> dict[str, Any]:
 
     ``submit_chain`` の ``source_audio_id``（A2V: アップロードした音声に映像を
     同期させて生成する機能）に渡す ``audio_id`` を得るための前段ツールです。
+    MiniMax H3 の Ref2VA では、この ``audio_id`` を参照音声として
+    ``references``（``kind="audio"``）の ``id`` にも使えます。
     許可される拡張子・最大サイズはバックエンドの設定に従います。
     コーデックの妥当性チェックはアップロード時ではなく生成時に行われます。
 

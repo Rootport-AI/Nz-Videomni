@@ -1,0 +1,237 @@
+{
+  "pass": true,
+  "failed": [],
+  "checks": [
+    {
+      "name": "job completed",
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null,
+        "stage": null
+      }
+    },
+    {
+      "name": "request.num_inference_steps==4",
+      "ok": true,
+      "detail": 4
+    },
+    {
+      "name": "h3.num_inference_steps==4",
+      "ok": true,
+      "detail": 4
+    },
+    {
+      "name": "request.shift_video==12",
+      "ok": true,
+      "detail": 12.0
+    },
+    {
+      "name": "h3.shift_video==12",
+      "ok": true,
+      "detail": 12.0
+    },
+    {
+      "name": "request.shift_audio==3",
+      "ok": true,
+      "detail": 3.0
+    },
+    {
+      "name": "h3.shift_audio==3",
+      "ok": true,
+      "detail": 3.0
+    },
+    {
+      "name": "2 clips in h3.phases.clips",
+      "ok": true,
+      "detail": 2
+    },
+    {
+      "name": "clip0 denoise.m_per_step length 4",
+      "ok": true,
+      "detail": {
+        "len": 4,
+        "keys_in_denoise": [
+          "block_swap_prefetch_used",
+          "commit_after_load_gib",
+          "commit_after_place_gib",
+          "commit_after_release_gib",
+          "commit_end_gib",
+          "commit_process_peak_gib",
+          "dit",
+          "dit_parked_tensors",
+          "dit_source",
+          "m_per_step",
+          "peak_vram_mb",
+          "peak_vram_reserved_mb",
+          "rss_after_load_gib",
+          "rss_after_place_gib",
+          "rss_after_release_gib",
+          "rss_end_gib",
+          "rss_process_peak_gib",
+          "seconds",
+          "sequence",
+          "vram16"
+        ]
+      }
+    },
+    {
+      "name": "clip1 denoise.m_per_step length 4",
+      "ok": true,
+      "detail": {
+        "len": 4,
+        "keys_in_denoise": [
+          "block_swap_prefetch_used",
+          "commit_after_load_gib",
+          "commit_after_place_gib",
+          "commit_after_release_gib",
+          "commit_end_gib",
+          "commit_process_peak_gib",
+          "dit_parked_tensors",
+          "dit_source",
+          "m_per_step",
+          "mask",
+          "peak_vram_mb",
+          "peak_vram_reserved_mb",
+          "rss_after_load_gib",
+          "rss_after_place_gib",
+          "rss_after_release_gib",
+          "rss_end_gib",
+          "rss_process_peak_gib",
+          "seconds",
+          "sequence",
+          "vram16"
+        ]
+      }
+    }
+  ],
+  "reference": {
+    "request.loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8,
+        "audio_strength": null
+      }
+    ],
+    "h3.loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8,
+        "layout": "ab",
+        "dtype": "BF16",
+        "pairs_applied": 208,
+        "skipped": []
+      }
+    ],
+    "backend": "minimax-h3",
+    "models": {
+      "base_model": "MiniMaxH3",
+      "selection": {
+        "transformer": {
+          "name": "minimax_h3_ref2va_pruned_int8_convrot",
+          "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+        },
+        "text_encoder": {
+          "name": "default",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        "video_vae": {
+          "name": "default",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        "audio": {
+          "name": "default",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        }
+      }
+    },
+    "attention_used": "sdpa",
+    "generation_time_seconds": 258.54,
+    "denoise_seconds": [
+      96.91,
+      85.31
+    ],
+    "request.clips_num_frames": [
+      73,
+      73
+    ],
+    "mp4_probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_type": "video",
+          "duration": "5.166667",
+          "nb_frames": "124"
+        },
+        {
+          "codec_type": "audio",
+          "duration": "5.167000",
+          "nb_frames": "163"
+        }
+      ],
+      "format": {
+        "duration": "5.167000"
+      }
+    },
+    "unreachable": {
+      "count": 3,
+      "at": [
+        "2026-11-25T01:41:21",
+        "2026-11-25T01:42:26",
+        "2026-11-25T01:42:56"
+      ]
+    },
+    "top_level_keys": [
+      "attention_used",
+      "backend",
+      "block_swap_prefetch_used",
+      "chain",
+      "completed_at",
+      "created_at",
+      "environment",
+      "fused_gguf_dequant_kernel_used",
+      "generation_mode",
+      "generation_time_seconds",
+      "h3",
+      "job_id",
+      "keep_resident_embeddings_used",
+      "keep_resident_used",
+      "kind",
+      "models",
+      "output",
+      "peak_vram_reserved_mb",
+      "request",
+      "seed_used",
+      "started_at",
+      "status",
+      "vae_mode_used",
+      "vram16_mode_used",
+      "vram_optimization"
+    ],
+    "h3_keys": [
+      "audio_drift_flags",
+      "audio_latent_excess",
+      "clips",
+      "commit_gib",
+      "commit_peak_gib",
+      "decode",
+      "images_used",
+      "inject_clean",
+      "loras",
+      "num_inference_steps",
+      "overlap_frames",
+      "phases",
+      "quant_backends",
+      "rss_peak_gib",
+      "sampler",
+      "seconds",
+      "seeds",
+      "shift_audio",
+      "shift_video"
+    ]
+  },
+  "loaded_weights": "minimax_h3_ref2va_pruned_int8_convrot"
+}

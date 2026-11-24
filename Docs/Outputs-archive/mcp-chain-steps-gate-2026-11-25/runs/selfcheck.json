@@ -1,0 +1,54 @@
+{
+  "at": "2026-11-25T01:37:31",
+  "body": {
+    "prompt": "A woman in a red raincoat walks along a quiet harbor at dawn, soft light, gentle camera movement.",
+    "width": 1280,
+    "height": 768,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "num_inference_steps": 4,
+    "shift_video": 12,
+    "shift_audio": 3,
+    "keep_resident": true,
+    "overlap_frames": 3,
+    "overlap_strength": 0.5,
+    "clips": [
+      {
+        "num_frames": 73,
+        "prompt": "She walks slowly along the wooden pier."
+      },
+      {
+        "num_frames": 73,
+        "prompt": "She stops at the end of the pier and looks at the sea."
+      }
+    ],
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ],
+    "chunked_upsample": true
+  },
+  "model_fields_set": [
+    "chunked_upsample",
+    "clips",
+    "frame_rate",
+    "height",
+    "keep_resident",
+    "loras",
+    "num_inference_steps",
+    "overlap_frames",
+    "overlap_strength",
+    "prompt",
+    "seed",
+    "shift_audio",
+    "shift_video",
+    "width"
+  ],
+  "turbo_files_rel": [
+    "models\\MiniMaxH3\\LoRA\\minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors"
+  ],
+  "problems": [],
+  "ok": true
+}

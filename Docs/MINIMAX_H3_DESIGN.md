@@ -188,6 +188,7 @@
   - **`constraints.chain`（監督の裁定）**: H3 のときだけ鍵を出し、LTX には鍵ごと出さない（LTX の固定値を揺らさない）。
   - **LTX の記録の増分（監督の裁定）**: LTX の連結の記録に `null` の鍵が 4 つ増えるのを受け入れた（追記であって変更ではない。詳細は仕様書 §6.2b (h)）。`num_inference_steps` の既定 8 は変えない。LTX 2.3 と LTX 2.5 の**両方**の連結の拒否表に `vram16_mode`＝`true` の行を足した（単発の前例）。
   - **MCP と Gradio は注記のみ（監督の裁定）**: MCP の `submit_chain` は第 1 弾では欄を足さず、H3 では既定の 20 ステップで動く（Turbo の 8 ステップは指定できない）。Gradio の Chain タブは LTX 専用。どちらも説明文に限界を書いた。
+    > **更新（2026-11-25）**: MCP の `submit_chain` に、ステップ数と shift の引数（`num_inference_steps`・`shift_video`・`shift_audio`）を足した。省略すれば送らず、H3 の既定で動く。`vram16_mode` の引数は今も無い（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §234）。
   - **取り消しはベストエフォート（監督の裁定）**: LTX の連結と同じ。終わった時点で `cancelled` にする。
   - **操作パネル（監督の裁定）**: 閉じたパネルでも、素材を消すボタンだけは生かし、素材が残っているときは理由コード `materialInClosedPanel` で生成を止める（ベースモデルを切り替えても Chained 画面は作り直されず、LTX で付けた素材が残るため）。Chained 系の右クリックの入口 7 種は、門で「入口 → パネル」の対応を引き、閉じたパネル行きは案内の一行で断る。音声の注意の一行は、既定の文字色の新しい書式（`.clip-note`）で出す（既存の `field-hint` はミュート色）。
 - **裁定 86 【オーナー裁定】**: Ref2VA の重みで参照を付けた連結（固定行方式。台帳 §1-109。2026-10-31）で、新しい区間の展開が人物の向きや場所を変える内容だと新しいショットに切り替わる事象には、**対処しない**。先行事例の vLLM-Omni（研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §16.12）も対処せず、注意にとどめている。計測と切り分け（原因は追記の展開で、参照の枚数ではない）は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §185、裁定の経緯は §185.8・§185.9。計測値は §185 にだけ書く。
@@ -917,6 +918,7 @@ H3 の連結の帯は一段である（Stage 2 が無い。LTX の連結の 2 �
 - 重なりは 22 フレームの固定（選べるようにするのは §4-44）。長い連結での焼け（コントラストの累積）への対処は §4-45。H3 用の推定時間（Est.）は §3-261。快適上限の較正は Single が快適上限表 §17・§18、Chained が同 §19 で、マーカーは Single（裁定 94）と Chained の各クリップ（線は Single と共用。裁定 95）に出す。連結の全長に比例する上限（音声の復号・主メモリ）は較正していない（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §4-49）。
 - 合計の上限 11,544 フレームのうち、実測は 1,348 フレームまで（記録簿 §184.6）。復号の主記憶（1344×768 で 1 フレーム当たり uint8 で約 3.1MB）と音声復号器の VRAM は長さに比例する。
 - MCP の `submit_chain` はステップ数と shift の引数を持たないので、H3 では既定（20 ステップ・shift 12／3）で動く。**Turbo LoRA の 8 ステップは MCP から指定できない。** Gradio の Chain タブは LTX の格子（8n+1）と 8 ステップを送るので、H3 では 422 になる（73・209・345・481 フレームのような両方の格子に乗る長さは、8 ステップで走る）。Gradio の Chain タブは LTX 専用。
+  > **更新（2026-11-25）**: MCP の `submit_chain` でも、引数 `num_inference_steps`・`shift_video`・`shift_audio` でステップ数と shift を指定できるようになった（Turbo LoRA の 4 ステップの連結も MCP から流せる。省略すれば既定の 20 ステップ・shift 12／3）。Gradio の Chain タブは変わらない（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §234）。
 - 途中の取り消しは、LTX の連結と同じベストエフォートである（ワーカーの処理は途中で止めず、終わった時点で `cancelled` になる）。
 
 ### 採らなかった案

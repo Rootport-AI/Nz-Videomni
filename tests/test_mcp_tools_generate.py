@@ -771,6 +771,67 @@ def test_submit_chain_pi_h3_sent_only_when_not_off():
         assert name not in body
 
 
+def test_submit_chain_input_schema_exposes_optional_sampling_fields():
+    async def _run():
+        mcp = build_server()
+        return await mcp.list_tools()
+
+    tools = anyio.run(_run)
+    tool = next(t for t in tools if t.name == "submit_chain")
+    props = tool.inputSchema.get("properties", {})
+    required = set(tool.inputSchema.get("required", []))
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name in props, f"{name!r} missing from submit_chain schema"
+        assert name not in required
+        assert props[name].get("default") is None
+
+
+def _chain_sampling_clips():
+    return [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+
+
+def _chain_capture_handler(captured: dict):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+    return handler
+
+
+def test_submit_chain_omits_sampling_fields_when_not_given():
+    captured: dict = {}
+    set_client(_client_for_handler(_chain_capture_handler(captured)))
+    anyio.run(generate.submit_chain, "p", _chain_sampling_clips())
+    for name in ("num_inference_steps", "shift_video", "shift_audio"):
+        assert name not in captured["body"]
+
+
+def test_submit_chain_sends_sampling_fields_when_given():
+    captured: dict = {}
+    set_client(_client_for_handler(_chain_capture_handler(captured)))
+    anyio.run(functools.partial(
+        generate.submit_chain, "p", _chain_sampling_clips(),
+        num_inference_steps=4, shift_video=12.5, shift_audio=3.0))
+    body = captured["body"]
+    assert body["num_inference_steps"] == 4
+    assert body["shift_video"] == 12.5
+    assert body["shift_audio"] == 3.0
+
+
+def test_submit_chain_sends_zero_sampling_values_instead_of_dropping_them():
+    # 0 is falsy but is a given value: it must reach the server (whose 422 is
+    # the source of truth), not be silently dropped.
+    captured: dict = {}
+    set_client(_client_for_handler(_chain_capture_handler(captured)))
+    anyio.run(functools.partial(
+        generate.submit_chain, "p", _chain_sampling_clips(),
+        num_inference_steps=0, shift_video=0.0, shift_audio=0.0))
+    body = captured["body"]
+    assert body["num_inference_steps"] == 0
+    assert body["shift_video"] == 0.0
+    assert body["shift_audio"] == 0.0
+
+
 def test_pi_h3_argument_default_matches_the_server():
     from api.models import GenerateChainRequest, GenerateRequest
 
@@ -1539,7 +1600,7 @@ def test_submit_chain_input_schema_has_no_hidden_fields():
     tools = anyio.run(_run)
     tool = next(t for t in tools if t.name == "submit_chain")
     props = set(tool.inputSchema.get("properties", {}))
-    for hidden in ("pipeline", "num_inference_steps", "guidance_scale", "crf"):
+    for hidden in ("pipeline", "guidance_scale", "crf"):
         assert hidden not in props, f"hidden field {hidden!r} leaked into submit_chain schema"
 
 

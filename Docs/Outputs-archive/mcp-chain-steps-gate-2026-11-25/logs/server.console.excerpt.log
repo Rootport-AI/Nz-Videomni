@@ -1,0 +1,44 @@
+2026-11-25 01:37:39,242 INFO ltx: Starting server on 127.0.0.1:18620  (UI: http://127.0.0.1:18620/ui)
+2026-11-25 01:37:39,243 INFO ltx: ====================================================================
+2026-11-25 01:37:39,243 INFO ltx:   準備ができたら、次のアドレスをブラウザで開いてください
+2026-11-25 01:37:39,243 INFO ltx:       http://127.0.0.1:18620/ui
+2026-11-25 01:37:39,243 INFO ltx:   この黒い画面は閉じないでください（閉じるとサーバーが止まります）
+2026-11-25 01:37:39,243 INFO ltx: ====================================================================
+INFO:     Started server process [83792]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18620 (Press CTRL+C to quit)
+2026-11-25 01:39:43,520 INFO ltx.runner: Backend auto-selected: REAL.
+2026-11-25 01:39:43,521 INFO h3.runner: Loading pipeline (REAL engine_h3 worker). python=.venv-engine-h3\Scripts\python.exe engine_dir=engine_h3 blocks_on_gpu=8 deterministic=True
+2026-11-25 01:39:43,521 INFO ltx.runner: Model-management overrides: {'transformer': 'models\\MiniMaxH3\\Weights\\minimax_h3_ref2va_pruned_int8_convrot.safetensors'}
+2026-11-25 01:39:46,726 INFO ltx.runner: LTX worker ready. sage_available=True
+2026-11-25 01:39:46,728 INFO ltx.pipeline: Transformer weight role: ref2va (minimax_h3_ref2va_pruned_int8_convrot.safetensors)
+INFO:     127.0.0.1:63746 - "POST /api/v1/pipeline/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63746 - "POST /api/v1/generate/chain HTTP/1.1" 202 Accepted
+2026-11-25 01:39:46,767 INFO ltx.pipeline: Chain job 6cea4139-55c1-4794-80d6-fb1712a7a43a start clips=2 1280x768 steps=4 fps=24 overlap=22f(fixed) seed=42
+2026-11-25 01:39:46,767 INFO ltx.pipeline: Chain job 6cea4139-55c1-4794-80d6-fb1712a7a43a base=minimax_h3_ref2va_pruned_int8_convrot.safetensors loras=minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16(strength=0.8) prompt="A woman in a red raincoat walks along a quiet harbor at dawn, soft light, gentle camera movement."
+2026-11-25 01:39:46,767 INFO h3.runner: MiniMax H3 ignores 1 requested field(s): chunked_upsample=True (MiniMax H3's chain has no Stage-2 upsample)
+2026-11-25 01:39:46,836 INFO ltx.runner: chain text encode started (3 steps)
+2026-11-25 01:39:49,033 INFO ltx.runner: chain text encode 2/3 steps (0.45 step/s, 2.2s elapsed)
+2026-11-25 01:40:02,584 INFO ltx.runner: chain text encode 3/3 steps (0.07 step/s, 15.8s elapsed)
+2026-11-25 01:40:02,744 INFO ltx.runner: chain text encode 4/3 steps (6.37 step/s, 15.9s elapsed)
+2026-11-25 01:40:15,889 INFO ltx.runner: chain stage-1 denoise [1/2] started (4 steps)
+2026-11-25 01:40:36,788 INFO ltx.runner: chain stage-1 denoise [1/2] 1/4 steps (0.05 step/s, 20.9s elapsed)
+2026-11-25 01:40:57,654 INFO ltx.runner: chain stage-1 denoise [1/2] 2/4 steps (0.05 step/s, 41.8s elapsed)
+2026-11-25 01:41:18,607 INFO ltx.runner: chain stage-1 denoise [1/2] 3/4 steps (0.05 step/s, 62.7s elapsed)
+2026-11-25 01:41:39,544 INFO ltx.runner: chain stage-1 denoise [1/2] 4/4 steps (0.05 step/s, 83.7s elapsed)
+2026-11-25 01:41:39,792 INFO ltx.runner: chain text encode 1/3 steps (-0.03 step/s, 113.0s elapsed)
+2026-11-25 01:42:01,495 INFO ltx.runner: chain text encode 3/3 steps (0.09 step/s, 134.7s elapsed)
+2026-11-25 01:42:01,651 INFO ltx.runner: chain text encode 4/3 steps (6.41 step/s, 134.8s elapsed)
+2026-11-25 01:42:03,115 INFO ltx.runner: chain stage-1 denoise [2/2] started (4 steps)
+2026-11-25 01:42:23,997 INFO ltx.runner: chain stage-1 denoise [2/2] 1/4 steps (0.05 step/s, 20.9s elapsed)
+2026-11-25 01:42:44,920 INFO ltx.runner: chain stage-1 denoise [2/2] 2/4 steps (0.05 step/s, 41.8s elapsed)
+2026-11-25 01:43:05,888 INFO ltx.runner: chain stage-1 denoise [2/2] 3/4 steps (0.05 step/s, 62.8s elapsed)
+2026-11-25 01:43:26,836 INFO ltx.runner: chain stage-1 denoise [2/2] 4/4 steps (0.05 step/s, 83.7s elapsed)
+2026-11-25 01:43:27,120 INFO ltx.runner: chain VAE decode started (3 steps)
+2026-11-25 01:44:03,076 INFO ltx.runner: chain VAE decode 2/3 steps (0.03 step/s, 36.0s elapsed)
+2026-11-25 01:44:03,654 INFO ltx.runner: chain VAE decode 3/3 steps (1.73 step/s, 36.5s elapsed)
+2026-11-25 01:44:05,225 INFO ltx.runner: chain VAE decode 4/3 steps (0.63 step/s, 38.1s elapsed)
+2026-11-25 01:44:05,372 INFO ltx.pipeline: Chain job 6cea4139-55c1-4794-80d6-fb1712a7a43a done in 258.5s peak_vram=6344MB -> completed (frames=124)
+2026-11-25 01:44:16,099 INFO ltx.runner: Unloading pipeline (REAL worker).
+INFO:     127.0.0.1:54130 - "POST /api/v1/pipeline/unload HTTP/1.1" 200 OK

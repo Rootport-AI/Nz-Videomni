@@ -26896,3 +26896,132 @@ VRAM の山（MiB。割り当て／予約）:
 ### 233.16 main への取り込み（2026-11-25）
 
 - **これから行うこと**: 本節を含む文書のコミットを dev に入れ、プッシュ分の個人情報の確認を通したあとで、dev を main へ `--no-ff` で取り込みます（オーナーの実機での確認の合格と裁定 2026-11-25 を受けて。§232 の分も同じ取り込みに入る）。ハッシュは git の履歴を正とします。
+
+## 234. MCP の `submit_chain` でステップ数と shift を指定できるようにする: 実装と機械の門・GPU での確認（2026-11-25）
+
+### 234.1 結論
+
+- **結論を先に**: MCP の連結の道具 `submit_chain`（`mcp_server/tools/generate.py`）に、引数 `num_inference_steps`・`shift_video`・`shift_audio` を足しました（dev の `a3cbdcc6`）。**省略すれば API へ送らず、指定したときだけその値をそのまま送ります。** 省略したときに送る本文は、変更の前と同じです。
+- **機械の門は失敗 0 でした**（234.5）。**GPU での確認も合格しました**（234.6）。MCP から MiniMax H3 の連結を Turbo LoRA の 4 ステップ・shift 12／3 で流し、要求の写しにもエンジンの記録にもその値が入り、2 クリップとも 4 ステップでノイズ除去されました。
+- **main へ取り込む前のアプリの試験の全件 1 回も、失敗 0・エラー 0 で通りました**（234.7）。残っているのは、オーナーの指示を受けての、台帳の 1-300 を完了の文書へ移すことと main への取り込みです（234.8）。
+- 判断と理由は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41、API の契約は仕様書 [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) で、本節には写しません。**このテーマの検証・機械の門・GPU での確認の数値の正本は本節です。**
+
+> **更新（2026-11-25）**: オーナーの指示（2026-11-25）で、台帳の項目を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 へ移しました（234.10）。残るのは main への取り込みです（234.11）。
+
+### 234.2 経緯と位置づけ
+
+- 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の §1-300 のテーマです。オーナーの指示（2026-11-25）で着手しました。きっかけは、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認の G2 を、ステップ数を指定するために HTTP で流したことです（233.10・233.13）。
+- 以前に足さないと決めた理由（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D31）と、今回それを解除した理由は、同 D41 に書きました。
+- 計画はオーナーが了承しました（2026-11-25）。計画では、オーナーにお願いする画面の操作が無いので、台帳の項目は §2 へ移さず、確認が済んで指示を受けたら完了の文書へ移す、と決めました。
+- 進め方: 計画 → 敵対的なレビュー → オーナーの了承 → 実装 → 差分の検証 → 機械の門 → コミット → GPU を使わない自己点検 → GPU での確認。
+
+### 234.3 計画の敵対的なレビュー
+
+- 別の担当に、計画を現物のコードと突き合わせて突かせました。**作りを変える指摘はありませんでした。**
+
+| 採った指摘 | 反映先 |
+|---|---|
+| 実機での確認の重みの前提が違う（いま選ばれているのは Ref2VA だった） | GPU での確認の条件（234.6） |
+| 説明文に、直し漏れが 3 か所ある | 実装の範囲（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41 の④） |
+| 設計の正本で該当する箇所が 2 か所ある。D31 と D40 に訂正の注記が要る | 文書の更新（[`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) の 2 か所の注記、[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D31・D40 の注記） |
+| 試験の値がどれも「真」なので、`is not None` を真偽の判定に書き間違えても通ってしまう | 0 を落とさずに送ることの試験を 1 件（234.5 の書き間違いの確かめ） |
+| クリップごとのステップ数を直接書いた記録の鍵は無い | GPU での確認で、`denoise.m_per_step` の長さで読む（234.6） |
+| MCP の既定と違うので、明示が要る引数がある | GPU での確認の条件の表（234.6） |
+
+### 234.4 実装の差分の検証
+
+- 別の担当が差分を確かめました。**コードと試験に直す点はありませんでした。**
+- 指摘は 1 件で、説明文（`generate.py` の注釈）が指す D41 が、まだ設計書に無い、というものでした。本節と同時の文書の更新で D41 を書いたので、コードは直していません。
+
+### 234.5 機械の門（2026-11-25）
+
+| 確認 | 結果 |
+|---|---|
+| 実装担当: `tests/test_mcp_tools_generate.py` と `tests/test_mcp_registration.py` | 合格 169・失敗 0 |
+| 検証担当: 上の 2 ファイルに `tests/test_mcp_tools_system.py` を加えた 3 ファイル | 合格 183・失敗 0（警告 1 件は starlette の非推奨の通知） |
+| 書き間違いの確かめ: `if num_inference_steps is not None:` を `if num_inference_steps:` に変えて回す | 0 の試験だけが落ちた（合格 166・失敗 1）。元に戻して合格 169 |
+
+- 新設の試験は 4 件です（`tests/test_mcp_tools_generate.py` の `test_submit_chain_input_schema_exposes_optional_sampling_fields`・`test_submit_chain_omits_sampling_fields_when_not_given`・`test_submit_chain_sends_sampling_fields_when_given`・`test_submit_chain_sends_zero_sampling_values_instead_of_dropping_them`）。`test_submit_chain_input_schema_has_no_hidden_fields` の一覧から `num_inference_steps` を外しました。省略したときの本文を固定する既存の試験 `test_submit_chain_payload_contract_defaults_only_and_chunked_upsample_always_sent` は、変えずに通りました。
+- 件数は、試験を回した担当の報告によります。試験の出力そのものは保管していません。
+
+### 234.6 GPU での確認（2026-11-25。合格）
+
+- **結論を先に**: **合格です。** MCP の `submit_chain` で指定した 4 ステップ・shift 12／3 が、要求の写し（`request`）にもエンジンの記録（`h3`）にも入り、2 クリップとも 4 ステップでノイズ除去されました。
+- **記録の置き場所**: [`Outputs-archive/mcp-chain-steps-gate-2026-11-25/`](Outputs-archive/mcp-chain-steps-gate-2026-11-25/)（台本 `g_chainsteps.py`、始める前の `state.json` の写し `state.before.json`、`runs/` に自己点検 `selfcheck.json`・実行の記録 `run.json`・ジョブの `metadata.json`・判定 `verdict.json`・後片付け `cleanup.json`・MCP の呼び出しの記録、`logs/` にコンソールとサーバーのログ）。mp4 は写していません。本節の数値は `runs/verdict.json` と `runs/run.json` から書きました。
+- **流した手順**: 監督がサーバーを起こし、台本で 1 本を流し、終わったらサーバーを止めました。
+
+#### 条件（オーナーが了承した表）
+
+| 項目 | 値 |
+|---|---|
+| 入口 | MCP の `submit_chain`（stdio のクライアント） |
+| ベースモデル | MiniMax H3 |
+| 重み | そのとき選ばれていたものをそのまま（`minimax_h3_ref2va_pruned_int8_convrot`）。切り替えも戻しもしていない。合否には使わない |
+| LoRA | Turbo LoRA `minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16`、強さ 0.8 |
+| ステップ数・shift | `num_inference_steps=4`・`shift_video=12`・`shift_audio=3` |
+| クリップ | 2 枚（73 フレームずつ、プロンプトだけ） |
+| 解像度・fps | 1280×768、24fps |
+| そのほか | attention は sdpa、`keep_resident` は on、seed 42。1 本だけ |
+
+- プロンプトの文面は、台本と `runs/run.json` の `submit_args` にあります（本節には写しません）。
+
+#### GPU を使わない自己点検（生成の前）
+
+- MCP の `submit_chain` が API へ送る本文を捕まえ、3 つの値が最上位に入ること（`num_inference_steps: 4`・`shift_video: 12`・`shift_audio: 3`）と、API のモデルで検査したときに `model_fields_set` に `num_inference_steps`・`shift_video`・`shift_audio` が入ることを確かめました（`runs/selfcheck.json`。問題 0 件）。
+
+#### 結果
+
+| 見たもの | 値 |
+|---|---|
+| ジョブ | `6cea4139-55c1-4794-80d6-fb1712a7a43a`。完了（`error` なし） |
+| `request.num_inference_steps`・`request.shift_video`・`request.shift_audio` | 4・12.0・3.0 |
+| `h3.num_inference_steps`・`h3.shift_video`・`h3.shift_audio` | 4・12.0・3.0 |
+| クリップごとのステップ数（`h3.phases.clips[i].denoise.m_per_step` の要素の数） | クリップ 1 が 4、クリップ 2 が 4 |
+| LoRA（`h3.loras`） | Turbo LoRA、強さ 0.8 で当たった（`pairs_applied` 208、`skipped` なし） |
+| attention（`attention_used`） | sdpa |
+| 全体の生成時間（`generation_time_seconds`） | 258.54 秒 |
+| ノイズ除去（クリップ順） | 96.91 秒・85.31 秒 |
+| 出力の mp4 | 映像 124 フレーム・5.167 秒（音声の流れもある） |
+
+- クリップごとのステップ数を直接書いた鍵は記録に無いので、ステップごとに 1 つ足される `denoise.m_per_step` の並びの長さで読みました。
+
+#### 起きたこと
+
+- **`wait_for_job` の `BACKEND_UNREACHABLE`**: MCP の `wait_for_job` が、ジョブの実行中に `BACKEND_UNREACHABLE` を 3 回返しました（`runs/run.json` の `unreachable`）。台本は 10 秒待って呼び直して続け、ジョブは送り直していません。台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-281 の 1 つ目の件と同じ症状です。原因は追究していません。
+
+#### 後片付けの確認（監督が現物で確かめた）
+
+- 台本が MCP の `unload_pipeline` でパイプラインを解放しました（`runs/cleanup.json`）。
+- python のプロセスは 0 件、ポート 18620 の待ち受けは無し、GPU のメモリの使用は 723 MiB でした。`state.json` は始める前と同じでした（担当がバイトの一致を確かめた）。
+
+### 234.7 main へ取り込む前の、アプリの試験の全件 1 回（2026-11-25）
+
+- **結論を先に**: 合格 4,329・失敗 0・エラー 0・スキップ 82（合計 4,411）でした。終了コードは 0 です。junitxml（tests=4411・failures=0・errors=0・skipped=82）と標準出力の末尾の集計の行（「4329 passed, 82 skipped, 63 warnings in 493.95s (0:08:13)」）は、件数が一致しました。所要は junitxml で 493.666 秒です。
+- **条件**: HEAD `a3cbdcc6`（dev）。作業ツリーには、まだコミットしていない文書の変更（文書だけで、コードと試験は `a3cbdcc6` のまま）と、追跡外の `Docs/Outputs-archive/mcp-chain-steps-gate-2026-11-25/` がありました。バックエンドのサーバーは停止、エンジンのワーカーは無し、AviUtl2 も停止した状態で回しました（python のプロセス 0 件・AviUtl2 のプロセス 0 件・ポート 18620 と 8000 の待ち受けなし）。命令の形は §227.12・§232.9・§233.15 と同じです。
+- **スキップ 82 件の内訳**: 収集のときが 54 件、実行のときが 28 件です（「the tensor helpers need an engine venv」18、「could not import 'torch'」9、「the 2.3 pipeline needs an engine venv」1）。前回の全件（§233.15）と内訳まで同じです。
+- **前回の全件（§233.15。HEAD `23175bdf`）との差**: 合格 +4・合計 +4 です。失敗 0・エラー 0・スキップ 82 は同じです。`a3cbdcc6` で `tests/test_mcp_tools_generate.py` に足した試験 4 件の分と見られます（件数の単位までは突き合わせていない）。
+- **警告**: 63 件で、前回と同じです。
+- **終わったあと**: python のプロセスは残っておらず、止めたプロセスもありません。GPU のメモリの使用は、回す前もあとも 728 MiB でした。コードと試験のファイルに変更はなく、リポジトリの直下に追跡外の新しいファイルはできていません。
+- 件数は、試験を回した担当の報告によります。試験の出力そのものは保管していません。
+
+### 234.8 残っていること
+
+- オーナーの指示を受けての、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-300 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移すことと、main への取り込み。
+
+> **更新（2026-11-25）**: 台帳の項目は、オーナーの指示で [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 へ移しました（234.10）。いま残っていることは 234.11 です。
+
+### 234.9 成果物の所在
+
+- **アプリ**: `mcp_server/tools/generate.py`・`mcp_server/server.py`・`mcp_server/tools/system.py`。試験は `tests/test_mcp_tools_generate.py`。
+- **GPU での確認の記録**: [`Outputs-archive/mcp-chain-steps-gate-2026-11-25/`](Outputs-archive/mcp-chain-steps-gate-2026-11-25/)。
+- **コミット**: コードと試験は dev の `a3cbdcc6` です。本節を含む文書は、監督がコミットします。
+
+### 234.10 クローズ（2026-11-25）
+
+- **結論を先に**: オーナーの指示（2026-11-25）で、台帳の 1-300 を閉じました。
+- **オーナーにお願いする実機での確認**: ありません。変えたのは MCP サーバーだけで、操作パネルもプラグインも変えていないためです。オーナーは、「内容が MCP の改善で、人間の目視での確認が要る実機の試験は残っていない」という解釈を確かめたうえで、クローズを指示しました。
+- **台帳の扱い**: 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-300 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 へ移しました（2026-11-25）。
+
+### 234.11 main への取り込み（2026-11-25）
+
+- **これから行うこと**: 本節を含む文書のコミットを dev に入れ、プッシュ分の個人情報の確認を通したあとで、dev を main へ `--no-ff` で取り込みます（オーナーの指示 2026-11-25 を受けて）。ハッシュは git の履歴を正とします。

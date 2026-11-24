@@ -1,0 +1,9 @@
+  load: state=ready loaded=True t=0s
+job 6cea4139-55c1-4794-80d6-fb1712a7a43a
+  running stage=stage1_denoise step=0/4 t=45s
+  running stage=stage1_denoise step=2/4 t=90s
+  BACKEND_UNREACHABLE (1) 2026-11-25T01:41:21
+  running stage=stage1_denoise step=0/4 t=150s
+  BACKEND_UNREACHABLE (1) 2026-11-25T01:42:26
+  BACKEND_UNREACHABLE (2) 2026-11-25T01:42:56
+  running stage=decode step=None/None t=245s

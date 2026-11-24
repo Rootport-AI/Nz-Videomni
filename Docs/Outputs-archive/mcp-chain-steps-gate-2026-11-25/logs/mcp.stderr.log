@@ -1,0 +1,80 @@
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/status "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type ListToolsRequest
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/models "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/loras "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/status "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST http://127.0.0.1:18620/api/v1/pipeline/load "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/status "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/models "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: POST http://127.0.0.1:18620/api/v1/generate/chain "HTTP/1.1 202 Accepted"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/jobs/6cea4139-55c1-4794-80d6-fb1712a7a43a "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: POST http://127.0.0.1:18620/api/v1/pipeline/unload "HTTP/1.1 200 OK"
+INFO:mcp.server.lowlevel.server:Processing request of type ListToolsRequest
+INFO:mcp.server.lowlevel.server:Processing request of type CallToolRequest
+INFO:httpx:HTTP Request: GET http://127.0.0.1:18620/api/v1/status "HTTP/1.1 200 OK"

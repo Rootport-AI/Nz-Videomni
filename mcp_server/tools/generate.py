@@ -7,11 +7,12 @@
 モック（LTX 2.5 では 422）で、CFG は LTX の distilled パイプラインで 1.0 に縛られ、
 MiniMax H3 には CFG そのものが無いため。``num_inference_steps`` と shift
 （``shift_video`` / ``shift_audio``）は、ステップ数が固定の LTX には意味が無いが
-MiniMax H3 では利用者の選ぶ値なので、``submit_generate`` に限り任意引数で
-公開する（既定 ``None`` は送らない＝ベースモデルの既定値。LTX では 8 以外は 422）。
-``submit_chain`` には出さない: H3 の連結生成は送らないとき H3 の既定（20 ステップ・
-shift 12 / 3）で動くので、MCP からは Turbo LoRA の 8 ステップを指定できない
-（``pi_h3`` を選んだときは、選択の値〔4steps は 4・12・3、2steps は 2・12・3〕で動く）。
+MiniMax H3 では利用者の選ぶ値なので、``submit_generate`` と ``submit_chain`` の
+両方で任意引数として公開する（既定 ``None`` は送らない＝ベースモデルの既定値。
+LTX では 8 以外は 422。H3 の連結は、送らなければ H3 の既定の 20 ステップ・shift 12 / 3、
+``pi_h3`` を選んだときは選択の値〔4steps は 4・12・3、2steps は 2・12・3〕で動く）。
+API の連結の既定は 8 で、H3 は「送られたかどうか」で見分けるため、MCP は ``None`` の
+ときキー自体を送らない（``Docs/MCP_SERVER_DESIGN.md`` §2 の D41）。
 一方で Acceleration 機能の引数（``GenerateRequest`` の Acceleration の
 区画）はすべて公開する（同書 §2 の D12・D22）--
 ``attention_backend``（既定 ``"sdpa"``、``"sage"`` も選べる）と
@@ -1051,6 +1052,9 @@ async def submit_chain(
     pi_h3: Literal["off", "4steps", "2steps"] = "off",
     sol_vae: bool = False,
     keep_reference_latents: bool = False,
+    num_inference_steps: int | None = None,
+    shift_video: float | None = None,
+    shift_audio: float | None = None,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -1092,11 +1096,16 @@ async def submit_chain(
     **MiniMax H3 でも連結生成が使えます**。前の
     クリップの末尾 22 フレーム（固定）を次のクリップの先頭に引き継ぎます。
     各クリップの ``num_frames`` は 17n+5 で、1 本目は 22 以上・2 本目以降は 39
-    以上、幅と高さは 32 の倍数、``frame_rate`` は 24 です。ステップ数と shift と
-    VRAM 16GB mode はこのツールに引数が無いので、H3 の既定（20 ステップ・
-    shift 12 / 3・VRAM 16GB mode on）で動きます（Turbo LoRA の 8 ステップは
-    指定できません）。``pi_h3`` を ``"off"`` 以外にしたときは、選択の値
-    （4steps は 4・12・3、2steps は 2・12・3）で動きます。``overlap_frames`` / ``overlap_strength`` /
+    以上、幅と高さは 32 の倍数、``frame_rate`` は 24 です。
+    ステップ数と shift（``constraints.sampling`` があるベースモデル＝MiniMax H3）:
+    ``num_inference_steps`` / ``shift_video`` / ``shift_audio`` は省略（``None``）
+    すると送らず、ベースモデルの既定値になります（H3 は 20 / 12 / 3。範囲は
+    ``list_models`` の ``constraints.sampling``）。連結の全クリップに同じ値が効きます。
+    Turbo LoRA の 4 ステップなどはここで指定します。``pi_h3`` を ``"off"`` 以外に
+    したときは、選択の値（4steps は 4・12・3、2steps は 2・12・3）で動きます。
+    LTX ではステップ数は distilled の 8 に固定で、8 以外を送ると 422、shift は
+    LTX には無い概念で、送っても無視されます。**VRAM 16GB mode はこのツールに
+    引数が無く、H3 の既定の on で動きます。** ``overlap_frames`` / ``overlap_strength`` /
     ``stage2_window`` / ``chunked_upsample`` は H3 では無視されます。
     ``clips[0].conditioning_images``（冒頭画像）は H3 でも使えます（``strength``
     は指定しない。指定すると 422 FEATURE_UNSUPPORTED の ``keyframe_strength``）。
@@ -1400,10 +1409,11 @@ async def submit_chain(
             ``"off"``（既定）・``"4steps"``・``"2steps"``。**既定のままなら
             キーは送りません。** 連結・V2V・撮り直しの全クリップに 1 つの選択が
             効きます）。**MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``"off"`` 以外を
-            指定すると 422 FEATURE_UNSUPPORTED になります。** このツールには
-            ステップ数と shift の引数が無いので、指定するだけで選択の値
-            （4steps は 4・12・3、2steps は 2・12・3。正本は ``list_models`` の
-            ``constraints.pi_h3``）で動きます。**Turbo LoRA や Turbo モデルとの
+            指定すると 422 FEATURE_UNSUPPORTED になります。** **有効のあいだは
+            ``num_inference_steps`` / ``shift_video`` / ``shift_audio`` を省略して
+            ください**（選択の値で動きます。4steps は 4・12・3、2steps は 2・12・3。
+            正本は ``list_models`` の ``constraints.pi_h3``。違う値を指定すると
+            422）。**Turbo LoRA や Turbo モデルとの
             併用は非推奨です**（断られはしません）。**2steps は品質に課題が
             あります**（細部が潰れたり、収束しきらない靄が残ったりします）。
             先頭に置いた絵から、絵柄や背景が変わることがあります。重みの
@@ -1429,6 +1439,17 @@ async def submit_chain(
             ジョブや、この引数が ``False`` のジョブが来ると、保持した分は消えます。
             **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
             FEATURE_UNSUPPORTED になります。**
+        num_inference_steps: ステップ数（MiniMax H3 用。省略で送らない＝
+            ベースモデルの既定値。H3 は既定 20・範囲 1〜50。LTX は 8 固定で、
+            8 以外は 422）。連結の全クリップに 1 つの値が効きます。``pi_h3`` が
+            ``"off"`` 以外のときは、この引数と ``shift_video`` / ``shift_audio``
+            は省略してください（選択の値で動きます）。
+        shift_video: 映像のノイズスケジュールの shift（MiniMax H3 用。省略で
+            送らない＝既定値。H3 は既定 12・範囲 1〜20。LTX では無視）。連結の
+            全クリップに 1 つの値が効きます。
+        shift_audio: 音声のノイズスケジュールの shift（MiniMax H3 用。省略で
+            送らない＝既定値。H3 は既定 3・範囲 1〜20。LTX では無視）。連結の
+            全クリップに 1 つの値が効きます。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1482,6 +1503,16 @@ async def submit_chain(
         payload["crop_output"] = {"width": crop_width, "height": crop_height}
     payload["frame_rate"] = _snap_frame_rate(frame_rate)
     payload["seed"] = seed
+    # num_inference_steps / shift_*: same rule as submit_generate (sent only
+    # when not None; no truthiness test, 0 must reach the server's 422). The
+    # API's chain default is 8 and H3 tells "sent" from "omitted", so None must
+    # leave the key out (D41).
+    if num_inference_steps is not None:
+        payload["num_inference_steps"] = num_inference_steps
+    if shift_video is not None:
+        payload["shift_video"] = shift_video
+    if shift_audio is not None:
+        payload["shift_audio"] = shift_audio
 
     if nag_enabled:
         payload["nag_enabled"] = True

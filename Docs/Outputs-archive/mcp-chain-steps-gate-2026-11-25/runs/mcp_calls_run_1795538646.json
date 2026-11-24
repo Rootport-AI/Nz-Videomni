@@ -1,0 +1,286 @@
+[
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.17,
+    "at": "2026-11-25T01:39:43",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.03,
+    "at": "2026-11-25T01:39:43"
+  },
+  {
+    "tool": "list_loras",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T01:39:43"
+  },
+  {
+    "tool": "load_pipeline",
+    "args": {
+      "wait_sec": 45
+    },
+    "is_error": false,
+    "seconds": 3.24,
+    "at": "2026-11-25T01:39:46",
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "finished": true
+    }
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T01:39:46",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.01,
+    "at": "2026-11-25T01:39:46"
+  },
+  {
+    "tool": "submit_chain",
+    "args": {
+      "prompt": "A woman in a red raincoat walks along a quiet harbor at dawn, soft light, gentle camera movement.",
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "num_inference_steps": 4,
+      "shift_video": 12,
+      "shift_audio": 3,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "clips": [
+        {
+          "num_frames": 73,
+          "prompt": "She walks slowly along the wooden pier."
+        },
+        {
+          "num_frames": 73,
+          "prompt": "She stops at the end of the pier and looks at the sea."
+        }
+      ]
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T01:39:46",
+    "result": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "status": "running",
+      "created_at": "2026-11-24T16:39:46Z",
+      "num_clips": 2,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T01:40:31"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T01:41:16"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.0,
+    "at": "2026-11-25T01:41:21",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T01:42:16"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.01,
+    "at": "2026-11-25T01:42:26",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 19.99,
+    "at": "2026-11-25T01:42:56",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T01:43:51"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "6cea4139-55c1-4794-80d6-fb1712a7a43a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 15.0,
+    "at": "2026-11-25T01:44:06"
+  }
+]

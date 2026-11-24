@@ -120,8 +120,8 @@ async def list_models() -> dict[str, Any]:
             MiniMax H3 は 17n+5 かつ 22 以上）、``dimension_multiple``（幅と
             高さの倍数。LTX は 64、H3 は 32）、``frame_rate`` の
             ``{min, max}``（LTX は 1〜60、H3 は 24 固定）、``sampling``（
-            submit_generate の ``num_inference_steps`` / ``shift_video`` /
-            ``shift_audio`` の ``{min, max, step, default}``。LTX は null＝
+            submit_generate / submit_chain の ``num_inference_steps`` /
+            ``shift_video`` / ``shift_audio`` の ``{min, max, step, default}``。LTX は null＝
             ステップ数 8 固定で shift なし）、``keyframes``（キーフレームを
             置ける位置の格子 ``{step, offset}``。LTX は ``{8, 1}``＝位置 0 と
             8n+1、MiniMax H3 は ``{1, 0}``＝0〜num_frames−1 の任意のフレーム）、

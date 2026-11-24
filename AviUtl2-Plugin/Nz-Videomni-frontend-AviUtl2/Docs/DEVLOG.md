@@ -7100,6 +7100,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 - 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-297 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-297）。
 
+> **更新（2026-11-25）**: オーナーの実機での確認は合格し、項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-297 へ移りました（結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §233.14）。main へ取り込む前のアプリの試験の全件 1 回は通りました（同 §233.15）。main への取り込みは、そのあとに行います。
+
 ## 183. MiniMax H3 の Chained で、アコーディオンが消えたクリップカードに「クリップ n の参照素材が使われます。」を出す — 出す条件はアコーディオンを隠す条件と同じ・新しい状態は足さない・既存の `.clip-note`（設計正本 裁定 109 ③。2026-11-24）
 
 ### 183.1 結論
@@ -7146,3 +7148,5 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 183.6 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）は済みました。案内のオーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。§181 のチェックそのもののオーナーの確認は合格しました（記録簿 §232.11）。
+
+> **更新（2026-11-25）**: 案内のオーナーの実機での確認も合格し、§181 の分とあわせて項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296 へ移りました（結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232.13）。main へ取り込む前のアプリの試験の全件 1 回は通りました（同 §233.15）。main への取り込みは、そのあとに行います。

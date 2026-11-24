@@ -45,6 +45,40 @@
 - [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
 - 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
 
+### 1-296. MiniMax H3 の Chained のクリップカードに「後続クリップにも同じ参照素材を使う」を置き、MCP で参照素材を受ける（起票：2026-11-24）
+
+- **概要**: Chained のクリップカードの Reference アコーディオンに、チェック「後続クリップにも同じ参照素材を使う」を足した（dev の `2311d120`。配布用の aux2 を含む）。MCP の `submit_generate` と `submit_chain` には、参照素材の引数 `references` を足した（`79e4b903`）。機械の確認と実機への配置は済み。残るのはオーナーの実機での確認。
+- **出典**: 裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 109、操作パネルの作りはフロントエンド `Docs/DEVLOG.md` §181、MCP の引数の形は `MCP_SERVER_DESIGN.md` D39、機械の確認と配置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §232。本節が実機確認の項目の正本。
+
+前提: MiniMax H3、Ref2VA の重み、Chained タブでクリップ 4 枚、`References` を on。ステップ数はふだんの Turbo の 4 ステップでよい（生成の項目は、絵ではなく記録で判定する）。
+
+#### 画面
+
+- [ ] 4 枚のカードの Reference アコーディオンを開く → 4 枚とも、Audios の行の下に「後続クリップにも同じ参照素材を使う」があり、チェックは外れている。
+- [ ] クリップ 2 のチェックを入れる → クリップ 3・4 の Reference アコーディオンが消え、クリップ 1・2 のアコーディオンは残る。
+- [ ] 続けてクリップ 1 のチェックを入れる → クリップ 2 のチェックが外れ、クリップ 2〜4 のアコーディオンが消える。
+- [ ] クリップ 4 の Pictures の 1 番に画像を入れてから、クリップ 2 のチェックを入れ、外す → クリップ 4 のアコーディオンが戻る（閉じた状態で出る）。開くと、1 番のカードにその画像が残っている。
+- [ ] クリップ 2 のチェックを入れたまま「クリップを追加」を押す → 増えたクリップ 5 のカードに Reference アコーディオンが無い。
+- [ ] クリップ 2 のチェックを入れたまま、クリップ 2 の「クリップを削除」を押す → 残った全カードにアコーディオンが出て、開くとチェックはどれも外れている。
+- [ ] クリップ 2 のチェックを入れ、「クリップ」の見出し（英語の画面では Clips）の右の `References` のチェックを外して、入れ直す → クリップ 2 のチェックは入ったままで、クリップ 3・4 のアコーディオンは無い。
+- [ ] クリップ 1 の Audios の 1 番の「Audio to video」にチェックを入れる → 全カードの新しいチェックが灰色で押せず、マウスを重ねるとポインタが禁止の印になり「Audio to video が on のクリップがあります。」が出る。「Audio to video」を外す → 押せるようになり、チェックは外れたまま。
+- [ ] クリップ 2 のチェックを入れてから、クリップ 1 の「Audio to video」にチェックを入れる → クリップ 2 のチェックが外れ、クリップ 3・4 のアコーディオンが戻る。「Audio to video」を外しても、クリップ 2 のチェックは外れたまま。
+- [ ] クリップ 2 のチェックを入れてから、「音声から動画（A2V）」の欄に 20 秒以上の音声を入れる（「クリップを変更しますか？」が出たら「はい」）→ 全カードに Reference アコーディオンが出る。開くと、クリップ 2 のチェックは外れていて、各カードの Audios に音声と「Audio to video」のチェックが入っている。
+- [ ] クリップ 2 の Videos の 1 番に 15 秒の動画を入れ、クリップ 2 のチェックを入れる → クリップ 3・4 の快適上限の印が、クリップ 2 の印と同じ位置に動く。チェックを外す → 元の位置に戻る。
+- [ ] 素材（冒頭）に動画を入れ、「クリップを削除」でカードを 1 枚にする → そのカードの Reference アコーディオンにも新しいチェックがある。
+- [ ] Single タブの Reference アコーディオンを開く → 新しいチェックが無い。
+- [ ] バッチ v2v-ref-long でフォルダをスキャンして行を作り、行の ▶ を開く → 出てきたカードの Reference アコーディオンに新しいチェックが無い（参照素材フォルダの欄の「後続クリップにも同じ参照ファイルを入力」は今までどおりある）。
+- [ ] 言語を English にする → 見出しと説明が英語で出る。
+
+#### 記録
+
+Toolbox タブの「mp4 info」に、生成した mp4 をドロップして読む。Settings の「生成したmp4に生成条件をメタデータとして書き込む」が ON〔既定〕であること。記録の番号は 0 から数えるので、画面のクリップ 2 は `clips[1]`。
+
+- [ ] クリップ 1 に画像 A、クリップ 2 に画像 B、クリップ 4 に画像 C を、それぞれ Pictures の 1 番に入れ、クリップ 2 のチェックを入れて生成する → 完了する。記録の `request.clips[1]`・`[2]`・`[3]` の `references[0].id` が同じ値で、`request.clips[0]` の `references[0].id` とは違う。
+- [ ] 続けて、クリップ 2 のチェックを外して生成する → `request.clips[3].references[0].id` が前の項目と違う値になり、`request.clips[2].references` は `[]` になっている。
+
+注: LTX へ切り替えて H3 に戻したときに on が残ることは、自動の試験で確かめる（重みの読み込み直しを 2 回お願いすることになるため、実機の項目には入れない）。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
@@ -143,12 +177,12 @@
 - **観測（2026-11-02）**: H3 の 1 本の V2V（クリップ 56 フレーム）でも同じ約 8 ミリ秒の不足を観測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193.7 ④）。
 - **出典**: §1-103（H3 の A2V。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-257）の事前調査（2026-10-25）で見つかった副産物。A2V では Strength 1.0 のとき元の波形を映像の長さで切って載せるので、この差は出ない。
 
-#### 3-259. MCP と Gradio の Ref2VA（参照素材からの生成）の受け口（起票：2026-10-28）
+#### 3-259. Gradio の Ref2VA（参照素材からの生成）の受け口と、MCP の連結の文脈フレームの既定（起票：2026-10-28）
 
-- **概要**: MiniMax H3 の Ref2VA を、MCP の生成の道具と Gradio の Generate タブからも使えるようにする（いまは API と AviUtl2 の操作パネルだけ）。**連結（Chained）の各クリップの参照（旧 §1-109〔CLOSED 3-264〕）も含める**（MCP の `submit_chain` は `clips[i].references` を受けず、Gradio の Chain タブは LTX 専用）。
-- **前提**: API は `POST /generate` の `references`（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2）で確定している。MCP は画像・動画・音声の 3 種のアップロードの id と、プロンプトの札（`<Picture n>` など）の書き方、Ref2VA の重みを読み込む必要（`GET /models` の `transformer_role`）の案内が要る。Gradio は H3 の整理（§3-243）と合わせて扱う。
-- **H3 の連結の V2V と冒頭画像（追記）**: MCP の `submit_chain` は `source_video_context_frames`（既定 73）をそのまま送るので、22 を指定しないと H3 の V2V は 422（`source_video.context_frames must be 22 …`）になる（説明文には 22 の指定を書いた。既定値を系統で変えるかは本項で決める）。冒頭画像は `strength` を省略すれば通る。Gradio の Chain タブは LTX 専用で、LTX の検査（25 以上・8n+1）を画面側で行うので、H3 の V2V は送れない（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)）。
-- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・§3.3（参照付きの連結・入力動画からの続き）・裁定 82・裁定 87・裁定 90、`MCP_SERVER_DESIGN.md` D32。
+- **概要**: MiniMax H3 の Ref2VA を、Gradio の Generate タブ（単発）と Chain タブ（連結の各クリップ）からも使えるようにする。あわせて、MCP の `submit_chain` の `source_video_context_frames` の既定（73）を系統で変えるかを決める。
+- **前提**: API は `POST /generate` の `references`（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2）と `POST /generate/chain` の `clips[i].references`（同 §6.2b (h)）で確定している。Gradio の Chain タブは LTX 専用で、LTX の検査（25 以上・8n+1）を画面側で行うので、H3 の連結には使えない。Gradio は H3 の整理（§3-243）と合わせて扱う。説明文の書き方（3 種のアップロードの id・札 `<Picture n>` など・重みの種別の確かめ方）は、MCP の `submit_generate` の説明（`MCP_SERVER_DESIGN.md` D39）が手本になる。
+- **MCP の V2V の文脈フレーム**: MCP の `submit_chain` は `source_video_context_frames`（既定 73）をそのまま送るので、22 を指定しないと H3 の V2V は 422（`source_video.context_frames must be 22 …`）になる（説明文には 22 の指定を書いてある）。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・§3.3（参照付きの連結・入力動画からの続き）・裁定 82・裁定 87・裁定 90・裁定 109 ⑩、`MCP_SERVER_DESIGN.md` D39。
 
 #### 3-269. MiniMax H3 の V2V の凍結フレーム（入力動画から引き継ぐ文脈）の増量の検討（起票：2026-11-02）
 

@@ -26507,6 +26507,7 @@ VRAM の山（MiB。割り当て／予約）:
 
 - **結論を先に**: 操作パネルの Chained のクリップカードに、チェック「後続クリップにも同じ参照素材を使う」を足しました（dev の `2311d120`。配布用のプラグインを含む）。MCP の `submit_generate` と `submit_chain` には、参照素材（Ref2VA）の引数 `references` を足しました（dev の `79e4b903`）。**機械の確認（操作パネルの型検査・書き方の検査・テスト、MCP のテスト）は、直しのあとの最終の結果ですべて合格でした**（232.4）。
 - **実機への配置は済みました。オーナーの実機での確認は未了です**（232.5。項目の正本は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-296）。
+- **main へ取り込む前のアプリの試験の全件 1 回は、失敗 0・エラー 0 でした**（232.9）。残るのは、オーナーの実機での確認と、そのあとの main への取り込みだけです。
 - 裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 109、操作パネルの作りはフロントエンドの `Docs/DEVLOG.md` §181、MCP の引数の形は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D39 で、本節には写しません。**このテーマの機械の確認と配置の数値の正本は本節です。**
 - サーバーの API とエンジンは変えていません。
 
@@ -26535,7 +26536,7 @@ VRAM の山（MiB。割り当て／予約）:
 | MCP のテスト（`.venv` の pytest で、`tests\test_mcp_*.py` の 7 本をファイル指定） | 230 件すべて合格 |
 
 - MCP のテストは、`test_mcp_tools_generate`・`test_mcp_registration`・`test_mcp_tools_system`・`test_mcp_errors`・`test_mcp_tools_jobs`・`test_mcp_outputs`・`test_mcp_batch_planning` の 7 本です。サーバーとワーカーが動いていない状態で回しました。
-- アプリの試験の全件は、まだ回していません（main へ取り込む前に 1 回回します）。
+- アプリの試験の全件 1 回は、文書のコミットのあとに回しました（232.9）。
 - MCP を本物のバックエンドで流す確認は行っていません。API は変えておらず、MCP が送る本文の形は自動の試験で固定したためです。
 - 件数は、確認を回した担当の報告によります。
 
@@ -26553,7 +26554,7 @@ VRAM の山（MiB。割り当て／予約）:
 
 ### 232.7 残っていること
 
-- オーナーの実機での確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-296）。合格のあとで、アプリの試験の全件を 1 回回し、main へ取り込みます。
+- オーナーの実機での確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-296）と、そのあとの main への取り込み。main へ取り込む前のアプリの試験の全件 1 回は済んでいます（232.9）。
 - Gradio の参照素材の受け口と、MCP の `submit_chain` の `source_video_context_frames` の既定は、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-259 に残しています。
 
 ### 232.8 成果物の所在
@@ -26562,3 +26563,14 @@ VRAM の山（MiB。割り当て／予約）:
 - **MCP のソース**: `mcp_server/params.py`・`mcp_server/tools/generate.py`・`mcp_server/tools/uploads.py`・`mcp_server/server.py`、テストは `tests/test_mcp_tools_generate.py`。
 - **配布用のプラグイン**: `AviUtl2-Plugin/NzVideomni.aux2`。
 - **コミット**: 操作パネルのコードとテスト、配布用のプラグインは dev の `2311d120`、MCP は `79e4b903` です。本節を含む文書は、監督がコミットします。
+
+### 232.9 main へ取り込む前の、アプリの試験の全件 1 回（2026-11-24）
+
+- **結論を先に**: 合格 4,294・失敗 0・エラー 0・スキップ 82（合計 4,376）でした。終了コードは 0 です。junitxml（tests=4376・failures=0・errors=0・skipped=82）と標準出力の末尾の集計の行は、件数が一致しました。所要は junitxml で 489.92 秒です。
+- **時期**: オーナーの指示（2026-11-24。外出中で実機での確認ができないので、アプリの試験の全件だけを先に済ませる）によります。main への取り込みは、オーナーの実機での確認のあとに行います。
+- **条件**: HEAD `20d60cb4`（dev）。バックエンドのサーバーは停止、エンジンのワーカーは無し、AviUtl2 も停止した状態で回しました。命令の形は §227.12 と同じです（リポジトリの直下で `PATH` の先頭に `tools\ffmpeg\bin` を足し、`.venv\Scripts\python.exe -m pytest -o addopts="" -p no:cacheprovider --junitxml=<一時フォルダーの junit.xml>`。`-q`・`LTX_MCP_BASE_URL`・`CUDA_VISIBLE_DEVICES` は付けていない）。
+- **スキップ 82 件の内訳**: 収集のときが 54 件、実行のときが 28 件です（「the tensor helpers need an engine venv」18、「could not import 'torch'」9、「the 2.3 pipeline needs an engine venv」1）。前回の全件（§231.9。HEAD `2ca0911b`）と内訳まで同じです。
+- **前回の全件（§231.9）との差**: 合格 +3・失敗 0・スキップ 0 です。`79e4b903` で `tests/test_mcp_tools_generate.py` に足した試験が 3 件なので、その分と見られます（件数の単位までは突き合わせていない）。
+- **警告**: 63 件で、前回と同じです。非推奨の警告と、Gradio の入力の拒否を警告として出す試験の分です。外への通信の失敗の警告はありませんでした。
+- **終わったあと**: エンジンのワーカーは残っておらず、止めたプロセスもありません。`git status --short` は空のままでした。
+- 件数は、試験を回した担当の報告によります。試験の出力そのものは保管していません。

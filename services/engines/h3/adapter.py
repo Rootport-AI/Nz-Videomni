@@ -40,7 +40,8 @@ audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
 absent key is "no references"), ``nag`` (``{negative_prompt, method,
 vsf_scale}``; VSF only), ``pi_h3`` (``{steps, path}``; a pi-H3 job only —
 an absent key is off), ``sol_vae`` (``{path}``; a Sol-H3-VAE job only — an
-absent key is off) and ``keep_resident`` (only when asked for — an
+absent key is off), ``keep_reference_latents`` (the bool ``True``; only
+when asked for — an absent key is off) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
@@ -387,6 +388,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # the worker as the ``sol_vae`` payload key, only when it is true
         # (:func:`prefill_request` refuses it with pi_h3).
         "sol_vae",
+        # keep_reference_latents: the worker's ``keep_reference_latents`` payload
+        # key (the bool ``True``), only when it is true.
+        "keep_reference_latents",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -502,6 +506,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         # Sol-H3-VAE: the single path's ``sol_vae`` payload key ({path}), only
         # when it is true.
         "sol_vae",
+        # keep_reference_latents: the single path's payload key (``True``),
+        # only when it is true.
+        "keep_reference_latents",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -1339,6 +1346,9 @@ class _RealBackendH3(_RealBackend):
         # sol_vae: only for a Sol-H3-VAE job (an absent key = off), {path}.
         if request.sol_vae:
             payload["sol_vae"] = self._sol_vae_payload()
+        # keep_reference_latents: only when true (an absent key = off).
+        if request.keep_reference_latents:
+            payload["keep_reference_latents"] = True
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -1569,6 +1579,9 @@ class _RealBackendH3(_RealBackend):
         # single op's {path}.
         if chain.sol_vae:
             payload["sol_vae"] = self._sol_vae_payload()
+        # keep_reference_latents: only when true (an absent key = off).
+        if chain.keep_reference_latents:
+            payload["keep_reference_latents"] = True
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
         if chain.keep_resident:

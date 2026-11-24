@@ -56,6 +56,9 @@ LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結
 ``True`` のときだけ送る。``pi_h3`` との同時指定は送る前に検査せず、サーバーの 422 に
 任せる。LTX では ``True`` が 422。
 
+``keep_reference_latents``（MiniMax H3 の参照素材の符号化結果の保持。真偽値）は
+``sol_vae`` の後ろに置き、``True`` のときだけ送る。LTX では ``True`` が 422。
+
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
 違うときだけ送る）を持ち、読み出しは ``outputs`` の ``get_mp4_info`` が担う
@@ -256,6 +259,7 @@ async def submit_generate(
     source_audio_strength: float | None = None,
     pi_h3: Literal["off", "4steps", "2steps"] = "off",
     sol_vae: bool = False,
+    keep_reference_latents: bool = False,
     references: list[ReferenceArg] | None = None,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
@@ -267,7 +271,7 @@ async def submit_generate(
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
     ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True``・
-    ``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
+    ``keep_reference_latents=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -702,6 +706,16 @@ async def submit_generate(
             ``sol_vae_used`` が ``"on->off"`` になります（生成は完走します。
             Sol で復号したときは ``"on"``。``sol_vae`` のジョブにだけ入ります）。
             重みは ``install-MiniMaxH3.bat`` で取得します。
+        keep_reference_latents: MiniMax H3 の参照素材（Ref2VA の参照画像・参照動画・
+            参照音声）を符号化した結果の保持。既定の ``False`` ならキーは送られません。
+            ``True`` にすると、符号化した結果をワーカーのメインメモリに保持し、同じ
+            アップロードの id を使う次の生成と、連結の後ろのクリップで符号化を省きます
+            （符号化する範囲、つまり画像は縮小後の大きさ、動画は実際に使うフレーム数、
+            音声は実際に使う長さも同じときだけ。違えば符号化し直します）。
+            生成結果は変わりません。メインメモリ 64GB 以上を推奨します。参照の無い
+            ジョブや、この引数が ``False`` のジョブが来ると、保持した分は消えます。
+            **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
+            FEATURE_UNSUPPORTED になります。**
         references: Ref2VA の参照素材（``{kind, id, slot, max_sec}`` のリスト）。
             **MiniMax H3 専用**で、LTX では 422 FEATURE_UNSUPPORTED。省略または
             空ならキーごと送りません（``max_sec`` も省略するとキーごと送りません）。
@@ -839,6 +853,10 @@ async def submit_generate(
     # False). The pi_h3 exclusion is the server's 422, not checked here.
     if sol_vae:
         payload["sol_vae"] = True
+    # keep_reference_latents (MiniMax H3): sent only when True (the server's
+    # default is False).
+    if keep_reference_latents:
+        payload["keep_reference_latents"] = True
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -1032,6 +1050,7 @@ async def submit_chain(
     ] = "standard",
     pi_h3: Literal["off", "4steps", "2steps"] = "off",
     sol_vae: bool = False,
+    keep_reference_latents: bool = False,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -1055,7 +1074,7 @@ async def submit_chain(
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
     ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です
-    （``sol_vae=True`` も同じです）。
+    （``sol_vae=True`` と ``keep_reference_latents=True`` も同じです）。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -1400,6 +1419,16 @@ async def submit_chain(
             大きすぎる（つないだあとの動画で数えます）ときは、通常の VAE で
             復号し、メタデータの ``sol_vae_used`` が ``"on->off"`` になります
             （生成は完走します。Sol で復号したときは ``"on"``）。
+        keep_reference_latents: submit_generate と同じ意味（MiniMax H3 の参照素材の
+            符号化結果の保持。既定の ``False`` ならキーは送りません）。参照画像・参照
+            動画・参照音声を符号化した結果をワーカーのメインメモリに保持し、同じ
+            アップロードの id を使う次の生成と、連結の後ろのクリップで符号化を省きます
+            （符号化する範囲、つまり画像は縮小後の大きさ、動画は実際に使うフレーム数、
+            音声は実際に使う長さも同じときだけ。違えば符号化し直します）。
+            生成結果は変わりません。メインメモリ 64GB 以上を推奨します。参照の無い
+            ジョブや、この引数が ``False`` のジョブが来ると、保持した分は消えます。
+            **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
+            FEATURE_UNSUPPORTED になります。**
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1496,6 +1525,9 @@ async def submit_chain(
     # sol_vae: same rule as submit_generate (sent only when True).
     if sol_vae:
         payload["sol_vae"] = True
+    # keep_reference_latents: same rule as submit_generate (sent only when True).
+    if keep_reference_latents:
+        payload["keep_reference_latents"] = True
     # stage2_window: same rule as vae_mode (sent only when it differs from the
     # server default "standard"). No pre-check here: the server's 422 is the
     # single source of truth (full_length shape / V2V context / retake window).

@@ -2919,3 +2919,42 @@ def test_reference_arg_fields_match_the_server_reference_input():
         assert ReferenceArg.model_fields[name].default == server_field.default, name
     assert "references" in ChainClipArg.model_fields
     assert ChainClipArg.model_fields["references"].default is None
+
+
+def test_both_tools_expose_keep_reference_latents_as_an_optional_bool_defaulting_to_the_server():
+    from api.models import GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        schema = tools[name].inputSchema
+        prop = schema["properties"]["keep_reference_latents"]
+        assert prop["type"] == "boolean" and prop["default"] is False, name
+        assert "keep_reference_latents" not in set(schema.get("required", [])), name
+        assert "64GB" in tools[name].description or "64 GB" in tools[name].description, name
+    assert GenerateRequest.model_fields["keep_reference_latents"].default is False
+    assert GenerateChainRequest.model_fields["keep_reference_latents"].default is False
+
+
+def test_keep_reference_latents_sent_only_when_true():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+
+    set_client(_client_for_handler(handler))
+    anyio.run(functools.partial(generate.submit_generate, "p"))
+    assert "keep_reference_latents" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", keep_reference_latents=False))
+    assert "keep_reference_latents" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", keep_reference_latents=True))
+    assert captured["body"]["keep_reference_latents"] is True
+    clips = [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+    anyio.run(generate.submit_chain, "p", clips)
+    assert "keep_reference_latents" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_chain, "p", clips, keep_reference_latents=True))
+    assert captured["body"]["keep_reference_latents"] is True

@@ -155,6 +155,9 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
     # MiniMax H3 only (the Sol-H3-VAE decoder). The field's default is False.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (keeping the encoded reference latents). The field's
+    # default is False.
+    ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -358,6 +361,9 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (the Sol-H3-VAE decoder), the single path's row on the
     # chain schema. The field's default is False. LAST, for the same reason.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (keeping the encoded reference latents). The field's
+    # default is False. LAST, for the same reason.
+    ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
 )
 
 #: The ignore-and-log half. Field-for-field the same as

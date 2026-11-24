@@ -6,7 +6,7 @@ import type { TransformerRole } from "../../api/types";
 import { bridge as appBridge } from "../../bridge";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
-import { en } from "../../i18n/strings";
+import { en, ja } from "../../i18n/strings";
 import { JobsProvider } from "../../jobs/JobsContext";
 import { ToastProvider } from "../../shell/ToastContext";
 import { PrefillPolicyProvider } from "../../shell/PrefillPolicyContext";
@@ -464,6 +464,8 @@ describe("ChainedScreen — use the same references for the following clips", ()
     return within(card).getByRole("checkbox", { name: FOLLOW_LABEL }) as HTMLInputElement;
   };
   const accordionsShown = () => clipCards().map((card) => card.querySelector(".ref-accordion") !== null);
+  const NOTE_PATTERN = /^Clip \d+'s references are used\.$/;
+  const notesShown = () => clipCards().map((card) => within(card).queryByText(NOTE_PATTERN) !== null);
   const addClip = () => fireEvent.click(screen.getByRole("button", { name: en.chained.addClipButton }));
   const sentClips = (bodies: Record<string, unknown>[]) => bodies[0]!.clips as { references?: { id: string }[] }[];
 
@@ -650,18 +652,54 @@ describe("ChainedScreen — use the same references for the following clips", ()
       const { switchTo } = await renderFourClips();
       fireEvent.click(followBox(1));
 
+      expect(notesShown()).toEqual([false, false, true, true]);
       setReferences(false);
+      expect(notesShown()).toEqual([false, false, false, false]);
       setReferences(true);
       expect(followBox(1).checked).toBe(true);
       expect(accordionsShown()).toEqual([true, true, false, false]);
+      expect(notesShown()).toEqual([false, false, true, true]);
 
       switchTo({});
       await waitFor(() => expect(referencesBox()).toBeNull(), { timeout: 5_000 });
+      expect(notesShown()).toEqual([false, false, false, false]);
       switchTo(H3_PROPS);
       await waitFor(() => expect(referencesBox()).toBeChecked(), { timeout: 5_000 });
       expect(followBox(1).checked).toBe(true);
       expect(accordionsShown()).toEqual([true, true, false, false]);
+      expect(notesShown()).toEqual([false, false, true, true]);
     },
     20_000,
   );
+
+  describe("the note", () => {
+    it(
+      "names the checked clip on the clips after it; moves with the check; gone when off",
+      async () => {
+        await renderFourClips();
+        expect(notesShown()).toEqual([false, false, false, false]);
+
+        fireEvent.click(followBox(1));
+        const note2 = "Clip 2's references are used.";
+        expect(within(clipCard(2)).getByText(note2)).toBeInTheDocument();
+        expect(within(clipCard(3)).getByText(note2)).toBeInTheDocument();
+        expect(within(clipCard(0)).queryByText(note2)).toBeNull();
+        expect(within(clipCard(1)).queryByText(note2)).toBeNull();
+
+        // Clip 1 (index 0) is a clip, not "no clip".
+        fireEvent.click(followBox(0));
+        const note1 = "Clip 1's references are used.";
+        for (let i = 1; i < 4; i += 1) expect(within(clipCard(i)).getByText(note1)).toBeInTheDocument();
+        expect(within(clipCard(0)).queryByText(note1)).toBeNull();
+
+        fireEvent.click(followBox(0));
+        expect(notesShown()).toEqual([false, false, false, false]);
+      },
+      20_000,
+    );
+
+    it("reads in Japanese", () => {
+      expect(ja.chained.clipReferenceFollow.followedNote(1)).toBe("クリップ 2 の参照素材が使われます。");
+    });
+  });
 });

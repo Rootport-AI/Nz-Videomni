@@ -701,6 +701,7 @@ export const en = {
     clipReferenceFollow: {
       label: "Use the same references for the following clips",
       a2vBlocked: "A clip has Audio to video on.",
+      followedNote: (index: number): string => `Clip ${index + 1}'s references are used.`,
     },
     minClipsError: (min: number): string => `At least ${min} clips are required (no source video attached).`,
     maxClipsReached: (max: number): string => `Maximum ${max} clips reached.`,
@@ -3155,6 +3156,7 @@ export const ja: Strings = {
     clipReferenceFollow: {
       label: "後続クリップにも同じ参照素材を使う",
       a2vBlocked: "Audio to video が on のクリップがあります。",
+      followedNote: (index: number): string => `クリップ ${index + 1} の参照素材が使われます。`,
     },
     minClipsError: (min: number): string => `最低 ${min} 本のクリップが必要です（元動画が未指定のため）。`,
     maxClipsReached: (max: number): string => `クリップは最大 ${max} 本までです。`,

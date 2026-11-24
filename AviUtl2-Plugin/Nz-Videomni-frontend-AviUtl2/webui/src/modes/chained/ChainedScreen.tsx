@@ -2174,6 +2174,7 @@ function ClipsSection({
                     clipId={clip.id}
                     rules={references.rules}
                     referencesOn={references.isH3 && references.on && !hidden}
+                    followedIndex={references.isH3 && references.on && hidden ? references.followIndex : undefined}
                     nativeBridge={references.nativeBridge}
                     disabled={disabled}
                     onAppendTag={(tag) => form.setClipPrompt(clip.id, appendReferenceTag(clip.prompt, tag))}

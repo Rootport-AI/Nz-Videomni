@@ -9,7 +9,7 @@ import type { ClipReferenceEntry, ClipReferencesProps } from "./ClipReferences";
 
 // §1-109: one Chained clip's Reference cards — registered with the screen
 // under the clip id (Enable switched on once at mount), unregistered on
-// unmount, and drawn only while `referencesOn`.
+// unmount, and drawn only while `referencesOn` (or, with `followedIndex`, a note in its place).
 
 const RULES: ReferenceRules = {
   maxImages: 9,

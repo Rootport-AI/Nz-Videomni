@@ -9,6 +9,7 @@ import type {
   ReferenceSlotsApi,
   ReferenceSummary,
 } from "../single/referenceRules";
+import { useStrings } from "../../i18n/LanguageContext";
 import { useReferenceSlots } from "../single/useReferenceSlots";
 
 /** §1-109: what one clip's cards tell the Chained screen — enough for
@@ -34,6 +35,11 @@ export interface ClipReferencesProps {
    * References checkbox is on, and the clip is not after the clip whose
    * references the following clips use. Off = hidden, the cards are kept. */
   referencesOn: boolean;
+  /** The 0-based index of the clip whose references this clip uses (this clip
+   * is after it). Given only while the base model takes references and the
+   * References checkbox is on; then, with `referencesOn` off, a one-line note
+   * names that clip where the accordion was. Not a flag: 0 is a clip. */
+  followedIndex?: number | undefined;
   nativeBridge?: NativeBridge | undefined;
   disabled: boolean;
   /** The pen button: appends the card's tag to THIS clip's own prompt. */
@@ -54,7 +60,8 @@ export interface ClipReferencesProps {
  * §1-109: one Chained clip's Reference cards. Mounted for every clip (keyed by
  * the clip id) once MiniMax H3 has been seen, so the cards survive the
  * References checkbox going off and a trip through LTX; removing the clip
- * unmounts this and drops its cards.
+ * unmounts this and drops its cards. Drawn: the accordion, or, for a clip
+ * after the one whose references are followed, a note naming that clip.
  *
  * The state is Create's own `useReferenceSlots`, with Enable switched on once
  * at mount (the embedded accordion draws no Enable checkbox — the screen-wide
@@ -66,6 +73,7 @@ export function ClipReferences({
   clipId,
   rules,
   referencesOn,
+  followedIndex,
   nativeBridge,
   disabled,
   onAppendTag,
@@ -74,6 +82,7 @@ export function ClipReferences({
   register,
   unregister,
 }: ClipReferencesProps) {
+  const strings = useStrings();
   const api = useReferenceSlots(rules, { nativeBridge });
   const { setEnabled, state, summary, adopt, clear, setA2vSlot } = api;
   // §1-120: stable (each member is a `useCallback` of the hook), so the
@@ -93,7 +102,10 @@ export function ClipReferences({
 
   useLayoutEffect(() => () => unregister(clipId), [clipId, unregister]);
 
-  if (!referencesOn) return null;
+  if (!referencesOn) {
+    if (followedIndex === undefined) return null;
+    return <p className="clip-note">{strings.chained.clipReferenceFollow.followedNote(followedIndex)}</p>;
+  }
   return (
     <ReferenceAccordion
       api={api}

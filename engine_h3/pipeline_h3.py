@@ -79,6 +79,9 @@ condition rows and the audio rows, ``[text | cond | ref_video | ref_audio |
 audio | video]``; the picture / video rows are mixed once with noise drawn
 after the condition rows' and carry t = max(t_video, 0.999), the audio rows
 are clean and carry t = 1.0. A job without references is the same as before.
+With ``keep_reference_latents`` (台帳 §1-297) the encoded reference rows are kept
+in main memory for the next job (``engine_h3.ref_latent_cache``; the media are
+still read, the video encoder is still built).
 
 Keeping models between jobs (``keep_resident``, Docs/MINIMAX_H3_DESIGN.md §4): at the end of
 a job that asks for it, the DiT (all of it on the CPU, block swap wrappers
@@ -106,6 +109,7 @@ import torch
 
 import h3_format
 import sft_quant_format
+from engine_h3 import ref_latent_cache as RC
 from engine_h3.constants import (
     ATTENTION_BACKENDS,
     AUDIO_HOP,
@@ -280,6 +284,23 @@ def ordered_references(refs) -> list:
     return sorted(refs or (), key=lambda r: (REFERENCE_KINDS.index(str(r.kind)), int(r.slot)))
 
 
+def reference_identities(requests, on: bool) -> set:
+    """What a job hands to the reference latents' ``begin``: the identities
+    (``ref_latent_cache.media_identity``) of every reference of ``requests`` (a
+    chain: all its clips), or an empty set when ``on`` is false. A file that
+    cannot be stat'ed is left out (its read refuses it later)."""
+    out: set = set()
+    if not on:
+        return out
+    for req in requests:
+        for ref in req.references or ():
+            try:
+                out.add(RC.media_identity(ref.kind, ref.path))
+            except OSError:
+                pass
+    return out
+
+
 @dataclass
 class H3GenerateRequest:
     prompt: str
@@ -321,6 +342,9 @@ class H3GenerateRequest:
     pi_h3: H3PiH3Input | None = None
     #: Sol-H3-VAE: ``None`` = as before (the decode of every other job is unchanged).
     sol_vae: H3SolVaeInput | None = None
+    #: Keep the references' encoded latents for the next job (engine_h3.ref_latent_cache,
+    #: 台帳 §1-297); off = nothing is kept and the job's record is unchanged.
+    keep_reference_latents: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -845,6 +869,9 @@ class H3Pipeline:
         #: What ``keep_resident`` kept from the previous job (Docs/MINIMAX_H3_DESIGN.md §4):
         #: ``{"dit", "cfg", "decoder", "audio_vae"}``, every tensor on the CPU, or None.
         self._resident: dict | None = None
+        #: The references' encoded latents (``keep_reference_latents``, 台帳 §1-297): apart
+        #: from ``_resident``, so ``release_resident()`` / ``close()`` never touch them.
+        self._ref_latents = RC.RefLatentCache()
         self.quant_backends: dict = {}
         self.build_report: dict = {}
         #: The fp8 path chosen at load from the GPU generation ("scaled" / "dequant";
@@ -982,6 +1009,8 @@ class H3Pipeline:
             # ``dit_path``: a pi-H3 job's file is matched against this DiT's header
             # (only that job reads it).
             validate_request(req, dit_path=self.paths.transformer)
+            # The reference latents kept from earlier jobs: only this job's files stay.
+            self._ref_latents.begin(reference_identities([req], bool(req.keep_reference_latents)))
             # Sol-H3-VAE: decided once here (None for every other job).
             sol = sol_start(req, self.device)
             # Ascending frame order (stable): the condition rows and the vision
@@ -1296,6 +1325,8 @@ class H3Pipeline:
                 del video_lat, audio_lat, wave, op_frames, op_wave, composite_kw, ip_chunk_blocks, ip_values
             ok = True
         finally:
+            # First, so a raise below cannot skip it.
+            self._ref_latents.end(ok)
             if not (ok and keep):
                 # No key (the LTX contract: kept only while the key is true), or a
                 # failed job: whatever is kept goes now.
@@ -1477,6 +1508,13 @@ class H3Pipeline:
         ``frames`` (uint8 [F, h, w, 3]) and ``pairs`` (video), or ``wave``
         ([2, N] f32 at 32 kHz, audio). A file that cannot be used is refused
         here with a Japanese ``ValueError``.
+
+        ``keep_reference_latents`` (台帳 §1-297): each item also gets ``key``,
+        the reference latents' key ``(identity, extent)``; the identity is
+        stat'ed BEFORE the file is read (a file replaced while it is read is
+        then held under its old identity), the extent is what was read (a
+        picture's resized ``(w, h)``, a video's used frames, an audio's
+        samples). A file that cannot be stat'ed gets no key.
         """
         refs = ordered_references(req.references)
         if not refs:
@@ -1488,10 +1526,17 @@ class H3Pipeline:
             read_reference_video,
         )
 
+        keep_latents = bool(req.keep_reference_latents)
         media: list[dict] = []
         for ref in refs:
             kind, slot = str(ref.kind), int(ref.slot)
             item: dict = {"kind": kind, "slot": slot}
+            identity = None
+            if keep_latents:
+                try:
+                    identity = RC.media_identity(kind, ref.path)
+                except OSError:
+                    identity = None
             if kind == "picture":
                 item["image"], item["info"] = load_reference_image(ref.path, int(req.width), int(req.height))
             elif kind == "video":
@@ -1510,6 +1555,14 @@ class H3Pipeline:
                         f"{AUDIO_HOP} サンプル（0.025 秒）以上が必要です）: {ref.path}"
                     )
                 item["wave"], item["info"] = wave, info
+            if identity is not None:
+                if kind == "picture":
+                    extent = tuple(int(v) for v in item["info"]["size"])
+                elif kind == "video":
+                    extent = int(item["info"]["used_frames"])
+                else:
+                    extent = int(item["wave"].shape[-1])
+                item["key"] = (identity, extent)
             media.append(item)
         return media
 
@@ -1544,6 +1597,13 @@ class H3Pipeline:
         when there is no picture / video reference. ``te_refs``: the text
         encoder's per-reference report (``vision_tokens``). Writes
         ``entry["references"]``: one record per reference.
+
+        An item with a ``key`` (``keep_reference_latents``, 台帳 §1-297) is
+        looked up in the reference latents first: a hit hands over the held
+        ``(RefShape, rows)`` as they are (nothing is encoded; the record is
+        filled from the read media and the held shape); a miss is encoded as
+        above and the very value handed over is put there once its rows are
+        checked. Its record gains ``latent_cache`` ("hit" / "miss").
         """
         from engine_h3.dit import audio_to_rows, patchify_video  # noqa: PLC0415
         from engine_h3.rope import RefShape  # noqa: PLC0415
@@ -1557,48 +1617,65 @@ class H3Pipeline:
                 started = time.perf_counter()
                 kind, slot, info = item["kind"], item["slot"], item["info"]
                 record: dict = {"kind": kind, "slot": slot}
-                if kind == "picture":
+                key = item.get("key")
+                held = None if key is None else self._ref_latents.get(key)
+                if held is not None:
+                    shape, rows = held
+                elif kind == "picture":
                     z = video_enc.encode(item["image"].to(self.device), tiled=True)   # [1, 24, 1, lh, lw]
                     if z.dim() != 5 or tuple(z.shape[:3]) != (1, 24, 1):
                         raise RuntimeError(f"reference encode: unexpected picture latent shape {list(z.shape)}")
                     shape = RefShape.picture(int(z.shape[3]), int(z.shape[4]))
                     rows = patchify_video(z.float()).cpu()
-                    record.update({
-                        "source_size": list(info["source_size"]), "size": list(info["size"]),
-                        "vision_tokens": tokens.get((kind, slot)),
-                    })
+                    del z
                 elif kind == "video":
                     z = video_enc.encode_clips(item["frames"], device=self.device, tiled=True)   # [1, 24, vt, lh, lw]
                     if z.dim() != 5 or tuple(z.shape[:2]) != (1, 24):
                         raise RuntimeError(f"reference encode: unexpected video latent shape {list(z.shape)}")
                     shape = RefShape.video(int(z.shape[2]), int(z.shape[3]), int(z.shape[4]))
                     rows = patchify_video(z.float()).cpu()
-                    record.update({
-                        "source_frames": int(info["source_frames"]), "used_frames": int(info["used_frames"]),
-                        "latent_t": int(z.shape[2]), "pairs": len(item["pairs"]),
-                    })
+                    del z
                 else:
                     if audio_enc is None:
                         from engine_h3.audio_vae import H3AudioEncoder  # noqa: PLC0415
 
                         audio_enc = H3AudioEncoder.from_file(self.paths.audio_vae, device=self.device)
                     wave = item["wave"]
-                    samples = int(wave.shape[-1])
-                    rt = math.ceil(samples / AUDIO_HOP)   # >= 1: _read_references refused < 800 samples
+                    rt = math.ceil(int(wave.shape[-1]) / AUDIO_HOP)   # >= 1: _read_references refused < 800 samples
                     z = audio_enc.encode(wave.to(device=self.device, dtype=torch.float32))
                     if z.dim() != 3 or tuple(z.shape[:2]) != (2, 32) or int(z.shape[2]) < rt:
                         raise RuntimeError(f"reference encode: unexpected audio latent shape {list(z.shape)} for {rt} latents")
                     shape = RefShape.audio(rt)
                     rows = audio_to_rows(z[:, :, :rt].to(torch.float32)).cpu()
-                    record.update({"samples": samples, "latent_t": rt})
-                del z
-                shape.check()
-                if int(rows.shape[0]) != shape.rows:
-                    raise RuntimeError(f"reference encode: {rows.shape[0]} rows for {shape}")
-                record["rows"] = int(rows.shape[0])
+                    del z
+                # The record: from the read media and the shape (encoded now or held).
+                if kind == "picture":
+                    record.update({
+                        "source_size": list(info["source_size"]), "size": list(info["size"]),
+                        "vision_tokens": tokens.get((kind, slot)),
+                    })
+                elif kind == "video":
+                    record.update({
+                        "source_frames": int(info["source_frames"]), "used_frames": int(info["used_frames"]),
+                        "latent_t": int(shape.vt), "pairs": len(item["pairs"]),
+                    })
+                else:
+                    record.update({"samples": int(item["wave"].shape[-1]), "latent_t": int(shape.rt)})
+                if held is None:
+                    shape.check()
+                    if int(rows.shape[0]) != shape.rows:
+                        raise RuntimeError(f"reference encode: {rows.shape[0]} rows for {shape}")
+                    value = (shape, rows.to(torch.float32).contiguous())
+                    if key is not None:
+                        self._ref_latents.put(key, value)
+                else:
+                    value = held
+                record["rows"] = int(value[1].shape[0])
                 record["seconds"] = round(time.perf_counter() - started, 2)
+                if key is not None:
+                    record["latent_cache"] = "miss" if held is None else "hit"
                 records.append(record)
-                out.append((shape, rows.to(torch.float32).contiguous()))
+                out.append(value)
         finally:
             del audio_enc
             entry["references"] = records

@@ -213,6 +213,43 @@ def test_read_video_15_second_cap(tmp_path, monkeypatch):
     assert info["source_frames"] == 24 and frames.shape[0] == 22
 
 
+def test_read_video_same_used_frames_same_pixels(tmp_path):
+    """The reference latents' key (台帳 §1-297) holds a video by its used frame count:
+    two reads under different caps that use the same count give the same frames."""
+    p = tmp_path / "long.mp4"
+    _write_video(p, fps=24, n=60)
+    a, info_a = R.read_reference_video(str(p), num_frames=40)                  # 40 -> 39
+    b, info_b = R.read_reference_video(str(p), num_frames=1000, max_sec=1.0)   # 24 -> 39 (rounded up)
+    assert info_a["used_frames"] == info_b["used_frames"] == 39
+    assert info_a["source_frames"] != info_b["source_frames"]                  # the caps really differ
+    assert np.array_equal(a, b)
+    # A video shorter than the clip: any frame count above its length uses all of it.
+    s = tmp_path / "short.mp4"
+    _write_video(s, fps=24, n=30)
+    c, info_c = R.read_reference_video(str(s), num_frames=124)
+    d, info_d = R.read_reference_video(str(s), num_frames=362)
+    assert info_c["used_frames"] == info_d["used_frames"] == 22 and np.array_equal(c, d)
+    e, info_e = R.read_reference_video(str(p), num_frames=22)                  # fewer frames: another key
+    assert info_e["used_frames"] == 22 and np.array_equal(e, a[:22])
+
+
+def test_load_reference_image_same_size_same_pixels(tmp_path):
+    """The key holds a picture by its resized size: two generation sizes that give
+    the same resized size give the same pixels (scaled down, and kept as is)."""
+    from PIL import Image
+
+    p = tmp_path / "ref.png"
+    Image.fromarray(np.random.RandomState(1).randint(0, 256, (1080, 1920, 3), np.uint8)).save(p)
+    a, info_a = R.load_reference_image(str(p), 1344, 768)
+    b, info_b = R.load_reference_image(str(p), 1376, 752)
+    assert info_a["size"] == info_b["size"] == [1344, 768] and torch.equal(a, b)
+    small = tmp_path / "small.png"
+    Image.fromarray(np.random.RandomState(2).randint(0, 256, (480, 640, 3), np.uint8)).save(small)
+    c, info_c = R.load_reference_image(str(small), 1344, 768)
+    d, info_d = R.load_reference_image(str(small), 768, 1344)
+    assert info_c["size"] == info_d["size"] == [640, 480] and torch.equal(c, d)
+
+
 def test_read_video_resizes_to_canvas_and_refuses_missing(tmp_path):
     p = tmp_path / "big.mp4"
     _write_video(p, fps=24, n=6, size=(1920, 1088))

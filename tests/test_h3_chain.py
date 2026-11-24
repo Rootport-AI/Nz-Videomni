@@ -285,7 +285,7 @@ def test_refused_before_any_stage(monkeypatch, frames, kw, match):
 # --------------------------------------------------------------------------- #
 
 def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), samples=2000, seen=None, decoded=None,
-                   negative_prompt=""):
+                   negative_prompt="", keep_reference_latents=False, shared_files=False, pipe=None, fail_clip=None):
     """``run_chain_h3`` through the REAL ``_encode`` / ``_read_references`` /
     ``_te_references`` / ``_encode_references`` with a stand-in text encoder,
     video encoder, audio encoder and loader (``samples`` long) and video reader
@@ -294,7 +294,12 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     slot, max_sec)`` entries. ``seen`` / ``decoded``: lists to record the denoise
     kwargs / the decode calls into (also readable after a failure).
     ``negative_prompt``: the base's (VSF); the stubbed denoise fills a given
-    ``vsf_report`` with the clip's seed. Returns
+    ``vsf_report`` with the clip's seed. ``keep_reference_latents``: the base's
+    (台帳 §1-297). ``shared_files``: every clip's ``(kind, slot)`` names one file
+    (the same upload on each card). ``pipe``: a pipeline of an earlier call, to
+    run a second job on (its stand-ins stay). ``fail_clip``: the clip whose
+    denoise raises. ``builds`` also counts ``video_encodes`` / ``audio_encodes``
+    and holds the pipeline (``pipe``). Returns
     ``(done, te_calls, encode progress, denoise kwargs per clip, builds)``."""
     import numpy as np
     from PIL import Image
@@ -304,11 +309,11 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     from engine_h3 import text_encoder as TE
     from engine_h3 import video_vae as VV
 
-    _a2v_fakes(monkeypatch, samples=samples)
+    _wave, audio_calls = _a2v_fakes(monkeypatch, samples=samples)
     te_calls, progress = [], []
     seen = [] if seen is None else seen
     decoded = [] if decoded is None else decoded
-    builds = {"video": 0}
+    builds = {"video": 0, "video_encodes": 0, "audio_encodes": audio_calls["encode"]}
 
     class FakeTE:
         def __init__(self, *a, **k):
@@ -332,9 +337,11 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
 
     class FakeVideoEncoder:
         def encode(self, x, tiled=True):
+            builds["video_encodes"] += 1
             return torch.zeros((1, 24, 1, x.shape[-2] // 16, x.shape[-1] // 16))
 
         def encode_clips(self, frames, *, device, tiled=True):
+            builds["video_encodes"] += 1
             vt = (int(frames.shape[0]) - 5) // 17 * 5 + 2
             return torch.zeros((1, 24, vt, frames.shape[1] // 16, frames.shape[2] // 16))
 
@@ -349,12 +356,17 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
     monkeypatch.setattr(VV.H3VideoEncoder, "from_file", classmethod(build_video))
     monkeypatch.setattr(RM, "read_reference_video", read_video)
-    pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
-                        progress=lambda *a, **k: None, log=lambda m: None)
-    pipe._dit_cfg = object()
+    if pipe is None:
+        pipe = P.H3Pipeline(P.H3Paths("t", "te", "vv", "av", "tok"), P.H3LoadOptions(), device="cpu",
+                            progress=lambda *a, **k: None, log=lambda m: None)
+        pipe._dit_cfg = object()
+    builds["pipe"] = pipe
+    first_seen = len(seen)
 
     def denoise(req, h, t, phases, entry, **kw):
         seen.append(kw)
+        if fail_clip is not None and len(seen) - first_seen - 1 == fail_clip:
+            raise RuntimeError("denoise failed")
         if kw.get("vsf_report") is not None:
             kw["vsf_report"].update({"seed": int(req.seed)})
         video = torch.randn(1, CH_LAT, P.latent_frames(req.num_frames), LH, LW,
@@ -373,15 +385,17 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     for i, (n, refs) in enumerate(zip(frames, clip_refs)):
         inputs = []
         for kind, slot, max_sec in refs:
-            path = tmp_path / (f"c{i}-{kind}{slot}.png" if kind == "picture" else f"c{i}-{kind}{slot}.bin")
-            if kind == "picture":
-                Image.new("RGB", (128, 64), (90,) * 3).save(path)
-            else:
-                path.write_bytes(b"x")
+            prefix = "" if shared_files else f"c{i}-"
+            path = tmp_path / (f"{prefix}{kind}{slot}.png" if kind == "picture" else f"{prefix}{kind}{slot}.bin")
+            if not path.exists():   # written once: the identity of a shared file stays
+                if kind == "picture":
+                    Image.new("RGB", (128, 64), (90,) * 3).save(path)
+                else:
+                    path.write_bytes(b"x")
             inputs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
         clips.append(CH.H3ChainClipSpec(f"clip {i}", n, references=tuple(inputs)))
     base = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=frames[0], output_path="o.mp4",
-                               negative_prompt=negative_prompt)
+                               negative_prompt=negative_prompt, keep_reference_latents=keep_reference_latents)
     done = CH.run_chain_h3(pipe, CH.H3ChainSpec(base=base, clips=tuple(clips), seed=1),
                            lambda stage, i, total, **kw: progress.append((stage, i, total, kw)), lambda m: None)
     return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
@@ -471,6 +485,77 @@ def test_chain_clip_reference_failure_is_that_clips(monkeypatch, tmp_path):
                        seen=seen, decoded=decoded)
     assert len(seen) == 1 and seen[0]["refs"] is None     # only clip 0's denoise ran
     assert decoded == []
+
+
+# --------------------------------------------------------------------------- #
+# the references' encoded latents kept across clips and jobs (keep_reference_latents, 台帳 §1-297)
+# --------------------------------------------------------------------------- #
+
+def _latent_cache(done):
+    return [[r.get("latent_cache") for r in p.get("reference_encode", {}).get("references", [])]
+            for p in done["h3"]["phases"]["clips"]]
+
+
+def test_chain_later_clips_hit_the_first_clips_latents(monkeypatch, tmp_path):
+    """The same files on every clip: clip 0 encodes them, clips 1 and 2 get its very
+    rows (no encode; the video encoder is still built per clip)."""
+    refs = [("picture", 1, None), ("video", 1, None), ("audio", 1, None)]
+    done, _te, _progress, kw, builds = _ref_chain_job(
+        monkeypatch, tmp_path, [refs] * 3, keep_reference_latents=True, shared_files=True,
+    )
+    assert _latent_cache(done) == [["miss"] * 3, ["hit"] * 3, ["hit"] * 3]
+    assert builds["video_encodes"] == 2 and len(builds["audio_encodes"]) == 1
+    assert builds["video"] == 3
+    for k in kw[1:]:
+        assert all(r is r0 for (_s, r), (_s0, r0) in zip(k["refs"], kw[0]["refs"]))
+    assert len(builds["pipe"]._ref_latents) == 3
+    clips = done["chain"]["clips"]
+    assert [c["references"] for c in clips] == [{"pictures": 1, "videos": 1, "audios": 1}] * 3
+
+
+def test_chain_off_encodes_every_clip_and_keeps_nothing(monkeypatch, tmp_path):
+    refs = [("picture", 1, None), ("video", 1, None), ("audio", 1, None)]
+    done, _te, _progress, _kw, builds = _ref_chain_job(monkeypatch, tmp_path, [refs] * 3, shared_files=True)
+    assert _latent_cache(done) == [[None] * 3] * 3            # no latent_cache key at all
+    assert builds["video_encodes"] == 6 and len(builds["audio_encodes"]) == 3
+    assert len(builds["pipe"]._ref_latents) == 0
+
+
+def test_chain_begin_names_every_clips_files(monkeypatch, tmp_path):
+    """The next chain's ``begin`` takes the files of all its clips: a picture held by an
+    earlier chain's clip 0 is a hit on this chain's clip 1."""
+    _done, _te, _p, _kw, builds = _ref_chain_job(
+        monkeypatch, tmp_path, [[("picture", 1, None)], []], frames=(39, 39),
+        keep_reference_latents=True, shared_files=True,
+    )
+    pipe = builds["pipe"]
+    done, _te, _p, _kw, builds = _ref_chain_job(
+        monkeypatch, tmp_path, [[("video", 1, None)], [("picture", 1, None)]], frames=(39, 39),
+        keep_reference_latents=True, shared_files=True, pipe=pipe,
+    )
+    assert _latent_cache(done) == [["miss"], ["hit"]] and builds["video_encodes"] == 1
+    assert len(pipe._ref_latents) == 2
+
+
+def test_chain_failed_clip_drops_what_the_chain_encoded(monkeypatch, tmp_path):
+    """A chain that fails on clip 1 is a failed job: the audio its clip 0 encoded is
+    dropped, the video an earlier chain left stays; the next chain encodes the audio again."""
+    _done, _te, _p, _kw, builds = _ref_chain_job(
+        monkeypatch, tmp_path, [[("video", 1, None)]] * 2, frames=(39, 39),
+        keep_reference_latents=True, shared_files=True,
+    )
+    pipe = builds["pipe"]
+    refs = [("video", 1, None), ("audio", 1, None)]
+    seen = []
+    with pytest.raises(RuntimeError, match="denoise failed"):
+        _ref_chain_job(monkeypatch, tmp_path, [refs] * 2, frames=(39, 39), keep_reference_latents=True,
+                       shared_files=True, pipe=pipe, fail_clip=1, seen=seen)
+    assert len(seen) == 2 and len(pipe._ref_latents) == 1
+    done, _te, _p, _kw, builds = _ref_chain_job(
+        monkeypatch, tmp_path, [refs] * 2, frames=(39, 39), keep_reference_latents=True, shared_files=True, pipe=pipe,
+    )
+    assert _latent_cache(done) == [["hit", "miss"], ["hit", "hit"]]
+    assert builds["video_encodes"] == 0 and len(builds["audio_encodes"]) == 1
 
 
 # --------------------------------------------------------------------------- #

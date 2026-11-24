@@ -130,6 +130,57 @@ def test_do_generate_without_references_logs_as_before(monkeypatch):
     assert "references=" not in logs[-1] and "ignored keys" not in logs[-1]
 
 
+def test_keep_reference_latents_key(monkeypatch):
+    """``keep_reference_latents`` (台帳 §1-297): read by ``generate`` and
+    ``generate_chain`` (absent / null = off), logged, never an ignored key."""
+    assert "keep_reference_latents" in worker._GENERATE_FIELDS
+    assert "keep_reference_latents" in worker._CHAIN_FIELDS
+    assert worker._generate_request(dict(BASE)).keep_reference_latents is False
+    assert worker._generate_request({**BASE, "keep_reference_latents": None}).keep_reference_latents is False
+    assert worker._generate_request({**BASE, "keep_reference_latents": True}).keep_reference_latents is True
+    seen, logs = {}, []
+
+    class StubPipe:
+        def generate(self, req):
+            seen["req"] = req
+            return {}
+
+    monkeypatch.setattr(worker, "_PIPE", StubPipe())
+    monkeypatch.setattr(worker, "_ATTENTION", ("sdpa", False))
+    monkeypatch.setattr(worker, "_log", logs.append)
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: None)
+    worker._do_generate({**BASE, "op": "generate", "keep_reference_latents": True})
+    assert seen["req"].keep_reference_latents is True
+    assert "keep_reference_latents=True" in logs[-1] and "ignored keys" not in logs[-1]
+    worker._do_generate({**BASE, "op": "generate"})
+    assert seen["req"].keep_reference_latents is False and "keep_reference_latents=False" in logs[-1]
+
+
+def test_keep_reference_latents_reaches_every_clip_of_a_chain(monkeypatch):
+    import engine_h3.chain_h3 as CH
+
+    seen, logs = {}, []
+
+    def run(pipe, spec, progress, log):
+        seen["spec"] = spec
+        return {}
+
+    monkeypatch.setattr(worker, "_PIPE", object())
+    monkeypatch.setattr(worker, "_ATTENTION", ("sdpa", False))
+    monkeypatch.setattr(worker, "_log", logs.append)
+    monkeypatch.setattr(worker, "_emit", lambda event, **f: None)
+    monkeypatch.setattr(CH, "run_chain_h3", run)
+    worker._do_generate_chain({
+        "op": "generate_chain", "seed": 1, "width": 640, "height": 384, "output_path": "o.mp4",
+        "keep_reference_latents": True,
+        "clips": [{"prompt": "a", "num_frames": 124}, {"prompt": "b", "num_frames": 39}],
+    })
+    spec = seen["spec"]
+    assert spec.base.keep_reference_latents is True
+    assert all(r.keep_reference_latents is True for r in CH.clip_requests(spec))   # dataclasses.replace keeps it
+    assert "keep_reference_latents=True" in logs[-1] and "ignored keys" not in logs[-1]
+
+
 def test_selftest_reference_options():
     assert "references" not in worker._selftest_generate_message(_args(), "o.mp4")   # as before
     args = _args("--ref-audio", "a1.wav", "--ref-image", "p1.png", "--ref-video", "v1.mp4",

@@ -1145,6 +1145,8 @@ GOLDEN_GENERATE_INPAINT_KEYS = ["inpaint"]
 GOLDEN_GENERATE_PI_H3_KEYS = ["pi_h3"]
 #: Sol-H3-VAE's ``sol_vae``, sent only for that job.
 GOLDEN_GENERATE_SOL_VAE_KEYS = ["sol_vae"]
+#: ``keep_reference_latents`` (台帳 §1-297), sent only when true.
+GOLDEN_GENERATE_KEEP_REFERENCE_LATENTS_KEYS = ["keep_reference_latents"]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
@@ -1182,7 +1184,7 @@ def test_golden_generate_message_keys():
     assert worker._GENERATE_FIELDS == frozenset(
         GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS + GOLDEN_GENERATE_REFERENCE_KEYS
         + GOLDEN_GENERATE_NAG_KEYS + GOLDEN_GENERATE_OUTPAINT_KEYS + GOLDEN_GENERATE_INPAINT_KEYS
-        + GOLDEN_GENERATE_PI_H3_KEYS + GOLDEN_GENERATE_SOL_VAE_KEYS)
+        + GOLDEN_GENERATE_PI_H3_KEYS + GOLDEN_GENERATE_SOL_VAE_KEYS + GOLDEN_GENERATE_KEEP_REFERENCE_LATENTS_KEYS)
     args = _selftest_args()
     args.source_audio, args.audio_strength = "a.wav", 0.5
     msg = worker._selftest_generate_message(args, "o.mp4")
@@ -3770,8 +3772,50 @@ def _ref_job(monkeypatch, tmp_path, references, frames=(), negative_prompt=""):
     loader (``_a2v_fakes``, 2,000 samples) and video reader; the denoise and the decode
     are stubs. 64 x 64, 22 frames. ``references``: ``(kind, slot, max_sec)``.
     Returns ``(done, te_calls, encode progress, denoise kwargs, builds)``."""
-    import numpy as np
     from PIL import Image
+
+    from engine_h3 import pipeline_h3 as P
+
+    pipe, te_calls, progress, seen, builds = _ref_pipe(monkeypatch)
+    images = []
+    for n in frames:
+        path = tmp_path / f"k{n}.png"
+        Image.new("RGB", (64, 64), (40,) * 3).save(path)
+        images.append(P.H3ImageInput(str(path), n))
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
+                              images=tuple(images), references=tuple(_ref_inputs(tmp_path, references)),
+                              negative_prompt=negative_prompt)
+    done = pipe.generate(req)
+    return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
+
+
+def _ref_inputs(tmp_path, references) -> list:
+    """``(kind, slot, max_sec)`` -> ``H3ReferenceInput`` on files written under ``tmp_path``
+    (a 128 x 64 picture; a 1-byte stand-in for a video / audio, read by the fakes)."""
+    from PIL import Image
+
+    from engine_h3 import pipeline_h3 as P
+
+    refs = []
+    for kind, slot, max_sec in references:
+        path = tmp_path / (f"{kind}{slot}.png" if kind == "picture" else f"{kind}{slot}.bin")
+        if kind == "picture":
+            Image.new("RGB", (128, 64), (90,) * 3).save(path)
+        else:
+            path.write_bytes(b"x")
+        refs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
+    return refs
+
+
+def _ref_pipe(monkeypatch, video_frames=None):
+    """``_ref_job``'s pipeline and stand-ins, kept for several jobs. ``video_frames``:
+    None = the reader's fixed 22 frames (5 with ``max_sec``); a number = a reference
+    video that long, read as the real reader cuts it (``min(length, num_frames)`` down
+    to 17k + 5). The video encoder's latents are filled with its call count, so each
+    encode is told apart. Returns ``(pipe, te_calls, progress, denoise kwargs, builds)``;
+    ``builds["video_encodes"]`` counts the picture / video encodes, ``builds["reads"]``
+    the video reads (``("read", path)``)."""
+    import numpy as np
 
     from engine_h3 import pipeline_h3 as P
     from engine_h3 import reference as RM
@@ -3780,7 +3824,8 @@ def _ref_job(monkeypatch, tmp_path, references, frames=(), negative_prompt=""):
 
     _wave, calls = _a2v_fakes(monkeypatch, samples=2000)
     te_calls, progress, seen = [], [], {}
-    builds = {"video": 0, "audio_loads": calls["load"], "audio_encodes": calls["encode"]}
+    builds = {"video": 0, "audio_loads": calls["load"], "audio_encodes": calls["encode"], "video_encodes": 0,
+              "reads": []}
 
     class FakeTE:
         def __init__(self, *a, **k):
@@ -3803,19 +3848,27 @@ def _ref_job(monkeypatch, tmp_path, references, frames=(), negative_prompt=""):
 
     class FakeVideoEncoder:
         def encode(self, x, tiled=True):
-            return torch.zeros((1, 24, 1, x.shape[-2] // 16, x.shape[-1] // 16))
+            builds["video_encodes"] += 1
+            return torch.full((1, 24, 1, x.shape[-2] // 16, x.shape[-1] // 16), float(builds["video_encodes"]))
 
         def encode_clips(self, frames, *, device, tiled=True):
+            builds["video_encodes"] += 1
             vt = (int(frames.shape[0]) - 5) // 17 * 5 + 2
-            return torch.zeros((1, 24, vt, frames.shape[1] // 16, frames.shape[2] // 16))
+            return torch.full((1, 24, vt, frames.shape[1] // 16, frames.shape[2] // 16), float(builds["video_encodes"]))
 
     def build_video(cls, *a, **k):
         builds["video"] += 1
         return FakeVideoEncoder()
 
     def read_video(path, *, num_frames, max_sec=None):
-        n = 22 if max_sec is None else 5
-        info = {"source_size": [64, 32], "size": [64, 32], "source_fps": 24.0, "source_frames": n + 2, "used_frames": n}
+        builds["reads"].append(("read", path))
+        if video_frames is None:
+            n = 22 if max_sec is None else 5
+            source = n + 2
+        else:
+            source = min(int(video_frames), int(num_frames))
+            n = RM.video_frame_count(source)
+        info = {"source_size": [64, 32], "size": [64, 32], "source_fps": 24.0, "source_frames": source, "used_frames": n}
         return np.zeros((n, 32, 64, 3), np.uint8), info
 
     monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
@@ -3831,23 +3884,7 @@ def _ref_job(monkeypatch, tmp_path, references, frames=(), negative_prompt=""):
 
     monkeypatch.setattr(pipe, "_denoise", denoise)
     monkeypatch.setattr(pipe, "_decode", lambda req, v, a, entry, **kw: 1)
-    images = []
-    for n in frames:
-        path = tmp_path / f"k{n}.png"
-        Image.new("RGB", (64, 64), (40,) * 3).save(path)
-        images.append(P.H3ImageInput(str(path), n))
-    refs = []
-    for kind, slot, max_sec in references:
-        path = tmp_path / (f"{kind}{slot}.png" if kind == "picture" else f"{kind}{slot}.bin")
-        if kind == "picture":
-            Image.new("RGB", (128, 64), (90,) * 3).save(path)
-        else:
-            path.write_bytes(b"x")
-        refs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
-    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=22, output_path="o.mp4",
-                              images=tuple(images), references=tuple(refs), negative_prompt=negative_prompt)
-    done = pipe.generate(req)
-    return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
+    return pipe, te_calls, progress, seen, builds
 
 
 def test_references_sorted_key_frames_kept_off_the_vision_tower(monkeypatch, tmp_path):
@@ -3961,6 +3998,187 @@ def test_request_validation_references(tmp_path):
     for refs, match in bad:
         with pytest.raises(ValueError, match=match):
             validate_request(H3GenerateRequest(**ok, references=refs))
+
+
+# --------------------------------------------------------------------------- #
+# The references' encoded latents kept between jobs (keep_reference_latents, 台帳 §1-297)
+# --------------------------------------------------------------------------- #
+
+def _cache_job(pipe, refs, *, num_frames=22, keep=True, keep_resident=False):
+    """One ``generate`` on ``_ref_pipe``'s pipeline; returns its reference records."""
+    from engine_h3 import pipeline_h3 as P
+
+    req = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=num_frames, output_path="o.mp4",
+                              references=tuple(refs), keep_reference_latents=keep, keep_resident=keep_resident)
+    done = pipe.generate(req)
+    return done["h3"]["phases"].get("reference_encode", {}).get("references")
+
+
+def _without(record, *keys):
+    return {k: v for k, v in record.items() if k not in keys}
+
+
+def test_ref_latents_second_job_hits_without_the_encoders(monkeypatch, tmp_path):
+    """The same files again: no picture / video / audio encode, the very rows of the
+    first job reach the denoise, and the records are the first job's with ``hit``.
+    The models are not kept (``keep_resident`` off, released after each job): the
+    reference latents are apart from them."""
+    pipe, _te, _progress, kw, builds = _ref_pipe(monkeypatch)
+    refs = _ref_inputs(tmp_path, [("picture", 1, None), ("video", 1, None), ("audio", 1, None)])
+    first = _cache_job(pipe, refs)
+    rows1 = list(kw["refs"])
+    snapshot = [r.clone() for _s, r in rows1]
+    assert [r["latent_cache"] for r in first] == ["miss"] * 3
+    assert (builds["video_encodes"], len(builds["audio_encodes"])) == (2, 1)
+    assert pipe._resident is None and len(pipe._ref_latents) == 3
+    pipe.release_resident()                                   # what a job without keep_resident does
+    assert len(pipe._ref_latents) == 3
+    second = _cache_job(pipe, refs)
+    assert [r["latent_cache"] for r in second] == ["hit"] * 3
+    assert (builds["video_encodes"], len(builds["audio_encodes"])) == (2, 1)   # nothing encoded
+    assert builds["video"] == 2                               # the video encoder is still built (plan §4.3)
+    assert len(builds["audio_loads"]) == 2                    # the media are still read
+    assert [s for s, _r in kw["refs"]] == [s for s, _r in rows1]
+    assert all(r2 is r1 for (_s2, r2), (_s1, r1) in zip(kw["refs"], rows1))
+    assert all(torch.equal(r, s) for (_sh, r), s in zip(kw["refs"], snapshot))
+    assert [_without(r, "seconds", "latent_cache") for r in second] == [_without(r, "seconds", "latent_cache")
+                                                                       for r in first]
+    assert [list(r) for r in second] == [list(r) for r in first]   # the same keys in the same order
+
+
+def test_ref_latents_short_video_hits_for_any_longer_clip(monkeypatch, tmp_path):
+    """A 30-frame video reads 22 frames for a 39- or a 56-frame clip: one key, a hit."""
+    pipe, _te, _progress, _kw, builds = _ref_pipe(monkeypatch, video_frames=30)
+    refs = _ref_inputs(tmp_path, [("video", 1, None)])
+    first = _cache_job(pipe, refs, num_frames=39)
+    second = _cache_job(pipe, refs, num_frames=56)
+    assert [r["latent_cache"] for r in first + second] == ["miss", "hit"]
+    assert first[0]["used_frames"] == second[0]["used_frames"] == 22 and builds["video_encodes"] == 1
+    assert (first[0]["source_frames"], second[0]["source_frames"]) == (30, 30)
+
+
+def test_ref_latents_long_video_is_held_per_frame_count(monkeypatch, tmp_path):
+    """A 100-frame video reads 22 or 39 frames: two keys, held side by side during the
+    job that adds the second; that job's end keeps only what it used."""
+    pipe, _te, _progress, _kw, builds = _ref_pipe(monkeypatch, video_frames=100)
+    held = []
+    real_denoise = pipe._denoise
+    monkeypatch.setattr(pipe, "_denoise", lambda *a, **k: held.append(len(pipe._ref_latents)) or real_denoise(*a, **k))
+    refs = _ref_inputs(tmp_path, [("video", 1, None)])
+    a = _cache_job(pipe, refs, num_frames=22)
+    b = _cache_job(pipe, refs, num_frames=39)
+    assert [r["latent_cache"] for r in a + b] == ["miss", "miss"] and builds["video_encodes"] == 2
+    assert (a[0]["used_frames"], b[0]["used_frames"]) == (22, 39) and (a[0]["latent_t"], b[0]["latent_t"]) == (7, 12)
+    assert held == [1, 2] and len(pipe._ref_latents) == 1
+    c = _cache_job(pipe, refs, num_frames=39)
+    d = _cache_job(pipe, refs, num_frames=22)               # dropped at b's end: encoded again
+    assert [r["latent_cache"] for r in c + d] == ["hit", "miss"] and builds["video_encodes"] == 3
+
+
+def test_ref_latents_failed_job_drops_what_it_encoded(monkeypatch, tmp_path):
+    """A failed job drops what it encoded; what an earlier good job left stays."""
+    pipe, _te, _progress, _kw, builds = _ref_pipe(monkeypatch)
+    pv = _ref_inputs(tmp_path, [("picture", 1, None), ("video", 1, None)])
+    audio = _ref_inputs(tmp_path, [("audio", 1, None)])
+    _cache_job(pipe, pv)
+    real_denoise = pipe._denoise
+
+    def failing(*a, **k):
+        raise RuntimeError("denoise failed")
+
+    monkeypatch.setattr(pipe, "_denoise", failing)
+    with pytest.raises(RuntimeError, match="denoise failed"):
+        _cache_job(pipe, pv + audio)
+    assert len(builds["audio_encodes"]) == 1 and builds["video_encodes"] == 2
+    assert len(pipe._ref_latents) == 2                        # the picture and the video stay
+    monkeypatch.setattr(pipe, "_denoise", real_denoise)
+    again = _cache_job(pipe, pv + audio)
+    assert [r["latent_cache"] for r in again] == ["hit", "hit", "miss"]
+    assert len(builds["audio_encodes"]) == 2 and builds["video_encodes"] == 2
+
+
+def test_ref_latents_refused_job_touches_nothing(monkeypatch, tmp_path):
+    """A job refused by ``validate_request`` never reaches ``begin``: what is held stays."""
+    pipe, _te, _progress, _kw, _builds = _ref_pipe(monkeypatch)
+    refs = _ref_inputs(tmp_path, [("video", 1, None)])
+    _cache_job(pipe, refs)
+    with pytest.raises(ValueError):
+        _cache_job(pipe, refs, num_frames=23)
+    assert len(pipe._ref_latents) == 1
+    assert [r["latent_cache"] for r in _cache_job(pipe, refs)] == ["hit"]
+
+
+def test_ref_latents_off_job_and_job_without_references_empty_it(monkeypatch, tmp_path):
+    """Off: nothing kept, nothing looked up, the records as before (no ``latent_cache``).
+    A job without references empties it too."""
+    pipe, _te, _progress, _kw, builds = _ref_pipe(monkeypatch)
+    refs = _ref_inputs(tmp_path, [("picture", 1, None), ("video", 1, None), ("audio", 1, None)])
+    _cache_job(pipe, refs)
+    assert len(pipe._ref_latents) == 3
+    off = _cache_job(pipe, refs, keep=False)
+    assert len(pipe._ref_latents) == 0 and builds["video_encodes"] == 4
+    assert [set(r) for r in off] == [
+        {"kind", "slot", "source_size", "size", "vision_tokens", "rows", "seconds"},
+        {"kind", "slot", "source_frames", "used_frames", "latent_t", "pairs", "rows", "seconds"},
+        {"kind", "slot", "samples", "latent_t", "rows", "seconds"},
+    ]
+    assert [r["latent_cache"] for r in _cache_job(pipe, refs)] == ["miss"] * 3
+    assert _cache_job(pipe, []) is None and len(pipe._ref_latents) == 0
+
+
+def test_ref_latents_identity_is_taken_before_the_read(monkeypatch, tmp_path):
+    """The file's size and time are taken before its read: a file replaced while it is
+    read is held under its old identity, so the next job (new identity) encodes again."""
+    from engine_h3 import reference as RM
+
+    pipe, _te, _progress, _kw, builds = _ref_pipe(monkeypatch)
+    refs = _ref_inputs(tmp_path, [("video", 1, None)])
+    order = builds["reads"]
+    real_identity = _rc_module().media_identity
+    monkeypatch.setattr(_rc_module(), "media_identity", lambda kind, path: order.append(("stat", str(path)))
+                        or real_identity(kind, path))
+    real_read = RM.read_reference_video
+
+    def replacing_read(path, **kw):
+        out = real_read(path, **kw)
+        with open(path, "ab") as f:                           # replaced while it is read
+            f.write(b"more")
+        return out
+
+    monkeypatch.setattr(RM, "read_reference_video", replacing_read)
+    _cache_job(pipe, refs)
+    path = refs[0].path
+    assert order == [("stat", path), ("stat", path), ("read", path)]   # begin, the key, then the read
+    monkeypatch.setattr(RM, "read_reference_video", real_read)
+    assert [r["latent_cache"] for r in _cache_job(pipe, refs)] == ["miss"]
+    assert builds["video_encodes"] == 2
+
+
+def _rc_module():
+    from engine_h3 import ref_latent_cache
+
+    return ref_latent_cache
+
+
+def test_ref_latents_rows_unchanged_by_the_denoise_and_noisy_condition(monkeypatch, tmp_path):
+    """The held rows go to the REAL ``_denoise`` (tiny DiT) and ``noisy_condition`` as they
+    are (no copy): neither writes into them."""
+    from engine_h3 import pipeline_h3 as P
+
+    _dit, run = _tiny_denoiser(monkeypatch, tmp_path)
+    cache = _rc_module().RefLatentCache()
+    cache.begin({"i"})
+    keys = [("i", n) for n in range(3)]
+    for key, value in zip(keys, _tiny_refs()):
+        cache.put(key, value)
+    snapshot = [cache.get(k)[1].clone() for k in keys]
+    held = [cache.get(k) for k in keys]
+    video, _audio, _entry = run(refs=held)
+    video2, _audio2, _entry2 = run(refs=[cache.get(k) for k in keys])
+    assert torch.equal(video, video2)
+    P.noisy_condition(held[0][1], 2, torch.Generator().manual_seed(5))
+    for k, s in zip(keys, snapshot):
+        assert torch.equal(cache.get(k)[1], s)
 
 
 # --------------------------------------------------------------------------- #

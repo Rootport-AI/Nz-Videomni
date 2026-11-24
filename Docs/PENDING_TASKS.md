@@ -37,12 +37,6 @@
 - **判断材料**: 同じ案（プロンプトの埋め込みのジョブ間のキャッシュ）は研究ノート [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) の「未着手の候補」(1) にあり、同「次の一歩」で、LTX 2.3 のテキストエンコードの所要時間の実測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50）を根拠に優先度を下げている。LTX 2.5 には同じ内訳の実測が無い（本書 §3-53）。`keep_resident_embeddings` の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-114、実測は記録簿 §92。
 - **出典**: オーナー指示 2026-11-24。
 
-### 1-300. MCP の `submit_chain` で、ステップ数と shift を指定できるようにする（起票：2026-11-24）
-
-- **概要**: MCP の連結の道具 `submit_chain`（`mcp_server/tools/generate.py`）に、引数 `num_inference_steps`・`shift_video`・`shift_audio` を足した（dev の `a3cbdcc6`。省略すれば送らず、ベースモデルの既定で動く。`vram16_mode` は足していない）。実装と確認は済んだ。機械の門は失敗 0、MCP から MiniMax H3 の連結を Turbo LoRA の 4 ステップで流す GPU での確認も合格した。main へ取り込む前のアプリの試験の全件 1 回も通った（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §234.7）。オーナーにお願いする画面の操作は無いので、§2 へは移さない。
-- **これからすること**: オーナーの指示を受けて、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、dev を main へ取り込む。
-- **出典**: 判断と理由は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41、検証・機械の門・GPU での確認の記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §234。オーナー指示 2026-11-24・2026-11-25。
-
 ## 2. 実装済み・ユーザーのテスト待ち
 
 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
@@ -203,7 +197,7 @@
 #### 3-281. 軽い症状の原因究明（受け皿）（起票：2026-11-11）
 
 - **概要**: 再現はするが実害が小さい症状の原因究明を溜め、ある程度の数が溜まったところでまとめて調べる受け皿です（オーナー指示 2026-11-11）。いま溜まっているもの。
-  - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認（2026-11-24）でも、ジョブの実行中に合計 12 回返し、そのあいだサーバーのログにエラーは無く、サーバーへ直接問い合わせるとジョブは running のまま進んでいました（同 §233.13）。本書 §1-300 の GPU での確認（2026-11-25）でも、ジョブの実行中に 3 回返しました（同 §234.6）。原因は調べていません。
+  - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認（2026-11-24）でも、ジョブの実行中に合計 12 回返し、そのあいだサーバーのログにエラーは無く、サーバーへ直接問い合わせるとジョブは running のまま進んでいました（同 §233.13）。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 の GPU での確認（2026-11-25）でも、ジョブの実行中に 3 回返しました（同 §234.6）。原因は調べていません。
   - Gradio の試験（`tests/test_gradio_*.py`）の実行中に、試験の既定の向き先（`http://127.0.0.1:8000/api/v1/loras/reload`）への 500 の警告が出る（変更の前からある。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.7）。どの試験が実際の通信を出しているかは調べていません。
   - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。

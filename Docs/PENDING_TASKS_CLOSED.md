@@ -3679,3 +3679,15 @@ End sourceの目視ゲート（本書§3-82）の結果を受けた1バッチで
 - **派生**: テキストエンコーダーの出力の使い回しは台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-298（LTX 系は同 §1-299）、MCP の `submit_chain` でステップ数と shift を指定できるようにする件は同 §1-300 です。
 - **状態**: 完結（2026-11-25）。main へ取り込む前のアプリの試験の全件 1 回は通りました（記録簿 §233.15）。main への取り込みは、そのあとに行います（同 §233.16）。コミットのハッシュは git の履歴を正とします。
 - **正本・出典**: 仕組みは設計正本 §6.9・裁定 110、操作パネルの作りはフロントエンド `Docs/DEVLOG.md` §182、MCP の引数は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D40、記録は記録簿 §233、GPU での確認の一次記録は保管庫 [`Outputs-archive/h3-refcache-gates-2026-11-24/`](Outputs-archive/h3-refcache-gates-2026-11-24/)。
+
+### 1-300. MCP の `submit_chain` で、ステップ数と shift を指定できるようにする（起票：2026-11-24、クローズ：2026-11-25）（[`PENDING_TASKS.md`](PENDING_TASKS.md) §1-300 からクローズ）
+
+- **出自**: [`PENDING_TASKS.md`](PENDING_TASKS.md) 元 §1-300（2026-11-24 起票。同書「1. 近日中の改修項目」）。**同書側は欠番**。オーナーにお願いする画面の操作が無いので、同書「2. 実装済み・ユーザーのテスト待ち」へは移さず、§1 から閉じました。同書 §1 にはほかの項目が残るので、見出しは残しました。きっかけは、本書 1-297 の GPU での確認の G2 を、ステップ数を指定するために MCP ではなく HTTP で流したことです（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §233.10・§233.13）。
+- **到達条件**: MCP〔AI エージェント向けの道具の口〕の連結の道具 `submit_chain` で、ステップ数と shift（`num_inference_steps`・`shift_video`・`shift_audio`）を指定でき、MiniMax H3 の連結を Turbo LoRA の 4 ステップで MCP から流せる。省略したときに送る本文は、変更の前と同じ。**達成しました。**
+- **何が完了したか**: `submit_chain`（`mcp_server/tools/generate.py`）に 3 つの引数を足し、説明文を指定できる形に直しました（dev `a3cbdcc6`）。省略すれば API へ送らず、ベースモデルの既定で動きます。`vram16_mode` は足していません。サーバーの API とエンジン、操作パネル、プラグインは変えていません。
+- **合格の根拠**: 計画の敵対的なレビューと差分の検証（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §234.3・§234.4）、機械の門（同 §234.5）、MCP から MiniMax H3 の連結を Turbo LoRA の 4 ステップで流した GPU での確認 1 本（同 §234.6。合格）。条件と数値は同 §234 にだけ書きます。
+- **オーナーにお願いする実機での確認**: ありませんでした。変えたのは MCP サーバーだけで、操作パネルもプラグインも変えていないためです。オーナーがこの解釈を確かめたうえで、クローズを指示しました（2026-11-25）。
+- **判断**: [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41（本書には写しません）。
+- **派生**: GPU での確認の実行中に、MCP の `wait_for_job` が `BACKEND_UNREACHABLE`〔接続できない〕を返しました（記録簿 §234.6）。同じ症状の件は、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-281 に残っています。
+- **状態**: 完結（2026-11-25）。main へ取り込む前のアプリの試験の全件 1 回は通りました（記録簿 §234.7）。main への取り込みは、そのあとに行います（同 §234.11）。コミットのハッシュは git の履歴を正とします。
+- **正本・出典**: 判断と理由は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41、API の契約は仕様書 [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)、記録は記録簿 §234、GPU での確認の一次記録は保管庫 [`Outputs-archive/mcp-chain-steps-gate-2026-11-25/`](Outputs-archive/mcp-chain-steps-gate-2026-11-25/)。オーナー指示 2026-11-24・2026-11-25。

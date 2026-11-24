@@ -26906,6 +26906,8 @@ VRAM の山（MiB。割り当て／予約）:
 - **main へ取り込む前のアプリの試験の全件 1 回も、失敗 0・エラー 0 で通りました**（234.7）。残っているのは、オーナーの指示を受けての、台帳の 1-300 を完了の文書へ移すことと main への取り込みです（234.8）。
 - 判断と理由は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D41、API の契約は仕様書 [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) で、本節には写しません。**このテーマの検証・機械の門・GPU での確認の数値の正本は本節です。**
 
+> **更新（2026-11-25）**: オーナーの指示（2026-11-25）で、台帳の項目を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 へ移しました（234.10）。残るのは main への取り込みです（234.11）。
+
 ### 234.2 経緯と位置づけ
 
 - 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の §1-300 のテーマです。オーナーの指示（2026-11-25）で着手しました。きっかけは、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認の G2 を、ステップ数を指定するために HTTP で流したことです（233.10・233.13）。
@@ -27006,8 +27008,20 @@ VRAM の山（MiB。割り当て／予約）:
 
 - オーナーの指示を受けての、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-300 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移すことと、main への取り込み。
 
+> **更新（2026-11-25）**: 台帳の項目は、オーナーの指示で [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 へ移しました（234.10）。いま残っていることは 234.11 です。
+
 ### 234.9 成果物の所在
 
 - **アプリ**: `mcp_server/tools/generate.py`・`mcp_server/server.py`・`mcp_server/tools/system.py`。試験は `tests/test_mcp_tools_generate.py`。
 - **GPU での確認の記録**: [`Outputs-archive/mcp-chain-steps-gate-2026-11-25/`](Outputs-archive/mcp-chain-steps-gate-2026-11-25/)。
 - **コミット**: コードと試験は dev の `a3cbdcc6` です。本節を含む文書は、監督がコミットします。
+
+### 234.10 クローズ（2026-11-25）
+
+- **結論を先に**: オーナーの指示（2026-11-25）で、台帳の 1-300 を閉じました。
+- **オーナーにお願いする実機での確認**: ありません。変えたのは MCP サーバーだけで、操作パネルもプラグインも変えていないためです。オーナーは、「内容が MCP の改善で、人間の目視での確認が要る実機の試験は残っていない」という解釈を確かめたうえで、クローズを指示しました。
+- **台帳の扱い**: 台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §1-300 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 へ移しました（2026-11-25）。
+
+### 234.11 main への取り込み（2026-11-25）
+
+- **これから行うこと**: 本節を含む文書のコミットを dev に入れ、プッシュ分の個人情報の確認を通したあとで、dev を main へ `--no-ff` で取り込みます（オーナーの指示 2026-11-25 を受けて）。ハッシュは git の履歴を正とします。

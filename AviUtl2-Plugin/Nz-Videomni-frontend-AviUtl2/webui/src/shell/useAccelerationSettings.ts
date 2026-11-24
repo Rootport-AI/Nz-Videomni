@@ -61,6 +61,10 @@ export interface UseAccelerationSettingsResult {
    * Sol on, any other choice is that pi-H3 choice + Sol off), so the two can
    * never be on at once. */
   setFastVae: (value: FastVaeChoice) => void;
+  /** Write-through to `localStorage`, same persistence rationale as
+   * {@link setVram16Mode} — whether this PC has the main memory to spare is a
+   * machine-level fact (台帳 §1-297). */
+  setKeepReferenceLatents: (value: boolean) => void;
   /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
    * panel's Output row — whether finished mp4s carry their generation
    * conditions. A standing preference, persisted like the rows above. */
@@ -96,7 +100,8 @@ export interface UseAccelerationSettingsResult {
  * spent a day in that state. `embedMp4Metadata` (§3-164, 2026-09-24) is the
  * Output row that shares this store; it too was persisted from its first day,
  * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), `piH3` (ruling 107,
- * 2026-11-23) and `solVae` (Sol-H3-VAE, 2026-11-24).
+ * 2026-11-23), `solVae` (Sol-H3-VAE, 2026-11-24) and
+ * `keepReferenceLatents` (台帳 §1-297).
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -133,6 +138,7 @@ export function useAccelerationSettings(
       vram16Mode: stored.vram16Mode,
       piH3: stored.piH3,
       solVae: stored.solVae,
+      keepReferenceLatents: stored.keepReferenceLatents,
       embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
@@ -151,6 +157,7 @@ export function useAccelerationSettings(
       vram16Mode: acceleration.vram16Mode,
       piH3: acceleration.piH3,
       solVae: acceleration.solVae,
+      keepReferenceLatents: acceleration.keepReferenceLatents,
       embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
@@ -163,6 +170,7 @@ export function useAccelerationSettings(
     acceleration.vram16Mode,
     acceleration.piH3,
     acceleration.solVae,
+    acceleration.keepReferenceLatents,
     acceleration.embedMp4Metadata,
   ]);
 
@@ -198,6 +206,10 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, ...fastVaeSettings(value) }));
   }, []);
 
+  const setKeepReferenceLatents = useCallback((value: boolean) => {
+    setAcceleration((prev) => ({ ...prev, keepReferenceLatents: value }));
+  }, []);
+
   const setEmbedMp4Metadata = useCallback((value: boolean) => {
     setAcceleration((prev) => ({ ...prev, embedMp4Metadata: value }));
   }, []);
@@ -231,6 +243,7 @@ export function useAccelerationSettings(
     setKeepResidentEmbeddings,
     setVram16Mode,
     setFastVae,
+    setKeepReferenceLatents,
     setEmbedMp4Metadata,
     resetToServerDefaults,
   };

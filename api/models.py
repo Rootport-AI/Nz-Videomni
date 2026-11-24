@@ -763,6 +763,18 @@ class GenerateRequest(BaseModel):
     # 連結スキーマにも同じ形で置く。GET /status には載せない（pi_h3 と同じ規律）。
     sol_vae: bool = False
 
+    # keep_reference_latents: MiniMax H3 の参照素材（Ref2VA の参照画像・参照動画・
+    # 参照音声）を符号化した結果を、ワーカーのメインメモリに保持する。既定の
+    # false は今日の生成と一切変わらない。true のときは、同じアップロードの
+    # 参照素材を使う次の生成と連結の後ろのクリップで符号化を省く（生成結果は
+    # 変わらない）。メインメモリ 64GB 以上を推奨。参照の無いジョブや false の
+    # ジョブが来ると保持した分は消える。
+    # true のときだけワーカーへ送る加算的コントラクト。【エンジン差】H3 専用で、
+    # LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る（各アダプタの
+    # REJECT_TABLE）。連結スキーマにも同じ形で置く。GET /status には載せない
+    # （sol_vae と同じ規律）。
+    keep_reference_latents: bool = False
+
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1488,6 +1500,11 @@ class GenerateChainRequest(BaseModel):
     # true を 422 FEATURE_UNSUPPORTED で断る（各アダプタの CHAIN_REJECT_TABLE）。
     # 実際に使えたかどうかは metadata.json の sol_vae_used（true のジョブだけ）。
     sol_vae: bool = False
+    # keep_reference_latents: 詳細は GenerateRequest の同名フィールドを参照
+    # （MiniMax H3 の参照素材の符号化結果の保持。既定 false は今日の連結と
+    # 一切変わらない）。LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る
+    # （各アダプタの CHAIN_REJECT_TABLE）。
+    keep_reference_latents: bool = False
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1945,8 +1962,8 @@ class GenerateChainRequest(BaseModel):
         ``embed_mp4_metadata`` is transcribed for the same reason (the stored
         record would otherwise claim the default), and so are ``vram16_mode``,
         ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX) and
-        ``pi_h3`` / ``sol_vae`` (MiniMax H3's; ``"off"`` / ``False`` on LTX,
-        which refuses any other).
+        ``pi_h3`` / ``sol_vae`` / ``keep_reference_latents`` (MiniMax H3's;
+        ``"off"`` / ``False`` on LTX, which refuses any other).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -1995,6 +2012,7 @@ class GenerateChainRequest(BaseModel):
             vram16_mode=self.vram16_mode,
             pi_h3=self.pi_h3,
             sol_vae=self.sol_vae,
+            keep_reference_latents=self.keep_reference_latents,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

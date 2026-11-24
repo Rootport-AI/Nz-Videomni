@@ -1,0 +1,341 @@
+{
+  "gate": "G2",
+  "pass": true,
+  "failed": [],
+  "checks": [
+    {
+      "name": "2 jobs completed",
+      "ok": true,
+      "detail": {
+        "g2_on": {
+          "status": "completed",
+          "error": null
+        },
+        "g2_off": {
+          "status": "completed",
+          "error": null
+        }
+      }
+    },
+    {
+      "name": "mp4 sha256 equal",
+      "ok": true,
+      "detail": [
+        "525c14ddc9ee7ebc964dcbd5364d1dcbefc6426203d27c86c7e2469e2d8b1495",
+        "525c14ddc9ee7ebc964dcbd5364d1dcbefc6426203d27c86c7e2469e2d8b1495"
+      ]
+    },
+    {
+      "name": "4 clips latents_sha256 equal (video, audio)",
+      "ok": true,
+      "detail": {
+        "per_clip": [
+          {
+            "video": true,
+            "audio": true
+          },
+          {
+            "video": true,
+            "audio": true
+          },
+          {
+            "video": true,
+            "audio": true
+          },
+          {
+            "video": true,
+            "audio": true
+          }
+        ],
+        "first_differing_clip_1based": null
+      }
+    },
+    {
+      "name": "on: short video miss/hit/hit/hit",
+      "ok": true,
+      "detail": {
+        "got": [
+          "miss",
+          "hit",
+          "hit",
+          "hit"
+        ],
+        "used_frames": [
+          73,
+          73,
+          73,
+          73
+        ],
+        "expected": [
+          "miss",
+          "hit",
+          "hit",
+          "hit"
+        ],
+        "expected_used": [
+          73,
+          73,
+          73,
+          73
+        ]
+      }
+    },
+    {
+      "name": "on: long video miss/miss/hit/miss",
+      "ok": true,
+      "detail": {
+        "got": [
+          "miss",
+          "miss",
+          "hit",
+          "miss"
+        ],
+        "used_frames": [
+          124,
+          90,
+          124,
+          107
+        ],
+        "expected": [
+          "miss",
+          "miss",
+          "hit",
+          "miss"
+        ],
+        "expected_used": [
+          124,
+          90,
+          124,
+          107
+        ]
+      }
+    },
+    {
+      "name": "off: no latent_cache key",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "head_equals_prev_tail true (clips 2-4, both jobs)",
+      "ok": true,
+      "detail": {
+        "g2_on": [
+          true,
+          true,
+          true
+        ],
+        "g2_off": [
+          true,
+          true,
+          true
+        ]
+      }
+    },
+    {
+      "name": "embed_mp4_metadata false",
+      "ok": true,
+      "detail": [
+        false,
+        false
+      ]
+    },
+    {
+      "name": "same reference ids in every clip of both jobs",
+      "ok": true,
+      "detail": {
+        "g2_on": [
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ],
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ],
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ],
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ]
+        ],
+        "g2_off": [
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ],
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ],
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ],
+          [
+            [
+              "video",
+              "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              1
+            ],
+            [
+              "video",
+              "66e90774-1704-49c6-82b3-1a006cfd2180",
+              2
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "name": "backend minimax-h3, attention sdpa",
+      "ok": true,
+      "detail": [
+        [
+          "minimax-h3",
+          "sdpa"
+        ],
+        [
+          "minimax-h3",
+          "sdpa"
+        ]
+      ]
+    }
+  ],
+  "records": {
+    "g2_on": {
+      "job_id": "29a2e63f-cbee-4f34-a313-f79d6dc1f157",
+      "generation_time_seconds": 2942.46,
+      "clip_seconds": [
+        {
+          "encode": 29.94,
+          "reference_encode": 70.33,
+          "denoise": 734.81
+        },
+        {
+          "encode": 28.93,
+          "reference_encode": 13.01,
+          "denoise": 484.16
+        },
+        {
+          "encode": 29.17,
+          "reference_encode": 0.31,
+          "denoise": 798.61
+        },
+        {
+          "encode": 29.34,
+          "reference_encode": 15.14,
+          "denoise": 580.14
+        }
+      ],
+      "clip_reference_encode_phase_seconds": [
+        70.33,
+        13.01,
+        0.31,
+        15.14
+      ],
+      "seeds": [
+        42,
+        43,
+        44,
+        45
+      ]
+    },
+    "g2_off": {
+      "job_id": "575f52c6-a7a5-4fa8-8780-725718ed20c7",
+      "generation_time_seconds": 3082.04,
+      "clip_seconds": [
+        {
+          "encode": 28.39,
+          "reference_encode": 65.27,
+          "denoise": 679.06
+        },
+        {
+          "encode": 30.37,
+          "reference_encode": 67.86,
+          "denoise": 485.35
+        },
+        {
+          "encode": 28.46,
+          "reference_encode": 65.27,
+          "denoise": 758.96
+        },
+        {
+          "encode": 30.99,
+          "reference_encode": 69.63,
+          "denoise": 639.8
+        }
+      ],
+      "clip_reference_encode_phase_seconds": [
+        65.27,
+        67.86,
+        65.27,
+        69.63
+      ],
+      "seeds": [
+        42,
+        43,
+        44,
+        45
+      ]
+    }
+  }
+}

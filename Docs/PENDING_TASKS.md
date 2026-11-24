@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-24
+- 作成: 2026-07-15／最終更新: 2026-11-25
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -20,6 +20,26 @@
 - **概要**: 一部のブロックを BF16 のまま残した重み（種類 `bf16_blocks`。`Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49`・`10Eros_Max_h3_8stepTURBO_beta7_int8HQ`）の快適上限の線は、概算による暫定の値である。この暫定の線を、実機で測った境界に基づく線で置き換える。1920×1088 と 2560×1472 で、快適の上端とその 1 段上の OOM の点を測り、記述子の `bf16_blocks` の値を決める。
 - **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
 - **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
+
+### 1-298. MiniMax H3 のテキストエンコーダーの出力（条件付け）を、メインメモリに置いて使い回す（起票：2026-11-24）
+
+- **概要**: MiniMax H3 で、プロンプトと参照素材がどちらも前回と同じなら、テキストエンコーダーの出力（条件付け＝プロンプトと参照を読み取った内部の表現）をメインメモリに置いて使い回し、テキストエンコーダーの段を省く。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297（参照素材の潜在の使い回し。2026-11-25 にクローズ）とは別のテーマである。1-297 は参照素材が同じでプロンプトが違う場合（Chained で参照が共通で、クリップごとのプロンプトが入力済みの場合など）に効き、本項はプロンプトも同じ場合に効く。LTX 系の同じ考えは本書 §1-299。
+- **まだ決まっていないこと**: 設計の全体。着手のときにオーナーと相談して決める。
+- **判断材料**: H3 のテキストエンコーダーは、プロンプトのほかに参照の画像と動画も読む（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2 の「テキストエンコーダーへの提示」）。テキストエンコーダーの段の作り（層ごとにファイルから直接読む）は同 §4。参照つきのテキストエンコーダーの段の所要時間の実測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.8・§196.3。
+- **出典**: オーナー指示 2026-11-24。
+
+### 1-299. LTX 系のテキストエンコーダーの出力（条件付け）を、メインメモリに置いて使い回す（起票：2026-11-24）
+
+- **概要**: 本書 §1-298 と同じ考え（入力が前回と同じなら、テキストエンコーダーの出力を使い回してその段を省く）を、LTX 系のエンジン（LTX 2.3・LTX 2.5）に入れる。MiniMax H3 向けの §1-298 とは別のテーマとして扱う。LTX 2.5 の Settings の項目 `keep_resident_embeddings` は、埋め込み処理器という部品の重みをジョブをまたいでメインメモリに残すもので、出力を使い回す本項とは別物である。
+- **まだ決まっていないこと**: 設計の全体。着手のときにオーナーと相談して決める。
+- **判断材料**: 同じ案（プロンプトの埋め込みのジョブ間のキャッシュ）は研究ノート [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) の「未着手の候補」(1) にあり、同「次の一歩」で、LTX 2.3 のテキストエンコードの所要時間の実測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50）を根拠に優先度を下げている。LTX 2.5 には同じ内訳の実測が無い（本書 §3-53）。`keep_resident_embeddings` の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-114、実測は記録簿 §92。
+- **出典**: オーナー指示 2026-11-24。
+
+### 1-300. MCP の `submit_chain` で、ステップ数と shift を指定できるようにする（起票：2026-11-24）
+
+- **概要**: MCP の連結の道具 `submit_chain`（`mcp_server/tools/generate.py`）には、ステップ数と shift の引数（`num_inference_steps`・`shift_video`・`shift_audio`）が無い。単発の `submit_generate` にはあり、API の `POST /generate/chain`（`api/models.py` の `GenerateChainRequest`）も 3 つとも受ける。このため MiniMax H3 の連結は、MCP からは H3 の既定（20 ステップ・shift 12／3）か `pi_h3` の選択の値でしか動かず、Turbo LoRA の 4 ステップの Chained（オーナーのふだんの使い方）を MCP から流せない。MCP の `submit_chain` でも、ステップ数と shift を指定できるようにしたい。
+- **判断材料**: `submit_chain` に足さなかった判断と理由（使いたい利用者が出てから足せば足りる・足すと LTX の `submit_chain` の見え方が変わる）は `MCP_SERVER_DESIGN.md` D31、`submit_generate` に足したときの判断は同 D27。限界の記述は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h) の「限界」と、`submit_chain` の説明文にある。`vram16_mode` も `submit_chain` には無い（同 D28・D31）。
+- **出典**: オーナー指示 2026-11-24。きっかけは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認の G2 で、ステップ数を指定するために MCP ではなく HTTP で流したこと（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §233.10・§233.13）。
 
 ## 2. 実装済み・ユーザーのテスト待ち
 
@@ -143,12 +163,12 @@
 - **観測（2026-11-02）**: H3 の 1 本の V2V（クリップ 56 フレーム）でも同じ約 8 ミリ秒の不足を観測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §193.7 ④）。
 - **出典**: §1-103（H3 の A2V。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-257）の事前調査（2026-10-25）で見つかった副産物。A2V では Strength 1.0 のとき元の波形を映像の長さで切って載せるので、この差は出ない。
 
-#### 3-259. MCP と Gradio の Ref2VA（参照素材からの生成）の受け口（起票：2026-10-28）
+#### 3-259. Gradio の Ref2VA（参照素材からの生成）の受け口と、MCP の連結の文脈フレームの既定（起票：2026-10-28）
 
-- **概要**: MiniMax H3 の Ref2VA を、MCP の生成の道具と Gradio の Generate タブからも使えるようにする（いまは API と AviUtl2 の操作パネルだけ）。**連結（Chained）の各クリップの参照（旧 §1-109〔CLOSED 3-264〕）も含める**（MCP の `submit_chain` は `clips[i].references` を受けず、Gradio の Chain タブは LTX 専用）。
-- **前提**: API は `POST /generate` の `references`（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2）で確定している。MCP は画像・動画・音声の 3 種のアップロードの id と、プロンプトの札（`<Picture n>` など）の書き方、Ref2VA の重みを読み込む必要（`GET /models` の `transformer_role`）の案内が要る。Gradio は H3 の整理（§3-243）と合わせて扱う。
-- **H3 の連結の V2V と冒頭画像（追記）**: MCP の `submit_chain` は `source_video_context_frames`（既定 73）をそのまま送るので、22 を指定しないと H3 の V2V は 422（`source_video.context_frames must be 22 …`）になる（説明文には 22 の指定を書いた。既定値を系統で変えるかは本項で決める）。冒頭画像は `strength` を省略すれば通る。Gradio の Chain タブは LTX 専用で、LTX の検査（25 以上・8n+1）を画面側で行うので、H3 の V2V は送れない（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2b (h)）。
-- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・§3.3（参照付きの連結・入力動画からの続き）・裁定 82・裁定 87・裁定 90、`MCP_SERVER_DESIGN.md` D32。
+- **概要**: MiniMax H3 の Ref2VA を、Gradio の Generate タブ（単発）と Chain タブ（連結の各クリップ）からも使えるようにする。あわせて、MCP の `submit_chain` の `source_video_context_frames` の既定（73）を系統で変えるかを決める。
+- **前提**: API は `POST /generate` の `references`（仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2）と `POST /generate/chain` の `clips[i].references`（同 §6.2b (h)）で確定している。Gradio の Chain タブは LTX 専用で、LTX の検査（25 以上・8n+1）を画面側で行うので、H3 の連結には使えない。Gradio は H3 の整理（§3-243）と合わせて扱う。説明文の書き方（3 種のアップロードの id・札 `<Picture n>` など・重みの種別の確かめ方）は、MCP の `submit_generate` の説明（`MCP_SERVER_DESIGN.md` D39）が手本になる。
+- **MCP の V2V の文脈フレーム**: MCP の `submit_chain` は `source_video_context_frames`（既定 73）をそのまま送るので、22 を指定しないと H3 の V2V は 422（`source_video.context_frames must be 22 …`）になる（説明文には 22 の指定を書いてある）。
+- **出典**: 設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2・§3.3（参照付きの連結・入力動画からの続き）・裁定 82・裁定 87・裁定 90・裁定 109 ⑩、`MCP_SERVER_DESIGN.md` D39。
 
 #### 3-269. MiniMax H3 の V2V の凍結フレーム（入力動画から引き継ぐ文脈）の増量の検討（起票：2026-11-02）
 
@@ -181,7 +201,7 @@
 #### 3-281. 軽い症状の原因究明（受け皿）（起票：2026-11-11）
 
 - **概要**: 再現はするが実害が小さい症状の原因究明を溜め、ある程度の数が溜まったところでまとめて調べる受け皿です（オーナー指示 2026-11-11）。いま溜まっているもの。
-  - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。原因は調べていません。
+  - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認（2026-11-24）でも、ジョブの実行中に合計 12 回返し、そのあいだサーバーのログにエラーは無く、サーバーへ直接問い合わせるとジョブは running のまま進んでいました（同 §233.13）。原因は調べていません。
   - Gradio の試験（`tests/test_gradio_*.py`）の実行中に、試験の既定の向き先（`http://127.0.0.1:8000/api/v1/loras/reload`）への 500 の警告が出る（変更の前からある。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.7）。どの試験が実際の通信を出しているかは調べていません。
   - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。

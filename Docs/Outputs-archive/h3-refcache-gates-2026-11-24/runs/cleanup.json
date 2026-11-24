@@ -1,0 +1,436 @@
+{
+  "phase": "cleanup",
+  "started": "2026-11-24T23:33:59",
+  "status_before": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 5,
+        "failed": 0
+      }
+    }
+  },
+  "load_default": {
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "models": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "finished": true
+  },
+  "loaded_default": {
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 5,
+        "failed": 0
+      }
+    },
+    "transformer_active": "default",
+    "h3": {
+      "id": "MiniMaxH3",
+      "display_name": "MiniMax H3",
+      "engine_family": "h3",
+      "active": true,
+      "installed": true,
+      "present": true,
+      "missing_categories": [],
+      "unsupported_features": [
+        "reference_video",
+        "nag",
+        "two_stage_hq",
+        "guidance_scale",
+        "alpha_gen",
+        "prune_vaed",
+        "keep_resident_embeddings",
+        "keyframe_strength",
+        "a2v",
+        "end_source",
+        "fused_gguf_dequant_kernel",
+        "lora_audio_strength"
+      ],
+      "constraints": {
+        "num_frames": {
+          "step": 17,
+          "offset": 5,
+          "min": 22,
+          "max": 481
+        },
+        "dimension_multiple": 32,
+        "frame_rate": {
+          "min": 24.0,
+          "max": 24.0
+        },
+        "sampling": {
+          "num_inference_steps": {
+            "min": 1,
+            "max": 50,
+            "step": 1,
+            "default": 20
+          },
+          "shift_video": {
+            "min": 1,
+            "max": 20,
+            "step": 0.1,
+            "default": 12
+          },
+          "shift_audio": {
+            "min": 1,
+            "max": 20,
+            "step": 0.1,
+            "default": 3
+          }
+        },
+        "keyframes": {
+          "step": 1,
+          "offset": 0
+        },
+        "prompt_token_limit": null,
+        "source_audio": {
+          "strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.5
+          }
+        },
+        "reference": {
+          "max_images": 9,
+          "max_videos": 3,
+          "max_audios": 3,
+          "max_total": 12,
+          "video_total_sec": 15.0,
+          "audio_total_sec": 15.0,
+          "clip_min_sec": 2.0
+        },
+        "chain": {
+          "overlap_frames": 22,
+          "source_audio": {
+            "strength": {
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05,
+              "default": 0.5
+            }
+          }
+        },
+        "retake": {
+          "audio_strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.5
+          }
+        },
+        "outpaint": {
+          "audio_strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.5
+          },
+          "blend_dilation_stage1": {
+            "min": 0,
+            "max": 15,
+            "step": 1,
+            "default": 1
+          }
+        },
+        "inpaint": {
+          "audio_strength": {
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "default": 0.5
+          },
+          "blend_dilation_stage1": {
+            "min": 0,
+            "max": 15,
+            "step": 1,
+            "default": 1
+          }
+        },
+        "pi_h3": {
+          "4steps": {
+            "num_inference_steps": 4,
+            "shift_video": 12.0,
+            "shift_audio": 3.0
+          },
+          "2steps": {
+            "num_inference_steps": 2,
+            "shift_video": 12.0,
+            "shift_audio": 3.0
+          }
+        }
+      },
+      "category_order": [
+        "transformer",
+        "text_encoder",
+        "video_vae",
+        "audio"
+      ],
+      "transformer_weight_class": null,
+      "transformer_role": "fl2va",
+      "transformer_quant_class": "int8",
+      "categories": {
+        "transformer": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            },
+            {
+              "name": "10Eros_Max_8stepTurbo_v1.0_hybrid-int8_HQ",
+              "path": "models/MiniMaxH3/Weights/10Eros_Max_8stepTurbo_v1.0_hybrid-int8_HQ.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "10Eros_Max_h3_8stepTURBO_beta7_int8HQ",
+              "path": "models/MiniMaxH3/Weights/10Eros_Max_h3_8stepTURBO_beta7_int8HQ.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+              "path": "models/MiniMaxH3/Weights/10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49",
+              "path": "models/MiniMaxH3/Weights/Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+              "path": "models/MiniMaxH3/Weights/h3ErosMax_beta5_3178732_int8_TURBO_Hybrid.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "minimax_h3_ref2va_pruned_int8_convrot",
+              "path": "models/MiniMaxH3/Weights/minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "pinkcherryMinimaxH3_v18Hybrid_int8",
+              "path": "models/MiniMaxH3/Weights/pinkcherryMinimaxH3_v18Hybrid_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            },
+            {
+              "name": "s3_raw_int8",
+              "path": "models/MiniMaxH3/Weights/s3_raw_int8.safetensors",
+              "is_default": false,
+              "exists": true,
+              "source": "scan"
+            }
+          ]
+        },
+        "text_encoder": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/TextEncoder/qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "video_vae": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_video_vae_fp16.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        },
+        "audio": {
+          "default": "default",
+          "active": "default",
+          "entries": [
+            {
+              "name": "default",
+              "path": "models/MiniMaxH3/VAE/minimax_h3_audio_vae_fp32.safetensors",
+              "is_default": true,
+              "exists": true,
+              "source": "config"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "unload": {
+    "pipeline_loaded": false,
+    "state": "unloaded"
+  },
+  "status_after": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": false,
+      "pipeline_type": null,
+      "state": "unloaded",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 5,
+        "failed": 0
+      }
+    }
+  },
+  "ok": true,
+  "finished": "2026-11-24T23:34:08"
+}

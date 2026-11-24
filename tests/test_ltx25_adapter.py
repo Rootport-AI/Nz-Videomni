@@ -277,6 +277,7 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     "references": {"references": [{"kind": "picture", "id": "img-123", "slot": 1}]},
     "pi_h3": {"pi_h3": "4steps"},
     "sol_vae": {"sol_vae": True},
+    "keep_reference_latents": {"keep_reference_latents": True},
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -626,8 +627,9 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # again. THREE with VRAM 16GB mode (``vram16_mode``, MiniMax H3 only — a
     # feature name, not a mode). FOUR with ``source_audio`` (single-shot A2V, H3 only).
     # FIVE with ``references`` (Ref2VA, H3 only). SIX with ``pi_h3`` (H3 only).
-    # SEVEN with ``sol_vae`` (Sol-H3-VAE, H3 only).
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 7
+    # SEVEN with ``sol_vae`` (Sol-H3-VAE, H3 only). EIGHT with
+    # ``keep_reference_latents`` (keeping the encoded reference latents, H3 only).
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 8
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -762,6 +764,7 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
         "references",
         "pi_h3",
         "sol_vae",
+        "keep_reference_latents",
     }
 
 
@@ -779,15 +782,15 @@ def test_alpha_gen_is_honoured_and_says_so_in_every_table():
     stage was asked for. Honoured, therefore not refused / ignored / governed —
     and NOT published by this engine (it is LTX 2.3 that publishes it), with
     this engine's published list at its two engine-level names plus MiniMax
-    H3's ``vram16_mode``, ``source_audio``, ``references``, ``pi_h3`` and
-    ``sol_vae``."""
+    H3's ``vram16_mode``, ``source_audio``, ``references``, ``pi_h3``,
+    ``sol_vae`` and ``keep_reference_latents``."""
     assert "alpha_gen" in ltx25.HONOURED_FIELDS
     assert "alpha_gen" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert "alpha_gen" not in ltx25.IGNORED_FIELDS
     assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
     assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 7
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 8
     # The needle the generic honoured-read audit below also relies on, named
     # here so a reader of this feature's tests sees it.
     assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)
@@ -925,6 +928,7 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     "pi_h3": {"pi_h3": "4steps"},
     # MiniMax H3 only (Sol-H3-VAE), on the chain schema too.
     "sol_vae": {"sol_vae": True},
+    "keep_reference_latents": {"keep_reference_latents": True},
 }
 
 
@@ -1232,8 +1236,11 @@ def test_no_chain_mode_is_refused_any_more():
     # acceptance test below rather than only by this set shrinking.
     # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX, and
     # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109), and so is
-    # ``pi_h3`` (MiniMax H3's pi-H3), and so is ``sol_vae`` (its Sol-H3-VAE).
-    assert refused == {"pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3", "sol_vae"}
+    # ``pi_h3`` (MiniMax H3's pi-H3), and so is ``sol_vae`` (its Sol-H3-VAE), and so is ``keep_reference_latents``.
+    assert refused == {
+        "pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3", "sol_vae",
+        "keep_reference_latents",
+    }
 
 
 @pytest.mark.parametrize("case", list(CHAIN_ACCEPTED_SOURCES))

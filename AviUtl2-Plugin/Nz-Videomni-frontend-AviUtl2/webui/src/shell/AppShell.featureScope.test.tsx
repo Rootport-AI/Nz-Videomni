@@ -756,6 +756,57 @@ describe("AppShell — base-model feature scope", () => {
     await waitFor(() => expect(readStoredAcceleration().piH3).toBe("off"));
   });
 
+  // -- 台帳 §1-297: Keep reference latents resident, MiniMax H3's own row ------
+  //
+  // Scoped like VRAM 16GB mode (both LTX engines publish
+  // `keep_reference_latents`), but the default is OFF — so the write-back lands
+  // on `false`, and the note shows only while ON.
+
+  function keepReferenceLatentsRow() {
+    return screen.queryByRole("group", { name: /^Keep reference latents resident \(MiniMax H3\)$/ });
+  }
+
+  function keepReferenceLatentsNote() {
+    return screen.queryByText(/^64GB or more of main memory recommended\. Keeps the encoded reference pictures/);
+  }
+
+  it("hides the Keep reference latents row AND its note on LTX 2.3 and 2.5, and shows them on MiniMax H3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepReferenceLatents: true }));
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(keepReferenceLatentsRow()).toBeNull();
+    expect(keepReferenceLatentsNote()).toBeNull();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(keepReferenceLatentsRow()).toBeNull();
+    expect(keepReferenceLatentsNote()).toBeNull();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(keepReferenceLatentsRow()).toBeInTheDocument());
+    // The leftover ON was written back to off on LTX, and stays off on H3.
+    expect(within(keepReferenceLatentsRow()!).getByRole("button", { name: "OFF" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(keepReferenceLatentsNote()).toBeNull();
+    await user.click(within(keepReferenceLatentsRow()!).getByRole("button", { name: "ON" }));
+    await waitFor(() => expect(keepReferenceLatentsNote()).toBeInTheDocument());
+  });
+
+  it("writes a leftover Keep reference latents ON back to off on LTX 2.3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepReferenceLatents: true }));
+    expect(readStoredAcceleration().keepReferenceLatents).toBe(true);
+    const { select } = await renderApp(AS_LTX25);
+    // LTX 2.3 is the active base model (it publishes `keep_reference_latents`).
+    expect(select.value).toBe("LTX23");
+
+    await waitFor(() => expect(readStoredAcceleration().keepReferenceLatents).toBe(false));
+  });
+
   // -- 台帳 §1-100: Fused GGUF Dequantization Kernel, hidden on MiniMax H3 -----
   //
   // MiniMax H3 has no GGUF weights, so it publishes `fused_gguf_dequant_kernel`

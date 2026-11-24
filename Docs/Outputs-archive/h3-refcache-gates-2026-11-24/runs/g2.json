@@ -1,0 +1,741 @@
+{
+  "phase": "g2",
+  "started": "2026-11-24T21:52:44",
+  "runs": {
+    "g2_on": {
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>, following the motion of <Video 2>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "clips": [
+          {
+            "num_frames": 124,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          },
+          {
+            "num_frames": 90,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          },
+          {
+            "num_frames": 141,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          },
+          {
+            "num_frames": 107,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          }
+        ],
+        "keep_reference_latents": true
+      },
+      "submitted_at": "2026-11-24T21:52:44",
+      "submit": {
+        "http": 202,
+        "resp": {
+          "job_id": "29a2e63f-cbee-4f34-a313-f79d6dc1f157",
+          "status": "running",
+          "created_at": "2026-11-24T12:52:44Z",
+          "num_clips": 4
+        }
+      },
+      "job_id": "29a2e63f-cbee-4f34-a313-f79d6dc1f157",
+      "final": {
+        "status": "completed",
+        "error": null
+      },
+      "wall_seconds": 2951.6,
+      "summary": {
+        "mp4_sha256": "525c14ddc9ee7ebc964dcbd5364d1dcbefc6426203d27c86c7e2469e2d8b1495",
+        "mp4_size": 9207195,
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 2942.46,
+        "seeds": [
+          42,
+          43,
+          44,
+          45
+        ],
+        "clips": [
+          {
+            "latents_sha256": {
+              "video": "dd37138b0320e49a30f7573c5683324ae88c09070bcb391324653481f88898e7",
+              "audio": "dc1b904bfcb360c9a647076132a41f3df96d3456432e8bc7dc5d00701c16b202"
+            },
+            "seconds": {
+              "encode": 29.94,
+              "reference_encode": 70.33,
+              "denoise": 734.81
+            },
+            "reference_encode_seconds_phase": 70.33,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 51.93,
+                "latent_cache": "miss"
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 124,
+                "used_frames": 124,
+                "latent_t": 37,
+                "pairs": 6,
+                "rows": 8880,
+                "seconds": 17.88,
+                "latent_cache": "miss"
+              }
+            ],
+            "head_equals_prev_tail": null,
+            "seed": null
+          },
+          {
+            "latents_sha256": {
+              "video": "791d438d94b96473908c3397aee8e45c23ed537d8007286342accfcf47283bc4",
+              "audio": "3fa0f4b5f74602acd251464c9d1643d1aec1711aa86ae15c3d7f086ff18f344f"
+            },
+            "seconds": {
+              "encode": 28.93,
+              "reference_encode": 13.01,
+              "denoise": 484.16
+            },
+            "reference_encode_seconds_phase": 13.01,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 90,
+                "used_frames": 90,
+                "latent_t": 27,
+                "pairs": 4,
+                "rows": 6480,
+                "seconds": 12.68,
+                "latent_cache": "miss"
+              }
+            ],
+            "head_equals_prev_tail": true,
+            "seed": null
+          },
+          {
+            "latents_sha256": {
+              "video": "b6cf976a6b111ffc44b08f575aaf23e2bfcf854706d3bf1f81835d0f92a67f85",
+              "audio": "373b68024d397012a66370cda282ac4e2cc3eed4cf2ce1e3e7454c6019ece5db"
+            },
+            "seconds": {
+              "encode": 29.17,
+              "reference_encode": 0.31,
+              "denoise": 798.61
+            },
+            "reference_encode_seconds_phase": 0.31,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 124,
+                "used_frames": 124,
+                "latent_t": 37,
+                "pairs": 6,
+                "rows": 8880,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              }
+            ],
+            "head_equals_prev_tail": true,
+            "seed": null
+          },
+          {
+            "latents_sha256": {
+              "video": "b26391f60b39e591b9b0ec866f48de12c2019f09648d24d8dafac9f9c3f8afd8",
+              "audio": "14cd168b1248a3508e08393bc6109d20d5c2efc19c5f922f379e1e3d5606a0a0"
+            },
+            "seconds": {
+              "encode": 29.34,
+              "reference_encode": 15.14,
+              "denoise": 580.14
+            },
+            "reference_encode_seconds_phase": 15.14,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 107,
+                "used_frames": 107,
+                "latent_t": 32,
+                "pairs": 5,
+                "rows": 7680,
+                "seconds": 14.83,
+                "latent_cache": "miss"
+              }
+            ],
+            "head_equals_prev_tail": true,
+            "seed": null
+          }
+        ],
+        "latent_cache_paths": [
+          "h3.phases.clips[0].reference_encode.references[0].latent_cache",
+          "h3.phases.clips[0].reference_encode.references[1].latent_cache",
+          "h3.phases.clips[1].reference_encode.references[0].latent_cache",
+          "h3.phases.clips[1].reference_encode.references[1].latent_cache",
+          "h3.phases.clips[2].reference_encode.references[0].latent_cache",
+          "h3.phases.clips[2].reference_encode.references[1].latent_cache",
+          "h3.phases.clips[3].reference_encode.references[0].latent_cache",
+          "h3.phases.clips[3].reference_encode.references[1].latent_cache"
+        ],
+        "request_embed_mp4_metadata": false,
+        "request_keep_reference_latents": true,
+        "request_clip_references": [
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ],
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ],
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ],
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ]
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 202752,
+            "duration": "16.500000",
+            "nb_read_frames": "396"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 528000,
+            "duration": "16.500000",
+            "nb_read_frames": "516"
+          }
+        ]
+      }
+    },
+    "g2_off": {
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>, following the motion of <Video 2>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "clips": [
+          {
+            "num_frames": 124,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          },
+          {
+            "num_frames": 90,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          },
+          {
+            "num_frames": 141,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          },
+          {
+            "num_frames": 107,
+            "references": [
+              {
+                "kind": "video",
+                "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+                "slot": 1
+              },
+              {
+                "kind": "video",
+                "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+                "slot": 2
+              }
+            ]
+          }
+        ],
+        "keep_reference_latents": false
+      },
+      "submitted_at": "2026-11-24T22:41:57",
+      "submit": {
+        "http": 202,
+        "resp": {
+          "job_id": "575f52c6-a7a5-4fa8-8780-725718ed20c7",
+          "status": "running",
+          "created_at": "2026-11-24T13:41:57Z",
+          "num_clips": 4
+        }
+      },
+      "job_id": "575f52c6-a7a5-4fa8-8780-725718ed20c7",
+      "final": {
+        "status": "completed",
+        "error": null
+      },
+      "wall_seconds": 3091.9,
+      "summary": {
+        "mp4_sha256": "525c14ddc9ee7ebc964dcbd5364d1dcbefc6426203d27c86c7e2469e2d8b1495",
+        "mp4_size": 9207195,
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 3082.04,
+        "seeds": [
+          42,
+          43,
+          44,
+          45
+        ],
+        "clips": [
+          {
+            "latents_sha256": {
+              "video": "dd37138b0320e49a30f7573c5683324ae88c09070bcb391324653481f88898e7",
+              "audio": "dc1b904bfcb360c9a647076132a41f3df96d3456432e8bc7dc5d00701c16b202"
+            },
+            "seconds": {
+              "encode": 28.39,
+              "reference_encode": 65.27,
+              "denoise": 679.06
+            },
+            "reference_encode_seconds_phase": 65.27,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 48.38
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 124,
+                "used_frames": 124,
+                "latent_t": 37,
+                "pairs": 6,
+                "rows": 8880,
+                "seconds": 16.56
+              }
+            ],
+            "head_equals_prev_tail": null,
+            "seed": null
+          },
+          {
+            "latents_sha256": {
+              "video": "791d438d94b96473908c3397aee8e45c23ed537d8007286342accfcf47283bc4",
+              "audio": "3fa0f4b5f74602acd251464c9d1643d1aec1711aa86ae15c3d7f086ff18f344f"
+            },
+            "seconds": {
+              "encode": 30.37,
+              "reference_encode": 67.86,
+              "denoise": 485.35
+            },
+            "reference_encode_seconds_phase": 67.86,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 53.71
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 90,
+                "used_frames": 90,
+                "latent_t": 27,
+                "pairs": 4,
+                "rows": 6480,
+                "seconds": 13.8
+              }
+            ],
+            "head_equals_prev_tail": true,
+            "seed": null
+          },
+          {
+            "latents_sha256": {
+              "video": "b6cf976a6b111ffc44b08f575aaf23e2bfcf854706d3bf1f81835d0f92a67f85",
+              "audio": "373b68024d397012a66370cda282ac4e2cc3eed4cf2ce1e3e7454c6019ece5db"
+            },
+            "seconds": {
+              "encode": 28.46,
+              "reference_encode": 65.27,
+              "denoise": 758.96
+            },
+            "reference_encode_seconds_phase": 65.27,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 48.35
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 124,
+                "used_frames": 124,
+                "latent_t": 37,
+                "pairs": 6,
+                "rows": 8880,
+                "seconds": 16.58
+              }
+            ],
+            "head_equals_prev_tail": true,
+            "seed": null
+          },
+          {
+            "latents_sha256": {
+              "video": "b26391f60b39e591b9b0ec866f48de12c2019f09648d24d8dafac9f9c3f8afd8",
+              "audio": "14cd168b1248a3508e08393bc6109d20d5c2efc19c5f922f379e1e3d5606a0a0"
+            },
+            "seconds": {
+              "encode": 30.99,
+              "reference_encode": 69.63,
+              "denoise": 639.8
+            },
+            "reference_encode_seconds_phase": 69.63,
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 53.3
+              },
+              {
+                "kind": "video",
+                "slot": 2,
+                "source_frames": 107,
+                "used_frames": 107,
+                "latent_t": 32,
+                "pairs": 5,
+                "rows": 7680,
+                "seconds": 15.98
+              }
+            ],
+            "head_equals_prev_tail": true,
+            "seed": null
+          }
+        ],
+        "latent_cache_paths": [],
+        "request_embed_mp4_metadata": false,
+        "request_keep_reference_latents": false,
+        "request_clip_references": [
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ],
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ],
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ],
+          [
+            {
+              "kind": "video",
+              "id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+              "slot": 1,
+              "max_sec": null
+            },
+            {
+              "kind": "video",
+              "id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+              "slot": 2,
+              "max_sec": null
+            }
+          ]
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 202752,
+            "duration": "16.500000",
+            "nb_read_frames": "396"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 528000,
+            "duration": "16.500000",
+            "nb_read_frames": "516"
+          }
+        ]
+      }
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-24T23:33:30"
+}

@@ -6,7 +6,7 @@ import type { TransformerRole } from "../../api/types";
 import { bridge as appBridge } from "../../bridge";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
-import { en } from "../../i18n/strings";
+import { en, ja } from "../../i18n/strings";
 import { JobsProvider } from "../../jobs/JobsContext";
 import { ToastProvider } from "../../shell/ToastContext";
 import { PrefillPolicyProvider } from "../../shell/PrefillPolicyContext";
@@ -454,4 +454,252 @@ describe("ChainedScreen — §1-109 per-clip References", () => {
     },
     30_000,
   );
+});
+
+describe("ChainedScreen — use the same references for the following clips", () => {
+  const FOLLOW_LABEL = en.chained.clipReferenceFollow.label;
+  const followBox = (index: number) => {
+    const card = clipCard(index);
+    openClipReference(card);
+    return within(card).getByRole("checkbox", { name: FOLLOW_LABEL }) as HTMLInputElement;
+  };
+  const accordionsShown = () => clipCards().map((card) => card.querySelector(".ref-accordion") !== null);
+  const NOTE_PATTERN = /^Clip \d+'s references are used\.$/;
+  const notesShown = () => clipCards().map((card) => within(card).queryByText(NOTE_PATTERN) !== null);
+  const addClip = () => fireEvent.click(screen.getByRole("button", { name: en.chained.addClipButton }));
+  const sentClips = (bodies: Record<string, unknown>[]) => bodies[0]!.clips as { references?: { id: string }[] }[];
+
+  async function renderFourClips(options: Parameters<typeof renderChain>[1] = {}) {
+    const view = renderChain(H3_PROPS, options);
+    await waitForClips();
+    addClip();
+    addClip();
+    await waitFor(() => expect(clipCards()).toHaveLength(4), { timeout: 5_000 });
+    setReferences(true);
+    return view;
+  }
+
+  it(
+    "every card has the box, off by default",
+    async () => {
+      await renderFourClips();
+      for (let i = 0; i < 4; i += 1) expect(followBox(i).checked).toBe(false);
+      expect(accordionsShown()).toEqual([true, true, true, true]);
+    },
+    15_000,
+  );
+
+  it(
+    "on at clip 2: clips 3 and 4 lose their accordion and send clip 2's references; clip 1 sends its own",
+    async () => {
+      const { chainBodies } = await renderFourClips();
+      pickPicture(clipCard(0), 1);
+      pickPicture(clipCard(1), 1);
+      // Clip 4 holds a picture of its own, which it must not send while hidden.
+      pickPicture(clipCard(3), 1);
+      await waitForReady(0, 1);
+      await waitForReady(1, 1);
+      await waitForReady(3, 1);
+      fireEvent.click(followBox(1));
+      expect(accordionsShown()).toEqual([true, true, false, false]);
+
+      await clickGenerate();
+      await waitFor(() => expect(chainBodies()).toHaveLength(1), { timeout: 5_000 });
+      const clips = sentClips(chainBodies());
+      const followed = clips[1]!.references!;
+      expect(followed).toEqual([{ kind: "picture", id: expect.stringMatching(/^mock-image-/), slot: 1 }]);
+      expect(clips[2]!.references).toEqual(followed);
+      // Every upload gets a fresh mock id, so clip 4's own picture would differ.
+      expect(clips[3]!.references).toEqual(followed);
+      expect(clips[0]!.references![0]!.id).not.toBe(followed[0]!.id);
+    },
+    20_000,
+  );
+
+  it(
+    "only one card at a time: on at clip 1 takes the check off clip 2",
+    async () => {
+      await renderFourClips();
+      fireEvent.click(followBox(1));
+      fireEvent.click(followBox(0));
+      expect(followBox(0).checked).toBe(true);
+      expect(accordionsShown()).toEqual([true, false, false, false]);
+      // Off at clip 1: clip 2 comes back unchecked.
+      fireEvent.click(followBox(0));
+      expect(accordionsShown()).toEqual([true, true, true, true]);
+      expect(followBox(1).checked).toBe(false);
+    },
+    15_000,
+  );
+
+  it(
+    "a hidden card keeps its cards: off shows clip 4's picture again and sends it",
+    async () => {
+      const { chainBodies } = await renderFourClips();
+      pickPicture(clipCard(1), 1);
+      pickPicture(clipCard(3), 1);
+      await waitForReady(1, 1);
+      await waitForReady(3, 1);
+      fireEvent.click(followBox(1));
+      expect(accordionsShown()).toEqual([true, true, false, false]);
+      fireEvent.click(followBox(1));
+      expect(accordionsShown()).toEqual([true, true, true, true]);
+      await waitForReady(3, 1);
+
+      await clickGenerate();
+      await waitFor(() => expect(chainBodies()).toHaveLength(1), { timeout: 5_000 });
+      const clips = sentClips(chainBodies());
+      expect(clips[2]).not.toHaveProperty("references");
+      expect(clips[3]!.references![0]!.id).toMatch(/^mock-image-/);
+      expect(clips[3]!.references![0]!.id).not.toBe(clips[1]!.references![0]!.id);
+    },
+    20_000,
+  );
+
+  it(
+    "removing the checked clip: every card shows its accordion again, none checked",
+    async () => {
+      await renderFourClips();
+      fireEvent.click(followBox(1));
+      fireEvent.click(within(clipCard(1)).getByRole("button", { name: en.chained.removeClipButton }));
+      await waitFor(() => expect(clipCards()).toHaveLength(3), { timeout: 5_000 });
+      expect(accordionsShown()).toEqual([true, true, true]);
+      for (let i = 0; i < 3; i += 1) expect(followBox(i).checked).toBe(false);
+    },
+    15_000,
+  );
+
+  it(
+    "a clip added while on has no accordion and sends the same references",
+    async () => {
+      const { chainBodies } = await renderFourClips();
+      pickPicture(clipCard(1), 1);
+      await waitForReady(1, 1);
+      fireEvent.click(followBox(1));
+      addClip();
+      await waitFor(() => expect(clipCards()).toHaveLength(5), { timeout: 5_000 });
+      expect(accordionsShown()).toEqual([true, true, false, false, false]);
+
+      await clickGenerate();
+      await waitFor(() => expect(chainBodies()).toHaveLength(1), { timeout: 5_000 });
+      const clips = sentClips(chainBodies());
+      expect(clips[4]!.references).toEqual(clips[1]!.references);
+    },
+    20_000,
+  );
+
+  it(
+    "a hidden card's upload does not block Generate; the followed card's upload does",
+    async () => {
+      const { nativeBridge } = await renderFourClips({ holdUploads: true });
+      pickPicture(clipCard(3), 1);
+      expect(await screen.findByText(CARD_UPLOADING, {}, { timeout: 5_000 })).toBeInTheDocument();
+
+      fireEvent.click(followBox(1));
+      await waitFor(() => expect(screen.queryByText(CARD_UPLOADING)).not.toBeInTheDocument(), { timeout: 5_000 });
+      await waitFor(() => expect(generateButton()).toBeEnabled(), { timeout: 5_000 });
+
+      pickPicture(clipCard(1), 1);
+      expect(await screen.findByText(CARD_UPLOADING, {}, { timeout: 5_000 })).toBeInTheDocument();
+      expect(generateButton()).toBeDisabled();
+      act(() => nativeBridge.releaseUploads());
+      await waitForReady(1, 1);
+    },
+    20_000,
+  );
+
+  it(
+    "③ counts the cards in use: a picture on a hidden card only, with the followed card empty, shows ③",
+    async () => {
+      renderChain(H3_PROPS, { transformerRole: "ref2va" });
+      await waitForClips();
+      addClip();
+      addClip();
+      await waitFor(() => expect(clipCards()).toHaveLength(4), { timeout: 5_000 });
+      setReferences(true);
+      pickPicture(clipCard(3), 1);
+      await waitForReady(3, 1);
+      await waitFor(() => expect(noticeShown(NOTICE.none)).toBe(false), { timeout: 5_000 });
+
+      fireEvent.click(followBox(1));
+      await waitFor(() => expect(noticeShown(NOTICE.none)).toBe(true), { timeout: 5_000 });
+    },
+    20_000,
+  );
+
+  it(
+    "a picture on a hidden card still makes the screen dirty",
+    async () => {
+      // Two clips: adding clips would make the form itself dirty.
+      renderChain();
+      await waitForClips();
+      await waitFor(() => expect(getChainDirty()).toBe(false), { timeout: 5_000 });
+      setReferences(true);
+      pickPicture(clipCard(1), 1);
+      await waitForReady(1, 1);
+      await waitFor(() => expect(getChainDirty()).toBe(true), { timeout: 5_000 });
+
+      fireEvent.click(followBox(0));
+      expect(accordionsShown()).toEqual([true, false]);
+      expect(getChainDirty()).toBe(true);
+    },
+    15_000,
+  );
+
+  it(
+    "the check survives References off and on, and a trip through LTX",
+    async () => {
+      const { switchTo } = await renderFourClips();
+      fireEvent.click(followBox(1));
+
+      expect(notesShown()).toEqual([false, false, true, true]);
+      setReferences(false);
+      expect(notesShown()).toEqual([false, false, false, false]);
+      setReferences(true);
+      expect(followBox(1).checked).toBe(true);
+      expect(accordionsShown()).toEqual([true, true, false, false]);
+      expect(notesShown()).toEqual([false, false, true, true]);
+
+      switchTo({});
+      await waitFor(() => expect(referencesBox()).toBeNull(), { timeout: 5_000 });
+      expect(notesShown()).toEqual([false, false, false, false]);
+      switchTo(H3_PROPS);
+      await waitFor(() => expect(referencesBox()).toBeChecked(), { timeout: 5_000 });
+      expect(followBox(1).checked).toBe(true);
+      expect(accordionsShown()).toEqual([true, true, false, false]);
+      expect(notesShown()).toEqual([false, false, true, true]);
+    },
+    20_000,
+  );
+
+  describe("the note", () => {
+    it(
+      "names the checked clip on the clips after it; moves with the check; gone when off",
+      async () => {
+        await renderFourClips();
+        expect(notesShown()).toEqual([false, false, false, false]);
+
+        fireEvent.click(followBox(1));
+        const note2 = "Clip 2's references are used.";
+        expect(within(clipCard(2)).getByText(note2)).toBeInTheDocument();
+        expect(within(clipCard(3)).getByText(note2)).toBeInTheDocument();
+        expect(within(clipCard(0)).queryByText(note2)).toBeNull();
+        expect(within(clipCard(1)).queryByText(note2)).toBeNull();
+
+        // Clip 1 (index 0) is a clip, not "no clip".
+        fireEvent.click(followBox(0));
+        const note1 = "Clip 1's references are used.";
+        for (let i = 1; i < 4; i += 1) expect(within(clipCard(i)).getByText(note1)).toBeInTheDocument();
+        expect(within(clipCard(0)).queryByText(note1)).toBeNull();
+
+        fireEvent.click(followBox(0));
+        expect(notesShown()).toEqual([false, false, false, false]);
+      },
+      20_000,
+    );
+
+    it("reads in Japanese", () => {
+      expect(ja.chained.clipReferenceFollow.followedNote(1)).toBe("クリップ 2 の参照素材が使われます。");
+    });
+  });
 });

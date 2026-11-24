@@ -434,7 +434,10 @@ def run_chain_h3(
     A clip with references runs the single job's reference steps (``generate``
     without key frames): read before its text encoder, encoded after it in a
     ``reference_encode`` phase by a video encoder built for this clip only, and
-    handed to its denoise next to the fixed head.
+    handed to its denoise next to the fixed head. With ``keep_reference_latents``
+    (台帳 §1-297) the chain is one job of the reference latents: ``begin`` with
+    every clip's files after the checks, ``end`` in the outer ``finally``, so a
+    later clip reuses what an earlier clip (or an earlier job) encoded.
 
     With ``spec.source`` (video-to-video) the input video's tail is read on the
     CPU before anything else, encoded in clip 0's ``source_encode`` phase (the
@@ -492,6 +495,8 @@ def run_chain_h3(
         # (only such a chain reads it), as in a single job.
         for req in requests:
             P.validate_request(req, dit_path=pipe.paths.transformer)
+        # The reference latents kept from earlier jobs: only the files of this chain's clips stay.
+        pipe._ref_latents.begin(P.reference_identities(requests, bool(base.keep_reference_latents)))
         # Sol-H3-VAE: decided once for the chain's one decode (None without sol_vae).
         sol = P.sol_start(base, pipe.device)
         pi_feats: list = []         # pi-H3: each clip's last-evaluation rows (CPU)
@@ -831,6 +836,8 @@ def run_chain_h3(
         del video_cat, audio_cat, decode_kw
         ok = True
     finally:
+        # First, so a raise below cannot skip it; a clip that failed fails the whole chain.
+        pipe._ref_latents.end(ok)
         if not (ok and keep):
             pipe.release_resident()
         P._free_cuda()

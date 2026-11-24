@@ -2,13 +2,14 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../../bridge/mockBridge";
 import { LanguageProvider } from "../../i18n/LanguageContext";
+import { en } from "../../i18n/strings";
 import type { ReferenceRules } from "../single/referenceRules";
 import { ClipReferences } from "./ClipReferences";
 import type { ClipReferenceEntry, ClipReferencesProps } from "./ClipReferences";
 
 // §1-109: one Chained clip's Reference cards — registered with the screen
 // under the clip id (Enable switched on once at mount), unregistered on
-// unmount, and drawn only while `referencesOn`.
+// unmount, and drawn only while `referencesOn` (or, with `followedIndex`, a note in its place).
 
 const RULES: ReferenceRules = {
   maxImages: 9,
@@ -116,5 +117,13 @@ describe("ClipReferences", () => {
     expect(screen.queryByRole("checkbox", { name: "Audio to video" })).toBeNull();
     rerender({ referencesOn: true, a2v });
     expect(screen.getAllByRole("checkbox", { name: "Audio to video" })).toHaveLength(3);
+  });
+
+  it("draws the follow box only when the screen passes `follow`", () => {
+    const label = en.chained.clipReferenceFollow.label;
+    const { rerender } = renderClip({ referencesOn: true });
+    expect(screen.queryByRole("checkbox", { name: label })).toBeNull();
+    rerender({ referencesOn: true, follow: { checked: true, a2vBlocked: false, onChange: vi.fn() } });
+    expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
   });
 });

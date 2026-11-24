@@ -43,7 +43,8 @@ Protocol (one JSON object per line; parent -> worker):
   {"op": "generate", prompt, seed, width, height, num_frames, frame_rate,
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
-   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3], [sol_vae]}
+   [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3], [sol_vae],
+   [keep_reference_latents]}
       One T2V, I2V, A2V, Outpainting or Inpainting job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -101,11 +102,18 @@ Protocol (one JSON object per line; parent -> worker):
       decoder too; ``engine_h3.pipeline_h3.H3SolVaeInput``). Not with
       ``pi_h3``. Unknown inner keys are logged once and ignored. A chain takes
       it too (its one decode).
+      ``keep_reference_latents`` (台帳 §1-297): absent / null / false = off (the
+      app sends it only when true). True keeps the references' encoded latents
+      in main memory for the next job (``engine_h3.ref_latent_cache``; a job
+      keeps only its own files' latents, a failed job drops what it encoded),
+      and each record of ``h3.phases.reference_encode.references`` gains
+      ``latent_cache`` "hit" / "miss". A chain takes it too (one job for all
+      its clips).
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
-   [loras], [source], [retake], [nag]}
+   [loras], [source], [retake], [nag], [keep_reference_latents]}
       One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
       of ``{"prompt", "num_frames", [references], [images], [source_audio]}`` (2..24 clips, 1..24
       with a ``source``, exactly 1 with a ``retake``; each prompt is the clip's whole text, the top-level
@@ -177,7 +185,8 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             {pictures, videos, audios} counts, with ``h3.phases.reference_encode``
             (its ``references`` list: kind, slot, rows, seconds, and per kind
             source_size / size / vision_tokens, source_frames / used_frames /
-            latent_t / pairs, or samples / latent_t) and ``ref_video`` /
+            latent_t / pairs, or samples / latent_t; plus latent_cache only for a
+            ``keep_reference_latents`` job) and ``ref_video`` /
             ``ref_audio`` in ``h3.phases.denoise.sequence``)
             A chain's ``done`` has the same keys plus ``chain`` (the layout of
             ``h3_chain_math.H3ChainLayout.to_dict()``, ``seeds``, ``clips``:
@@ -302,6 +311,7 @@ _GENERATE_FIELDS = frozenset({
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
     "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint", "pi_h3", "sol_vae",
+    "keep_reference_latents",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -786,6 +796,7 @@ def _generate_request(
         inpaint=inpaint,
         pi_h3=pi_h3,
         sol_vae=sol_vae,
+        keep_reference_latents=_or("keep_reference_latents", False, bool),
     )
 
 
@@ -824,6 +835,7 @@ def _do_generate(msg: dict) -> None:
         f"generate: seed={req.seed} {req.width}x{req.height} frames={req.num_frames} "
         f"steps={req.num_inference_steps} shift={req.shift_video}/{req.shift_audio} "
         f"attention={effective} images={len(req.images)} keep_resident={req.keep_resident} "
+        f"keep_reference_latents={req.keep_reference_latents} "
         f"prefetch={req.block_swap_prefetch} vram16={req.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in req.loras]} "
         + (
@@ -1012,6 +1024,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"generate_chain: seed={base.seed} {base.width}x{base.height} clips={[c.num_frames for c in clips]} "
         f"steps={base.num_inference_steps} shift={base.shift_video}/{base.shift_audio} "
         f"attention={effective} keep_resident={base.keep_resident} "
+        f"keep_reference_latents={base.keep_reference_latents} "
         f"prefetch={base.block_swap_prefetch} vram16={base.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
         + (f"images={[len(c.images) for c in clips]} " if any(c.images for c in clips) else "")

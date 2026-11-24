@@ -1,0 +1,29 @@
+g1_1: job 38e9bde1-69a5-4899-98e0-8bfa6b8b7d7a
+  38e9bde1 running stage=stage1_denoise step=2/4 t=50s
+  38e9bde1 running stage=stage1_denoise step=3/4 t=95s
+  38e9bde1 running stage=stage1_denoise step=4/4 t=140s
+g1_1: c929203caf8df4739b596e37921ba4c0d934b364ce87d1a7e5cbc1bc08c8cd0b refs=[('picture', 'miss'), ('video', 'miss'), ('audio', 'miss')] gen=337.07
+g1_2: job 3fc3b127-0637-4728-85ec-0e40180ca211
+  3fc3b127 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+  3fc3b127 running stage=stage1_denoise step=0/4 t=95s
+  3fc3b127 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+  3fc3b127 running stage=stage1_denoise step=2/4 t=195s
+  3fc3b127 running stage=stage1_denoise step=2/4 t=240s
+  3fc3b127 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+  3fc3b127 wait_for_job: BACKEND_UNREACHABLE (2), waiting again
+  3fc3b127 wait_for_job: BACKEND_UNREACHABLE (3), waiting again
+  3fc3b127 wait_for_job: BACKEND_UNREACHABLE (4), waiting again
+g1_2: 2da4a171c98879a039d380aa3337824e122d4e0cd2b2be325d52d42fb2a5eada refs=[('picture', 'hit'), ('video', 'hit'), ('audio', 'hit')] gen=385.22
+g1_3: job dc830f63-4e84-432d-bb98-8bdb0851df50
+  dc830f63 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+  dc830f63 wait_for_job: BACKEND_UNREACHABLE (2), waiting again
+  dc830f63 running stage=stage1_denoise step=0/4 t=105s
+  dc830f63 running stage=stage1_denoise step=0/4 t=155s
+  dc830f63 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+  dc830f63 running stage=stage1_denoise step=1/4 t=250s
+  dc830f63 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+  dc830f63 running stage=stage1_denoise step=3/4 t=350s
+  dc830f63 running stage=stage1_denoise step=3/4 t=395s
+  dc830f63 running stage=decode step=None/None t=440s
+  dc830f63 wait_for_job: BACKEND_UNREACHABLE (1), waiting again
+g1_3: 2da4a171c98879a039d380aa3337824e122d4e0cd2b2be325d52d42fb2a5eada refs=[('picture', None), ('video', None), ('audio', None)] gen=463.01

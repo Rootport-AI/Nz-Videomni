@@ -698,6 +698,11 @@ export const en = {
       label: (startSec: string, endSec: string): string => `🎵 Window ${startSec}s – ${endSec}s`,
       tooltip: (overlapFrames: number): string => `Overlaps the neighbouring clip by ${overlapFrames} frames.`,
     },
+    clipReferenceFollow: {
+      label: "Use the same references for the following clips",
+      a2vBlocked: "A clip has Audio to video on.",
+      followedNote: (index: number): string => `Clip ${index + 1}'s references are used.`,
+    },
     minClipsError: (min: number): string => `At least ${min} clips are required (no source video attached).`,
     maxClipsReached: (max: number): string => `Maximum ${max} clips reached.`,
     totalFramesLabel: (total: number, max: number): string => `Total input: ${total} / ${max} frames`,
@@ -2614,6 +2619,17 @@ export const en = {
      * trailing space to separate the three sentences; the Japanese is written
      * without any. */
     accelPiH3NoteDetail: " Generation is faster, but video quality is reduced. ",
+    /** Acceleration (台帳 §1-297): "Keep reference latents resident" — MiniMax
+     * H3 only. The row is HIDDEN on the engines that publish
+     * `keep_reference_latents` in `unsupported_features` (LTX 2.3 / 2.5), so the
+     * label names the engine it belongs to, like the embeddings-processor row. */
+    accelKeepReferenceLatentsLabel: "Keep reference latents resident (MiniMax H3)",
+    accelKeepReferenceLatentsOn: "ON",
+    accelKeepReferenceLatentsOff: "OFF",
+    /** Shown under the row while it is on: the main-memory cost is what the
+     * reader needs at that moment; not an output warning. */
+    accelKeepReferenceLatentsNote:
+      "64GB or more of main memory recommended. Keeps the encoded reference pictures, videos and audio in main memory, so the next generation with the same references and the following clips of a Chained job skip their encoding. The output does not change.",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -3136,6 +3152,11 @@ export const ja: Strings = {
     clipReferenceA2vWindow: {
       label: (startSec: string, endSec: string): string => `🎵 担当区間 ${startSec}〜${endSec}秒`,
       tooltip: (overlapFrames: number): string => `隣のクリップと ${overlapFrames} フレーム重なります。`,
+    },
+    clipReferenceFollow: {
+      label: "後続クリップにも同じ参照素材を使う",
+      a2vBlocked: "Audio to video が on のクリップがあります。",
+      followedNote: (index: number): string => `クリップ ${index + 1} の参照素材が使われます。`,
     },
     minClipsError: (min: number): string => `最低 ${min} 本のクリップが必要です（元動画が未指定のため）。`,
     maxClipsReached: (max: number): string => `クリップは最大 ${max} 本までです。`,
@@ -4160,6 +4181,11 @@ export const ja: Strings = {
       "軽量化した復元処理（Sol-H3-VAE）で生成を高速化します。出力品質がわずかに低下する可能性があります。Solを使えない場合（動画が長すぎる等）には、代わりに通常のVAEが使われます。",
     accelPiH3Note: "pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。",
     accelPiH3NoteDetail: "生成が高速になる代わりに、動画の品質は劣化します。",
+    accelKeepReferenceLatentsLabel: "参照素材の潜在の常駐（MiniMax H3）",
+    accelKeepReferenceLatentsOn: "ON",
+    accelKeepReferenceLatentsOff: "OFF",
+    accelKeepReferenceLatentsNote:
+      "メインメモリ64GB以上を推奨。参照画像・参照動画・参照音声を符号化した結果をメインメモリに保持し、同じ参照素材を使う次の生成と、Chainedの後続クリップで符号化を省きます。生成結果は変わりません。",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

@@ -6973,3 +6973,180 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 | `shell/SettingsPanel.test.tsx` | 段落が 1 つであること、3 つの文の順、赤い太字が最後の文だけであることを、英語の pi-H3_4s・pi-H3_2s と日本語の pi-H3_2s で確かめる形にした |
 
 - §179.4 の「赤い太字は文の部分だけ」は、そのまま保っています（段落は普通の書体で、`<strong>` は裁定 107 ①の文だけ）。
+
+## 181. MiniMax H3 の Chained のクリップカードに「後続クリップにも同じ参照素材を使う」を置く — 足した状態は画面の 1 つだけ・各クリップが使うカードの対応を 1 か所で導く・Audio to video の登録で off にする（設計正本 裁定 109。2026-11-24）
+
+### 181.1 結論
+
+- **Chained のクリップカードの Reference アコーディオンの、Audios の行の下に、チェック「後続クリップにも同じ参照素材を使う」（英語 `Use the same references for the following clips`）を置きました。** on にしたカードより後ろのカードは Reference アコーディオンが消え、後ろの全クリップが、on にしたカードの素材（アップロード済みの同じ id）を送ります。どれかのカードで「Audio to video」のチェックが入っているあいだは灰色で押せず、ラベルに「Audio to video が on のクリップがあります。」（英語 `A clip has Audio to video on.`）が出ます。
+- 動き（何がどうなるか）の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 109 で、本節には写しません。**本節は実装の形と、将来の改修者への注意（181.5）の正本です。**
+- 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 にだけ書きます。**実機への配置は済み、オーナーの実機での確認は未了です。**
+- 変えたのは操作パネルだけです。サーバーの API とエンジン、バッチ機能、プラグイン本体（C++）は変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。同じテーマで MCP の生成の道具にも参照素材の引数を足しました（バックエンド [`MCP_SERVER_DESIGN.md`](../../../Docs/MCP_SERVER_DESIGN.md) D39）。
+
+### 181.2 進め方とコミット
+
+計画は監督の計画ファイル `quirky-splashing-moonbeam-of-7379f81c-1c4f-4fe5-a574-c4b777037187` にあります（オーナー了承 2026-11-24）。実装の前に別の担当が計画をコードと突き合わせ、作りを変える指摘はありませんでした。実装のあと、別の担当が差分を確かめ、操作パネルの実装に直すべき点はありませんでした。試験を 1 点補強しました（消えたカードに素材が残ったまま生成すると、引き継ぐ元の id が送られる場面）。コミットは dev です。
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト、配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `2311d120` |
+
+本節を含む文書は、別のコミットで入れました。
+
+### 181.3 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは省きました（181.6）。
+
+| ファイル | 要旨 |
+|---|---|
+| `modes/chained/ChainedScreen.tsx` | `ChainedScreenBody` に状態 `followFromClipId`（引き継ぐ元のクリップの id か `null`）を足した（`References` の状態の隣）。登録の関数 `registerClipReferences` に、登録されたカードが Audio to video を宣言していれば `followFromClipId` を `null` に戻す 1 行を足した。クリップの並びの取り出し（`const { clips, hasSourceVideo } = form;`）を上へ移し、引き継ぐ元の位置 `followIndex` と、各クリップが使うカードの対応 `usedReferences` を導くようにした。送信の本文・アップロード待ち・注意文の使用数（`referenceView`）と快適上限（`clipComfort`）は `usedReferences` を通して読む。「変更あり」（`anyFilled`）は全カードを見る。`ClipsSection` で、引き継ぐ元より後ろのカードはアコーディオンを描かず、各カードにチェックの値・灰色かどうか・操作を渡す |
+| `modes/chained/ClipReferences.tsx` | 任意の引数 `follow` を受けて、そのままアコーディオンへ渡す |
+| `modes/single/ReferenceAccordion.tsx` | 型 `ReferenceAccordionFollow`（`checked`・`a2vBlocked`・`onChange`）と任意の引数 `follow`。渡されたときだけ、Audios の行の下にチェックを描く。灰色の理由は包んでいるラベルの `title` に付ける（生成中の無効では付けない） |
+| `modes/single/ReferenceAccordion.css` | 灰色の見た目を、既存の Audio to video のチェックの並びに足した（`.ref-follow-toggle`）。ラベル全体の禁止の印のポインタは `.ref-follow-toggle:has(input:disabled)` |
+| `i18n/strings.ts` | `chained.clipReferenceFollow` の 2 つの文言（英語と日本語） |
+
+### 181.4 採った選択と理由
+
+- **足した状態は画面の 1 つだけで、連結のフォーム（`useChainForm`）には置かない**: 連結のフォームはバッチ機能も読むので、置くとバッチに届きます。画面の状態なので、どこにも保存されず、AviUtl2 の再起動と右クリックの送り込みによる画面の作り直しで off に戻ります。LTX との往復と `References` の off・on では、画面がそのまま残るので on も残ります。
+- **各クリップが使うカードの対応は 1 か所（`usedReferences`）で導く**: 引き継ぐ元より後ろのクリップは引き継ぐ元のカードを、それ以外は自分のカードを指します。送信・快適上限・注意文・アップロード待ちが同じ対応を読むので、どれか 1 つだけが引き継ぎを見落とすことがありません。チェックが off のとき、対応は各クリップ自身のカードになり、送る本文は改修前と同じです。
+- **「変更あり」の判定は全カードを見る**: 消えたカードに残っている素材も、off に戻せば使われる入力なので、右クリックの送り込みの前の破棄の確認で数えます。
+- **「on のカードが消えたら off」は導出で満たす**: 引き継ぐ元の id がクリップの一覧に見つからなければ、`followIndex` が −1 になり、何も隠しません。クリップの id は使い回されないので、状態を書き戻す処理は要りません。
+- **「Audio to video が on になったら off」は、登録の関数で満たす**: 各カードは状態が変わるたびに `registerClipReferences` で画面へ登録し直します。Audio to video が on になる 2 つの入口（手でのチェックと、長い音声の各クリップへの割り当て）は、どちらもこの登録を通ります。登録の中で状態そのものを `null` に戻すので、あとで Audio to video を外しても on には戻りません。見張りの effect は置いていません。消えたカードも隠れているだけで登録を続けるので、灰色の判定（全カードのどれかが Audio to video を宣言しているか）と割り当ては、消えたカードがあっても正しく動きます。
+- **共用の部品には、Chained からだけ渡す**: Reference アコーディオンは Single とバッチ v2v-ref-long の表でも使われています。Audio to video のチェック（`a2v`）と同じ形で任意の引数を足し、渡されたときだけ描くので、ほかの画面は変わりません。
+- **灰色の説明はラベルに付ける**: チェックではなく、包んでいるラベルの `title` に付けました（NAG の方式の選択肢と同じ形）。禁止の印のポインタも、ラベル全体に付けます（`.field-reserved` と同じ考え）。無効にしたチェックの上でも説明が出ることは、実機でだけ確かめられます（台帳 §1-296）。
+- **消えたクリップの ✒ は足さない**: アコーディオンごと隠れるので、札をプロンプトに足すボタンも出ません。裁定 109 ⑦のとおり、札は手で書きます。
+
+### 181.5 将来の改修者への注意
+
+この 3 点の正本は本項です（コードのコメントには書いていません。ほかの文書からは本項を指します）。
+
+- **(a) `followFromClipId` を `useChainForm` へ移さない。** 連結のフォームはバッチ機能も読むので、移すとバッチの送信に引き継ぎが届きます。バッチは Chained 画面のクリップごとの参照を読まない作りです（[`BATCH_V2V_REF_LONG.md`](BATCH_V2V_REF_LONG.md) の「使わないもの」）。
+- **(b) Audio to video を宣言させる入口を増やすときは、`registerClipReferences` を通すこと。** 強制の off は登録の関数の 1 行だけが受け持っています。登録を通らない入口を作ると、新しいチェックが on のまま Audio to video が宣言され、併用しない約束（裁定 109 ④）が崩れます。
+- **(c) 知られている穴（影響が小さいので変えていない）**: 長い音声を入れたあと、全クリップの「Audio to video」を手で外し、新しいチェックを on にして、長い音声を持つのが消えたカードだけになると、Generate を止める理由「音声がクリップに割り当てられていません。…」（`chainA2vNotDistributed`）が出ません。理由の判定（`h3A2v` の `holdsLongAudio`）が、各クリップ自身の登録を見ているためです。送る本文は `usedReferences` を通るので正しいままです。
+
+### 181.6 テスト
+
+- `modes/single/ReferenceAccordion.test.tsx`: 引数を渡したときだけチェックが Audios の行の下に出て、on・off が操作に届くこと。灰色のときは押せず、ラベルに理由が付くこと。生成中の無効では理由が付かないこと。
+- `modes/chained/ClipReferences.test.tsx`: 引数がアコーディオンまで届くこと。
+- `modes/chained/ChainedScreen.references.test.tsx`: 既定は off／on にしたカードより後ろが消え、後ろのクリップが同じ id を送り、クリップ 1 は自分の素材を送る／同時に 1 枚だけ／消えたカードの素材が残り、off で送られる／on のカードを削除すると全部戻る／on のまま足したカードも引き継ぐ／消えたカードのアップロード中は Generate を止めず、引き継ぐ元のアップロード中は止める／注意文 ③ の数え方／消えたカードの画像でも「変更あり」になる／LTX との往復と `References` の off・on で on が残る。
+- `modes/chained/ChainedScreen.h3Audio.test.tsx`: Audio to video があるあいだは灰色で理由が出て、外すと押せる（チェックは外れたまま）／on のときに手で Audio to video を入れると外れ、外しても戻らない／on のときに長い音声の割り当てが起きると外れる。
+- `modes/chained/ChainedScreen.h3Comfort.test.tsx`: 引き継いだクリップの快適上限の印が、引き継ぐ元と同じになり、off で戻る。
+- 機械の確認の結果（型検査・書き方の検査・テストの件数・配置）は記録簿 §232 です。
+
+### 181.7 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。
+
+## 182. MiniMax H3 の Settings の Acceleration に「参照素材の潜在の常駐（MiniMax H3）」の行を足す — ON／OFF の 2 つのボタンと ON のときだけの注意書き・保存の欄 `keepReferenceLatents`・共通の関数で全部の要求に載せる・LTX での隠し方（設計正本 裁定 110。2026-11-24）
+
+### 182.1 結論
+
+- **Settings の「Acceleration: / 生成の高速化:」の欄の最後（VRAM 16GB mode の行の下）に、行「参照素材の潜在の常駐（MiniMax H3）」（英語 `Keep reference latents resident (MiniMax H3)`）を、ほかの行と同じ ON／OFF の 2 つのボタンで置きました。** 既定は OFF で、ON のあいだだけ要求に `keep_reference_latents: true` を載せ、行の下に注意書きを出します。
+- 動き（何がどうなるか）と注意書きの文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 110・§6.9（「操作パネル」）で、本節には写しません。**本節は実装の形と、将来の改修者への注意（182.5）の正本です。**
+- 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §233 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-297 にだけ書きます。**実機への配置は済み、オーナーの実機での確認は未了です。**
+- 同じテーマで、エンジン（参照素材の潜在の使い回しそのもの）、API・アダプタ、MCP も変えました（バックエンドの dev の `56b01c11`・`234f6c5f`）。プラグイン本体（C++）は変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。
+
+### 182.2 進め方とコミット
+
+計画は監督の計画ファイル `quirky-splashing-moonbeam-of-7379f81c-1c4f-4fe5-a574-c4b777037187` にあります（オーナー了承 2026-11-24）。操作パネルは、エンジンとアプリと並行して別の担当が実装しました。実装のあと、別の担当が差分を確かめ、直す必要のある点はありませんでした。採った小さな指摘は、模擬のバックエンドの拒否の文を本物のサーバーの文にそろえた 1 点です。コミットは dev です。
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト、配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `b74c6b51` |
+
+本節を含む文書は、別のコミットで入れました。
+
+### 182.3 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは省きました（182.6）。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts` | 設定 `keepReferenceLatents`（既定 `false`。定数 `KEEP_REFERENCE_LATENTS_SERVER_DEFAULT`）。保存の欄と読み戻し（欄の無い保存値は既定で読む）。`withServerDefaults` の書き戻し。`accelerationRequestFields` で、既定と違うとき（真のとき）だけ `keep_reference_latents` を載せる |
+| `shell/useAccelerationSettings.ts` | 書き換えの関数 `setKeepReferenceLatents` |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | 行・2 つのボタン・ON のときだけの注意書き。行を隠す条件 `keepReferenceLatentsUnsupported` |
+| `shell/featureScope.ts` | 機能の名前 `keep_reference_latents` で行を隠し、保存値を既定に戻す（`FEATURE_UI` の行） |
+| `i18n/strings.ts` | 行の名前・ボタン・注意書き（英語と日本語） |
+| `api/types.ts` | 単発と連結の要求の型に `keep_reference_latents` |
+| `bridge/mockBridge.ts` | 開発用の模擬に、LTX の `unsupported_features` の `keep_reference_latents` と、LTX の拒否（単発と連結。文は本物のサーバーと同じ） |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 1 行（快適上限マーカーの計算は変えていない） |
+
+### 182.4 採った選択と理由
+
+- **ほかの行と同じ ON／OFF の 2 つのボタン**: Settings の真偽値の行は、どれもこの形です（チェックボックスではない）。
+- **注意書きは ON のときだけ**: 読む人がその場で要るのは、ON にしたときのメインメモリの目安だからです（モデル骨格の常駐の行と同じ考え）。
+- **ほかの行とつながりを持たない**: `/status` の能力の旗も、ほかの行への依存もありません（VRAM 16GB mode の行と同じ）。
+- **快適上限マーカーの計算に加えない**: 配信される線の条件（`requires`）がこの名前を挙げることはありません（メモリの中の使い回しで、出力も VRAM も変えないため）。
+
+### 182.5 将来の改修者への注意
+
+この 2 点の正本は本項です（ほかの文書からは本項を指します）。
+
+- **(a) Acceleration の欄は、共通の関数 `accelerationRequestFields` で、全部の要求に載る。** 単発・連結のほか、バッチ（i2v・A2V・v2v-ref-long）と Edit（Retake・Outpainting・Inpainting）の送信も、この関数の結果を本文に混ぜています。`keep_reference_latents` も分岐を足さずに全部の要求へ同じ規則で載るので、バックエンドでは Edit（MiniMax H3 の Edit は参照を持てない）を挟むと持っている潜在が消え、バッチ v2v-ref-long は行ごとに同じ規則で働きます（設計正本 §6.9 の「項目が届く範囲」）。**要求の種類ごとに載せ分けたくなったときは、この関数の外で消すのではなく、設計正本の規則と一緒に見直すこと。**
+- **(b) MiniMax H3 以外では行が隠れ、保存の値は既定（OFF）へ戻る。** `featureScope.ts` の表で、`unsupported_features` に `keep_reference_latents` がある系統（LTX 2.3・2.5）では、行を描かず、保存の値を `false` に書き戻します（Fast VAE・VRAM 16GB mode と同じ仕組み）。だから LTX を一度選ぶと、H3 に戻しても OFF です。LTX の要求に鍵が載らないことも、この書き戻しが受け持っています。行の出し分けだけを変えて書き戻しを外すと、LTX の要求に `true` が載って 422 になります。
+
+### 182.6 テスト
+
+- `shell/accelerationSettings.test.ts`: 既定、保存と読み戻し（欄の無い保存値）、真のときだけ要求に載ること。
+- `shell/useAccelerationSettings.test.ts`: 書き換えの関数と保存。
+- `shell/keepReferenceLatents.paths.test.ts`（新設）: ON なら単発・連結・バッチの i2v の要求の本文に `keep_reference_latents: true` が載り、OFF ならどの本文にも鍵が無いこと。
+- `shell/SettingsPanel.test.tsx`: 行と 2 つのボタン、注意書きが ON のときだけ出ること、文言。
+- `shell/featureScope.test.ts`・`shell/AppShell.featureScope.test.tsx`: LTX で行が隠れ、保存値が OFF に戻ること。
+- `bridge/mockBridge.h3.test.ts`・`bridge/mockBridge.test.ts`: 模擬の `unsupported_features` と LTX の拒否。
+- ほかに、設定の型に欄が増えたことに合わせた既存の試験の期待値の更新（`useBaseModels.test.ts`・`comfortTable.test.ts`・`useGenerationForm.test.ts`・`prefillSeed.test.ts`）。
+- 機械の確認の結果（型検査・書き方の検査・テストの件数・試験の揺れ・aux2 の大きさと SHA-256・配置）は記録簿 §233 です。
+
+### 182.7 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-297 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-297）。
+
+> **更新（2026-11-25）**: オーナーの実機での確認は合格し、項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-297 へ移りました（結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §233.14）。main へ取り込む前のアプリの試験の全件 1 回は通りました（同 §233.15）。main への取り込みは、そのあとに行います。
+
+## 183. MiniMax H3 の Chained で、アコーディオンが消えたクリップカードに「クリップ n の参照素材が使われます。」を出す — 出す条件はアコーディオンを隠す条件と同じ・新しい状態は足さない・既存の `.clip-note`（設計正本 裁定 109 ③。2026-11-24）
+
+### 183.1 結論
+
+- **§181 のチェック「後続クリップにも同じ参照素材を使う」を入れたクリップより後ろのカードで、Reference アコーディオンがあった場所に、1 行の案内「クリップ n の参照素材が使われます。」（英語 `Clip n's references are used.`）を出すようにしました。** n はチェックを入れたクリップの画面の番号です。オーナーの指示（2026-11-24）によります。
+- 動き（出す条件・出ない場面・そのままにした動き）の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 109 ③の更新の注記で、本節には写しません。**本節は実装の形の正本です。**
+- 計画の敵対的なレビュー・差分の検証・機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232.10 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 にだけ書きます。**実機への配置は済み、案内のオーナーの実機での確認は未了です。**
+- 変えたのは操作パネルだけです。Generate を止める条件と送る要求の中身は変えていません。サーバーの API とエンジン、プラグイン本体（C++）も変えていません。配布用の aux2 は作り直しました。
+
+### 183.2 コミット
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト | `561312ef` |
+| 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `a52b74e5` |
+
+本節を含む文書は、別のコミットで入れました。
+
+### 183.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | `chained.clipReferenceFollow.followedNote`（引数は 0 から数えた番号で、文には 1 を足して出す。英語と日本語） |
+| `modes/chained/ClipReferences.tsx` | 任意の引数 `followedIndex`（引き継ぐ元のクリップの 0 から数えた番号）。`referencesOn` が偽のとき、`followedIndex` があれば `<p className="clip-note">` の案内を返し、無ければ今までどおり何も描かない。文言を引くフック（`useStrings`）は、この早い return より前に置いた |
+| `modes/chained/ChainedScreen.tsx` | `ClipsSection` から `followedIndex` を渡す 1 行。値は、アコーディオンを隠している条件（`references.isH3 && references.on && hidden`）のときだけ `references.followIndex`、それ以外は `undefined` |
+| `modes/chained/ChainedScreen.references.test.tsx` | 試験（183.5） |
+| `modes/chained/ClipReferences.test.tsx` | 冒頭のコメントに `followedIndex` の案内を足した |
+
+### 183.4 採った選択と理由
+
+- **出す条件は、アコーディオンを隠す条件をそのまま使う**: 新しい状態や判定を足さず、§181 の `followIndex` と `hidden` から決めます。案内が出るカードと、引き継ぐ元の素材を送るカードは同じ導出（§181.4 の `usedReferences` と同じ `followIndex`）から出るので、案内と実際に送る参照がずれません。
+- **番号 0 を真偽で判定しない**: クリップ 1 でチェックを入れると番号は 0 です。`followedIndex === undefined` で「案内なし」を見分けます（引数のコメントにも「Not a flag: 0 is a clip.」と書いた）。
+- **見た目は既存の `.clip-note`**: 音声のずれの案内と同じ書式です。新しい CSS は足していません。
+- **案内を隠す例外は足さない**: チェックを入れたクリップに素材が無いときと、FL2VA の重みのときも案内は出ます（設計正本 裁定 109 ③の更新の注記の「そのままにした動き」）。どちらも画面の既存の注意文が受け持ちます。
+
+### 183.5 テスト
+
+- `modes/chained/ChainedScreen.references.test.tsx` に組「the note」を新設しました。チェックを入れたクリップより後ろのカードにだけ案内が出て、チェックを入れたカード自身と前のカードには出ないこと／クリップ 1（番号 0）へチェックを移すと、クリップ 2〜4 の案内が「Clip 1's references are used.」に変わること／チェックを外すと全部消えること／日本語の文面（`followedNote(1)` が「クリップ 2 の参照素材が使われます。」）。試験は案内を文面で探します。
+- 既存の「the check survives References off and on, and a trip through LTX」に、`References` を off にしたあいだと LTX のあいだは案内が出ず、戻すと出ることの確かめを足しました。
+- 機械の確認の結果（型検査・書き方の検査・テストの件数・試験の揺れ・aux2 の大きさと SHA-256・配置）は記録簿 §232.10 です。
+
+### 183.6 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。案内のオーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。§181 のチェックそのもののオーナーの確認は合格しました（記録簿 §232.11）。
+
+> **更新（2026-11-25）**: 案内のオーナーの実機での確認も合格し、§181 の分とあわせて項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296 へ移りました（結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232.13）。main へ取り込む前のアプリの試験の全件 1 回は通りました（同 §233.15）。main への取り込みは、そのあとに行います。

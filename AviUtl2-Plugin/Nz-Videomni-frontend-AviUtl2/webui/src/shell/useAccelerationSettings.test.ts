@@ -12,6 +12,7 @@ import {
   VRAM16_MODE_SERVER_DEFAULT,
   PI_H3_DEFAULT,
   SOL_VAE_SERVER_DEFAULT,
+  KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
 } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 
@@ -36,6 +37,7 @@ describe("useAccelerationSettings", () => {
       vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
       piH3: PI_H3_DEFAULT,
       solVae: SOL_VAE_SERVER_DEFAULT,
+      keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     });
   });
@@ -73,6 +75,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -90,6 +93,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -114,6 +118,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -131,6 +136,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -177,6 +183,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -194,6 +201,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -287,6 +295,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -361,6 +370,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -407,6 +417,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -490,6 +501,7 @@ describe("useAccelerationSettings", () => {
         vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
+        keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -606,6 +618,36 @@ describe("useAccelerationSettings", () => {
     expect(result.current.acceleration.piH3).toBe("off");
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).piH3).toBe("off");
+    });
+  });
+
+  // 台帳 §1-297: keep reference latents resident, persisted from its first day.
+  it("setKeepReferenceLatents updates state, writes through, and survives a remount", async () => {
+    const { result, unmount } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.keepReferenceLatents).toBe(KEEP_REFERENCE_LATENTS_SERVER_DEFAULT);
+
+    act(() => result.current.setKeepReferenceLatents(true));
+
+    expect(result.current.acceleration.keepReferenceLatents).toBe(true);
+    // Does not disturb the neighbouring H3 rows.
+    expect(result.current.acceleration.vram16Mode).toBe(VRAM16_MODE_SERVER_DEFAULT);
+    expect(result.current.acceleration.solVae).toBe(SOL_VAE_SERVER_DEFAULT);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).keepReferenceLatents).toBe(true);
+    });
+    unmount();
+
+    const { result: result2 } = renderHook(() => useAccelerationSettings());
+    expect(result2.current.acceleration.keepReferenceLatents).toBe(true);
+  });
+
+  it("resetToServerDefaults([\"keepReferenceLatents\"]) writes it back to off and persists it", async () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setKeepReferenceLatents(true));
+    act(() => result.current.resetToServerDefaults(["keepReferenceLatents"]));
+    expect(result.current.acceleration.keepReferenceLatents).toBe(false);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).keepReferenceLatents).toBe(false);
     });
   });
 

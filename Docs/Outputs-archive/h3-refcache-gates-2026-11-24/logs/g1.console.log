@@ -1,0 +1,5 @@
+  load: state=ready loaded=True t=0s
+g1_1: job 38e9bde1-69a5-4899-98e0-8bfa6b8b7d7a
+  38e9bde1 running stage=encode step=None/None t=45s
+  38e9bde1 running stage=encode step=None/None t=90s
+g1 error: ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)

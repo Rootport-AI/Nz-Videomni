@@ -34,6 +34,14 @@ export interface ReferenceAccordionA2v {
   window?: { audioId: string; label: string; tooltip: string } | null | undefined;
 }
 
+/** A Chained clip's "use the same references for the following clips" box. */
+export interface ReferenceAccordionFollow {
+  checked: boolean;
+  /** Some clip declares "Audio to video": the box is greyed out. */
+  a2vBlocked: boolean;
+  onChange: (checked: boolean) => void;
+}
+
 export interface ReferenceAccordionProps {
   api: ReferenceSlotsApi;
   /** Bump to force the accordion open (right-click delivery). */
@@ -60,6 +68,8 @@ export interface ReferenceAccordionProps {
   defaultOpen?: boolean | undefined;
   /** Called with the new open state whenever the `<details>` toggles. */
   onToggle?: ((open: boolean) => void) | undefined;
+  /** Drawn below the Audios row when given (Chained clips only). */
+  follow?: ReferenceAccordionFollow | undefined;
 }
 
 const ACCEPT: Record<ReferenceKind, readonly string[]> = {
@@ -339,8 +349,10 @@ export function ReferenceAccordion({
   embedded = false,
   defaultOpen = false,
   onToggle,
+  follow,
 }: ReferenceAccordionProps) {
-  const t = useStrings().single.reference;
+  const strings = useStrings();
+  const t = strings.single.reference;
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const initialOpen = useRef(defaultOpen);
   useLayoutEffect(() => {
@@ -400,6 +412,20 @@ export function ReferenceAccordion({
             disabled={disabled}
           />
         ))}
+        {follow && (
+          <label
+            className="field field-inline ref-follow-toggle"
+            title={follow.a2vBlocked ? strings.chained.clipReferenceFollow.a2vBlocked : undefined}
+          >
+            <input
+              type="checkbox"
+              checked={follow.checked}
+              disabled={disabled || follow.a2vBlocked}
+              onChange={(e) => follow.onChange(e.target.checked)}
+            />
+            <span>{strings.chained.clipReferenceFollow.label}</span>
+          </label>
+        )}
       </div>
     </details>
   );

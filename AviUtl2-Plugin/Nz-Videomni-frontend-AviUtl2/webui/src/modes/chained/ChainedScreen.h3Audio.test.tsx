@@ -645,3 +645,81 @@ describe("ChainedScreen — §1-120 H3 long A2V (distribute to each clip)", () =
     30_000,
   );
 });
+
+describe("ChainedScreen — Audio to video and the follow box do not mix", () => {
+  const FOLLOW = en.chained.clipReferenceFollow;
+  const followBox = (index: number) => {
+    const card = clipCard(index);
+    openClipReference(card);
+    return within(card).getByRole("checkbox", { name: FOLLOW.label }) as HTMLInputElement;
+  };
+  const accordionsShown = () => clipCards().map((card) => card.querySelector(".ref-accordion") !== null);
+
+  it(
+    "a declared Audio to video (even on an empty card) greys every box with the reason; taking it off frees them, still off",
+    async () => {
+      renderChain();
+      await waitForClips();
+      fireEvent.click(referencesBox());
+      openClipReference(clipCard(0));
+      fireEvent.click(a2vBox(clipCard(0), 1));
+      await waitFor(() => expect(followBox(1)).toBeDisabled());
+      for (const index of [0, 1]) {
+        expect(followBox(index)).toBeDisabled();
+        expect(followBox(index).closest("label")).toHaveAttribute("title", FOLLOW.a2vBlocked);
+      }
+
+      fireEvent.click(a2vBox(clipCard(0), 1));
+      await waitFor(() => expect(followBox(1)).toBeEnabled());
+      for (const index of [0, 1]) {
+        expect(followBox(index).checked).toBe(false);
+        expect(followBox(index).closest("label")).not.toHaveAttribute("title");
+      }
+    },
+    15_000,
+  );
+
+  it(
+    "on, then Audio to video by hand: the box goes off and every accordion is back; taking Audio to video off leaves it off",
+    async () => {
+      renderChain();
+      await waitForClips();
+      fireEvent.click(referencesBox());
+      fireEvent.click(followBox(0));
+      expect(accordionsShown()).toEqual([true, false]);
+
+      fireEvent.click(a2vBox(clipCard(0), 1));
+      await waitFor(() => expect(accordionsShown()).toEqual([true, true]));
+      expect(followBox(0).checked).toBe(false);
+
+      fireEvent.click(a2vBox(clipCard(0), 1));
+      await waitFor(() => expect(followBox(0)).toBeEnabled());
+      expect(followBox(0).checked).toBe(false);
+      expect(accordionsShown()).toEqual([true, true]);
+    },
+    15_000,
+  );
+
+  it(
+    "on, then a long audio is distributed: the box goes off and every clip shows its Audio to video",
+    async () => {
+      const { container } = renderChain();
+      await waitForClips();
+      fireEvent.click(referencesBox());
+      fireEvent.click(followBox(0));
+      expect(accordionsShown()).toEqual([true, false]);
+
+      dropAudio(container);
+      await waitFor(
+        () => {
+          expect(clipCards().length).toBeGreaterThan(2);
+          expect(accordionsShown().every(Boolean)).toBe(true);
+          for (const card of clipCards()) expect(a2vBox(card, 1).checked).toBe(true);
+        },
+        { timeout: 5_000 },
+      );
+      expect(followBox(0).checked).toBe(false);
+    },
+    30_000,
+  );
+});

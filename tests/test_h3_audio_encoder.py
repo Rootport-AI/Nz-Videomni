@@ -308,6 +308,19 @@ def test_read_samples_caps_and_stops_reading(tmp_path):
     assert 0 < pulled < total
 
 
+@pytest.mark.parametrize("rate", [32000, 44100])
+def test_reference_read_same_samples_same_waveform(tmp_path, rate):
+    """The reference latents' key (台帳 §1-297) holds an audio reference by its sample
+    count: read as the reference path reads it (``keep_samples=1``) under two caps
+    above its length, the same count gives the same waveform bit for bit."""
+    path = _write_wav(tmp_path / "a.wav", _sine(int(rate * 1.5), rate)[None], rate)
+    a, _info_a = S.load_source_waveform(str(path), keep_samples=1, read_samples=2 * 32000)
+    b, _info_b = S.load_source_waveform(str(path), keep_samples=1, read_samples=15 * 32000)
+    assert a.shape[-1] == b.shape[-1] < 2 * 32000 and torch.equal(a, b)
+    c, _info_c = S.load_source_waveform(str(path), keep_samples=1, read_samples=32000)   # cut: another key
+    assert c.shape[-1] == 32000 and torch.equal(c, a[:, :32000])
+
+
 def test_three_channels_keep_the_first_two(tmp_path):
     n = 8000
     data = np.stack([np.full(n, 0.25), np.full(n, -0.5), np.full(n, 0.75)]).astype(np.float32)

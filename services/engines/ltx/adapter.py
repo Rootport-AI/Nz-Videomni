@@ -150,6 +150,9 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
     # MiniMax H3 only (the Sol-H3-VAE decoder). The field's default is False.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (keeping the encoded reference latents). The field's
+    # default is False.
+    ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
 )
 
 #: The 422 message for a feature that belongs to neither LTX: the generic one
@@ -161,6 +164,7 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "references": "参照素材（Ref2VA）は MiniMax H3 専用です。",
     "pi_h3": "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
     "sol_vae": "Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。",
+    "keep_reference_latents": "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
 }
 
 #: The chain twin of :data:`H3_ONLY_REFUSALS`, read by both LTX families'
@@ -274,6 +278,9 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (the Sol-H3-VAE decoder), the single path's row on the
     # chain schema. The field's default is False. LAST, for the same reason.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (keeping the encoded reference latents). The field's
+    # default is False. LAST, for the same reason.
+    ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.

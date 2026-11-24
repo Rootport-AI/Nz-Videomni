@@ -47,6 +47,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "vram16_mode",
         "pi_h3",
         "sol_vae",
+        "keep_reference_latents",
         "fused_gguf_dequant_kernel",
       ].sort(),
     );
@@ -182,6 +183,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: false,
       vram16: false,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
@@ -189,6 +191,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: false,
       vram16: false,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -199,6 +202,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: false,
       vram16: false,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
@@ -206,6 +210,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: true,
       vram16: false,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
@@ -213,6 +218,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: false,
       vram16: true,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["fused_gguf_dequant_kernel"])).toEqual({
@@ -220,6 +226,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: false,
       vram16: false,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -231,9 +238,21 @@ describe("settingsRowsHiddenFor", () => {
         keepResidentEmbeddings: false,
         vram16: false,
         fastVae: true,
+        keepReferenceLatents: false,
         fusedGgufDequantKernel: false,
       });
     }
+  });
+
+  it("maps keep_reference_latents onto its own row only (台帳 §1-297)", () => {
+    expect(settingsRowsHiddenFor(["keep_reference_latents"])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      fastVae: false,
+      keepReferenceLatents: true,
+      fusedGgufDequantKernel: false,
+    });
   });
 
   it("hides all four when all four are refused", () => {
@@ -246,6 +265,7 @@ describe("settingsRowsHiddenFor", () => {
       keepResidentEmbeddings: true,
       vram16: true,
       fastVae: false,
+      keepReferenceLatents: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -265,6 +285,7 @@ describe("accelerationResetsFor", () => {
     expect(accelerationResetsFor(["pi_h3"])).toEqual(["piH3"]);
     expect(accelerationResetsFor(["sol_vae"])).toEqual(["solVae"]);
     expect(accelerationResetsFor(["pi_h3", "sol_vae"])).toEqual(["piH3", "solVae"]);
+    expect(accelerationResetsFor(["keep_reference_latents"])).toEqual(["keepReferenceLatents"]);
   });
 
   it("collects both without duplicates", () => {

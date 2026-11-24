@@ -631,6 +631,8 @@ function ChainedScreenBody({
   /** H3 has been seen: the clip cards stay mounted from then on. */
   const referenceCardsMounted = referenceRulesRef.current !== NO_REFERENCE_RULES;
   const [referencesOn, setReferencesOn] = useState(false);
+  /** The clip whose cards every following clip uses (`null` = each its own). */
+  const [followFromClipId, setFollowFromClipId] = useState<string | null>(null);
   const [clipReferences, setClipReferences] = useState<Record<string, ClipReferenceEntry>>({});
   const registerClipReferences = useCallback((clipId: string, entry: ClipReferenceEntry) => {
     setClipReferences((prev) => {
@@ -638,6 +640,8 @@ function ChainedScreenBody({
       if (current && current.summary === entry.summary && current.slots === entry.slots) return prev;
       return { ...prev, [clipId]: entry };
     });
+    // "Audio to video" and the follow box do not mix: a declaration turns it off.
+    if (declaredA2vSlotOf(entry) !== null) setFollowFromClipId(null);
   }, []);
   const unregisterClipReferences = useCallback((clipId: string) => {
     setClipReferences((prev) => {
@@ -648,30 +652,46 @@ function ChainedScreenBody({
     });
   }, []);
   const role = transformerRole ?? null;
+  const { clips, hasSourceVideo } = form;
+  // A follow clip that left the list hides nothing (clip ids are never reused).
+  const followIndex = followFromClipId === null ? -1 : clips.findIndex((c) => c.id === followFromClipId);
+  /** Clip id -> the cards the clip actually uses: its own, or (after the
+   * follow clip) the follow clip's. */
+  const usedReferences = useMemo(() => {
+    const used: Record<string, ClipReferenceEntry | undefined> = {};
+    const followId = followIndex >= 0 ? clips[followIndex]?.id : undefined;
+    clips.forEach((clip, index) => {
+      used[clip.id] = clipReferences[followId !== undefined && index > followIndex ? followId : clip.id];
+    });
+    return used;
+  }, [clips, clipReferences, followIndex]);
+  const anyClipDeclaresA2v = Object.values(clipReferences).some((e) => declaredA2vSlotOf(e) !== null);
   const referenceView = useMemo(() => {
     const bodies: Record<string, ReferenceInputBody[]> = {};
     let uploading = false;
     let usedCount = 0;
-    let anyFilled = false;
-    for (const [clipId, { summary, slots }] of Object.entries(clipReferences)) {
-      bodies[clipId] = buildReferenceBody(summary, slots, role, isH3);
+    for (const clip of clips) {
+      const entry = usedReferences[clip.id];
+      if (!entry) continue;
+      const { summary, slots } = entry;
+      bodies[clip.id] = buildReferenceBody(summary, slots, role, isH3);
       if (referenceSendUploading(summary, slots, role, isH3)) uploading = true;
       usedCount += countUsedReferences(summary);
-      if (summary.filled.total > 0) anyFilled = true;
     }
+    // The no-change check counts every clip's cards, hidden ones included.
+    const anyFilled = Object.values(clipReferences).some((entry) => entry.summary.filled.total > 0);
     return { bodies, uploading, usedCount, anyFilled };
-  }, [clipReferences, role, isH3]);
+  }, [clips, usedReferences, clipReferences, role, isH3]);
 
   // Ledger §1-276: each clip's comfort marker on MiniMax H3's sequence-rows
   // line. A clip's S is Single's formula at the clip's length
   // (`shell/h3SequenceRows.ts`): the shared size, clip 0's opening image as the
   // one keyframe (none on a V2V chain; the overlap pins rows, it adds none),
-  // and the clip's own Reference cards only while References is on (exactly
+  // and the Reference cards the clip uses only while References is on (exactly
   // what `buildSubmission` sends). Derived, not stored — no state, no effect.
   // Empty (no marker) when the engine serves no rows line (LTX).
   const clipFrameMin = form.clipFrameLimits.min;
   const clipFrameMax = form.clipFrameLimits.max;
-  const { clips, hasSourceVideo } = form;
   const { width: commonWidth, height: commonHeight } = form.common;
   const startFrameItems = form.startFrame.items;
   const clipComfort = useMemo(() => {
@@ -680,7 +700,7 @@ function ChainedScreenBody({
     clips.forEach((clip, index) => {
       const budget = resolveSequenceRowsBudget(config.limits, engineFamily, transformerQuantClass);
       if (budget === null) return;
-      const entry = clipReferences[clip.id];
+      const entry = usedReferences[clip.id];
       comfort[clip.id] = h3ComfortFrames(
         {
           width: commonWidth,
@@ -702,7 +722,7 @@ function ChainedScreenBody({
     hasSourceVideo,
     startFrameItems,
     referencesOn,
-    clipReferences,
+    usedReferences,
     role,
     isH3,
     config.limits,
@@ -1795,6 +1815,9 @@ function ChainedScreenBody({
             register: registerClipReferences,
             unregister: unregisterClipReferences,
             a2vFor,
+            followIndex,
+            followBlocked: anyClipDeclaresA2v,
+            onFollowChange: setFollowFromClipId,
           }}
         />
 
@@ -2076,6 +2099,11 @@ interface ClipsSectionReferences {
   /** §1-120: the Audios cards' A2V side for one clip, or `undefined` (no box —
    * LTX, or a backend without `constraints.chain.source_audio`). */
   a2vFor: (clipId: string, index: number) => ReferenceAccordionA2v | undefined;
+  /** The index of the clip whose cards the following clips use, or -1. */
+  followIndex: number;
+  /** Some clip declares "Audio to video": every follow box is greyed out. */
+  followBlocked: boolean;
+  onFollowChange: (clipId: string | null) => void;
 }
 
 function ClipsSection({
@@ -2119,42 +2147,51 @@ function ClipsSection({
             every clip's length), so they are handed out here by index; `null`
             — no audio attached, or a geometry the mirror can't resolve — hides
             the badge. */}
-        {form.clips.map((clip, index) => (
-          <ClipCard
-            key={clip.id}
-            clip={clip}
-            index={index}
-            frameRate={form.common.frameRate}
-            disabled={disabled}
-            canRemove={form.clips.length > form.clipRemovalFloor}
-            audioWindow={form.audioSegmentWindowsForClips?.[index] ?? null}
-            tokenCount={tokenCounts?.[index]}
-            tokenLimit={tokenLimit}
-            frameLimits={form.clipFrameLimits}
-            comfortThresholdFrames={clipComfort[clip.id] ?? null}
-            showAudioDriftNote={form.clipAudioDriftFlags[index] ?? false}
-            onPromptChange={(value) => form.setClipPrompt(clip.id, value)}
-            onNumFramesChange={(value, snap) => form.setClipNumFrames(clip.id, value, snap)}
-            onRemove={() => form.removeClip(clip.id)}
-            // §1-109: mounted (not drawn) off H3 too once H3 was seen, so the
-            // cards survive H3 -> LTX -> H3; drawn only while H3 + References on.
-            referencesSlot={
-              references.cardsMounted ? (
-                <ClipReferences
-                  clipId={clip.id}
-                  rules={references.rules}
-                  referencesOn={references.isH3 && references.on}
-                  nativeBridge={references.nativeBridge}
-                  disabled={disabled}
-                  onAppendTag={(tag) => form.setClipPrompt(clip.id, appendReferenceTag(clip.prompt, tag))}
-                  a2v={references.a2vFor(clip.id, index)}
-                  register={references.register}
-                  unregister={references.unregister}
-                />
-              ) : undefined
-            }
-          />
-        ))}
+        {form.clips.map((clip, index) => {
+          const hidden = references.followIndex >= 0 && index > references.followIndex;
+          return (
+            <ClipCard
+              key={clip.id}
+              clip={clip}
+              index={index}
+              frameRate={form.common.frameRate}
+              disabled={disabled}
+              canRemove={form.clips.length > form.clipRemovalFloor}
+              audioWindow={form.audioSegmentWindowsForClips?.[index] ?? null}
+              tokenCount={tokenCounts?.[index]}
+              tokenLimit={tokenLimit}
+              frameLimits={form.clipFrameLimits}
+              comfortThresholdFrames={clipComfort[clip.id] ?? null}
+              showAudioDriftNote={form.clipAudioDriftFlags[index] ?? false}
+              onPromptChange={(value) => form.setClipPrompt(clip.id, value)}
+              onNumFramesChange={(value, snap) => form.setClipNumFrames(clip.id, value, snap)}
+              onRemove={() => form.removeClip(clip.id)}
+              // §1-109: mounted (not drawn) off H3 too once H3 was seen, so the
+              // cards survive H3 -> LTX -> H3; drawn only while H3 + References on.
+              referencesSlot={
+                references.cardsMounted ? (
+                  <ClipReferences
+                    clipId={clip.id}
+                    rules={references.rules}
+                    referencesOn={references.isH3 && references.on && !hidden}
+                    followedIndex={references.isH3 && references.on && hidden ? references.followIndex : undefined}
+                    nativeBridge={references.nativeBridge}
+                    disabled={disabled}
+                    onAppendTag={(tag) => form.setClipPrompt(clip.id, appendReferenceTag(clip.prompt, tag))}
+                    a2v={references.a2vFor(clip.id, index)}
+                    follow={{
+                      checked: index === references.followIndex,
+                      a2vBlocked: references.followBlocked,
+                      onChange: (on) => references.onFollowChange(on ? clip.id : null),
+                    }}
+                    register={references.register}
+                    unregister={references.unregister}
+                  />
+                ) : undefined
+              }
+            />
+          );
+        })}
       </ul>
 
       <button type="button" className="secondary-button" disabled={disabled || !form.canAddClip} onClick={form.addClip}>

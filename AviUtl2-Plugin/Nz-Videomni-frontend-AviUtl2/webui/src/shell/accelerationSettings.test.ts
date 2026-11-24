@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   ACCELERATION_DEFAULTS,
   ACCELERATION_STORAGE_KEY,
+  KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   accelerationRequestFields,
   readStoredAcceleration,
   writeStoredAcceleration,
@@ -35,6 +36,7 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     vram16Mode: true,
     piH3: "off",
     solVae: false,
+    keepReferenceLatents: false,
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -55,6 +57,8 @@ describe("effectiveAccelerationFields", () => {
       pi_h3: "off",
       // Sol-H3-VAE: at its server default, and likewise named by no row.
       sol_vae: false,
+      // 台帳 §1-297: likewise named by no row.
+      keep_reference_latents: false,
     });
   });
 
@@ -67,6 +71,7 @@ describe("effectiveAccelerationFields", () => {
       "attention_backend",
       "block_swap_prefetch",
       "fused_gguf_dequant_kernel",
+      "keep_reference_latents",
       "keep_resident",
       "keep_resident_embeddings",
       "pi_h3",
@@ -84,6 +89,7 @@ describe("effectiveAccelerationFields", () => {
       vram16_mode: true,
       pi_h3: "off",
       sol_vae: false,
+      keep_reference_latents: false,
     });
   });
 
@@ -297,6 +303,62 @@ describe("piH3 (ruling 107)", () => {
         window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ piH3: bad }));
         expect(readStoredAcceleration().piH3).toBe("off");
       }
+    });
+  });
+});
+
+/** 台帳 §1-297: keep reference latents resident (MiniMax H3). */
+describe("keepReferenceLatents (§1-297)", () => {
+  it("defaults to off, matching the server default", () => {
+    expect(ACCELERATION_DEFAULTS.keepReferenceLatents).toBe(false);
+    expect(KEEP_REFERENCE_LATENTS_SERVER_DEFAULT).toBe(false);
+  });
+
+  it("sends nothing while off — not even keep_reference_latents: false", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).toEqual({});
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("keep_reference_latents");
+  });
+
+  it("sends keep_reference_latents: true only while on, and nothing else", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepReferenceLatents: true })).toEqual({
+      keep_reference_latents: true,
+    });
+  });
+
+  it("withServerDefaults writes it back to off (the feature-scope reset on LTX)", () => {
+    const after = withServerDefaults(makeAllOn({ keepReferenceLatents: true }), ["keepReferenceLatents"]);
+    expect(after.keepReferenceLatents).toBe(false);
+    expect(after).toEqual(makeAllOn());
+  });
+
+  it("withServerDefaults leaves it alone when another field is the one reset", () => {
+    const before = makeAllOn({ keepReferenceLatents: true });
+    expect(withServerDefaults(before, ["solVae"]).keepReferenceLatents).toBe(true);
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back an on value", () => {
+      writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, keepReferenceLatents: true });
+      expect(readStoredAcceleration().keepReferenceLatents).toBe(true);
+    });
+
+    it("reads a JSON blob without the key (written before §1-297) as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ attentionBackend: "sage" }));
+      expect(readStoredAcceleration().keepReferenceLatents).toBe(false);
+    });
+
+    it("reads the pre-2026-08-01 bare string form as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sdpa");
+      expect(readStoredAcceleration().keepReferenceLatents).toBe(false);
+    });
+
+    it("reads a malformed value as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepReferenceLatents: "yes" }));
+      expect(readStoredAcceleration().keepReferenceLatents).toBe(false);
     });
   });
 });

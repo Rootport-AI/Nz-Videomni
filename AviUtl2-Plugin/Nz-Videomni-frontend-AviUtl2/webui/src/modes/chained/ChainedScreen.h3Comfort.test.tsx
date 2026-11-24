@@ -283,6 +283,30 @@ describe("ChainedScreen — MiniMax H3 per-clip comfort marker (§1-276)", () =>
     15_000,
   );
 
+  it(
+    "following clip 1's 15 s reference video, clip 2 takes clip 1's marker (345); off it is 481 again",
+    async () => {
+      renderChain(H3_PROPS, { probeMediaInfoDurationSec: 15 }, "ref2va");
+      await waitForClips();
+      fireEvent.click(screen.getByRole("checkbox", { name: en.chained.referencesToggleLabel }));
+      const card = clipCard(0);
+      const summary = within(card).getByText(en.single.reference.heading, { selector: "summary" });
+      const details = summary.closest("details") as HTMLDetailsElement;
+      if (!details.open) fireEvent.click(summary);
+      const slot = within(card).getByTestId("ref-slot-video-1");
+      fireEvent.click(within(slot).getByRole("button", { name: en.single.reference.chooseButton }));
+      await waitFor(() => expect(marker(0)).toBe("345"), { timeout: 5_000 });
+      expect(marker(1)).toBe("481");
+
+      const follow = within(card).getByRole("checkbox", { name: en.chained.clipReferenceFollow.label });
+      fireEvent.click(follow);
+      await waitFor(() => expect(marker(1)).toBe("345"));
+      fireEvent.click(follow);
+      await waitFor(() => expect(marker(1)).toBe("481"));
+    },
+    15_000,
+  );
+
   it("a right-click #6 at 1920x1088 seeds clip 0 at its marker, 345", async () => {
     const initialIntent: GenerationPrefill = {
       intent: "image-to-clip-chain",

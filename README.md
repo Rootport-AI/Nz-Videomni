@@ -759,7 +759,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 生成の高速化（Acceleration）
 
-生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
+生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。さらに、MiniMax H3 専用の **参照素材の潜在の常駐** の行が、AviUtl2 の操作パネルの Settings にだけあります（Gradio UI にはありません。下の「[参照素材の潜在の常駐](#keep-reference-latents)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
 |------|--------|------------------|------------------|---------------------|
@@ -772,6 +772,7 @@ $env:PYTHONPATH = (Get-Location).Path
 | VRAM 16GB mode（ノイズ除去の計算の分割） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は on（中身は §7.6） |
 | pi-H3（少ないステップの生成。Gradio UI では Generate タブの単発だけ） | off / 4steps / 2steps（両方の UI とも「Fast VAE」の行の pi-H3_4s・pi-H3_2s） | **この項目はありません**。行は見えません。API へ off 以外を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ off 以外を指定すると **422** | **実装済み**。既定は off（中身は下の「[pi-H3](#pi-h3)」） |
 | Sol-H3-VAE（軽量化した映像の復元処理。Gradio UI では Generate タブの単発だけ） | off / on（両方の UI とも「Fast VAE」の行の Sol） | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[Sol-H3-VAE](#sol-h3-vae)」） |
+| 参照素材の潜在の常駐（keep_reference_latents。AviUtl2 の操作パネルだけ） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[参照素材の潜在の常駐](#keep-reference-latents)」） |
 
 **GGUF逆量子化の1カーネル化と先読み block swap を LTX 2.5 で併用したときの生成時間は、実測で 102.86 秒 → 39.28 秒＝61.8%短縮です。** 出力そのものは変わらず、**固定の検証用ジョブ17本すべてで動画のファイルが1バイトも変わっていない**ことを確認しています。残る PrunaVAED だけは LTX 2.5 で **422** で断られます——利用者が意図して on にしたときだけ付くものなので、効かないまま黙って通すより断ったほうが親切だという判断です（詳しくは §7.1 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75・§76・§77）。
 
@@ -918,6 +919,23 @@ MiniMax H3 の生成の最後に、内部表現から映像のフレームを作
 > - **128 画素ごとの格子状の線が出ることがあります**（肌や平坦な領域で出ると報告されています）。Sol-H3-VAE で報告されている現象で、配布元でも解決していません。気になるときは off にしてください。
 >
 > 設計の判断の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) の裁定 108 と §6.8 です。
+
+### <a id="keep-reference-latents"></a>参照素材の潜在の常駐（MiniMax H3 の参照素材の使い回し・`keep_reference_latents`）
+
+MiniMax H3 の参照素材（Reference の参照画像・参照動画・参照音声）を、モデルが扱う内部表現（潜在）に変換した結果をメインメモリに残し、同じ参照素材を使う次の生成と、Chained の後続クリップで、その変換を省いて速くする高速化です。**生成結果は変わりません。** **既定は off です。**
+
+- **効く場面**: Single で同じ参照素材のまま生成を繰り返すとき、Chained で同じ参照素材を複数のクリップに使うとき（「後続クリップにも同じ参照素材を使う」を入れたときなど）。参照動画の変換は時間がかかるので、参照動画で特に効きます。省けるのは変換の段だけで、参照素材の読み込みと、プロンプトを読み取る段（テキストエンコーダー）は毎回行います。
+- **メインメモリ 64GB 以上を推奨します。**
+- **同じ参照素材とみなす条件**: 同じアップロードのファイル（場所・大きさ・更新時刻が同じ）で、実際に変換する範囲（画像は縮小したあとの大きさ、動画は実際に使うフレーム数、音声は実際に使う長さ）も同じときだけ使い回します。違えば変換し直します。Chained の各カードに同じファイルを別々に入れた場合は、別の素材として扱います。
+- **残しておく分**: 直前の生成で使った参照素材の分だけです。参照素材を使わない生成（Edit タブでの生成を含む）や、この項目を off にした生成をすると、残していた分はすべて消えます。生成の失敗で、その生成で新しく変換した分は捨てます。生成しないあいだは残ったままです。
+- **AviUtl2 の操作パネル**: Settings の「生成の高速化」の最後にある「参照素材の潜在の常駐（MiniMax H3）」の ON / OFF で選びます。ON のあいだ、行の下に注意書きが出ます。選んだ内容は保存されます。LTX 2.3・LTX 2.5 を選んでいるあいだは、この行が見えません（選択は OFF に戻ります）。
+- **Gradio UI**: この項目はありません。
+- **MCP**: `submit_generate` と `submit_chain` の引数 `keep_reference_latents`（`True` / `False`〔既定〕）で選びます。
+- **API**: `POST /generate` と `POST /generate/chain` の `keep_reference_latents` です（正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2・§6.2b (k)）。使い回したかどうかは、メタデータの参照ごとの記録の `latent_cache`（`"hit"` が使い回し、`"miss"` が変換して残した）で分かります（この項目を on にした生成にだけ入ります）。
+
+> **⚠ 手でファイルを差し替えたとき**: アップロード済みのファイル（`uploads` フォルダーの中）を、手で同じ名前の別のファイルに置き換えると、古い変換結果が使われることがあります。そのときは、この項目を off にして 1 回生成するか、素材を入れ直してください。
+>
+> 設計の判断の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) の裁定 110 と §6.9 です。
 
 ---
 
@@ -1192,8 +1210,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイル（動画ファイルの音声トラックも可）をアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）と MiniMax H3 専用の `pi_h3`・`sol_vae` に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない）。MiniMax H3 では参照素材からの生成（Ref2VA）の `references`（`upload_image`・`upload_video`・`upload_audio` で上げた ID と、プロンプトの札 `<Picture 1>` などの番号）も指定できる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（連結生成には無い項目のため）と MiniMax H3 専用の `pi_h3`・`sol_vae` に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる。MiniMax H3 では各クリップの参照素材（`clips[i].references`。形は `submit_generate` と同じ）も指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents` に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない）。MiniMax H3 では参照素材からの生成（Ref2VA）の `references`（`upload_image`・`upload_video`・`upload_audio` で上げた ID と、プロンプトの札 `<Picture 1>` などの番号）も指定できる |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（連結生成には無い項目のため）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents` に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる。MiniMax H3 では各クリップの参照素材（`clips[i].references`。形は `submit_generate` と同じ）も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
@@ -1240,7 +1258,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。**MiniMax H3 専用の `pi_h3`（`submit_generate` と `submit_chain` の両方）は、`"off"` 以外を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使われたかはメタデータの `pi_h3_used` に記録されます。**MiniMax H3 専用の `sol_vae`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 実際に使われたか、通常の VAE に切り替わったかは、メタデータの `sol_vae_used`（`"on"` / `"on->off"`）に記録されます。
+- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。**MiniMax H3 専用の `pi_h3`（`submit_generate` と `submit_chain` の両方）は、`"off"` 以外を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使われたかはメタデータの `pi_h3_used` に記録されます。**MiniMax H3 専用の `sol_vae`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 実際に使われたか、通常の VAE に切り替わったかは、メタデータの `sol_vae_used`（`"on"` / `"on->off"`）に記録されます。**MiniMax H3 専用の `keep_reference_latents`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使い回したかは、メタデータの参照ごとの `latent_cache` に記録されます（§5「[参照素材の潜在の常駐](#keep-reference-latents)」）。
 - **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---

@@ -7036,3 +7036,66 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 181.7 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。
+
+## 182. MiniMax H3 の Settings の Acceleration に「参照素材の潜在の常駐（MiniMax H3）」の行を足す — ON／OFF の 2 つのボタンと ON のときだけの注意書き・保存の欄 `keepReferenceLatents`・共通の関数で全部の要求に載せる・LTX での隠し方（設計正本 裁定 110。2026-11-24）
+
+### 182.1 結論
+
+- **Settings の「Acceleration: / 生成の高速化:」の欄の最後（VRAM 16GB mode の行の下）に、行「参照素材の潜在の常駐（MiniMax H3）」（英語 `Keep reference latents resident (MiniMax H3)`）を、ほかの行と同じ ON／OFF の 2 つのボタンで置きました。** 既定は OFF で、ON のあいだだけ要求に `keep_reference_latents: true` を載せ、行の下に注意書きを出します。
+- 動き（何がどうなるか）と注意書きの文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 110・§6.9（「操作パネル」）で、本節には写しません。**本節は実装の形と、将来の改修者への注意（182.5）の正本です。**
+- 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §233 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-297 にだけ書きます。**実機への配置は済み、オーナーの実機での確認は未了です。**
+- 同じテーマで、エンジン（参照素材の潜在の使い回しそのもの）、API・アダプタ、MCP も変えました（バックエンドの dev の `56b01c11`・`234f6c5f`）。プラグイン本体（C++）は変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。
+
+### 182.2 進め方とコミット
+
+計画は監督の計画ファイル `quirky-splashing-moonbeam-of-7379f81c-1c4f-4fe5-a574-c4b777037187` にあります（オーナー了承 2026-11-24）。操作パネルは、エンジンとアプリと並行して別の担当が実装しました。実装のあと、別の担当が差分を確かめ、直す必要のある点はありませんでした。採った小さな指摘は、模擬のバックエンドの拒否の文を本物のサーバーの文にそろえた 1 点です。コミットは dev です。
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト、配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `b74c6b51` |
+
+本節を含む文書は、別のコミットで入れました。
+
+### 182.3 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは省きました（182.6）。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts` | 設定 `keepReferenceLatents`（既定 `false`。定数 `KEEP_REFERENCE_LATENTS_SERVER_DEFAULT`）。保存の欄と読み戻し（欄の無い保存値は既定で読む）。`withServerDefaults` の書き戻し。`accelerationRequestFields` で、既定と違うとき（真のとき）だけ `keep_reference_latents` を載せる |
+| `shell/useAccelerationSettings.ts` | 書き換えの関数 `setKeepReferenceLatents` |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | 行・2 つのボタン・ON のときだけの注意書き。行を隠す条件 `keepReferenceLatentsUnsupported` |
+| `shell/featureScope.ts` | 機能の名前 `keep_reference_latents` で行を隠し、保存値を既定に戻す（`FEATURE_UI` の行） |
+| `i18n/strings.ts` | 行の名前・ボタン・注意書き（英語と日本語） |
+| `api/types.ts` | 単発と連結の要求の型に `keep_reference_latents` |
+| `bridge/mockBridge.ts` | 開発用の模擬に、LTX の `unsupported_features` の `keep_reference_latents` と、LTX の拒否（単発と連結。文は本物のサーバーと同じ） |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 1 行（快適上限マーカーの計算は変えていない） |
+
+### 182.4 採った選択と理由
+
+- **ほかの行と同じ ON／OFF の 2 つのボタン**: Settings の真偽値の行は、どれもこの形です（チェックボックスではない）。
+- **注意書きは ON のときだけ**: 読む人がその場で要るのは、ON にしたときのメインメモリの目安だからです（モデル骨格の常駐の行と同じ考え）。
+- **ほかの行とつながりを持たない**: `/status` の能力の旗も、ほかの行への依存もありません（VRAM 16GB mode の行と同じ）。
+- **快適上限マーカーの計算に加えない**: 配信される線の条件（`requires`）がこの名前を挙げることはありません（メモリの中の使い回しで、出力も VRAM も変えないため）。
+
+### 182.5 将来の改修者への注意
+
+この 2 点の正本は本項です（ほかの文書からは本項を指します）。
+
+- **(a) Acceleration の欄は、共通の関数 `accelerationRequestFields` で、全部の要求に載る。** 単発・連結のほか、バッチ（i2v・A2V・v2v-ref-long）と Edit（Retake・Outpainting・Inpainting）の送信も、この関数の結果を本文に混ぜています。`keep_reference_latents` も分岐を足さずに全部の要求へ同じ規則で載るので、バックエンドでは Edit（MiniMax H3 の Edit は参照を持てない）を挟むと持っている潜在が消え、バッチ v2v-ref-long は行ごとに同じ規則で働きます（設計正本 §6.9 の「項目が届く範囲」）。**要求の種類ごとに載せ分けたくなったときは、この関数の外で消すのではなく、設計正本の規則と一緒に見直すこと。**
+- **(b) MiniMax H3 以外では行が隠れ、保存の値は既定（OFF）へ戻る。** `featureScope.ts` の表で、`unsupported_features` に `keep_reference_latents` がある系統（LTX 2.3・2.5）では、行を描かず、保存の値を `false` に書き戻します（Fast VAE・VRAM 16GB mode と同じ仕組み）。だから LTX を一度選ぶと、H3 に戻しても OFF です。LTX の要求に鍵が載らないことも、この書き戻しが受け持っています。行の出し分けだけを変えて書き戻しを外すと、LTX の要求に `true` が載って 422 になります。
+
+### 182.6 テスト
+
+- `shell/accelerationSettings.test.ts`: 既定、保存と読み戻し（欄の無い保存値）、真のときだけ要求に載ること。
+- `shell/useAccelerationSettings.test.ts`: 書き換えの関数と保存。
+- `shell/keepReferenceLatents.paths.test.ts`（新設）: ON なら単発・連結・バッチの i2v の要求の本文に `keep_reference_latents: true` が載り、OFF ならどの本文にも鍵が無いこと。
+- `shell/SettingsPanel.test.tsx`: 行と 2 つのボタン、注意書きが ON のときだけ出ること、文言。
+- `shell/featureScope.test.ts`・`shell/AppShell.featureScope.test.tsx`: LTX で行が隠れ、保存値が OFF に戻ること。
+- `bridge/mockBridge.h3.test.ts`・`bridge/mockBridge.test.ts`: 模擬の `unsupported_features` と LTX の拒否。
+- ほかに、設定の型に欄が増えたことに合わせた既存の試験の期待値の更新（`useBaseModels.test.ts`・`comfortTable.test.ts`・`useGenerationForm.test.ts`・`prefillSeed.test.ts`）。
+- 機械の確認の結果（型検査・書き方の検査・テストの件数・試験の揺れ・aux2 の大きさと SHA-256・配置）は記録簿 §233 です。
+
+### 182.7 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-297 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-297）。

@@ -7099,3 +7099,50 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 182.7 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-297 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-297）。
+
+## 183. MiniMax H3 の Chained で、アコーディオンが消えたクリップカードに「クリップ n の参照素材が使われます。」を出す — 出す条件はアコーディオンを隠す条件と同じ・新しい状態は足さない・既存の `.clip-note`（設計正本 裁定 109 ③。2026-11-24）
+
+### 183.1 結論
+
+- **§181 のチェック「後続クリップにも同じ参照素材を使う」を入れたクリップより後ろのカードで、Reference アコーディオンがあった場所に、1 行の案内「クリップ n の参照素材が使われます。」（英語 `Clip n's references are used.`）を出すようにしました。** n はチェックを入れたクリップの画面の番号です。オーナーの指示（2026-11-24）によります。
+- 動き（出す条件・出ない場面・そのままにした動き）の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 109 ③の更新の注記で、本節には写しません。**本節は実装の形の正本です。**
+- 計画の敵対的なレビュー・差分の検証・機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232.10 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 にだけ書きます。**実機への配置は済み、案内のオーナーの実機での確認は未了です。**
+- 変えたのは操作パネルだけです。Generate を止める条件と送る要求の中身は変えていません。サーバーの API とエンジン、プラグイン本体（C++）も変えていません。配布用の aux2 は作り直しました。
+
+### 183.2 コミット
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト | `561312ef` |
+| 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `a52b74e5` |
+
+本節を含む文書は、別のコミットで入れました。
+
+### 183.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | `chained.clipReferenceFollow.followedNote`（引数は 0 から数えた番号で、文には 1 を足して出す。英語と日本語） |
+| `modes/chained/ClipReferences.tsx` | 任意の引数 `followedIndex`（引き継ぐ元のクリップの 0 から数えた番号）。`referencesOn` が偽のとき、`followedIndex` があれば `<p className="clip-note">` の案内を返し、無ければ今までどおり何も描かない。文言を引くフック（`useStrings`）は、この早い return より前に置いた |
+| `modes/chained/ChainedScreen.tsx` | `ClipsSection` から `followedIndex` を渡す 1 行。値は、アコーディオンを隠している条件（`references.isH3 && references.on && hidden`）のときだけ `references.followIndex`、それ以外は `undefined` |
+| `modes/chained/ChainedScreen.references.test.tsx` | 試験（183.5） |
+| `modes/chained/ClipReferences.test.tsx` | 冒頭のコメントに `followedIndex` の案内を足した |
+
+### 183.4 採った選択と理由
+
+- **出す条件は、アコーディオンを隠す条件をそのまま使う**: 新しい状態や判定を足さず、§181 の `followIndex` と `hidden` から決めます。案内が出るカードと、引き継ぐ元の素材を送るカードは同じ導出（§181.4 の `usedReferences` と同じ `followIndex`）から出るので、案内と実際に送る参照がずれません。
+- **番号 0 を真偽で判定しない**: クリップ 1 でチェックを入れると番号は 0 です。`followedIndex === undefined` で「案内なし」を見分けます（引数のコメントにも「Not a flag: 0 is a clip.」と書いた）。
+- **見た目は既存の `.clip-note`**: 音声のずれの案内と同じ書式です。新しい CSS は足していません。
+- **案内を隠す例外は足さない**: チェックを入れたクリップに素材が無いときと、FL2VA の重みのときも案内は出ます（設計正本 裁定 109 ③の更新の注記の「そのままにした動き」）。どちらも画面の既存の注意文が受け持ちます。
+
+### 183.5 テスト
+
+- `modes/chained/ChainedScreen.references.test.tsx` に組「the note」を新設しました。チェックを入れたクリップより後ろのカードにだけ案内が出て、チェックを入れたカード自身と前のカードには出ないこと／クリップ 1（番号 0）へチェックを移すと、クリップ 2〜4 の案内が「Clip 1's references are used.」に変わること／チェックを外すと全部消えること／日本語の文面（`followedNote(1)` が「クリップ 2 の参照素材が使われます。」）。試験は案内を文面で探します。
+- 既存の「the check survives References off and on, and a trip through LTX」に、`References` を off にしたあいだと LTX のあいだは案内が出ず、戻すと出ることの確かめを足しました。
+- 機械の確認の結果（型検査・書き方の検査・テストの件数・試験の揺れ・aux2 の大きさと SHA-256・配置）は記録簿 §232.10 です。
+
+### 183.6 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。案内のオーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。§181 のチェックそのもののオーナーの確認は合格しました（記録簿 §232.11）。

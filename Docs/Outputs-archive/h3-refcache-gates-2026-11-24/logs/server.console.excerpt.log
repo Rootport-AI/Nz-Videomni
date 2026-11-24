@@ -1,0 +1,198 @@
+2026-11-24 21:32:00,127 INFO ltx: Starting server on 127.0.0.1:18620  (UI: http://127.0.0.1:18620/ui)
+2026-11-24 21:32:00,127 INFO ltx: ====================================================================
+2026-11-24 21:32:00,127 INFO ltx:   準備ができたら、次のアドレスをブラウザで開いてください
+2026-11-24 21:32:00,127 INFO ltx:       http://127.0.0.1:18620/ui
+2026-11-24 21:32:00,127 INFO ltx:   この黒い画面は閉じないでください（閉じるとサーバーが止まります）
+2026-11-24 21:32:00,127 INFO ltx: ====================================================================
+INFO:     Started server process [65464]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18620 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58714 - "GET /api/v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "GET /api/v1/loras HTTP/1.1" 200 OK
+2026-11-24 21:32:11,906 INFO ltx.runner: Backend auto-selected: REAL.
+2026-11-24 21:32:11,907 INFO h3.runner: Loading pipeline (REAL engine_h3 worker). python=.venv-engine-h3\Scripts\python.exe engine_dir=engine_h3 blocks_on_gpu=8 deterministic=True
+2026-11-24 21:32:11,907 INFO ltx.runner: Model-management overrides: {'transformer': 'models\\MiniMaxH3\\Weights\\minimax_h3_ref2va_pruned_int8_convrot.safetensors'}
+2026-11-24 21:32:15,198 INFO ltx.runner: LTX worker ready. sage_available=True
+2026-11-24 21:32:15,199 INFO ltx.pipeline: Transformer weight role: ref2va (minimax_h3_ref2va_pruned_int8_convrot.safetensors)
+INFO:     127.0.0.1:58714 - "POST /api/v1/pipeline/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "GET /api/v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "POST /api/v1/upload/image HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "POST /api/v1/upload/video HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "POST /api/v1/upload/audio HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "POST /api/v1/upload/video HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58714 - "POST /api/v1/generate HTTP/1.1" 202 Accepted
+2026-11-24 21:32:15,382 INFO ltx.pipeline: Job 38e9bde1-69a5-4899-98e0-8bfa6b8b7d7a start mode=t2v 960x576 frames=73 steps=4 fps=24 seed=42
+2026-11-24 21:32:15,383 INFO ltx.pipeline: Job 38e9bde1-69a5-4899-98e0-8bfa6b8b7d7a base=minimax_h3_ref2va_pruned_int8_convrot.safetensors loras=minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16(strength=0.8) prompt="<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>."
+2026-11-24 21:32:18,343 INFO ltx.runner: generate text encode started (4 steps)
+2026-11-24 21:32:20,586 INFO ltx.runner: generate text encode 2/4 steps (0.44 step/s, 2.2s elapsed)
+2026-11-24 21:32:40,765 INFO ltx.runner: generate text encode 3/4 steps (0.05 step/s, 22.4s elapsed)
+2026-11-24 21:32:40,941 INFO ltx.runner: generate text encode 4/4 steps (5.81 step/s, 22.6s elapsed)
+2026-11-24 21:33:31,963 INFO ltx.runner: generate text encode 5/4 steps (0.02 step/s, 73.6s elapsed)
+2026-11-24 21:33:45,925 INFO ltx.runner: generate stage-1 denoise started (4 steps)
+2026-11-24 21:34:44,110 INFO ltx.runner: generate stage-1 denoise 1/4 steps (0.02 step/s, 58.2s elapsed)
+INFO:     127.0.0.1:54251 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54253 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54254 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54254 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54252 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54251 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54254 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54251 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54253 - "GET /api/v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54254 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54252 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54253 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54251 - "GET /api/v1/loras HTTP/1.1" 200 OK
+2026-11-24 21:35:41,789 INFO ltx.runner: generate stage-1 denoise 2/4 steps (0.02 step/s, 115.9s elapsed)
+INFO:     127.0.0.1:54253 - "POST /api/v1/upload/video HTTP/1.1" 200 OK
+2026-11-24 21:36:39,454 INFO ltx.runner: generate stage-1 denoise 3/4 steps (0.02 step/s, 173.5s elapsed)
+INFO:     127.0.0.1:63427 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63429 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63430 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63430 - "GET /api/v1/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63428 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63427 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63430 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63428 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63429 - "GET /api/v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63430 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63427 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63428 - "GET /api/v1/loras HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63429 - "GET /api/v1/loras HTTP/1.1" 200 OK
+2026-11-24 21:37:36,939 INFO ltx.runner: generate stage-1 denoise 4/4 steps (0.02 step/s, 231.0s elapsed)
+2026-11-24 21:37:37,119 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-24 21:37:51,195 INFO ltx.runner: generate VAE decode 2/3 steps (0.07 step/s, 14.1s elapsed)
+2026-11-24 21:37:51,747 INFO ltx.runner: generate VAE decode 3/3 steps (1.83 step/s, 14.6s elapsed)
+2026-11-24 21:37:52,330 INFO ltx.runner: generate VAE decode 4/3 steps (1.73 step/s, 15.2s elapsed)
+2026-11-24 21:37:52,453 INFO ltx.pipeline: Job 38e9bde1-69a5-4899-98e0-8bfa6b8b7d7a done in 337.1s peak_vram=5595MB -> completed
+INFO:     127.0.0.1:54178 - "POST /api/v1/generate HTTP/1.1" 202 Accepted
+2026-11-24 21:37:57,380 INFO ltx.pipeline: Job 3fc3b127-0637-4728-85ec-0e40180ca211 start mode=t2v 1280x768 frames=73 steps=4 fps=24 seed=42
+2026-11-24 21:37:57,381 INFO ltx.pipeline: Job 3fc3b127-0637-4728-85ec-0e40180ca211 base=minimax_h3_ref2va_pruned_int8_convrot.safetensors loras=minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16(strength=0.8) prompt="<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>."
+2026-11-24 21:38:00,143 INFO ltx.runner: generate text encode started (4 steps)
+2026-11-24 21:38:24,753 INFO ltx.runner: generate text encode 3/4 steps (0.08 step/s, 24.6s elapsed)
+2026-11-24 21:38:24,936 INFO ltx.runner: generate text encode 4/4 steps (5.35 step/s, 24.8s elapsed)
+2026-11-24 21:38:25,168 INFO ltx.runner: generate text encode 5/4 steps (4.26 step/s, 25.0s elapsed)
+2026-11-24 21:38:26,732 INFO ltx.runner: generate stage-1 denoise started (4 steps)
+2026-11-24 21:39:49,472 INFO ltx.runner: generate stage-1 denoise 1/4 steps (0.01 step/s, 82.7s elapsed)
+2026-11-24 21:41:12,346 INFO ltx.runner: generate stage-1 denoise 2/4 steps (0.01 step/s, 165.6s elapsed)
+2026-11-24 21:42:38,067 INFO ltx.runner: generate stage-1 denoise 3/4 steps (0.01 step/s, 251.3s elapsed)
+2026-11-24 21:44:00,872 INFO ltx.runner: generate stage-1 denoise 4/4 steps (0.01 step/s, 334.1s elapsed)
+2026-11-24 21:44:01,080 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-24 21:44:21,431 INFO ltx.runner: generate VAE decode 2/3 steps (0.05 step/s, 20.4s elapsed)
+2026-11-24 21:44:21,685 INFO ltx.runner: generate VAE decode 3/3 steps (4.00 step/s, 20.6s elapsed)
+2026-11-24 21:44:22,506 INFO ltx.runner: generate VAE decode 4/3 steps (1.23 step/s, 21.4s elapsed)
+2026-11-24 21:44:22,601 INFO ltx.pipeline: Job 3fc3b127-0637-4728-85ec-0e40180ca211 done in 385.2s peak_vram=6335MB -> completed
+INFO:     127.0.0.1:60267 - "POST /api/v1/generate HTTP/1.1" 202 Accepted
+2026-11-24 21:44:33,254 INFO ltx.pipeline: Job dc830f63-4e84-432d-bb98-8bdb0851df50 start mode=t2v 1280x768 frames=73 steps=4 fps=24 seed=42
+2026-11-24 21:44:33,255 INFO ltx.pipeline: Job dc830f63-4e84-432d-bb98-8bdb0851df50 base=minimax_h3_ref2va_pruned_int8_convrot.safetensors loras=minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16(strength=0.8) prompt="<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>."
+2026-11-24 21:44:35,959 INFO ltx.runner: generate text encode started (4 steps)
+2026-11-24 21:44:58,824 INFO ltx.runner: generate text encode 3/4 steps (0.09 step/s, 22.9s elapsed)
+2026-11-24 21:44:59,015 INFO ltx.runner: generate text encode 4/4 steps (5.35 step/s, 23.1s elapsed)
+2026-11-24 21:45:48,939 INFO ltx.runner: generate text encode 5/4 steps (0.02 step/s, 73.0s elapsed)
+2026-11-24 21:45:50,478 INFO ltx.runner: generate stage-1 denoise started (4 steps)
+2026-11-24 21:47:18,891 INFO ltx.runner: generate stage-1 denoise 1/4 steps (0.01 step/s, 88.4s elapsed)
+2026-11-24 21:48:52,029 INFO ltx.runner: generate stage-1 denoise 2/4 steps (0.01 step/s, 181.5s elapsed)
+2026-11-24 21:50:20,727 INFO ltx.runner: generate stage-1 denoise 3/4 steps (0.01 step/s, 270.2s elapsed)
+2026-11-24 21:51:48,472 INFO ltx.runner: generate stage-1 denoise 4/4 steps (0.01 step/s, 358.0s elapsed)
+2026-11-24 21:51:49,034 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-24 21:52:13,317 INFO ltx.runner: generate VAE decode 2/3 steps (0.04 step/s, 24.3s elapsed)
+2026-11-24 21:52:14,039 INFO ltx.runner: generate VAE decode 3/3 steps (1.36 step/s, 25.0s elapsed)
+2026-11-24 21:52:16,031 INFO ltx.runner: generate VAE decode 4/3 steps (0.50 step/s, 27.0s elapsed)
+2026-11-24 21:52:16,266 INFO ltx.pipeline: Job dc830f63-4e84-432d-bb98-8bdb0851df50 done in 463.0s peak_vram=6335MB -> completed
+INFO:     127.0.0.1:60627 - "POST /api/v1/generate/chain HTTP/1.1" 202 Accepted
+2026-11-24 21:52:44,355 INFO ltx.pipeline: Chain job 29a2e63f-cbee-4f34-a313-f79d6dc1f157 start clips=4 1280x768 steps=4 fps=24 overlap=22f(fixed) seed=42
+2026-11-24 21:52:44,358 INFO ltx.pipeline: Chain job 29a2e63f-cbee-4f34-a313-f79d6dc1f157 base=minimax_h3_ref2va_pruned_int8_convrot.safetensors loras=minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16(strength=0.8) prompt="A calm cinematic scene in the look of <Video 1>, following the motion of <Video 2>. Soft light, gentle camera movement."
+2026-11-24 21:52:47,845 INFO ltx.runner: chain text encode started (4 steps)
+2026-11-24 21:53:17,569 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 29.7s elapsed)
+2026-11-24 21:53:17,781 INFO ltx.runner: chain text encode 4/4 steps (4.93 step/s, 29.9s elapsed)
+2026-11-24 21:54:27,829 INFO ltx.runner: chain text encode 5/4 steps (0.01 step/s, 100.0s elapsed)
+2026-11-24 21:54:31,369 INFO ltx.runner: chain stage-1 denoise [1/4] started (4 steps)
+2026-11-24 21:57:34,412 INFO ltx.runner: chain stage-1 denoise [1/4] 1/4 steps (0.01 step/s, 183.0s elapsed)
+2026-11-24 22:00:35,230 INFO ltx.runner: chain stage-1 denoise [1/4] 2/4 steps (0.01 step/s, 363.9s elapsed)
+2026-11-24 22:03:36,264 INFO ltx.runner: chain stage-1 denoise [1/4] 3/4 steps (0.01 step/s, 544.9s elapsed)
+2026-11-24 22:06:42,821 INFO ltx.runner: chain stage-1 denoise [1/4] 4/4 steps (0.01 step/s, 731.5s elapsed)
+2026-11-24 22:06:46,330 INFO ltx.runner: chain text encode 1/4 steps (-0.01 step/s, 838.5s elapsed)
+2026-11-24 22:07:15,071 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 867.2s elapsed)
+2026-11-24 22:07:15,263 INFO ltx.runner: chain text encode 4/4 steps (5.35 step/s, 867.4s elapsed)
+2026-11-24 22:07:28,178 INFO ltx.runner: chain text encode 5/4 steps (0.08 step/s, 880.3s elapsed)
+2026-11-24 22:07:29,801 INFO ltx.runner: chain stage-1 denoise [2/4] started (4 steps)
+2026-11-24 22:09:30,775 INFO ltx.runner: chain stage-1 denoise [2/4] 1/4 steps (0.01 step/s, 121.0s elapsed)
+2026-11-24 22:11:31,229 INFO ltx.runner: chain stage-1 denoise [2/4] 2/4 steps (0.01 step/s, 241.4s elapsed)
+2026-11-24 22:13:31,490 INFO ltx.runner: chain stage-1 denoise [2/4] 3/4 steps (0.01 step/s, 361.7s elapsed)
+2026-11-24 22:15:32,330 INFO ltx.runner: chain stage-1 denoise [2/4] 4/4 steps (0.01 step/s, 482.5s elapsed)
+2026-11-24 22:15:35,913 INFO ltx.runner: chain text encode 1/4 steps (-0.01 step/s, 1368.1s elapsed)
+2026-11-24 22:16:04,895 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 1397.0s elapsed)
+2026-11-24 22:16:05,084 INFO ltx.runner: chain text encode 4/4 steps (5.32 step/s, 1397.2s elapsed)
+2026-11-24 22:16:05,317 INFO ltx.runner: chain text encode 5/4 steps (4.27 step/s, 1397.5s elapsed)
+2026-11-24 22:16:06,954 INFO ltx.runner: chain stage-1 denoise [3/4] started (4 steps)
+2026-11-24 22:19:20,939 INFO ltx.runner: chain stage-1 denoise [3/4] 1/4 steps (0.01 step/s, 194.0s elapsed)
+2026-11-24 22:22:51,674 INFO ltx.runner: chain stage-1 denoise [3/4] 2/4 steps (0.00 step/s, 404.7s elapsed)
+2026-11-24 22:26:11,624 INFO ltx.runner: chain stage-1 denoise [3/4] 3/4 steps (0.01 step/s, 604.7s elapsed)
+2026-11-24 22:29:23,925 INFO ltx.runner: chain stage-1 denoise [3/4] 4/4 steps (0.01 step/s, 797.0s elapsed)
+2026-11-24 22:29:27,321 INFO ltx.runner: chain text encode 1/4 steps (-0.00 step/s, 2199.5s elapsed)
+2026-11-24 22:29:56,480 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 2228.6s elapsed)
+2026-11-24 22:29:56,664 INFO ltx.runner: chain text encode 4/4 steps (5.32 step/s, 2228.8s elapsed)
+2026-11-24 22:30:11,708 INFO ltx.runner: chain text encode 5/4 steps (0.07 step/s, 2243.9s elapsed)
+2026-11-24 22:30:13,303 INFO ltx.runner: chain stage-1 denoise [4/4] started (4 steps)
+2026-11-24 22:32:37,807 INFO ltx.runner: chain stage-1 denoise [4/4] 1/4 steps (0.01 step/s, 144.5s elapsed)
+2026-11-24 22:35:02,457 INFO ltx.runner: chain stage-1 denoise [4/4] 2/4 steps (0.01 step/s, 289.2s elapsed)
+2026-11-24 22:37:27,587 INFO ltx.runner: chain stage-1 denoise [4/4] 3/4 steps (0.01 step/s, 434.3s elapsed)
+2026-11-24 22:39:51,841 INFO ltx.runner: chain stage-1 denoise [4/4] 4/4 steps (0.01 step/s, 578.5s elapsed)
+2026-11-24 22:39:52,224 INFO ltx.runner: chain VAE decode started (3 steps)
+2026-11-24 22:41:42,655 INFO ltx.runner: chain VAE decode 2/3 steps (0.01 step/s, 110.4s elapsed)
+2026-11-24 22:41:43,311 INFO ltx.runner: chain VAE decode 3/3 steps (1.52 step/s, 111.1s elapsed)
+2026-11-24 22:41:46,734 INFO ltx.runner: chain VAE decode 4/3 steps (0.29 step/s, 114.5s elapsed)
+2026-11-24 22:41:46,822 INFO ltx.pipeline: Chain job 29a2e63f-cbee-4f34-a313-f79d6dc1f157 done in 2942.5s peak_vram=6448MB -> completed (frames=396)
+INFO:     127.0.0.1:60029 - "POST /api/v1/generate/chain HTTP/1.1" 202 Accepted
+2026-11-24 22:41:57,099 INFO ltx.pipeline: Chain job 575f52c6-a7a5-4fa8-8780-725718ed20c7 start clips=4 1280x768 steps=4 fps=24 overlap=22f(fixed) seed=42
+2026-11-24 22:41:57,101 INFO ltx.pipeline: Chain job 575f52c6-a7a5-4fa8-8780-725718ed20c7 base=minimax_h3_ref2va_pruned_int8_convrot.safetensors loras=minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16(strength=0.8) prompt="A calm cinematic scene in the look of <Video 1>, following the motion of <Video 2>. Soft light, gentle camera movement."
+2026-11-24 22:42:00,303 INFO ltx.runner: chain text encode started (4 steps)
+2026-11-24 22:42:28,514 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 28.2s elapsed)
+2026-11-24 22:42:28,691 INFO ltx.runner: chain text encode 4/4 steps (5.81 step/s, 28.4s elapsed)
+2026-11-24 22:43:33,868 INFO ltx.runner: chain text encode 5/4 steps (0.02 step/s, 93.6s elapsed)
+2026-11-24 22:43:35,451 INFO ltx.runner: chain stage-1 denoise [1/4] started (4 steps)
+2026-11-24 22:46:23,762 INFO ltx.runner: chain stage-1 denoise [1/4] 1/4 steps (0.01 step/s, 168.3s elapsed)
+2026-11-24 22:49:11,854 INFO ltx.runner: chain stage-1 denoise [1/4] 2/4 steps (0.01 step/s, 336.4s elapsed)
+2026-11-24 22:51:59,887 INFO ltx.runner: chain stage-1 denoise [1/4] 3/4 steps (0.01 step/s, 504.4s elapsed)
+2026-11-24 22:54:52,823 INFO ltx.runner: chain stage-1 denoise [1/4] 4/4 steps (0.01 step/s, 677.4s elapsed)
+2026-11-24 22:54:56,413 INFO ltx.runner: chain text encode 1/4 steps (-0.01 step/s, 776.1s elapsed)
+2026-11-24 22:55:26,576 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 806.3s elapsed)
+2026-11-24 22:55:26,784 INFO ltx.runner: chain text encode 4/4 steps (4.93 step/s, 806.5s elapsed)
+2026-11-24 22:56:34,539 INFO ltx.runner: chain text encode 5/4 steps (0.01 step/s, 874.2s elapsed)
+2026-11-24 22:56:36,253 INFO ltx.runner: chain stage-1 denoise [2/4] started (4 steps)
+2026-11-24 22:58:43,840 INFO ltx.runner: chain stage-1 denoise [2/4] 1/4 steps (0.01 step/s, 127.6s elapsed)
+2026-11-24 23:00:42,808 INFO ltx.runner: chain stage-1 denoise [2/4] 2/4 steps (0.01 step/s, 246.6s elapsed)
+2026-11-24 23:02:41,357 INFO ltx.runner: chain stage-1 denoise [2/4] 3/4 steps (0.01 step/s, 365.1s elapsed)
+2026-11-24 23:04:39,918 INFO ltx.runner: chain stage-1 denoise [2/4] 4/4 steps (0.01 step/s, 483.7s elapsed)
+2026-11-24 23:04:43,440 INFO ltx.runner: chain text encode 1/4 steps (-0.01 step/s, 1363.1s elapsed)
+2026-11-24 23:05:11,726 INFO ltx.runner: chain text encode 3/4 steps (0.07 step/s, 1391.4s elapsed)
+2026-11-24 23:05:11,902 INFO ltx.runner: chain text encode 4/4 steps (5.81 step/s, 1391.6s elapsed)
+2026-11-24 23:06:17,070 INFO ltx.runner: chain text encode 5/4 steps (0.02 step/s, 1456.8s elapsed)
+2026-11-24 23:06:18,795 INFO ltx.runner: chain stage-1 denoise [3/4] started (4 steps)
+2026-11-24 23:09:27,756 INFO ltx.runner: chain stage-1 denoise [3/4] 1/4 steps (0.01 step/s, 189.0s elapsed)
+2026-11-24 23:12:36,557 INFO ltx.runner: chain stage-1 denoise [3/4] 2/4 steps (0.01 step/s, 377.8s elapsed)
+2026-11-24 23:15:45,331 INFO ltx.runner: chain stage-1 denoise [3/4] 3/4 steps (0.01 step/s, 566.5s elapsed)
+2026-11-24 23:18:56,052 INFO ltx.runner: chain stage-1 denoise [3/4] 4/4 steps (0.01 step/s, 757.2s elapsed)
+2026-11-24 23:18:59,864 INFO ltx.runner: chain text encode 1/4 steps (-0.01 step/s, 2219.5s elapsed)
+2026-11-24 23:19:30,644 INFO ltx.runner: chain text encode 3/4 steps (0.06 step/s, 2250.3s elapsed)
+2026-11-24 23:19:30,852 INFO ltx.runner: chain text encode 4/4 steps (4.57 step/s, 2250.5s elapsed)
+2026-11-24 23:20:40,374 INFO ltx.runner: chain text encode 5/4 steps (0.01 step/s, 2320.1s elapsed)
+2026-11-24 23:20:42,118 INFO ltx.runner: chain stage-1 denoise [4/4] started (4 steps)
+2026-11-24 23:23:21,905 INFO ltx.runner: chain stage-1 denoise [4/4] 1/4 steps (0.01 step/s, 159.8s elapsed)
+2026-11-24 23:26:01,137 INFO ltx.runner: chain stage-1 denoise [4/4] 2/4 steps (0.01 step/s, 319.0s elapsed)
+2026-11-24 23:28:40,828 INFO ltx.runner: chain stage-1 denoise [4/4] 3/4 steps (0.01 step/s, 478.7s elapsed)
+2026-11-24 23:31:20,176 INFO ltx.runner: chain stage-1 denoise [4/4] 4/4 steps (0.01 step/s, 638.0s elapsed)
+2026-11-24 23:31:20,663 INFO ltx.runner: chain VAE decode started (3 steps)
+2026-11-24 23:33:14,805 INFO ltx.runner: chain VAE decode 2/3 steps (0.01 step/s, 114.1s elapsed)
+2026-11-24 23:33:15,397 INFO ltx.runner: chain VAE decode 3/3 steps (1.68 step/s, 114.7s elapsed)
+2026-11-24 23:33:19,055 INFO ltx.runner: chain VAE decode 4/3 steps (0.27 step/s, 118.4s elapsed)
+2026-11-24 23:33:19,148 INFO ltx.pipeline: Chain job 575f52c6-a7a5-4fa8-8780-725718ed20c7 done in 3082.0s peak_vram=6448MB -> completed (frames=396)
+2026-11-24 23:34:01,419 INFO ltx.runner: Unloading pipeline (REAL worker).
+2026-11-24 23:34:04,038 INFO h3.runner: Loading pipeline (REAL engine_h3 worker). python=.venv-engine-h3\Scripts\python.exe engine_dir=engine_h3 blocks_on_gpu=8 deterministic=True
+2026-11-24 23:34:07,524 INFO ltx.runner: LTX worker ready. sage_available=True
+2026-11-24 23:34:07,526 INFO ltx.pipeline: Transformer weight role: fl2va (minimax_h3_fl2va_pruned_int8_convrot.safetensors)
+INFO:     127.0.0.1:55819 - "POST /api/v1/pipeline/load HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55819 - "GET /api/v1/models HTTP/1.1" 200 OK
+2026-11-24 23:34:07,569 INFO ltx.runner: Unloading pipeline (REAL worker).
+INFO:     127.0.0.1:55819 - "POST /api/v1/pipeline/unload HTTP/1.1" 200 OK

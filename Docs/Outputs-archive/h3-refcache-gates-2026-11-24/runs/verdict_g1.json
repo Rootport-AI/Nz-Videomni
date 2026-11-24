@@ -1,0 +1,259 @@
+{
+  "gate": "G1",
+  "pass": true,
+  "failed": [],
+  "checks": [
+    {
+      "name": "3 jobs completed",
+      "ok": true,
+      "detail": {
+        "g1_1": {
+          "status": "completed",
+          "error": null,
+          "timed_out": false
+        },
+        "g1_2": {
+          "status": "completed",
+          "error": null,
+          "timed_out": false
+        },
+        "g1_3": {
+          "status": "completed",
+          "error": null,
+          "timed_out": false
+        }
+      }
+    },
+    {
+      "name": "(2) and (3) mp4 sha256 equal",
+      "ok": true,
+      "detail": [
+        "2da4a171c98879a039d380aa3337824e122d4e0cd2b2be325d52d42fb2a5eada",
+        "2da4a171c98879a039d380aa3337824e122d4e0cd2b2be325d52d42fb2a5eada"
+      ]
+    },
+    {
+      "name": "(1) picture/video/audio miss",
+      "ok": true,
+      "detail": {
+        "picture": "miss",
+        "video": "miss",
+        "audio": "miss"
+      }
+    },
+    {
+      "name": "(2) picture/video/audio hit",
+      "ok": true,
+      "detail": {
+        "picture": "hit",
+        "video": "hit",
+        "audio": "hit"
+      }
+    },
+    {
+      "name": "(3) no latent_cache key anywhere in metadata",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "(2) and (3) denoise.sequence equal",
+      "ok": true,
+      "detail": [
+        {
+          "text": 4260,
+          "cond": 0,
+          "audio": 244,
+          "video": 21120,
+          "total": 48360,
+          "latent_frames": 22,
+          "audio_latents": 122,
+          "grid": [
+            24,
+            40
+          ],
+          "ref_video": 22320,
+          "ref_audio": 416
+        },
+        {
+          "text": 4260,
+          "cond": 0,
+          "audio": 244,
+          "video": 21120,
+          "total": 48360,
+          "latent_frames": 22,
+          "audio_latents": 122,
+          "grid": [
+            24,
+            40
+          ],
+          "ref_video": 22320,
+          "ref_audio": 416
+        }
+      ]
+    },
+    {
+      "name": "extents of (1) and (2) equal the expectation",
+      "ok": true,
+      "detail": {
+        "g1_1": {
+          "picture_size": [
+            384,
+            384
+          ],
+          "video_used_frames": 73,
+          "audio_samples": 165888
+        },
+        "g1_2": {
+          "picture_size": [
+            384,
+            384
+          ],
+          "video_used_frames": 73,
+          "audio_samples": 165888
+        },
+        "expected": {
+          "picture_size": [
+            384,
+            384
+          ],
+          "video_used_frames": 73,
+          "audio_samples": 165888
+        }
+      }
+    },
+    {
+      "name": "embed_mp4_metadata false in every request",
+      "ok": true,
+      "detail": [
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "name": "same reference ids in every job",
+      "ok": true,
+      "detail": [
+        [
+          [
+            "picture",
+            "f2a21678-1208-43a1-985a-a33cdb6b09f2"
+          ],
+          [
+            "video",
+            "1f7d6156-7633-410e-9c87-33a2dc406ca1"
+          ],
+          [
+            "audio",
+            "4d29bfe4-74e6-4066-b410-9c98e9defe14"
+          ]
+        ],
+        [
+          [
+            "picture",
+            "f2a21678-1208-43a1-985a-a33cdb6b09f2"
+          ],
+          [
+            "video",
+            "1f7d6156-7633-410e-9c87-33a2dc406ca1"
+          ],
+          [
+            "audio",
+            "4d29bfe4-74e6-4066-b410-9c98e9defe14"
+          ]
+        ],
+        [
+          [
+            "picture",
+            "f2a21678-1208-43a1-985a-a33cdb6b09f2"
+          ],
+          [
+            "video",
+            "1f7d6156-7633-410e-9c87-33a2dc406ca1"
+          ],
+          [
+            "audio",
+            "4d29bfe4-74e6-4066-b410-9c98e9defe14"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "backend is minimax-h3, attention sdpa",
+      "ok": true,
+      "detail": [
+        [
+          "minimax-h3",
+          "sdpa"
+        ],
+        [
+          "minimax-h3",
+          "sdpa"
+        ],
+        [
+          "minimax-h3",
+          "sdpa"
+        ]
+      ]
+    }
+  ],
+  "records": {
+    "g1_1": {
+      "job_id": "38e9bde1-69a5-4899-98e0-8bfa6b8b7d7a",
+      "generation_time_seconds": 337.07,
+      "reference_encode_seconds": 51.14,
+      "per_reference_seconds": [
+        [
+          "picture",
+          0.17
+        ],
+        [
+          "video",
+          50.38
+        ],
+        [
+          "audio",
+          0.3
+        ]
+      ]
+    },
+    "g1_2": {
+      "job_id": "3fc3b127-0637-4728-85ec-0e40180ca211",
+      "generation_time_seconds": 385.22,
+      "reference_encode_seconds": 0.31,
+      "per_reference_seconds": [
+        [
+          "picture",
+          0.0
+        ],
+        [
+          "video",
+          0.0
+        ],
+        [
+          "audio",
+          0.0
+        ]
+      ]
+    },
+    "g1_3": {
+      "job_id": "dc830f63-4e84-432d-bb98-8bdb0851df50",
+      "generation_time_seconds": 463.01,
+      "reference_encode_seconds": 50.02,
+      "per_reference_seconds": [
+        [
+          "picture",
+          0.13
+        ],
+        [
+          "video",
+          49.29
+        ],
+        [
+          "audio",
+          0.28
+        ]
+      ]
+    }
+  }
+}

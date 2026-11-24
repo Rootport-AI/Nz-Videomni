@@ -1,0 +1,45 @@
+{
+  "ids": {
+    "picture": "f2a21678-1208-43a1-985a-a33cdb6b09f2",
+    "video_short": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+    "audio": "4d29bfe4-74e6-4066-b410-9c98e9defe14",
+    "video_long": "66e90774-1704-49c6-82b3-1a006cfd2180"
+  },
+  "uploads": {
+    "picture": {
+      "image_id": "f2a21678-1208-43a1-985a-a33cdb6b09f2",
+      "original_filename": "i2v_input_square.png",
+      "width": 384,
+      "height": 384,
+      "content_type": "image/png",
+      "stored_path_rel": "uploads\\f2a21678-1208-43a1-985a-a33cdb6b09f2\\input.png"
+    },
+    "video_short": {
+      "video_id": "1f7d6156-7633-410e-9c87-33a2dc406ca1",
+      "original_filename": "H3-Ref-1080p-3s.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 2546645,
+      "trimmed": false,
+      "frame_count": null,
+      "fps": null,
+      "stored_path_rel": "uploads\\videos\\1f7d6156-7633-410e-9c87-33a2dc406ca1\\input.mp4"
+    },
+    "audio": {
+      "audio_id": "4d29bfe4-74e6-4066-b410-9c98e9defe14",
+      "original_filename": "ref_audio_raincoat_speech.wav",
+      "content_type": "audio/wav",
+      "size_bytes": 663630,
+      "stored_path_rel": "uploads\\audios\\4d29bfe4-74e6-4066-b410-9c98e9defe14\\input.wav"
+    },
+    "video_long": {
+      "video_id": "66e90774-1704-49c6-82b3-1a006cfd2180",
+      "original_filename": "g0_off.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 854334,
+      "trimmed": false,
+      "frame_count": null,
+      "fps": null,
+      "stored_path_rel": "uploads\\videos\\66e90774-1704-49c6-82b3-1a006cfd2180\\input.mp4"
+    }
+  }
+}

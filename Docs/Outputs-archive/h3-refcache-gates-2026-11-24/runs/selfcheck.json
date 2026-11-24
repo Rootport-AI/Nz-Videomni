@@ -1,0 +1,261 @@
+{
+  "phase": "selfcheck",
+  "at": "2026-11-24T21:31:15",
+  "materials": {
+    "picture": {
+      "path": "Docs/Outputs-archive/h3-gate2/i2v_input_square.png",
+      "exists": true,
+      "size_bytes": 203387,
+      "sha256": "f2ede05d3cb2a66ea6a2a11db6d3874ec341acd2ff892fdd77b1c8ff99071b80",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 384,
+          "height": 384,
+          "r_frame_rate": "25/1",
+          "nb_read_frames": "1"
+        }
+      ]
+    },
+    "video_short": {
+      "path": "outputs/comfort-calib-h3-ref-2026-11-03/materials/H3-Ref-1080p-3s.mp4",
+      "exists": true,
+      "size_bytes": 2546645,
+      "sha256": "8b15a3165c2ccf2eb301413261d30258b515459d1f18ec8887de9020a409a517",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "24/1",
+          "duration_ts": 37376,
+          "duration": "3.041667",
+          "nb_read_frames": "73"
+        },
+        {
+          "codec_type": "audio",
+          "sample_rate": "44100",
+          "r_frame_rate": "0/0",
+          "duration_ts": 133120,
+          "duration": "3.018594",
+          "nb_read_frames": "130"
+        }
+      ]
+    },
+    "audio": {
+      "path": "outputs/h3-ref2va-2026-10-28/ref_audio_raincoat_speech.wav",
+      "exists": true,
+      "size_bytes": 663630,
+      "sha256": "304d3f050bce9c450b998ac1eea6d4ed7e934b8e6fc013346cca7b63d6164282",
+      "streams": [
+        {
+          "codec_type": "audio",
+          "sample_rate": "32000",
+          "r_frame_rate": "0/0",
+          "duration_ts": 165888,
+          "duration": "5.184000",
+          "nb_read_frames": "81"
+        }
+      ]
+    },
+    "video_long": {
+      "path": "Docs/Outputs-archive/h3-vsf-2026-11-09/g0_off/g0_off.mp4",
+      "exists": true,
+      "size_bytes": 854334,
+      "sha256": "0da6111cdca853ce718531d14f6970c78c524d01744b22461c7a0cb482f098d9",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 640,
+          "height": 384,
+          "r_frame_rate": "24/1",
+          "duration_ts": 63488,
+          "duration": "5.166667",
+          "nb_read_frames": "124"
+        },
+        {
+          "codec_type": "audio",
+          "sample_rate": "32000",
+          "r_frame_rate": "0/0",
+          "duration_ts": 165344,
+          "duration": "5.167000",
+          "nb_read_frames": "162"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "picture_size": [
+      384,
+      384
+    ],
+    "video_short_frames": 73,
+    "video_long_frames": 124,
+    "audio_sample_rate": 32000,
+    "audio_samples": 165888,
+    "audio_seconds": 5.184,
+    "g1": {
+      "g1_1": {
+        "picture": "miss",
+        "video": "miss",
+        "audio": "miss"
+      },
+      "g1_2": {
+        "picture": "hit",
+        "video": "hit",
+        "audio": "hit"
+      },
+      "g1_3": null,
+      "video_used_frames": 73
+    },
+    "g2": {
+      "short_used": [
+        73,
+        73,
+        73,
+        73
+      ],
+      "short_cache": [
+        "miss",
+        "hit",
+        "hit",
+        "hit"
+      ],
+      "long_used": [
+        124,
+        90,
+        124,
+        107
+      ],
+      "long_cache": [
+        "miss",
+        "miss",
+        "hit",
+        "miss"
+      ]
+    }
+  },
+  "g1_bodies_example": {
+    "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+    "width": 1280,
+    "height": 768,
+    "num_frames": 73,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "attention_backend": "sdpa",
+    "keep_resident": true,
+    "embed_mp4_metadata": false,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ],
+    "references": [
+      {
+        "kind": "picture",
+        "id": "<img>",
+        "slot": 1
+      },
+      {
+        "kind": "video",
+        "id": "<vid>",
+        "slot": 1
+      },
+      {
+        "kind": "audio",
+        "id": "<aud>",
+        "slot": 1,
+        "max_sec": 12.0
+      }
+    ],
+    "keep_reference_latents": true
+  },
+  "g2_body_example": {
+    "prompt": "A calm cinematic scene in the look of <Video 1>, following the motion of <Video 2>. Soft light, gentle camera movement.",
+    "width": 1280,
+    "height": 768,
+    "frame_rate": 24.0,
+    "seed": 42,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "attention_backend": "sdpa",
+    "keep_resident": true,
+    "embed_mp4_metadata": false,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8
+      }
+    ],
+    "clips": [
+      {
+        "num_frames": 124,
+        "references": [
+          {
+            "kind": "video",
+            "id": "<vid>",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "<vid2>",
+            "slot": 2
+          }
+        ]
+      },
+      {
+        "num_frames": 90,
+        "references": [
+          {
+            "kind": "video",
+            "id": "<vid>",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "<vid2>",
+            "slot": 2
+          }
+        ]
+      },
+      {
+        "num_frames": 141,
+        "references": [
+          {
+            "kind": "video",
+            "id": "<vid>",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "<vid2>",
+            "slot": 2
+          }
+        ]
+      },
+      {
+        "num_frames": 107,
+        "references": [
+          {
+            "kind": "video",
+            "id": "<vid>",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "<vid2>",
+            "slot": 2
+          }
+        ]
+      }
+    ],
+    "keep_reference_latents": true
+  },
+  "problems": [],
+  "ok": true
+}

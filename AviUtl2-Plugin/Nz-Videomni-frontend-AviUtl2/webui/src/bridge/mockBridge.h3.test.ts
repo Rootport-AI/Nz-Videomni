@@ -527,6 +527,38 @@ describe("mockBridge — MiniMax H3", () => {
     expect(await kindOf("MiniMaxH3")).toBe("int8");
     expect(await kindOf("LTX23")).toBeNull();
   });
+
+  // 台帳 §1-297: keep reference latents resident.
+  it("publishes `keep_reference_latents` in both LTX engines' unsupported_features, not MiniMax H3's", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    expect(blocksFeature(blocks, "MiniMaxH3")).not.toContain("keep_reference_latents");
+    for (const id of ["LTX23", "LTX25"]) expect(blocksFeature(blocks, id)).toContain("keep_reference_latents");
+  });
+
+  it("refuses keep_reference_latents: true on LTX (single and chain) with 422 FEATURE_UNSUPPORTED; false passes", async () => {
+    for (const id of ["LTX23", "LTX25"]) {
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const single = await generate(bridge, { ...BODY, num_frames: 121, width: 1280, height: 704, keep_reference_latents: true });
+      expect(single.status).toBe(422);
+      expect((single.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const chained = await chain(bridge, { keep_reference_latents: true }, [{ num_frames: 121 }]);
+      expect(chained.status).toBe(422);
+      expect((chained.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const offChain = await chain(bridge, { keep_reference_latents: false }, [{ num_frames: 121 }]);
+      expect(offChain.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+    }
+  });
+
+  it("accepts keep_reference_latents on MiniMax H3, single and chain", async () => {
+    // One bridge per request: the fixture runs a single job at a time (409).
+    const single = createMockBridge({ delayMs: 0 });
+    expect((await load(single, "MiniMaxH3")).status).toBe(200);
+    expect((await generate(single, { ...BODY, keep_reference_latents: true })).status).toBe(202);
+    const chained = createMockBridge({ delayMs: 0 });
+    expect((await load(chained, "MiniMaxH3")).status).toBe(200);
+    expect((await chain(chained, { keep_reference_latents: true })).status).toBe(202);
+  });
 });
 
 function blocksFeature(blocks: BaseModelBlock[], id: string): string[] {

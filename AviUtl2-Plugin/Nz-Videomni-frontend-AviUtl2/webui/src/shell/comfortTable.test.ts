@@ -33,6 +33,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     vram16Mode: true,
     piH3: "off",
     solVae: false,
+    keepReferenceLatents: false,
     embedMp4Metadata: true,
     ...overrides,
   };

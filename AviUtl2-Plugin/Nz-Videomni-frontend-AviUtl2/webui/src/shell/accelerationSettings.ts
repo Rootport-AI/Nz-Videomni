@@ -126,6 +126,15 @@
  *    slider lock, the dropped sampling values, the red note) must not fire on
  *    Sol. Scope: LTX 2.3 / 2.5 publish `sol_vae` in `unsupported_features`,
  *    and `AppShell` hides the row and writes a leftover `true` back to `false`.
+ *  - `keepReferenceLatents` — REAL (台帳 §1-297). MiniMax H3's reference
+ *    encodings (pictures, videos, audio) are kept in main memory between jobs,
+ *    so the next generation with the same references and the following clips of
+ *    a Chained job skip their encoding; the output does not change. Sent as
+ *    `keep_reference_latents`; the server default is `false`, so the key rides
+ *    along only while it is ON (the `keep_resident` direction). Independent of
+ *    every other row. Scope: LTX 2.3 / 2.5 publish `keep_reference_latents` in
+ *    `unsupported_features`, and `AppShell` hides the row and writes a leftover
+ *    `true` back to `false`.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -211,6 +220,14 @@ export interface AccelerationSettings {
    * by {@link fastVaeSettings} only. LTX 2.3 / 2.5 publish the name in
    * `unsupported_features`, so the row is hidden there. */
   solVae: boolean;
+  /** REAL (台帳 §1-297): "Keep reference latents resident" — MiniMax H3 only.
+   * Keeps the encoded reference pictures / videos / audio in main memory so the
+   * next generation with the same references (and the following clips of a
+   * Chained job) skip their encoding; the output does not change. Sent as
+   * `keep_reference_latents` — but only while ON, since the server defaults to
+   * `false`. LTX 2.3 / 2.5 publish the name in `unsupported_features`, so the
+   * row is hidden there. */
+  keepReferenceLatents: boolean;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -298,6 +315,11 @@ export const PI_H3_DEFAULT: PiH3Mode = "off";
  * `keep_resident`: the key rides along only while the user turns it ON. On LTX
  * the row is hidden and the stored value is reset to this default. */
 export const SOL_VAE_SERVER_DEFAULT = false;
+/** Server default for `keep_reference_latents` as of 台帳 §1-297: `false`.
+ * Direction matches `keep_resident`: the key rides along only while the user
+ * turns it ON. On LTX the row is hidden and the stored value is reset to this
+ * default. */
+export const KEEP_REFERENCE_LATENTS_SERVER_DEFAULT = false;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -325,6 +347,7 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
   piH3: PI_H3_DEFAULT,
   solVae: SOL_VAE_SERVER_DEFAULT,
+  keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
@@ -394,6 +417,9 @@ export function withServerDefaults(
     vram16Mode: at("vram16Mode") ? ACCELERATION_DEFAULTS.vram16Mode : acceleration.vram16Mode,
     piH3: at("piH3") ? ACCELERATION_DEFAULTS.piH3 : acceleration.piH3,
     solVae: at("solVae") ? ACCELERATION_DEFAULTS.solVae : acceleration.solVae,
+    keepReferenceLatents: at("keepReferenceLatents")
+      ? ACCELERATION_DEFAULTS.keepReferenceLatents
+      : acceleration.keepReferenceLatents,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -417,6 +443,8 @@ export interface StoredAcceleration {
   piH3: PiH3Mode;
   /** 2026-11-24: Sol-H3-VAE, persisted from its first day. */
   solVae: boolean;
+  /** 台帳 §1-297: keep reference latents resident, persisted from its first day. */
+  keepReferenceLatents: boolean;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -431,6 +459,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
   piH3: PI_H3_DEFAULT,
   solVae: SOL_VAE_SERVER_DEFAULT,
+  keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
@@ -447,7 +476,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *     "blockSwapPrefetch":...,"keepResident":...,
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
  *     "keepResidentEmbeddings":...,"vram16Mode":...,"piH3":...,
- *     "solVae":...,"embedMp4Metadata":...}`
+ *     "solVae":...,"keepReferenceLatents":...,"embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
@@ -455,7 +484,8 @@ const STORED_DEFAULTS: StoredAcceleration = {
  * `fusedGgufDequantKernel`), or a pre-§52 one (no `vaeMode`), or a pre-§3-114
  * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
  * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`), or a pre-ruling-107
- * one (no `piH3`), or a pre-Sol one (no `solVae`) — read back
+ * one (no `piH3`), or a pre-Sol one (no `solVae`), or a pre-§1-297 one (no
+ * `keepReferenceLatents`) — read back
  * cleanly. `solVae` is also normalized against `piH3` (a pi-H3 choice other
  * than off wins and Sol reads back off). EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
@@ -480,6 +510,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       vram16Mode: VRAM16_MODE_SERVER_DEFAULT,
       piH3: PI_H3_DEFAULT,
       solVae: SOL_VAE_SERVER_DEFAULT,
+      keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -512,6 +543,10 @@ export function readStoredAcceleration(): StoredAcceleration {
       vram16Mode: typeof rec.vram16Mode === "boolean" ? rec.vram16Mode : VRAM16_MODE_SERVER_DEFAULT,
       piH3,
       solVae,
+      keepReferenceLatents:
+        typeof rec.keepReferenceLatents === "boolean"
+          ? rec.keepReferenceLatents
+          : KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -626,6 +661,9 @@ export interface AccelerationRequestFields {
   /** 2026-11-24: Sol-H3-VAE — `/generate` and `/generate/chain` (MiniMax H3
    * only). Never sent as `false`. */
   sol_vae?: boolean;
+  /** 台帳 §1-297: keep reference latents resident — `/generate` and
+   * `/generate/chain` (MiniMax H3 only). Never sent as `false`. */
+  keep_reference_latents?: boolean;
 }
 
 /**
@@ -677,6 +715,9 @@ export function effectiveAccelerationFields(
     // No served row's `requires` names `sol_vae` (Sol does not move the
     // comfort line), so this key takes no part in the match.
     sol_vae: acceleration.solVae,
+    // Likewise no served row's `requires` names it (a memory cache; the
+    // output does not change), so it takes no part in the match.
+    keep_reference_latents: acceleration.keepReferenceLatents,
   };
 }
 
@@ -781,6 +822,14 @@ export function accelerationRequestFields(
   // is `AppShell`'s, as for `pi_h3`.
   if (acceleration.solVae !== SOL_VAE_SERVER_DEFAULT) {
     out.sol_vae = acceleration.solVae;
+  }
+  // 台帳 §1-297: keep reference latents resident. The server default is
+  // `false`, so the key only ever appears as `true` (the `keep_resident`
+  // direction). INDEPENDENT — no capability flag, no dependency on any other
+  // row. The scope half is `AppShell`'s, as for `sol_vae`: LTX publishes the
+  // name, the row is hidden and the stored choice is written back to `false`.
+  if (acceleration.keepReferenceLatents !== KEEP_REFERENCE_LATENTS_SERVER_DEFAULT) {
+    out.keep_reference_latents = acceleration.keepReferenceLatents;
   }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order

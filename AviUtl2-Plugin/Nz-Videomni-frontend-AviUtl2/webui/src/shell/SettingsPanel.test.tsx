@@ -121,6 +121,11 @@ function Harness({
       // the hiding through the fixture server is in
       // `AppShell.featureScope.test.tsx`.
       fastVaeUnsupported={fastVaeUnsupported}
+      onKeepReferenceLatentsChange={accelerationControls.setKeepReferenceLatents}
+      // 台帳 §1-297: hidden on an engine that publishes `keep_reference_latents`
+      // (LTX 2.3 / 2.5). Same "supported" case as the rows above; the hiding is
+      // covered in `AppShell.featureScope.test.tsx`.
+      keepReferenceLatentsUnsupported={false}
       onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
       // §3-166: the base-model dropdown is fed by `AppShell` in production;
       // these direct-render tests hand it an empty list (its placeholder). The
@@ -181,6 +186,10 @@ function renderPanel(
   // handle: the table's scroll WRAPPER is a presentational div (§3-163).
   return { onSaved, onClose, container: rendered.container };
 }
+
+const KEEP_REFERENCE_LATENTS_LABEL = "Keep reference latents resident (MiniMax H3)";
+const KEEP_REFERENCE_LATENTS_NOTE_EN =
+  "64GB or more of main memory recommended. Keeps the encoded reference pictures, videos and audio in main memory, so the next generation with the same references and the following clips of a Chained job skip their encoding. The output does not change.";
 
 describe("SettingsPanel", () => {
   beforeEach(() => {
@@ -394,6 +403,7 @@ describe("SettingsPanel", () => {
         vram16Mode: true,
         piH3: "off",
         solVae: false,
+        keepReferenceLatents: false,
         embedMp4Metadata: true,
       });
     });
@@ -507,6 +517,7 @@ describe("SettingsPanel", () => {
         vram16Mode: true,
         piH3: "off",
         solVae: false,
+        keepReferenceLatents: false,
         embedMp4Metadata: true,
       });
     });
@@ -597,6 +608,7 @@ describe("SettingsPanel", () => {
         vram16Mode: true,
         piH3: "off",
         solVae: false,
+        keepReferenceLatents: false,
         embedMp4Metadata: true,
       });
     });
@@ -719,6 +731,7 @@ describe("SettingsPanel", () => {
         vram16Mode: true,
         piH3: "off",
         solVae: false,
+        keepReferenceLatents: false,
         embedMp4Metadata: true,
       });
     });
@@ -761,10 +774,70 @@ describe("SettingsPanel", () => {
         vram16Mode: false,
         piH3: "off",
         solVae: false,
+        keepReferenceLatents: false,
         embedMp4Metadata: true,
       });
     });
     expect(readStoredAcceleration().vram16Mode).toBe(false);
+  });
+
+  // 台帳 §1-297: "Keep reference latents resident (MiniMax H3)". Default OFF,
+  // note only while ON, no gate, ON persists.
+  it("Keep reference latents defaults to OFF without its note; selecting ON shows the note and persists", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const row = within(screen.getByRole("group", { name: KEEP_REFERENCE_LATENTS_LABEL }));
+    expect(row.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText(KEEP_REFERENCE_LATENTS_NOTE_EN)).not.toBeInTheDocument();
+
+    await user.click(row.getByRole("button", { name: "ON" }));
+    await waitFor(() => {
+      expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    });
+    const note = screen.getByText(KEEP_REFERENCE_LATENTS_NOTE_EN);
+    expect(note).toHaveClass("field-hint");
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!)).toEqual({
+        attentionBackend: "sdpa",
+        blockSwapPrefetch: true,
+        keepResident: false,
+        fusedGgufDequantKernel: true,
+        vaeMode: "default",
+        keepResidentEmbeddings: false,
+        vram16Mode: true,
+        piH3: "off",
+        solVae: false,
+        keepReferenceLatents: true,
+        embedMp4Metadata: true,
+      });
+    });
+
+    await user.click(row.getByRole("button", { name: "OFF" }));
+    await waitFor(() => {
+      expect(row.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.queryByText(KEEP_REFERENCE_LATENTS_NOTE_EN)).not.toBeInTheDocument();
+    expect(readStoredAcceleration().keepReferenceLatents).toBe(false);
+  });
+
+  it("Keep reference latents reads the owner's Japanese wording in Japanese, and restores a stored ON", async () => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, "ja");
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepReferenceLatents: true }));
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const row = within(screen.getByRole("group", { name: "参照素材の潜在の常駐（MiniMax H3）" }));
+    expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByText(
+        "メインメモリ64GB以上を推奨。参照画像・参照動画・参照音声を符号化した結果をメインメモリに保持し、同じ参照素材を使う次の生成と、Chainedの後続クリップで符号化を省きます。生成結果は変わりません。",
+      ),
+    ).toBeInTheDocument();
   });
 
   // Ruling 107 (2026-11-23) / Sol-H3-VAE (2026-11-24): the "Fast VAE" row.

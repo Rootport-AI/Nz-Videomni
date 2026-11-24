@@ -356,6 +356,17 @@ export interface GenerateRequest {
    * LTX 2.3 / 2.5 publish `sol_vae` in `unsupported_features` and 422 a
    * `true`. Mirrored on {@link GenerateChainRequest}. */
   sol_vae?: boolean;
+  /** Acceleration (台帳 §1-297): keep reference latents resident — MiniMax H3
+   * only. Keeps the encoded reference pictures / videos / audio in main memory
+   * so the next generation with the same references (and the following clips
+   * of a Chained job) skip their encoding; the output does not change. Built
+   * exclusively by `shell/accelerationSettings.ts`'s
+   * `accelerationRequestFields` and spread in — omitted entirely while the
+   * server default (`false`) is selected, so this key only ever appears as
+   * `true`. LTX 2.3 / 2.5 publish `keep_reference_latents` in
+   * `unsupported_features` and 422 a `true`. Mirrored on
+   * {@link GenerateChainRequest}. */
+  keep_reference_latents?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
@@ -601,6 +612,11 @@ export interface GenerateChainRequest {
    * single builder, same "sent only as `true`" rule; it covers the chain's one
    * decode (Chained, V2V, Retake). */
   sol_vae?: boolean;
+  /** Keep reference latents resident (台帳 §1-297): mirrors
+   * {@link GenerateRequest.keep_reference_latents} — same single builder, same
+   * "sent only as `true`" rule; it lets the following clips reuse the encoded
+   * references. */
+  keep_reference_latents?: boolean;
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;

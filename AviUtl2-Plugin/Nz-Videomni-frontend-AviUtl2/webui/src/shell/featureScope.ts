@@ -56,6 +56,7 @@ export type UiTarget =
   | "settingsRow.keepResidentEmbeddings"
   | "settingsRow.vram16"
   | "settingsRow.fastVae"
+  | "settingsRow.keepReferenceLatents"
   | "settingsRow.fusedGgufDequantKernel"
   | "chainPanel.startImageStrength";
 
@@ -180,6 +181,10 @@ interface FeatureUiEntry {
  *    "Fast VAE", scoped like `vram16_mode` (MiniMax H3 only, so LTX 2.3 / 2.5
  *    publish both names). Either name closes the row (the table's
  *    disjunction), and each writes its own stored field back.
+ *  - **keep_reference_latents** (台帳 §1-297) is a Settings row with a
+ *    `resets`, scoped like `vram16_mode` (MiniMax H3 only, so LTX 2.3 / 2.5
+ *    publish the name). Its default is OFF, so the write-back lands on
+ *    `false` — which is what an LTX request then omits.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses
@@ -213,6 +218,10 @@ export const FEATURE_UI = {
   vram16_mode: { disables: ["settingsRow.vram16"], resets: "vram16Mode" },
   pi_h3: { disables: ["settingsRow.fastVae"], resets: "piH3" },
   sol_vae: { disables: ["settingsRow.fastVae"], resets: "solVae" },
+  keep_reference_latents: {
+    disables: ["settingsRow.keepReferenceLatents"],
+    resets: "keepReferenceLatents",
+  },
   fused_gguf_dequant_kernel: {
     disables: ["settingsRow.fusedGgufDequantKernel"],
     resets: "fusedGgufDequantKernel",
@@ -474,6 +483,9 @@ export interface SettingsRowsHidden {
   /** MiniMax H3's "Fast VAE" row (pi-H3 and Sol-H3-VAE) with its notes
    * (`pi_h3` or `sol_vae`). */
   fastVae: boolean;
+  /** MiniMax H3's "Keep reference latents resident" row and its ON-only note
+   * (`keep_reference_latents`). */
+  keepReferenceLatents: boolean;
   /** The Fused GGUF Dequantization Kernel row and its ON-only note
    * (`fused_gguf_dequant_kernel`). */
   fusedGgufDequantKernel: boolean;
@@ -495,6 +507,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     keepResidentEmbeddings: disabled.has("settingsRow.keepResidentEmbeddings"),
     vram16: disabled.has("settingsRow.vram16"),
     fastVae: disabled.has("settingsRow.fastVae"),
+    keepReferenceLatents: disabled.has("settingsRow.keepReferenceLatents"),
     fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };
 }

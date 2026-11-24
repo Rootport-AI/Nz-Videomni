@@ -534,6 +534,10 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // Sol-H3-VAE (2026-11-24): `sol_vae` likewise — last, after `pi_h3` as in
     // the server's REJECT_TABLE. Hides the same Settings row ("Fast VAE").
     "sol_vae",
+    // 台帳 §1-297: `keep_reference_latents` likewise — last, after `sol_vae` as
+    // in the server's REJECT_TABLE. Hides the Settings row; the chain refusal
+    // has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
+    "keep_reference_latents",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -611,6 +615,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "pi_h3",
     // Sol-H3-VAE: `sol_vae` — see the LTX23 entry above.
     "sol_vae",
+    // 台帳 §1-297: `keep_reference_latents` — see the LTX23 entry above.
+    "keep_reference_latents",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -763,6 +769,14 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // Sol-H3-VAE (MiniMax H3 only — both LTX engines declare `sol_vae`). Last,
   // like the real LTX `CHAIN_REJECT_TABLE` row; refused only when `true`.
   { field: "sol_vae", feature: "sol_vae", isSet: (v) => v === true },
+  // 台帳 §1-297: keep reference latents resident (MiniMax H3 only — both LTX
+  // engines declare `keep_reference_latents`). Last, like the real LTX
+  // `CHAIN_REJECT_TABLE` row; refused only when `true`.
+  {
+    field: "keep_reference_latents",
+    feature: "keep_reference_latents",
+    isSet: (v) => v === true,
+  },
 ];
 
 /** §1-120: a clip's `source_audio` shape check only (`audio_id` a non-empty
@@ -2081,6 +2095,24 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           },
         };
       }
+    }
+
+    // 台帳 §1-297: LTX engines refuse a `true` (the server's REJECT_TABLE row).
+    if (
+      req.keep_reference_latents === true &&
+      (MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("keep_reference_latents")
+    ) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "FEATURE_UNSUPPORTED",
+            message:
+              "'keep_reference_latents' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            detail: "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
+          },
+        },
+      };
     }
 
     jobCounter += 1;

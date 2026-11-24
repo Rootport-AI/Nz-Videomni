@@ -118,6 +118,16 @@ export interface SettingsPanelProps {
    * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the names and
    * hide this row (and its notes). */
   fastVaeUnsupported: boolean;
+  /** Acceleration (台帳 §1-297): "Keep reference latents resident" (MiniMax H3
+   * only). INDEPENDENT like the VRAM 16GB row — no `/status` capability flag
+   * and no relationship to any other row. */
+  onKeepReferenceLatentsChange: (value: boolean) => void;
+  /** Whether the LOADED base model's engine refuses `keep_reference_latents` —
+   * derived by `AppShell` from `GET /models`' `unsupported_features`, never
+   * from a base-model id. Same HIDE-don't-grey treatment as
+   * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the name and
+   * hide this row (and its note). */
+  keepReferenceLatentsUnsupported: boolean;
   /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
    * conditions written into their `comment` tag. Stored alongside the
    * acceleration choices (`acceleration.embedMp4Metadata`). */
@@ -174,6 +184,8 @@ export function SettingsPanel({
   vram16Unsupported,
   onFastVaeChange,
   fastVaeUnsupported,
+  onKeepReferenceLatentsChange,
+  keepReferenceLatentsUnsupported,
   onEmbedMp4MetadataChange,
   baseModelOptions,
   baseModelValue,
@@ -699,6 +711,44 @@ export function SettingsPanel({
               </div>
             </div>
             {acceleration.vram16Mode && <p className="field-hint">{strings.settings.accelVram16Note}</p>}
+          </>
+        )}
+
+        {/* Keep reference latents resident (台帳 §1-297) — MiniMax H3 only. Same
+            two-button shape as the VRAM 16GB row above, default OFF, with its
+            note shown only while ON (the main-memory cost is what the reader
+            needs in front of them at that moment; not an output warning).
+            HIDDEN OUTRIGHT, row and note under the ONE condition, on an engine
+            whose `unsupported_features` name `keep_reference_latents` (LTX 2.3 /
+            2.5). */}
+        {!keepReferenceLatentsUnsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelKeepReferenceLatentsLabel}</span>
+              <div
+                className="settings-lang-toggle"
+                role="group"
+                aria-label={strings.settings.accelKeepReferenceLatentsLabel}
+              >
+                {[
+                  { on: true, label: strings.settings.accelKeepReferenceLatentsOn },
+                  { on: false, label: strings.settings.accelKeepReferenceLatentsOff },
+                ].map(({ on, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`mode-tab${acceleration.keepReferenceLatents === on ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.keepReferenceLatents === on}
+                    onClick={() => onKeepReferenceLatentsChange(on)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {acceleration.keepReferenceLatents && (
+              <p className="field-hint">{strings.settings.accelKeepReferenceLatentsNote}</p>
+            )}
           </>
         )}
 

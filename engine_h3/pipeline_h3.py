@@ -101,7 +101,6 @@ inference tensor refuses; Docs/MULTI_ENGINE_DESIGN.md §5.8).
 from __future__ import annotations
 
 import gc
-import hashlib
 import logging
 import math
 import os
@@ -114,6 +113,7 @@ import torch
 
 import h3_format
 import sft_quant_format
+from engine.te_conditioning import tensor_sha256  # noqa: F401  (also used as pipeline_h3.tensor_sha256)
 from engine_h3 import ref_latent_cache as RC
 from engine_h3.constants import (
     ATTENTION_BACKENDS,
@@ -401,17 +401,6 @@ def text_conditioning_heads(requests, on: bool) -> set:
         if str(req.negative_prompt).strip():
             out.add(te_negative_key(req.negative_prompt)[0])
     return out
-
-
-def tensor_sha256(t: torch.Tensor) -> str:
-    """SHA-256 of a tensor's own bytes, without a copy: a CPU contiguous tensor is
-    viewed as the integer type of its element size (bf16 -> int16) and hashed in
-    place. Anything else is made CPU contiguous first, so its bytes are never misread."""
-    t = t.detach()
-    if t.device.type != "cpu" or not t.is_contiguous():
-        t = t.cpu().contiguous()
-    as_int = {1: torch.uint8, 2: torch.int16, 4: torch.int32, 8: torch.int64}[t.element_size()]
-    return hashlib.sha256(t.view(as_int).numpy()).hexdigest()
 
 
 @dataclass

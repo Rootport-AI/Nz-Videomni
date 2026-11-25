@@ -643,6 +643,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     piH3: "off",
     solVae: false,
     keepReferenceLatents: false,
+    keepTextConditioning: false,
     embedMp4Metadata: true,
   } as const;
 
@@ -689,6 +690,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       piH3: "off",
       solVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       embedMp4Metadata: true,
     } as const;
     const withDefaults = (engineFamily: string) =>

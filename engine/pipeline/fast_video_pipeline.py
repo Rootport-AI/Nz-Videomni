@@ -13,7 +13,15 @@ from engine.api_types import ImageConditioningInput
 from engine.gguf import dequant_triton
 from engine.pipeline.common import default_tiling_config, encode_video_output, video_chunks_number
 from engine.pipeline.utils import AudioOrNone, TilingConfigType, device_supports_fp8
-from engine.transformer.nag_service import NagParams, NagService, NagState, encode_negative
+from engine.ref_latent_cache import RefLatentCache
+from engine.te_conditioning import device_copy, host_copy, tensor_sha256
+from engine.transformer.nag_service import (
+    NagParams,
+    NagService,
+    NagState,
+    encode_negative,
+    negative_from_encoded,
+)
 from engine.transformer.sage_attention_service import SageAttentionService, SageState
 from engine.transformer.vsf_service import VsfParams, VsfService
 
@@ -67,6 +75,32 @@ def _set_conv3d_memory_format(module, fmt: torch.memory_format) -> int:
             m.to(memory_format=fmt)
             touched += 1
     return touched
+
+
+class _TextEncoderNotBuilt:
+    """What ``ledger.text_encoder()`` returns during a keep_text_conditioning
+    single generate whose every string is held (台帳 §1-299): the wheel's
+    ``DistilledPipeline.__call__`` still calls the builder, hands the result to
+    ``encode_text`` (our wrapper, which never touches it because every string
+    hits) and ``del``s it. Reading any attribute of it or calling it raises, so
+    a wheel that started to use the text encoder for anything else fails
+    loudly instead of running on a stand-in."""
+
+    def __getattr__(self, name: str):
+        raise RuntimeError(
+            f"the text encoder was not built for this job (every string's "
+            f"conditioning was held), but its attribute {name!r} was read"
+        )
+
+    def __call__(self, *args, **kwargs):
+        raise RuntimeError(
+            "the text encoder was not built for this job (every string's "
+            "conditioning was held), but it was called"
+        )
+
+
+def _text_encoder_not_built() -> _TextEncoderNotBuilt:
+    return _TextEncoderNotBuilt()
 
 
 class LTXFastVideoPipeline:
@@ -196,6 +230,24 @@ class LTXFastVideoPipeline:
         # (after block-swap), regardless of whether any job ever requests NAG —
         # install() itself is the zero-overhead-when-off gate.
         self._nag = NagState()
+
+        # ── Text encoder conditioning kept between jobs (keep_text_conditioning,
+        # 台帳 §1-299) ──────────────────────────────────────────────────────────
+        # Key ``(string, ())`` -> ``(video_cpu, audio_cpu, real_tokens, device)``:
+        # one entry per DISTINCT string, shared by positive and negative (both go
+        # through the same ``encode_text(te, prompts=[t])[0]``). Begun and ended
+        # by every entry point (an OFF job begins with an empty set: all go). The
+        # flag says "this job is ON"; it is set only by an entry point and always
+        # cleared in its finally, so ``warmup()`` (which calls _run_inference
+        # directly) never touches the cache. The notes are this job's per-string
+        # hit/miss and hashes, which become ``ltx23_record()``.
+        self._te_conditioning = RefLatentCache()
+        self._keep_text_conditioning_job = False
+        self._te_notes_positive: dict[str, tuple[str, dict[str, str]]] = {}
+        self._te_note_negative: tuple[str, dict[str, str]] | None = None
+        self._te_job_clips: list[str] | None = None
+        self._te_job_prompt: str = ""
+        self._ltx23_record: dict | None = None
 
         # ── Attention backend (sdpa / SageAttention) state ─────────────────────
         # Same lifetime rules as NagState above: one instance per pipeline,
@@ -1592,6 +1644,11 @@ class LTXFastVideoPipeline:
         # unmodified, and T2V (no images) gets the same empty list the wheel's
         # helper returns.
         _orig_replace = _distilled_mod.image_conditionings_by_replacing_latent
+        # keep_text_conditioning (台帳 §1-299): ``(ledger, builder, own)`` when
+        # this job swapped ``ledger.text_encoder`` for the not-built stand-in,
+        # restored in the finally. Stays None on every other job (an OFF job
+        # never reads or writes ``ledger.text_encoder``).
+        _te_restore = None
 
         # The try/finally starts here, ahead of the patch-application section
         # right below this comment: if any of the patch-building calls (e.g.
@@ -1703,7 +1760,20 @@ class LTXFastVideoPipeline:
             # encodes the negative prompt into NagState using the SAME live
             # text_encoder, exactly once, before returning the positive result
             # unchanged.
-            if self._nag.requested:
+            #
+            # keep_text_conditioning (台帳 §1-299), ON jobs only: encode_text is
+            # replaced by the cache wrapper (which also handles the negative, so
+            # the NAG wrapper is not installed). When every string of the job is
+            # already held, the wheel's ``ledger.text_encoder()`` is pointed at a
+            # stand-in that fails on any use, so the text encoder is never built;
+            # otherwise the wheel builds and frees the real one in its own order.
+            if self._keep_text_conditioning_job:
+                if self._te_all_held([prompt]):
+                    _ledger = self.pipeline.model_ledger
+                    _te_restore = (_ledger, _ledger.text_encoder, "text_encoder" in vars(_ledger))
+                    _ledger.text_encoder = _text_encoder_not_built  # type: ignore[method-assign]
+                _distilled_mod.encode_text = self._make_cached_encode_text()  # type: ignore[attr-defined]
+            elif self._nag.requested:
                 _distilled_mod.encode_text = self._make_nag_encode_text(_orig_encode)  # type: ignore[attr-defined]
 
             return self.pipeline(
@@ -1728,6 +1798,12 @@ class LTXFastVideoPipeline:
             _distilled_mod.euler_denoising_loop = _orig_euler
             _distilled_mod.image_conditionings_by_replacing_latent = _orig_replace  # type: ignore[attr-defined]
             _distilled_mod.encode_text = _orig_encode  # type: ignore[attr-defined]
+            if _te_restore is not None:
+                _ledger, _builder, _own = _te_restore
+                if _own:
+                    _ledger.text_encoder = _builder  # type: ignore[method-assign]
+                else:
+                    del _ledger.text_encoder
 
     def _make_nag_encode_text(self, orig):
         """Build the NAG-aware replacement for ``encode_text`` installed (only
@@ -1766,6 +1842,168 @@ class LTXFastVideoPipeline:
 
         return wrapped
 
+    # ── Text encoder conditioning kept between jobs (台帳 §1-299) ─────────────
+    def _begin_text_conditioning_job(
+        self,
+        keep: bool,
+        clip_prompts: list[str] | None,
+        prompt: str,
+        nag: NagParams | VsfParams | None,
+    ) -> None:
+        """Job start of the conditioning cache, called by every entry point
+        right after ``_set_vae_mode_job`` (before its try). An OFF job drops
+        everything held; an ON job drops what none of its strings (the clips'
+        and ``prompt`` — the single prompt or the chain's stage-2 prompt — plus
+        the negative when one is requested) would hit. Never raises."""
+        self._keep_text_conditioning_job = bool(keep)
+        self._te_notes_positive = {}
+        self._te_note_negative = None
+        self._te_job_clips = None if clip_prompts is None else list(clip_prompts)
+        self._te_job_prompt = prompt
+        self._ltx23_record = None
+        if not self._keep_text_conditioning_job:
+            self._te_conditioning.begin(set())
+            return
+        strings = {*(clip_prompts or []), prompt}
+        if nag is not None:
+            strings.add(nag.negative_prompt)
+        self._te_conditioning.begin(strings)
+
+    def _end_text_conditioning_job(self, ok: bool) -> None:
+        """Job end (the first thing in every entry point's finally): a job that
+        ended well keeps only what it used, a failed one drops only what it put.
+        The "this job is ON" flag is always cleared."""
+        try:
+            self._te_conditioning.end(ok)
+        finally:
+            self._keep_text_conditioning_job = False
+
+    def _finish_text_conditioning_record(self) -> None:
+        """Build ``ltx23_record()`` from this job's notes (ON jobs only; the
+        last statement of each entry point's try body)."""
+        if not self._keep_text_conditioning_job:
+            return
+        neg = self._te_note_negative
+        if self._te_job_clips is None:
+            pos = self._te_notes_positive[self._te_job_prompt]
+            te_cache: dict = {"positive": pos[0]}
+            sha: dict = {"positive": pos[1]}
+        else:
+            clips = [self._te_notes_positive[p] for p in self._te_job_clips]
+            stage2 = self._te_notes_positive[self._te_job_prompt]
+            te_cache = {"clips": [c[0] for c in clips], "stage2": stage2[0]}
+            sha = {"clips": [c[1] for c in clips], "stage2": stage2[1]}
+        if neg is not None:
+            te_cache["negative"] = neg[0]
+            sha["negative"] = neg[1]
+        self._ltx23_record = {"te_cache": te_cache, "conditioning_sha256": sha}
+
+    def ltx23_record(self) -> dict | None:
+        """The last keep_text_conditioning job's record for the worker's
+        ``done`` (``{"te_cache": ..., "conditioning_sha256": ...}``), or None
+        after an OFF job."""
+        return self._ltx23_record
+
+    def _te_all_held(self, prompts: list[str]) -> bool:
+        """Whether every string this job would encode (``prompts``, then the
+        negative when one is requested) is held."""
+        texts = list(prompts)
+        if self._nag.requested:
+            texts.append(self._nag.params.negative_prompt)
+        return all(self._te_conditioning.get((t, ())) is not None for t in texts)
+
+    def _make_cached_encode_text(self):
+        """The ``encode_text`` replacement a keep_text_conditioning single
+        generate installs over ``ltx_pipelines.distilled``'s module global: the
+        wheel's ``encode_text(text_encoder, prompts=[prompt])`` goes through
+        :meth:`_encode_conditioning` with the text encoder the wheel built (or
+        the not-built stand-in, never touched because every string hits). The
+        wheel frees the text encoder itself, in its own order."""
+
+        def wrapped(text_encoder: object, prompts: list[str]):
+            return self._encode_conditioning(list(prompts), lambda: text_encoder, release=False)
+
+        return wrapped
+
+    def _encode_conditioning(self, prompts: list[str], build, *, release: bool) -> list[tuple]:
+        """Encode a keep_text_conditioning job's strings through the cache.
+
+        ``prompts`` are the positive strings (distinct, in today's encode order);
+        the negative is taken from ``self._nag`` when NAG or VSF is requested,
+        last, as today. Each string in turn: held -> a fresh copy on its
+        original device; not held -> ``build()`` (once, on the first miss),
+        today's ``encode_text(te, prompts=[t])[0]``, whose GPU values go on
+        unchanged, and a main-memory copy plus the real token count are put.
+        The negative then goes through :func:`negative_from_encoded` (NAG: no
+        slice; VSF: sliced to the real tokens) into ``self._nag``.
+
+        ``encode_text`` is the unwrapped ``ltx_core`` function, never
+        ``ltx_pipelines.distilled.encode_text`` (that name may be this cache's
+        own wrapper during a single generate). ``release=True`` (chain,
+        outpaint, inpaint) frees a text encoder that was built, in today's
+        order. Returns one ``(video, audio)`` per entry of ``prompts``.
+        """
+        from ltx_core.text_encoders.gemma import encode_text
+
+        neg_params = self._nag.params if self._nag.requested else None
+        texts = list(prompts)
+        if neg_params is not None:
+            texts.append(neg_params.negative_prompt)
+
+        te = None
+        built = False
+        results: list[tuple] = []
+        for text in texts:
+            key = (text, ())
+            held = self._te_conditioning.get(key)
+            if held is not None:
+                video_cpu, audio_cpu, real_tokens, device = held
+                pair = device_copy((video_cpu, audio_cpu), device)
+                status = "hit"
+            else:
+                if not built:
+                    te = build()
+                    built = True
+                pair = encode_text(te, prompts=[text])[0]
+                video, audio = pair
+                # The count encode_negative makes for VSF, kept with the value so
+                # a later all-hit job (which builds no tokenizer) can slice too.
+                tokenizer = getattr(te, "tokenizer", None)
+                real_tokens = (
+                    None
+                    if tokenizer is None
+                    else int(sum(int(weight) for _token, weight in tokenizer.tokenize_with_weights(text)["gemma"]))
+                )
+                video_cpu, audio_cpu = host_copy((video, audio))
+                self._te_conditioning.put(key, (video_cpu, audio_cpu, real_tokens, video.device))
+                status = "miss"
+            note = (status, {"video": tensor_sha256(video_cpu), "audio": tensor_sha256(audio_cpu)})
+            results.append((pair, real_tokens, note))
+
+        if neg_params is not None:
+            (nvc, nac), real_tokens, note = results.pop()
+            vsf = isinstance(neg_params, VsfParams)
+            if vsf and real_tokens is None:
+                raise RuntimeError(
+                    "keep_text_conditioning (VSF): the text encoder has no "
+                    ".tokenizer, so the real token count cannot be determined. "
+                    "Slicing is a correctness requirement for VSF (see "
+                    "encode_negative's docstring), so this fails rather than "
+                    "silently sign-flipping the learned register embeddings."
+                )
+            self._nag.set_contexts(*negative_from_encoded(nvc, nac, real_tokens if vsf else None))
+            self._te_note_negative = note
+        for text, (_pair, _rt, note) in zip(prompts, results):
+            self._te_notes_positive.setdefault(text, note)
+
+        if release and built:
+            from ltx_pipelines.utils.helpers import cleanup_memory
+
+            torch.cuda.synchronize()
+            del te
+            cleanup_memory()
+        return [pair for pair, _rt, _note in results]
+
     @torch.inference_mode()
     def generate(
         self,
@@ -1795,6 +2033,7 @@ class LTXFastVideoPipeline:
         keep_resident: bool | None = None,
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
+        keep_text_conditioning: bool = False,
     ) -> None:
         # Per-job IC-LoRA resolution. ``None`` reverts to the create-time default
         # (for callers that supply loras at create()).
@@ -1845,7 +2084,11 @@ class LTXFastVideoPipeline:
         # registry を注入し直すので、_swap_registry との前後を問わない。
         # `Docs/PRUNAVAED_WORKORDER.md` §4.4）。
         self._set_vae_mode_job(vae_mode)
+        # Text encoder conditioning cache (台帳 §1-299): begun here, ended first
+        # thing in the finally. An OFF job drops everything held.
+        self._begin_text_conditioning_job(keep_text_conditioning, None, prompt, nag)
 
+        ok = False
         try:
             tiling_config = default_tiling_config(
                 spatial_tile_size=self._vae_spatial_tile_size,
@@ -1879,7 +2122,10 @@ class LTXFastVideoPipeline:
             torch.cuda.synchronize()
             del video, audio
             torch.cuda.empty_cache()
+            self._finish_text_conditioning_record()
+            ok = True
         finally:
+            self._end_text_conditioning_job(ok)
             # Resident-worker leak guard: NAG state must never survive past the
             # job that requested it (same reasoning as the IC-LoRA per-job reset
             # above, but NAG has no "revert to create-time default" concept, so
@@ -1933,6 +2179,7 @@ class LTXFastVideoPipeline:
         vae_mode: str = "default",
         *,
         stage2_prompt: str,
+        keep_text_conditioning: bool = False,
     ) -> dict:
         """Masked AV-latent clip chaining -> ONE continuous mp4.
 
@@ -2025,6 +2272,10 @@ class LTXFastVideoPipeline:
         different call site from the single-generate one, and both are reached
         only through the ledger builder this sets (``Docs/PRUNAVAED_WORKORDER.md``
         §8 E2). One setting covers every clip and every stage of the chain.
+
+        ``keep_text_conditioning`` (台帳 §1-299, additive): the whole chain is
+        ONE job of the conditioning cache (begun here, ended in the finally);
+        ``run_chain`` encodes through :meth:`_encode_conditioning` when it is on.
         """
         from engine.pipeline.chain_pipeline import run_chain
 
@@ -2036,9 +2287,13 @@ class LTXFastVideoPipeline:
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
         self._set_vae_mode_job(vae_mode)
+        self._begin_text_conditioning_job(
+            keep_text_conditioning, [c.prompt for c in clips], stage2_prompt, nag
+        )
 
+        ok = False
         try:
-            return run_chain(
+            meta = run_chain(
                 self,
                 clips=clips,
                 stage2_prompt=stage2_prompt,
@@ -2065,7 +2320,11 @@ class LTXFastVideoPipeline:
                 stage2_v_adv=stage2_v_adv,
                 nag=nag,
             )
+            self._finish_text_conditioning_record()
+            ok = True
+            return meta
         finally:
+            self._end_text_conditioning_job(ok)
             self._nag.reset()
             self._sage.reset()
             self._reset_block_swap_prefetch_job()
@@ -2098,6 +2357,7 @@ class LTXFastVideoPipeline:
         keep_resident: bool | None = None,
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
+        keep_text_conditioning: bool = False,
     ) -> dict:
         """Canvas extension (outpainting) -> ONE mp4.
 
@@ -2112,7 +2372,8 @@ class LTXFastVideoPipeline:
         armed here at the outermost entry point where its ``finally`` reset also
         lives. ``keep_resident`` deliberately has no reset — surviving the job is
         what the CPU-skeleton cache is for — and ``vae_mode`` needs none because
-        every job sets it afresh.
+        every job sets it afresh. ``keep_text_conditioning`` (台帳 §1-299) is
+        begun here and ended in the finally, like ``generate_chain``'s.
         """
         from engine.pipeline.outpaint_pipeline import run_outpaint
 
@@ -2124,9 +2385,11 @@ class LTXFastVideoPipeline:
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
         self._set_vae_mode_job(vae_mode)
+        self._begin_text_conditioning_job(keep_text_conditioning, None, prompt, nag)
 
+        ok = False
         try:
-            return run_outpaint(
+            meta = run_outpaint(
                 self,
                 prompt=prompt,
                 canvas_path=canvas_path,
@@ -2148,7 +2411,11 @@ class LTXFastVideoPipeline:
                 nag=nag,
                 progress=progress,
             )
+            self._finish_text_conditioning_record()
+            ok = True
+            return meta
         finally:
+            self._end_text_conditioning_job(ok)
             self._nag.reset()
             self._sage.reset()
             self._reset_block_swap_prefetch_job()
@@ -2182,6 +2449,7 @@ class LTXFastVideoPipeline:
         keep_resident: bool | None = None,
         fused_gguf_dequant_kernel: bool = False,
         vae_mode: str = "default",
+        keep_text_conditioning: bool = False,
     ) -> dict:
         """Masked partial regeneration (inpainting) -> ONE mp4.
 
@@ -2199,7 +2467,8 @@ class LTXFastVideoPipeline:
         armed here at the outermost entry point where its ``finally`` reset also
         lives, ``keep_resident`` deliberately has no reset — surviving the job
         is what the CPU-skeleton cache is for — and ``vae_mode`` needs none
-        because every job sets it afresh.
+        because every job sets it afresh. ``keep_text_conditioning`` (台帳 §1-299)
+        is begun here and ended in the finally, like ``generate_outpaint``'s.
         """
         from engine.pipeline.inpaint_pipeline import run_inpaint
 
@@ -2211,9 +2480,11 @@ class LTXFastVideoPipeline:
         if keep_resident is not None:
             self._set_keep_resident_job(keep_resident)
         self._set_vae_mode_job(vae_mode)
+        self._begin_text_conditioning_job(keep_text_conditioning, None, prompt, nag)
 
+        ok = False
         try:
-            return run_inpaint(
+            meta = run_inpaint(
                 self,
                 prompt=prompt,
                 canvas_path=canvas_path,
@@ -2236,7 +2507,11 @@ class LTXFastVideoPipeline:
                 nag=nag,
                 progress=progress,
             )
+            self._finish_text_conditioning_record()
+            ok = True
+            return meta
         finally:
+            self._end_text_conditioning_job(ok)
             self._nag.reset()
             self._sage.reset()
             self._reset_block_swap_prefetch_job()

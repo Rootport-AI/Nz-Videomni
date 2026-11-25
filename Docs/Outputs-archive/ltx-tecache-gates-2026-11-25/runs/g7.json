@@ -1,0 +1,1157 @@
+{
+  "gate": "g7",
+  "started": "2026-11-25T19:16:48",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "ON",
+      "args": {
+        "width": 1536,
+        "height": 896,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+        "outpaint_pad_left": 128,
+        "outpaint_pad_right": 128,
+        "outpaint_pad_top": 64,
+        "outpaint_pad_bottom": 64,
+        "outpaint_blend_dilation_stage1": 5
+      },
+      "job_id": "46b5350f-fd80-4460-8d13-b1bc399c29aa",
+      "submitted_at": "2026-11-25T19:16:49",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 175.4,
+      "summary": {
+        "mp4_sha256": "b7f8ded132e18a93033083f8f32f91d3194a88f858b0928bcef38c85fa41b313",
+        "mp4_size": 2801305,
+        "mp4_rel": "outputs/46b5350f-fd80-4460-8d13-b1bc399c29aa/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 170.59,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2,
+          "freeze_source_audio": true,
+          "source_video_id": null,
+          "audio_strength": null
+        },
+        "request_inpaint": null,
+        "request_loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0,
+            "audio_strength": null
+          }
+        ],
+        "request_num_frames": 121,
+        "request_prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "request_size": [
+          1536,
+          896
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [
+          "ltx25.te_cache"
+        ],
+        "csha_paths": [
+          "ltx25.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.reference_frames",
+            121
+          ],
+          [
+            "ltx25.pixel_chunk_frames",
+            8
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            23.16
+          ],
+          [
+            "ltx25.phases.10a_te_build.rss_gib",
+            8.48
+          ],
+          [
+            "ltx25.phases.10b_ep_build.rss_gib",
+            7.29
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            7.48
+          ],
+          [
+            "ltx25.phases.12_audio_conditioning.rss_gib",
+            7.58
+          ],
+          [
+            "ltx25.phases.11_reference_encode.rss_gib",
+            7.92
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise.rss_gib",
+            19.68
+          ],
+          [
+            "ltx25.phases.24_stage1_decode.rss_gib",
+            19.69
+          ],
+          [
+            "ltx25.phases.25_blend1.rss_gib",
+            19.75
+          ],
+          [
+            "ltx25.phases.26_pixel_upscale.rss_gib",
+            19.94
+          ],
+          [
+            "ltx25.phases.27_stage2_encode.rss_gib",
+            22.68
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise.rss_gib",
+            22.7
+          ],
+          [
+            "ltx25.phases.28_stage2_decode.rss_gib",
+            22.74
+          ],
+          [
+            "ltx25.phases.29_blend2.rss_gib",
+            23.16
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            23.16
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            23.16
+          ]
+        ],
+        "ltx25_te_cache": "miss",
+        "ltx25_csha": [
+          {
+            "video": "eb2394f4232aba1db0b85f4b5fa51470acbcfbef831c225191dba853be4f9f7f",
+            "audio": "527aaddce970802fec6ac206f100935719f2b513a2189cfd8b3abb33d8388935",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          }
+        ],
+        "ltx25_phases": {
+          "10a_te_build": {
+            "seconds": 8.96,
+            "rss_gib": 8.48,
+            "peak_allocated_gib": 1.973,
+            "peak_reserved_gib": 1.994,
+            "current_allocated_gib": 1.973
+          },
+          "10b_ep_build": {
+            "seconds": 5.27,
+            "rss_gib": 7.29,
+            "peak_allocated_gib": 5.01,
+            "peak_reserved_gib": 5.203,
+            "current_allocated_gib": 5.01
+          },
+          "10_prompt_encode": {
+            "seconds": 18.97,
+            "rss_gib": 7.48,
+            "peak_allocated_gib": 6.789,
+            "peak_reserved_gib": 7.012,
+            "current_allocated_gib": 0.021
+          },
+          "12_audio_conditioning": {
+            "seconds": 0.5,
+            "rss_gib": 7.58,
+            "peak_allocated_gib": 0.118,
+            "peak_reserved_gib": 0.854,
+            "current_allocated_gib": 0.022
+          },
+          "11_reference_encode": {
+            "seconds": 2.99,
+            "rss_gib": 7.92,
+            "peak_allocated_gib": 3.036,
+            "peak_reserved_gib": 3.529,
+            "current_allocated_gib": 0.616
+          },
+          "21_stage1_denoise": {
+            "seconds": 63.2,
+            "rss_gib": 19.68,
+            "peak_allocated_gib": 5.237,
+            "peak_reserved_gib": 5.988,
+            "current_allocated_gib": 0.026
+          },
+          "24_stage1_decode": {
+            "seconds": 3.23,
+            "rss_gib": 19.69,
+            "peak_allocated_gib": 2.2,
+            "peak_reserved_gib": 3.123,
+            "current_allocated_gib": 0.022
+          },
+          "25_blend1": {
+            "seconds": 0.52,
+            "rss_gib": 19.75,
+            "peak_allocated_gib": 0.543,
+            "peak_reserved_gib": 0.676,
+            "current_allocated_gib": 0.021
+          },
+          "26_pixel_upscale": {
+            "seconds": 0.11,
+            "rss_gib": 19.94,
+            "peak_allocated_gib": 0.39,
+            "peak_reserved_gib": 0.617,
+            "current_allocated_gib": 0.021
+          },
+          "27_stage2_encode": {
+            "seconds": 14.24,
+            "rss_gib": 22.68,
+            "peak_allocated_gib": 3.04,
+            "peak_reserved_gib": 3.529,
+            "current_allocated_gib": 0.026
+          },
+          "22_stage2_denoise": {
+            "seconds": 28.72,
+            "rss_gib": 22.7,
+            "peak_allocated_gib": 7.574,
+            "peak_reserved_gib": 8.857,
+            "current_allocated_gib": 0.037
+          },
+          "28_stage2_decode": {
+            "seconds": 11.73,
+            "rss_gib": 22.74,
+            "peak_allocated_gib": 3.592,
+            "peak_reserved_gib": 7.812,
+            "current_allocated_gib": 0.026
+          },
+          "29_blend2": {
+            "seconds": 7.79,
+            "rss_gib": 23.16,
+            "peak_allocated_gib": 2.106,
+            "peak_reserved_gib": 2.5,
+            "current_allocated_gib": 0.021
+          },
+          "30_decode_encode": {
+            "seconds": 1.1,
+            "rss_gib": 23.16,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.25,
+            "current_allocated_gib": 0.021
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 23.16,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.25,
+            "current_allocated_gib": 0.021
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 18.97,
+            "rss_gib": 7.48,
+            "peak_allocated_gib": 6.789,
+            "peak_reserved_gib": 7.012,
+            "current_allocated_gib": 0.021
+          },
+          "10a_te_build": {
+            "seconds": 8.96,
+            "rss_gib": 8.48,
+            "peak_allocated_gib": 1.973,
+            "peak_reserved_gib": 1.994,
+            "current_allocated_gib": 1.973
+          },
+          "10b_ep_build": {
+            "seconds": 5.27,
+            "rss_gib": 7.29,
+            "peak_allocated_gib": 5.01,
+            "peak_reserved_gib": 5.203,
+            "current_allocated_gib": 5.01
+          }
+        },
+        "held": {
+          "bundles": 1,
+          "entries": 1,
+          "bytes": 12591104
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1536,
+            "height": 896,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.013000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "ON (same)",
+      "args": {
+        "width": 1536,
+        "height": 896,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+        "outpaint_pad_left": 128,
+        "outpaint_pad_right": 128,
+        "outpaint_pad_top": 64,
+        "outpaint_pad_bottom": 64,
+        "outpaint_blend_dilation_stage1": 5
+      },
+      "job_id": "e5640d8f-42ad-44c6-b92d-3bd49190fa4f",
+      "submitted_at": "2026-11-25T19:19:45",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 140.4,
+      "summary": {
+        "mp4_sha256": "b7f8ded132e18a93033083f8f32f91d3194a88f858b0928bcef38c85fa41b313",
+        "mp4_size": 2801305,
+        "mp4_rel": "outputs/e5640d8f-42ad-44c6-b92d-3bd49190fa4f/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 135.34,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2,
+          "freeze_source_audio": true,
+          "source_video_id": null,
+          "audio_strength": null
+        },
+        "request_inpaint": null,
+        "request_loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0,
+            "audio_strength": null
+          }
+        ],
+        "request_num_frames": 121,
+        "request_prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "request_size": [
+          1536,
+          896
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [
+          "ltx25.te_cache"
+        ],
+        "csha_paths": [
+          "ltx25.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.reference_frames",
+            121
+          ],
+          [
+            "ltx25.pixel_chunk_frames",
+            8
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            23.22
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            21.94
+          ],
+          [
+            "ltx25.phases.12_audio_conditioning.rss_gib",
+            21.94
+          ],
+          [
+            "ltx25.phases.11_reference_encode.rss_gib",
+            21.96
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.24_stage1_decode.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.25_blend1.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.26_pixel_upscale.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.27_stage2_encode.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.28_stage2_decode.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.29_blend2.rss_gib",
+            23.22
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            23.19
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            23.19
+          ]
+        ],
+        "ltx25_te_cache": "hit",
+        "ltx25_csha": [
+          {
+            "video": "eb2394f4232aba1db0b85f4b5fa51470acbcfbef831c225191dba853be4f9f7f",
+            "audio": "527aaddce970802fec6ac206f100935719f2b513a2189cfd8b3abb33d8388935",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          }
+        ],
+        "ltx25_phases": {
+          "10_prompt_encode": {
+            "seconds": 0.01,
+            "rss_gib": 21.94,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.248,
+            "current_allocated_gib": 0.021
+          },
+          "12_audio_conditioning": {
+            "seconds": 0.18,
+            "rss_gib": 21.94,
+            "peak_allocated_gib": 0.119,
+            "peak_reserved_gib": 0.252,
+            "current_allocated_gib": 0.022
+          },
+          "11_reference_encode": {
+            "seconds": 2.98,
+            "rss_gib": 21.96,
+            "peak_allocated_gib": 3.039,
+            "peak_reserved_gib": 3.508,
+            "current_allocated_gib": 0.619
+          },
+          "21_stage1_denoise": {
+            "seconds": 49.58,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 5.235,
+            "peak_reserved_gib": 5.99,
+            "current_allocated_gib": 0.026
+          },
+          "24_stage1_decode": {
+            "seconds": 2.82,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 2.201,
+            "peak_reserved_gib": 3.104,
+            "current_allocated_gib": 0.023
+          },
+          "25_blend1": {
+            "seconds": 0.51,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 0.543,
+            "peak_reserved_gib": 0.643,
+            "current_allocated_gib": 0.021
+          },
+          "26_pixel_upscale": {
+            "seconds": 0.11,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 0.39,
+            "peak_reserved_gib": 0.506,
+            "current_allocated_gib": 0.021
+          },
+          "27_stage2_encode": {
+            "seconds": 13.57,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 3.042,
+            "peak_reserved_gib": 3.506,
+            "current_allocated_gib": 0.026
+          },
+          "22_stage2_denoise": {
+            "seconds": 27.91,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 7.572,
+            "peak_reserved_gib": 8.844,
+            "current_allocated_gib": 0.037
+          },
+          "28_stage2_decode": {
+            "seconds": 11.69,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 3.592,
+            "peak_reserved_gib": 7.805,
+            "current_allocated_gib": 0.026
+          },
+          "29_blend2": {
+            "seconds": 7.71,
+            "rss_gib": 23.22,
+            "peak_allocated_gib": 2.106,
+            "peak_reserved_gib": 2.389,
+            "current_allocated_gib": 0.021
+          },
+          "30_decode_encode": {
+            "seconds": 1.11,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.139,
+            "current_allocated_gib": 0.021
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 23.19,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.139,
+            "current_allocated_gib": 0.021
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 0.01,
+            "rss_gib": 21.94,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.248,
+            "current_allocated_gib": 0.021
+          },
+          "10a_te_build": null,
+          "10b_ep_build": null
+        },
+        "held": {
+          "bundles": 1,
+          "entries": 1,
+          "bytes": 12591104
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1536,
+            "height": 896,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.013000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "OFF",
+      "args": {
+        "width": 1536,
+        "height": 896,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": false,
+        "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+        "outpaint_pad_left": 128,
+        "outpaint_pad_right": 128,
+        "outpaint_pad_top": 64,
+        "outpaint_pad_bottom": 64,
+        "outpaint_blend_dilation_stage1": 5
+      },
+      "job_id": "c3902ec2-98aa-4356-8361-c83d5a9d18cd",
+      "submitted_at": "2026-11-25T19:22:06",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 155.4,
+      "summary": {
+        "mp4_sha256": "b7f8ded132e18a93033083f8f32f91d3194a88f858b0928bcef38c85fa41b313",
+        "mp4_size": 2801305,
+        "mp4_rel": "outputs/c3902ec2-98aa-4356-8361-c83d5a9d18cd/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 150.13,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2,
+          "freeze_source_audio": true,
+          "source_video_id": null,
+          "audio_strength": null
+        },
+        "request_inpaint": null,
+        "request_loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0,
+            "audio_strength": null
+          }
+        ],
+        "request_num_frames": 121,
+        "request_prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "request_size": [
+          1536,
+          896
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.reference_frames",
+            121
+          ],
+          [
+            "ltx25.pixel_chunk_frames",
+            8
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            29.55
+          ],
+          [
+            "ltx25.phases.10a_te_build.rss_gib",
+            29.55
+          ],
+          [
+            "ltx25.phases.10b_ep_build.rss_gib",
+            24.7
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            24.7
+          ],
+          [
+            "ltx25.phases.12_audio_conditioning.rss_gib",
+            24.68
+          ],
+          [
+            "ltx25.phases.11_reference_encode.rss_gib",
+            24.72
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise.rss_gib",
+            25.93
+          ],
+          [
+            "ltx25.phases.24_stage1_decode.rss_gib",
+            25.93
+          ],
+          [
+            "ltx25.phases.25_blend1.rss_gib",
+            25.92
+          ],
+          [
+            "ltx25.phases.26_pixel_upscale.rss_gib",
+            25.92
+          ],
+          [
+            "ltx25.phases.27_stage2_encode.rss_gib",
+            25.92
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise.rss_gib",
+            25.92
+          ],
+          [
+            "ltx25.phases.28_stage2_decode.rss_gib",
+            25.92
+          ],
+          [
+            "ltx25.phases.29_blend2.rss_gib",
+            25.96
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            25.91
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            25.91
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": {
+          "10a_te_build": {
+            "seconds": 6.57,
+            "rss_gib": 29.55,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.012,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 5.85,
+            "rss_gib": 24.7,
+            "peak_allocated_gib": 5.015,
+            "peak_reserved_gib": 5.236,
+            "current_allocated_gib": 5.015
+          },
+          "10_prompt_encode": {
+            "seconds": 15.41,
+            "rss_gib": 24.7,
+            "peak_allocated_gib": 6.452,
+            "peak_reserved_gib": 6.682,
+            "current_allocated_gib": 0.021
+          },
+          "12_audio_conditioning": {
+            "seconds": 0.18,
+            "rss_gib": 24.68,
+            "peak_allocated_gib": 0.118,
+            "peak_reserved_gib": 1.338,
+            "current_allocated_gib": 0.022
+          },
+          "11_reference_encode": {
+            "seconds": 2.91,
+            "rss_gib": 24.72,
+            "peak_allocated_gib": 3.036,
+            "peak_reserved_gib": 3.514,
+            "current_allocated_gib": 0.617
+          },
+          "21_stage1_denoise": {
+            "seconds": 49.53,
+            "rss_gib": 25.93,
+            "peak_allocated_gib": 5.236,
+            "peak_reserved_gib": 5.988,
+            "current_allocated_gib": 0.025
+          },
+          "24_stage1_decode": {
+            "seconds": 2.81,
+            "rss_gib": 25.93,
+            "peak_allocated_gib": 2.2,
+            "peak_reserved_gib": 3.193,
+            "current_allocated_gib": 0.022
+          },
+          "25_blend1": {
+            "seconds": 0.47,
+            "rss_gib": 25.92,
+            "peak_allocated_gib": 0.544,
+            "peak_reserved_gib": 0.688,
+            "current_allocated_gib": 0.021
+          },
+          "26_pixel_upscale": {
+            "seconds": 0.1,
+            "rss_gib": 25.92,
+            "peak_allocated_gib": 0.39,
+            "peak_reserved_gib": 0.619,
+            "current_allocated_gib": 0.021
+          },
+          "27_stage2_encode": {
+            "seconds": 13.54,
+            "rss_gib": 25.92,
+            "peak_allocated_gib": 3.041,
+            "peak_reserved_gib": 3.514,
+            "current_allocated_gib": 0.026
+          },
+          "22_stage2_denoise": {
+            "seconds": 27.92,
+            "rss_gib": 25.92,
+            "peak_allocated_gib": 7.572,
+            "peak_reserved_gib": 8.84,
+            "current_allocated_gib": 0.037
+          },
+          "28_stage2_decode": {
+            "seconds": 11.69,
+            "rss_gib": 25.92,
+            "peak_allocated_gib": 3.592,
+            "peak_reserved_gib": 7.914,
+            "current_allocated_gib": 0.026
+          },
+          "29_blend2": {
+            "seconds": 7.77,
+            "rss_gib": 25.96,
+            "peak_allocated_gib": 2.105,
+            "peak_reserved_gib": 2.5,
+            "current_allocated_gib": 0.021
+          },
+          "30_decode_encode": {
+            "seconds": 1.06,
+            "rss_gib": 25.91,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.498,
+            "current_allocated_gib": 0.021
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 25.91,
+            "peak_allocated_gib": 0.021,
+            "peak_reserved_gib": 0.498,
+            "current_allocated_gib": 0.021
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 15.41,
+            "rss_gib": 24.7,
+            "peak_allocated_gib": 6.452,
+            "peak_reserved_gib": 6.682,
+            "current_allocated_gib": 0.021
+          },
+          "10a_te_build": {
+            "seconds": 6.57,
+            "rss_gib": 29.55,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.012,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 5.85,
+            "rss_gib": 24.7,
+            "peak_allocated_gib": 5.015,
+            "peak_reserved_gib": 5.236,
+            "current_allocated_gib": 5.015
+          }
+        },
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1536,
+            "height": 896,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.013000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 3,
+    "at": [
+      "2026-11-25T19:18:04",
+      "2026-11-25T19:21:40",
+      "2026-11-25T19:22:51"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T19:16:48"
+  ],
+  "pre": {
+    "active_base_model": "LTX25",
+    "transformer_active": "default",
+    "categories_active": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "LTX25",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 6,
+        "failed": 0
+      }
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T19:24:41",
+  "gate_pass": true
+}

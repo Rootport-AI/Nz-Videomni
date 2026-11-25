@@ -759,7 +759,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 生成の高速化（Acceleration）
 
-生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。さらに、MiniMax H3 専用の **参照素材の潜在の常駐** の行が、AviUtl2 の操作パネルの Settings にだけあります（Gradio UI にはありません。下の「[参照素材の潜在の常駐](#keep-reference-latents)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
+生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。さらに、MiniMax H3 専用の **参照素材の潜在の常駐** と、3 つのベースモデルで使える **テキストエンコーダーの条件付けのキャッシュ** の 2 つの行が、AviUtl2 の操作パネルの Settings にだけあります（Gradio UI にはありません。下の「[参照素材の潜在の常駐](#keep-reference-latents)」と「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
 |------|--------|------------------|------------------|---------------------|
@@ -773,6 +773,7 @@ $env:PYTHONPATH = (Get-Location).Path
 | pi-H3（少ないステップの生成。Gradio UI では Generate タブの単発だけ） | off / 4steps / 2steps（両方の UI とも「Fast VAE」の行の pi-H3_4s・pi-H3_2s） | **この項目はありません**。行は見えません。API へ off 以外を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ off 以外を指定すると **422** | **実装済み**。既定は off（中身は下の「[pi-H3](#pi-h3)」） |
 | Sol-H3-VAE（軽量化した映像の復元処理。Gradio UI では Generate タブの単発だけ） | off / on（両方の UI とも「Fast VAE」の行の Sol） | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[Sol-H3-VAE](#sol-h3-vae)」） |
 | 参照素材の潜在の常駐（keep_reference_latents。AviUtl2 の操作パネルだけ） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[参照素材の潜在の常駐](#keep-reference-latents)」） |
+| テキストエンコーダーの条件付けのキャッシュ（keep_text_conditioning。AviUtl2 の操作パネルだけ） | On / Off | **実装済み**。既定は off。プロンプトの文字列ごとに使い回す | **実装済み**。既定は off。そのジョブのプロンプトの全部（ネガティブプロンプトと Chained の全クリップを含む）が前回と同じときだけ使い回す | **実装済み**。既定は off（中身は下の「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」） |
 
 **GGUF逆量子化の1カーネル化と先読み block swap を LTX 2.5 で併用したときの生成時間は、実測で 102.86 秒 → 39.28 秒＝61.8%短縮です。** 出力そのものは変わらず、**固定の検証用ジョブ17本すべてで動画のファイルが1バイトも変わっていない**ことを確認しています。残る PrunaVAED だけは LTX 2.5 で **422** で断られます——利用者が意図して on にしたときだけ付くものなので、効かないまま黙って通すより断ったほうが親切だという判断です（詳しくは §7.1 と [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §75・§76・§77）。
 
@@ -924,7 +925,7 @@ MiniMax H3 の生成の最後に、内部表現から映像のフレームを作
 
 MiniMax H3 の参照素材（Reference の参照画像・参照動画・参照音声）を、モデルが扱う内部表現（潜在）に変換した結果をメインメモリに残し、同じ参照素材を使う次の生成と、Chained の後続クリップで、その変換を省いて速くする高速化です。**生成結果は変わりません。** **既定は off です。**
 
-- **効く場面**: Single で同じ参照素材のまま生成を繰り返すとき、Chained で同じ参照素材を複数のクリップに使うとき（「後続クリップにも同じ参照素材を使う」を入れたときなど）。参照動画の変換は時間がかかるので、参照動画で特に効きます。省けるのは変換の段だけで、参照素材の読み込みと、プロンプトを読み取る段（テキストエンコーダー）は毎回行います。
+- **効く場面**: Single で同じ参照素材のまま生成を繰り返すとき、Chained で同じ参照素材を複数のクリップに使うとき（「後続クリップにも同じ参照素材を使う」を入れたときなど）。参照動画の変換は時間がかかるので、参照動画で特に効きます。省けるのは変換の段だけで、参照素材の読み込みと、プロンプトを読み取る段（テキストエンコーダー）は毎回行います（テキストエンコーダーの段は、別の項目「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」で省けます。2 つは同時に on にできます）。
 - **メインメモリ 64GB 以上を推奨します。**
 - **同じ参照素材とみなす条件**: 同じアップロードのファイル（場所・大きさ・更新時刻が同じ）で、実際に変換する範囲（画像は縮小したあとの大きさ、動画は実際に使うフレーム数、音声は実際に使う長さ）も同じときだけ使い回します。違えば変換し直します。Chained の各カードに同じファイルを別々に入れた場合は、別の素材として扱います。
 - **残しておく分**: 直前の生成で使った参照素材の分だけです。参照素材を使わない生成（Edit タブでの生成を含む）や、この項目を off にした生成をすると、残していた分はすべて消えます。生成の失敗で、その生成で新しく変換した分は捨てます。生成しないあいだは残ったままです。
@@ -936,6 +937,30 @@ MiniMax H3 の参照素材（Reference の参照画像・参照動画・参照�
 > **⚠ 手でファイルを差し替えたとき**: アップロード済みのファイル（`uploads` フォルダーの中）を、手で同じ名前の別のファイルに置き換えると、古い変換結果が使われることがあります。そのときは、この項目を off にして 1 回生成するか、素材を入れ直してください。
 >
 > 設計の判断の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) の裁定 110 と §6.9 です。
+
+### <a id="keep-text-conditioning"></a>テキストエンコーダーの条件付けのキャッシュ（テキストエンコーダーの出力の使い回し・`keep_text_conditioning`）
+
+テキストエンコーダー（プロンプトや参照素材を読み取って、モデルが扱う内部表現〔条件付け〕にする段）の出力をメインメモリに残し、入力が前回と同じ次の生成と、Chained のクリップで、その段を省いて速くする高速化です。**MiniMax H3・LTX 2.3・LTX 2.5 の 3 つのベースモデルで効きます。** **生成結果は変わりません。** **既定は off です。**
+
+- **効く場面**: Single で同じプロンプト（と素材）のまま生成を繰り返すとき（seed や LoRA やステップ数だけを変えるときなど。LTX では解像度やフレーム数を変えても効きます）、Chained で同じ内容のクリップを含む生成を繰り返すとき。どのベースモデルで何が当たるかの表は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §6.10 の「使い分けの表」です。
+- **ベースモデルによる違い**:
+  - **MiniMax H3 と LTX 2.3**: ポジティブプロンプトとネガティブプロンプトを別々に残します。ポジティブプロンプトだけを変えたときは、ネガティブプロンプトの分を使い回します（逆も同じ）。Chained では、クリップごとに使い回します（一部のクリップのプロンプトだけを直して流し直すときも、残りのクリップの分は使い回します）。
+  - **LTX 2.5**: そのジョブのプロンプトの全部（ネガティブプロンプトと、Chained の全クリップのプロンプトを含む）が前回と同じときだけ使い回します。どれか 1 つでも変えると、全部を作り直します（LTX 2.5 では、まとめて読み取るプロンプトの本数が変わると読み取った結果がわずかに変わるため。もともとこの段は短めです）。
+- **同じ入力とみなす条件**: テキストエンコーダーが実際に読むものが同じときだけ使い回します。LTX が読むのはプロンプトの文字列（前後の空白も含めてそのまま）だけです。MiniMax H3 のポジティブ側はプロンプトの文字列（前後の空白も含めてそのまま）・参照素材（同じアップロードのファイルで、画像は縮小したあとの大きさ、動画は実際に読み込んだフレーム数も同じ。音声は中身を読まないので、番号が同じなら中身を変えても同じとみなします）・開始と終了のフレームの画像（参照素材の無いジョブだけ。そのときの解像度も含む）、ネガティブ側は文字列だけです。seed・LoRA・ステップ数・shift・VRAM 16GB mode・重みの種類（FL2VA／Ref2VA）・pi-H3・Sol は効きません。
+- **残しておく分**: 直前の生成で使った分だけです。この項目を off にした生成をすると、残していた分はすべて消えます。生成の失敗で、その生成で新しく残した分は捨てます。件数や大きさの上限はありません。
+- **メインメモリ**: **メインメモリ 64GB 以上を推奨します**（キャッシュをメインメモリに置くため）。LTX は 1 件 約 13MB です（プロンプトの長さによらず一定）。MiniMax H3 は、プロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB になることがあります。Chained ではクリップごとに持ちます（実測と見積もりは [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §235〔MiniMax H3〕・§236〔LTX〕）。
+- **ほかの項目との関係**: 「参照素材の潜在の常駐」（MiniMax H3 専用）とは別の項目で、同時に on にできます。モデルの重みの常駐（`keep_resident`）とも別です。
+- **AviUtl2 の操作パネル**: Settings の「生成の高速化」の最後にある「テキストエンコーダーの条件付けのキャッシュ」の ON / OFF で選びます。3 つのベースモデルで共通の 1 行で、ベースモデルを切り替えても、行と ON / OFF の選択はそのまま残ります。ON のあいだ、行の下に注意書きが出ます。選んだ内容は保存されます。
+- **Gradio UI**: この項目はありません。
+- **MCP**: `submit_generate` と `submit_chain` の引数 `keep_text_conditioning`（`True` / `False`〔既定〕）で選びます。
+- **API**: `POST /generate` と `POST /generate/chain` の `keep_text_conditioning` です（LTX 2.5 の Alpha Gen の `POST /generate/alpha` でも受けます。正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2・§6.2b (l)）。使い回したかどうかは、メタデータの次の欄で分かります（`"hit"` が使い回し、`"miss"` がテキストエンコーダーに通して残した。この項目を on にした生成にだけ入ります）。
+  - MiniMax H3: `h3.phases.encode.te_cache`（Chained はクリップごとの `h3.phases.clips[i].encode.te_cache`）
+  - LTX 2.3: `ltx23.te_cache`（Chained はクリップごとの `ltx23.te_cache.clips`）
+  - LTX 2.5: `ltx25.te_cache`（Chained も 1 つ）
+
+> **⚠ 手でファイルを差し替えたとき（MiniMax H3）**: アップロード済みのファイル（`uploads` フォルダーの中）を、手で同じ名前の別のファイルに置き換えると、古い出力が使われることがあります。そのときは、この項目を off にして 1 回生成するか、素材を入れ直してください。
+>
+> 設計の判断の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) の裁定 111・裁定 112 と §6.10、LTX の仕組みの正本は [`Docs/MULTI_ENGINE_DESIGN.md`](Docs/MULTI_ENGINE_DESIGN.md) §5.9 です。
 
 ---
 
@@ -1210,8 +1235,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイル（動画ファイルの音声トラックも可）をアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents` に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない）。MiniMax H3 では参照素材からの生成（Ref2VA）の `references`（`upload_image`・`upload_video`・`upload_audio` で上げた ID と、プロンプトの札 `<Picture 1>` などの番号）も指定できる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（`submit_chain` には `vram16_mode` の引数を置いていないため。MiniMax H3 の連結は既定の on で動く）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents`、MiniMax H3 のステップ数と shift（`num_inference_steps`・`shift_video`・`shift_audio`。連結全体に 1 つの値で、省略すると既定値）に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる。MiniMax H3 では各クリップの参照素材（`clips[i].references`。形は `submit_generate` と同じ）も指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents`、3 つのベースモデルで使える `keep_text_conditioning` に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない）。MiniMax H3 では参照素材からの生成（Ref2VA）の `references`（`upload_image`・`upload_video`・`upload_audio` で上げた ID と、プロンプトの札 `<Picture 1>` などの番号）も指定できる |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（`submit_chain` には `vram16_mode` の引数を置いていないため。MiniMax H3 の連結は既定の on で動く）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents`、3 つのベースモデルで使える `keep_text_conditioning`、MiniMax H3 のステップ数と shift（`num_inference_steps`・`shift_video`・`shift_audio`。連結全体に 1 つの値で、省略すると既定値）に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる。MiniMax H3 では各クリップの参照素材（`clips[i].references`。形は `submit_generate` と同じ）も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
@@ -1258,7 +1283,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。**MiniMax H3 専用の `pi_h3`（`submit_generate` と `submit_chain` の両方）は、`"off"` 以外を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使われたかはメタデータの `pi_h3_used` に記録されます。**MiniMax H3 専用の `sol_vae`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 実際に使われたか、通常の VAE に切り替わったかは、メタデータの `sol_vae_used`（`"on"` / `"on->off"`）に記録されます。**MiniMax H3 専用の `keep_reference_latents`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使い回したかは、メタデータの参照ごとの `latent_cache` に記録されます（§5「[参照素材の潜在の常駐](#keep-reference-latents)」）。
+- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。**MiniMax H3 専用の `pi_h3`（`submit_generate` と `submit_chain` の両方）は、`"off"` 以外を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使われたかはメタデータの `pi_h3_used` に記録されます。**MiniMax H3 専用の `sol_vae`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 実際に使われたか、通常の VAE に切り替わったかは、メタデータの `sol_vae_used`（`"on"` / `"on->off"`）に記録されます。**MiniMax H3 専用の `keep_reference_latents`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使い回したかは、メタデータの参照ごとの `latent_cache` に記録されます（§5「[参照素材の潜在の常駐](#keep-reference-latents)」）。**`keep_text_conditioning`（`submit_generate` と `submit_chain` の両方）は、MiniMax H3・LTX 2.3・LTX 2.5 のどれでも使えます。** 使い回したかは、メタデータの `h3.phases.encode.te_cache`（MiniMax H3。Chained はクリップごと）、`ltx23.te_cache`（LTX 2.3）、`ltx25.te_cache`（LTX 2.5）に記録されます（§5「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」）。
 - **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---

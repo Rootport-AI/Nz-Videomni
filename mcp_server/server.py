@@ -57,6 +57,15 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   ときだけ。違えば符号化し直します。生成結果は変わりません。
   メインメモリ 64GB 以上を推奨。参照の無いジョブや false のジョブが来ると、
   保持した分は消えます）。
+  テキストエンコーダーの条件付けの保持（submit_generate と submit_chain の
+  keep_text_conditioning。既定 false。MiniMax H3・LTX 2.3・LTX 2.5 で使えます）を選ぶと、テキストエンコーダーの出力を
+  ワーカーのメインメモリに保持して、入力が同じ次の生成と、連結のクリップで
+  テキストエンコーダーの段を省きます（入力は、プロンプトの文字列と、テキスト
+  エンコーダーが読む素材。違えば通し直します。Positive と Negative は別々に
+  持ち、片方だけが変わったら、もう片方は使い回します。生成結果は変わりません。
+  メインメモリを使います。false のジョブが来ると、保持した分は消えます。
+  MiniMax H3 の keep_reference_latents とは別の機能で、同時に使えます。
+  LTX 2.5 は、そのジョブが渡す文字列の並びの全体が同じときだけ使い回します）。
   H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
   既定 on。切るときだけ false）も選べ、収まらないときはジョブが failed になり、
   job_status の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を

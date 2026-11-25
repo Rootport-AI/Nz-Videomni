@@ -229,6 +229,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "attention_backend",
         "block_swap_prefetch",
         "keep_resident",
+        # Keeping the text encoder's conditioning between jobs; rides the payload
+        # only when true (an absent key = off).
+        "keep_text_conditioning",
         "fused_gguf_dequant_kernel",
         "vae_mode",
         "outpaint",
@@ -767,6 +770,13 @@ class GenerationOutcome:
     # ``metadata["h3"]``, the same route ``ltx25`` takes. None on LTX and on
     # the mock.
     h3: dict | None = None
+    # LTX 2.3 only, ``keep_text_conditioning`` jobs only: the worker's own record
+    # (``te_cache`` hit/miss per prompt, ``conditioning_sha256``) — relayed
+    # verbatim from the ``done`` event's top level (a chain carries it inside
+    # ``chain_metadata["ltx23"]`` instead) into metadata.json as
+    # ``metadata["ltx23"]``. None for every other job; a chain's record
+    # still reaches metadata.json's top level, from ``chain_metadata``.
+    ltx23: dict | None = None
 
 
 class LTXRunner:
@@ -2451,6 +2461,10 @@ class _RealBackend:
         # by the same test as block_swap_prefetch above.
         if request.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # keep_text_conditioning: sent only when True (an absent key = off, and
+        # the explicit trigger that FREES the worker's kept conditioning).
+        if request.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
         # vae_mode: same additive contract, default "default" — so the key rides
         # ONLY on a job that explicitly asks for the pruned decoder, and a
         # default job's payload carries no vae_mode key. An environment without
@@ -2581,6 +2595,9 @@ class _RealBackend:
             # every other job, so ``None`` there — the same shape as every relay
             # above.
             inpaint=event.get("inpaint"),
+            # keep_text_conditioning: the engine's own record, relayed verbatim.
+            # Present only on a job that asked for it, so ``None`` otherwise.
+            ltx23=event.get("ltx23"),
         )
 
     def generate_chain(
@@ -2800,6 +2817,11 @@ class _RealBackend:
         # api/models.py).
         if chain.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # keep_text_conditioning: mirrors the single-generate block (sent only
+        # when True; an absent key = off). The worker's record of it rides back
+        # inside the ``done`` event's ``chain`` dict as ``ltx23``.
+        if chain.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
         # vae_mode: mirrors the single-generate block (default "default", so the
         # key is sent only when the pruned decoder is explicitly asked for). One
         # value covers every clip and every stage of the chain.

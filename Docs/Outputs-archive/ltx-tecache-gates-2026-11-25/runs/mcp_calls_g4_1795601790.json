@@ -1,0 +1,247 @@
+[
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.22,
+    "at": "2026-11-25T19:07:27"
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T19:07:27",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "LTX23",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 3,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T19:08:13"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T19:08:58"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T19:09:43"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.0,
+    "at": "2026-11-25T19:09:53",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T19:10:08",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 20.02,
+    "at": "2026-11-25T19:10:38"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "7f8a0eb6-85ac-4316-935c-9a44f2e416a9",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.01,
+    "at": "2026-11-25T19:11:23"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "7f8a0eb6-85ac-4316-935c-9a44f2e416a9",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T19:12:09"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "7f8a0eb6-85ac-4316-935c-9a44f2e416a9",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.0,
+    "at": "2026-11-25T19:12:24",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "7f8a0eb6-85ac-4316-935c-9a44f2e416a9",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 30.02,
+    "at": "2026-11-25T19:13:04"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T19:13:49"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T19:14:34"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.01,
+    "at": "2026-11-25T19:15:19"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.09,
+    "at": "2026-11-25T19:16:04"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 14.98,
+    "at": "2026-11-25T19:16:19",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T19:16:29"
+  }
+]

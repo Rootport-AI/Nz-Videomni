@@ -1,0 +1,680 @@
+{
+  "gate": "g4",
+  "started": "2026-11-25T19:07:25",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "ON",
+      "args": {
+        "prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": false,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ],
+        "inpaint": {
+          "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2
+        }
+      },
+      "job_id": "8e214beb-6034-437f-9de3-1fd56505d3b1",
+      "submitted_at": "2026-11-25T19:07:28",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 190.7,
+      "summary": {
+        "mp4_sha256": "c6f25fa38f5803dfefaea289e803d2642c1c4884d3c10d1bfaf49b16606389b3",
+        "mp4_size": 1237823,
+        "mp4_rel": "outputs/8e214beb-6034-437f-9de3-1fd56505d3b1/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 189.63,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_outpaint": null,
+        "request_inpaint": {
+          "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2,
+          "source_video_id": null,
+          "audio_strength": null
+        },
+        "request_loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0,
+            "audio_strength": null
+          }
+        ],
+        "request_num_frames": 121,
+        "request_prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "0bd549cfe5fb23025d8534286e91088ed8db42c0ff5ff762be83b328c7d92c39",
+              "audio": "5abc05362bc2a16db2b577abe23bb792495b02f9a9fa42a400431de1007ef854"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "inpaint.audio_frozen_latent_frames",
+            126
+          ],
+          [
+            "inpaint.audio_latent_frames_required",
+            126
+          ],
+          [
+            "inpaint.mask_proof.decoded_frames",
+            121
+          ],
+          [
+            "inpaint.window_start_frame",
+            0
+          ],
+          [
+            "inpaint.window_written_frames",
+            121
+          ],
+          [
+            "inpaint.canvas_frames",
+            121
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 1,
+          "bytes": 12582912
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.013000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "ON (same)",
+      "args": {
+        "prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": false,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ],
+        "inpaint": {
+          "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2
+        }
+      },
+      "job_id": "7f8a0eb6-85ac-4316-935c-9a44f2e416a9",
+      "submitted_at": "2026-11-25T19:10:38",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 145.6,
+      "summary": {
+        "mp4_sha256": "c6f25fa38f5803dfefaea289e803d2642c1c4884d3c10d1bfaf49b16606389b3",
+        "mp4_size": 1237823,
+        "mp4_rel": "outputs/7f8a0eb6-85ac-4316-935c-9a44f2e416a9/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 142.79,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_outpaint": null,
+        "request_inpaint": {
+          "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2,
+          "source_video_id": null,
+          "audio_strength": null
+        },
+        "request_loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0,
+            "audio_strength": null
+          }
+        ],
+        "request_num_frames": 121,
+        "request_prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "0bd549cfe5fb23025d8534286e91088ed8db42c0ff5ff762be83b328c7d92c39",
+              "audio": "5abc05362bc2a16db2b577abe23bb792495b02f9a9fa42a400431de1007ef854"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "inpaint.audio_frozen_latent_frames",
+            126
+          ],
+          [
+            "inpaint.audio_latent_frames_required",
+            126
+          ],
+          [
+            "inpaint.mask_proof.decoded_frames",
+            121
+          ],
+          [
+            "inpaint.window_start_frame",
+            0
+          ],
+          [
+            "inpaint.window_written_frames",
+            121
+          ],
+          [
+            "inpaint.canvas_frames",
+            121
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 1,
+          "bytes": 12582912
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.013000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "OFF",
+      "args": {
+        "prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": false,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": false,
+        "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ],
+        "inpaint": {
+          "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2
+        }
+      },
+      "job_id": "d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6",
+      "submitted_at": "2026-11-25T19:13:04",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 205.7,
+      "summary": {
+        "mp4_sha256": "c6f25fa38f5803dfefaea289e803d2642c1c4884d3c10d1bfaf49b16606389b3",
+        "mp4_size": 1237823,
+        "mp4_rel": "outputs/d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 192.55,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_outpaint": null,
+        "request_inpaint": {
+          "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2,
+          "source_video_id": null,
+          "audio_strength": null
+        },
+        "request_loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0,
+            "audio_strength": null
+          }
+        ],
+        "request_num_frames": 121,
+        "request_prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "inpaint.audio_frozen_latent_frames",
+            126
+          ],
+          [
+            "inpaint.audio_latent_frames_required",
+            126
+          ],
+          [
+            "inpaint.mask_proof.decoded_frames",
+            121
+          ],
+          [
+            "inpaint.window_start_frame",
+            0
+          ],
+          [
+            "inpaint.window_written_frames",
+            121
+          ],
+          [
+            "inpaint.canvas_frames",
+            121
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.013000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 4,
+    "at": [
+      "2026-11-25T19:09:53",
+      "2026-11-25T19:10:08",
+      "2026-11-25T19:12:24",
+      "2026-11-25T19:16:19"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T19:07:25"
+  ],
+  "pre": {
+    "active_base_model": "LTX23",
+    "transformer_active": "default",
+    "categories_active": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "LTX23",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 3,
+        "failed": 0
+      }
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T19:16:30",
+  "gate_pass": true
+}

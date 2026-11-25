@@ -332,6 +332,7 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
             fused_gguf_dequant_kernel=False,
             keep_resident=True,
             keep_resident_embeddings=True,
+            keep_text_conditioning=True,
         ),
     )
     assert r.status_code == 202, r.text
@@ -363,6 +364,7 @@ def test_accepted_builds_internal_request_and_finishes(alpha_client):
     assert req["fused_gguf_dequant_kernel"] is False
     assert req["keep_resident"] is True
     assert req["keep_resident_embeddings"] is True
+    assert req["keep_text_conditioning"] is True
 
     out = alpha_client.tmp_path / "outputs" / job_id
     assert _probe(out / "output.mp4") == ((640, 512), FRAMES)

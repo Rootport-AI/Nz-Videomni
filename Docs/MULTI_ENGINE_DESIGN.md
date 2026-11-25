@@ -520,6 +520,102 @@ LoRA は**モデルの読み込み時ではなくジョブごとに適用され�
 
 ---
 
+### 5.9 テキストエンコーダーの条件付けのキャッシュ（LTX 2.3・LTX 2.5。`keep_text_conditioning`。2026-11-25・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-299）
+
+**結論**: 要求の欄 `keep_text_conditioning`（真か偽。既定は偽）が真のジョブでは、テキストエンコーダーの出力（条件付け）をワーカーのメインメモリに持ち、入力が同じ次のジョブでは、持っていた値を渡してテキストエンコーダーの段を省く。**キャッシュの有無で生成結果は変わらない。** **偽のジョブは、この機能が入る前と同じ行・同じ呼び出し・同じ記録を通る**（ジョブの開始で、持っていた分を全部捨てるだけ）。真で外れたジョブの計算もこの機能が入る前と同じである。単位はエンジンで違い、**LTX 2.3 は文字列ごと、LTX 2.5 は束ごと**（1 回の符号化に渡す文字列の並びの全体）である。
+
+本節は LTX 2.3・LTX 2.5 の仕組みの正本である。同じ欄を使う MiniMax H3 の仕組みと、3 つのベースモデルの使い分けの表は [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.10、裁定は同 裁定 111（H3）・裁定 112（LTX）、API の契約は仕様書 [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.2・§6.2b (l)・§6.6、検証と実測と GPU での確認は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §236 にある。
+
+#### (1) 3 つのエンジンが共用する部品
+
+| ファイル | 中身 |
+|---|---|
+| `engine/ref_latent_cache.py` | 管理役 `RefLatentCache`（鍵の中身を見ない汎用の入れ物。torch を読み込まない）と、素材の素性 `media_identity`（H3 だけが使う）。MiniMax H3 の参照素材の潜在の常駐（台帳 1-297）で作ったものを、3 つのエンジンが使う部品として `engine/` の下へ移した。`engine_h3/ref_latent_cache.py` は読み込み直しだけを残している |
+| `engine/te_conditioning.py` | 値のハッシュ `tensor_sha256`（CPU の連続したテンソルを要素の大きさの整数型として見て、写しを作らずに SHA-256 を取る）、メインメモリへの写し `host_copy`、もとの置き場への写し `device_copy`（どちらも必ず新しい写しを作り、タプル・リスト・NamedTuple の形を保つ） |
+
+- 持ち主はエンジンごとに 1 つで、`LTXFastVideoPipeline._te_conditioning`（LTX 2.3）、`Ltx25Pipeline._te_conditioning`（LTX 2.5）、`H3Pipeline._te_conditioning`（H3）である。どれも `RefLatentCache` の別のもう 1 個で、新しい管理役のクラスは作っていない。
+- 3 つのエンジンが `engine/` の下の部品を読む、という今の依存の向きにそろえるため、管理役も `engine/` の下に置いた（`engine_h3` の下から読むと、LTX のエンジンが H3 の部品を読むことになる）。
+- モデルの重みの常駐（`keep_resident`・`keep_resident_embeddings`）とは別の持ち物である。常駐を手放す処理と `close()` は条件付けに触れない。
+
+#### (2) 捨てる規則（3 つのエンジンで同じ 2 回）
+
+| タイミング | すること |
+|---|---|
+| ジョブの開始 | 偽のジョブなら、全部捨てる。真のジョブなら、このジョブに出てこない分を捨てる |
+| ジョブの終わり（成功） | このジョブで使わなかった分を捨てる |
+| ジョブの終わり（失敗） | このジョブで入れた分だけを捨てる（前の成功したジョブから持ち越した分は残る） |
+
+- Chained は、連結の全体を 1 つのジョブとして数える。
+- 持つのは前のジョブで使った分だけなので、量は 1 ジョブ分で頭打ちになる。件数や大きさの上限は置かない（裁定 112 ②）。
+- 重みを切り替えるとワーカーが作り直されるので、ワーカーの中に持つ限り、違う重みで作った値は紛れ込まない。
+
+#### (3) LTX 2.3（文字列ごと）
+
+| 項目 | 中身 |
+|---|---|
+| 鍵 | `(文字列, ())`。文字列そのもの（前後の空白も含めてそのまま）。**Positive と Negative で同じ鍵を使う**（どちらも同じ `encode_text(te, prompts=[t])[0]` を通り、切り詰める前の値も同じなので、役割の印は入れない） |
+| 値 | `encode_text` が返す映像向けと音声向けの 2 つのテンソルをメインメモリへ写したものと、VSF の切り詰めに使う本物のトークン数と、もとの置き場（GPU）。1 件の大きさは文字列の長さによらず一定（記録簿 §236） |
+| 当たったとき | 値の新しい写しをもとの置き場へ戻して渡す。持っている値は書き換えない |
+| 外れたとき | 外れた文字列だけを、この機能が入る前と同じ 1 本ずつの呼び出しで通し、GPU の値はそのまま先へ渡し、メインメモリへの写しを入れる。テキストエンコーダーは、最初に外れた文字列のところで 1 回だけ組む |
+| Negative | NAG か VSF を有効にしたジョブだけ、この機能が入る前と同じく最後に通す。値の形を整える処理は、`engine/transformer/nag_service.py` の純粋な関数 `negative_from_encoded`（`encode_negative` の後半と同じ式。VSF なら本物のトークン数で切り詰め、NAG なら切り詰めない）に通す。2 つの関数が同じ値を出すことは試験で固定している |
+| テキストエンコーダーを組まない条件 | そのジョブの文字列が**全部**当たったとき。1 つでも外れると、組む時間は残る |
+
+- **入口は 4 か所**（`LTXFastVideoPipeline.generate`・`generate_chain`・`generate_outpaint`・`generate_inpaint`）で、全部が 1 つの補助の関数 `_encode_conditioning`（`engine/pipeline/fast_video_pipeline.py`）を通る。同じ処理を 4 か所に書き写していない。どの入口も、開始（`_begin_text_conditioning_job`）と終わり（`_end_text_conditioning_job`。finally の最初で呼び、「このジョブは ON」の印 `_keep_text_conditioning_job` を必ず消す）を呼ぶ。`warmup()` は印を立てないので、キャッシュに触れない。
+- **連結・Outpainting・Inpainting**（`engine/pipeline/chain_pipeline.py`・`outpaint_pipeline.py`・`inpaint_pipeline.py`）: 符号化の段落を「ON なら補助の関数、OFF ならこの機能が入る前の行」の 2 つに分けた。OFF の側の行は変えていない。連結は、この機能が入る前と同じく重複を除いた文字列の並び（クリップ → Stage-2 の共通のプロンプトの順。Negative は最後）を通す。組んだテキストエンコーダーは、この機能が入る前と同じ順で片づける。
+- **単発の番兵**: 単発では、上流のパッケージ（`ltx_pipelines` の `DistilledPipeline.__call__`）の中で「テキストエンコーダーを組む → 符号化する → 捨てる」の順に呼ばれる。ON のジョブでだけ、先にキャッシュを引き（`_te_all_held`）、全部当たっていたら、組む関数 `ledger.text_encoder` を、使われたら必ず失敗する番兵（`_TextEncoderNotBuilt`。属性を読んでも呼んでも `RuntimeError`）にジョブの間だけ差し替える。上流がテキストエンコーダーを符号化と片づけ以外に使い始めたら、代わりの物で黙って走らずに、その場で止まるためである。差し替えは今ある try／finally の中で必ず戻す。符号化の関数 `encode_text` の差し替えは、Negative のために使っている今の仕組みと同じ場所で行う（ON のジョブでは、キャッシュを通す包みが Negative も扱うので、NAG の包みは入れない）。OFF のジョブは `ledger.text_encoder` を読みも書きもしない。外れたジョブは、上流が、この機能が入る前と同じ順で組んで片づける。
+- 同じ文字列が Positive と Negative の両方に出て、どちらも外れたときは、1 回だけ通し、2 つ目は当たりになる（文字列を順に処理する作りなので、特別扱いは無い）。
+
+#### (4) LTX 2.5（束ごと）
+
+| 項目 | 中身 |
+|---|---|
+| 単位と鍵 | **束**（公式の符号化へ 1 回で渡す文字列の並びの全体。Negative を足したあとの形。順序つき）。鍵は `(text_conditioning_bundle(prompts, negative_prompt), ())` で、Negative の無いジョブは `tuple(prompts)`、あるジョブは最後に Negative を足した並び |
+| 値 | 公式の符号化の戻り値の全部（文字列ごとに 3 つのテンソル＝映像向け・音声向け・注意のマスク）をメインメモリへ写したものと、もとの置き場 |
+| 当たったとき | 公式の符号化を呼ばない（テキストエンコーダーも埋め込み処理器も組まない）。同じ型・同じ dtype の新しい写しのリストを返すので、呼び出し側の Negative の切り離しや VSF の切り詰めが、持っている値に届くことは無い |
+| 外れたとき | 束の全体を、この機能が入る前と同じ 1 回の呼び出しで通し、戻り値そのものを先へ渡し、メインメモリへの写しを入れる |
+| OFF のジョブ | 補助の関数 `Ltx25PromptEncoder._encode_bundle`（`engine25/pipeline25.py`）の最初の分岐で、公式の符号化をこの機能が入る前の並び・呼び出し側の引数のまま呼んで返す。`enhance_first_prompt` が求められたとき（`prompts[0]` が書き換わるので、渡した文字列と符号化される文字列が違う）も同じ道を通る。LTX 2.5 では使っていない |
+
+- **なぜ束ごとか**: GPU での実測（2026-11-25）で、同じ束を 2 回通すと値は一致したが、束の本数が変わると、同じ文字列でも値が一致しなかった（数字と条件は記録簿 §236.3）。だから文字列ごとに持つと「キャッシュの有無で結果が変わらない」を守れない。束ごとなら、当たるのは前回と同じ束を通したときだけなので守れる。代わりに、Negative だけ、Chained の 1 クリップだけを変えても全部を作り直す（裁定 112 ④）。
+- **入口は 1 か所**: `Ltx25PromptEncoder` で、単発・連結・Outpainting・Inpainting・Alpha Gen が全部ここを通る。Negative の無い道（`__call__`）と有る道（`_call_with_negative`）の両方が `_encode_bundle` を通る。
+- **開始と終わり**: ワーカー（`engine25/worker.py`）が、NAG／VSF の準備（`set_nag_job`）のあとに `Ltx25Pipeline.set_text_conditioning_job(on, prompts)` を呼び、finally で `end_text_conditioning_job(ok)` を呼ぶ（例外を投げない）。開始に渡す並びは、符号化に渡る並びと同じ関数で作る（束を組み立てる関数は `text_conditioning_bundle` の 1 つ。連結の重複を除いた並びは `engine25/chain25.py` の `distinct_chain_prompts` の 1 つで、符号化とワーカーの開始の両方が使う）。食い違っても、黙って外れるだけで、違う値が返ることは無い（引くのは実際に渡された束のため）。
+- **VSF のトークン数**: VSF の切り詰めに使うトークナイザーは、テキストエンコーダーを組むたびに取り直して持っている（`_build_text_encoder`）。当たったジョブはテキストエンコーダーを組まないので、前のジョブで持ったトークナイザーを使う。値を入れたのは必ず同じ符号化器でテキストエンコーダーを組んだジョブなので、当たったジョブでトークナイザーが無いことは無い。
+- **段の秒数**: 当たったジョブでも、進捗の組と `ltx25.phases` の `10_prompt_encode` は今までどおり出る（秒数はほぼ 0）。部品の組み立ての秒数 `10a_te_build`・`10b_ep_build` は、組んでいないので出ない。
+
+#### (5) 記録（真のジョブだけに付く。偽のジョブの記録は 1 つも変えない）
+
+| エンジン | 置き場 | 形 |
+|---|---|---|
+| LTX 2.3 の単発・Outpainting・Inpainting | `metadata.json` の最上位の新しいブロック `ltx23` | `te_cache: {"positive": "hit"｜"miss", "negative": …}`、`conditioning_sha256: {"positive": {"video", "audio"}, "negative": …}`。`negative` は Negative を符号化したジョブだけ |
+| LTX 2.3 の連結 | 同じく `ltx23`（ワーカーの `chain` の中の `ltx23` を最上位へ写したもの） | `te_cache: {"clips": ["hit", "miss", …], "stage2": …, "negative": …}`（クリップの順。H3 と同じ見方で読める）と、同じ形の `conditioning_sha256` |
+| LTX 2.5（単発も連結も） | 今ある `ltx25` | `te_cache: "hit"｜"miss"`（束で 1 つ）と、束の順の `conditioning_sha256` の並び（各要素が `{"video", "audio", "mask"}`。テンソルが無い所は `null`） |
+
+- LTX 2.3 には、エンジンの事実を書くブロックがそれまで無かったので、`ltx25`・`h3` と名前をそろえて `ltx23` を新設した（真のジョブだけに付く）。
+- LTX 2.5 の連結は、束が 1 つなので値も 1 つである。「クリップ 2 だけ miss」にはならない。
+- 値のハッシュは、当たったときも外れたときも、メインメモリに持っている値から取る。偽のジョブに付けないのは、真で外れたジョブが偽と同じ計算を通るので、作り直しても値が変わらないことは、真で外れたジョブどうしを比べれば確かめられるためである（H3 と同じ考え。MINIMAX_H3_DESIGN §6.10 の「記録」）。偽のジョブとの比べは mp4 の SHA-256 で行う。
+- 両方のエンジンで、ワーカーのログのジョブの始まりの行（単発と連結）に `keep_text_conditioning=` が出る。LTX 2.5 は真のジョブで、符号化のたびに `text conditioning cache: hit｜miss (N string(s) in the bundle)` の 1 行も出る。
+- 形の正本は仕様書 §6.6 の `ltx23`・`ltx25` の行である。
+
+#### (6) 要求の欄と送り物
+
+- **欄**: H3 と同じ `GenerateRequest.keep_text_conditioning`・`GenerateChainRequest.keep_text_conditioning`（裁定 112 ⑤）。LTX 2.3・2.5 のアダプター（`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py`）は、拒否の表からこの行を外し、受け付ける欄の一覧に入れた。`unsupported_features` にも名前は載らない。
+- **送り物**: 真のときだけ、ワーカーの `generate`・`generate_chain` に `keep_text_conditioning: true` を足す（偽のときの送り物はこの機能が入る前と同じ。鍵が無いことが「持たない」で、持っている分を捨てる合図でもある）。LTX 2.3 の記録 `ltx23` は、アダプターと `services/pipeline_manager.py` を通って `metadata.json` へ届く。
+- **Alpha Gen（裁定 112 ⑥）**: `AlphaGenRequest`（`api/models.py`）の受け渡しの欄に、6 つ目として `keep_text_conditioning` を足し、`api/generate_alpha.py` が内部の `GenerateRequest` へ写す。鍵が無いと LTX 2.5 のワーカーは OFF のジョブとして扱い、持っている分を全部捨てるためである。Alpha Gen のプロンプトはサーバーが決めた固定の文なので、2 回目からは当たる。
+- **入口**: 操作パネルの Settings の 1 行（フロントエンド `Docs/DEVLOG.md` §185）と MCP の `submit_generate`・`submit_chain` の引数（[`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) D42・D43）。Gradio には足さない。MCP の `submit_generate` は LTX の Inpainting を送れないので、LTX 2.3 の Inpainting でこの欄を使えるのは API と操作パネルである。
+
+#### (7) 既知の弱点
+
+- LTX 2.3 で、ジョブの文字列のうち 1 つでも外れると、テキストエンコーダーを組む時間は残る。
+- LTX 2.5 では、Negative だけ、Chained の 1 クリップだけを変えても、全部を作り直す。
+
+#### (8) 採らなかった案
+
+- **LTX 2.3 の単発を、番兵と先引きをやめて、ほかの 3 つの入口と同じ道に寄せる**: 外れたジョブの、テキストエンコーダーを組んで片づける順が、この機能が入る前の順（上流のまま）から変わる。「外れたジョブはこの機能が入る前と同じ」を順序まで含めて守るほうを採った。
+- **LTX 2.5 も文字列ごとに持つ**: 上の (4) の実測のとおり、生成結果が変わる。
+- **操作パネルの「行を隠す仕掛け」を消す**: 消さなくても行は出る。消すと、古いサーバーと組んだときに ON のせいで LTX の生成が断られる（裁定 112 ⑦）。
+- **新しい管理役のクラスを作る**: `RefLatentCache` は鍵の中身を見ない汎用の作りなので、もう 1 個使えば足りる。
+
+---
+
 ## 6. 利用者から見た振る舞い（UX仕様）【オーナー裁定】
 
 ### 6.1 切り替え＝即ロード

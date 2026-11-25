@@ -1,0 +1,52 @@
+2026-11-25 15:41:07,120 INFO engine25.ltxcore_compat: ltxcore_compat.verify OK (Disposable.dispose metas storage via empty_like: True)
+2026-11-25 15:41:07,202 INFO engine25.pipeline25: cuDNN pinned to deterministic convolutions (was {'deterministic': False, 'benchmark': False})
+2026-11-25 15:41:07,317 INFO engine25.assets_export: assets-only text encoder up to date: LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.assets.safetensors (30.7 MiB, 5 tensors)
+2026-11-25 15:41:07,385 INFO engine25.pipeline25: use_ancestral_sampler: forced True (sampler=euler_ancestral). The official model_version probe is skipped (it would memory-map the transformer file); an LTX 2.5 checkpoint always takes the ancestral sampler.
+2026-11-25 15:41:07,609 INFO engine25.gguf_transformer: LTX25 transformer SDOps: 4349 tensors total, 258 dropped as EmbeddingsProcessor, 4091 kept
+2026-11-25 15:41:07,609 INFO engine25.gguf_transformer: Ltx25DiffusionStage.from_gguf(LTX-2.5-22B-distilled-transformer.gguf): device=cuda:0 dtype=torch.bfloat16 blocks_on_gpu=8 cache_weights=True
+2026-11-25 15:41:07,609 INFO engine25.gguf_gemma4: text encoder builder: LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf (assets=LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.assets.safetensors, layers_on_gpu=0, cache_weights=False)
+2026-11-25 15:41:07,642 INFO engine25.gguf_gemma4: skipping the ProcessorLoad module op: the HF processor is only used by prompt enhancement, which this engine does not run
+2026-11-25 15:41:07,664 INFO engine25.gguf_transformer: PHASE 00_pipeline_build        {'seconds': 0.54, 'rss_gib': 0.82, 'peak_allocated_gib': 0.0, 'peak_reserved_gib': 0.0, 'current_allocated_gib': 0.0}
+2026-11-25 15:41:07,665 INFO engine25.pipeline25: LTX 2.5 pipeline ready on cuda:0 (sampler=euler_ancestral, 8 + 3 steps, blocks_on_gpu=8)
+2026-11-25 15:41:07,665 INFO spike: pipeline built in 0.57s; gpu={'allocated_mib': 0.0, 'reserved_mib': 0.0}
+2026-11-25 15:41:07,665 INFO ltx_pipelines.utils.blocks: Building text encoder from models\LTX25\TextEncoder\LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.assets.safetensors
+2026-11-25 15:41:09,342 INFO engine25.gguf_gemma4: GGML per-layer dequant patched 332 Linear layer(s) of LTXGemmaTextEncoder
+2026-11-25 15:41:16,089 INFO engine25.gguf_transformer: GGUF load LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf -> cpu: 349 float + 328 quantised tensors (9 dropped by sd_ops), 7.68 GiB raw, 6.7s
+2026-11-25 15:41:17,238 INFO engine25.gguf_gemma4: layer stream: wrapped 48 layer(s)
+2026-11-25 15:41:17,238 INFO engine25.gguf_gemma4: Text encoder placed on cuda:0 in 0.4s: 18 non-layer tensors moved, 0/48 layers resident, streaming the rest, lm_head left on CPU (shares storage with embed_tokens)
+2026-11-25 15:41:17,240 INFO engine25.gguf_transformer: PHASE 10a_te_build             {'seconds': 9.57, 'rss_gib': 8.48, 'peak_allocated_gib': 1.973, 'peak_reserved_gib': 1.994, 'current_allocated_gib': 1.973}
+2026-11-25 15:41:42,659 INFO ltx_pipelines.utils.blocks: Text encoder done, building embeddings processor from ('models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf', 'models\\LTX25\\TextEncoder\\LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.assets.safetensors')
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: GGML per-layer dequant patched 114 Linear layer(s) of EmbeddingsProcessor
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x188160 Linear (170 rows/chunk, 25 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 2048x188160 Linear (170 rows/chunk, 13 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 16384x4096 Linear (7812 rows/chunk, 3 chunks)
+2026-11-25 15:41:42,845 INFO engine25.gguf_gemma4: chunked dequant forward on 4096x16384 Linear (1953 rows/chunk, 3 chunks)
+2026-11-25 15:41:46,216 INFO engine25.gguf_transformer: GGUF load LTX-2.5-22B-distilled-transformer.gguf -> cpu: 258 float + 0 quantised tensors (4091 dropped by sd_ops), 3.76 GiB raw, 3.4s
+2026-11-25 15:41:47,313 INFO engine25.gguf_transformer: GGUF load LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf -> cpu: 2 float + 2 quantised tensors (682 dropped by sd_ops), 0.88 GiB raw, 0.7s
+2026-11-25 15:41:47,402 INFO engine25.gguf_gemma4: Merged 2 GGUF(s) into 262 tensors (4.64 GiB raw) for cpu
+2026-11-25 15:41:50,225 INFO engine25.pipeline25: EmbeddingsProcessor: moved 262 tensors to cuda:0
+2026-11-25 15:41:50,226 INFO engine25.gguf_transformer: PHASE 10b_ep_build             {'seconds': 7.57, 'rss_gib': 34.51, 'peak_allocated_gib': 41.759, 'peak_reserved_gib': 42.396, 'current_allocated_gib': 41.759}
+2026-11-25 15:42:03,775 INFO ltx_pipelines.utils.blocks: Prompt encoding complete
+2026-11-25 15:42:03,775 INFO engine25.gguf_transformer: PHASE 10_prompt_encode         {'seconds': 56.11, 'rss_gib': 37.65, 'peak_allocated_gib': 45.611, 'peak_reserved_gib': 45.885, 'current_allocated_gib': 44.328}
+2026-11-25 15:42:03,830 INFO spike: R1 ['A'] 56.11s phases={'10a_te_build': 9.57, '10b_ep_build': 7.57, '10_prompt_encode': 56.11}
+2026-11-25 15:42:03,830 INFO ltx_pipelines.utils.blocks: Building text encoder from models\LTX25\TextEncoder\LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.assets.safetensors
+2026-11-25 15:42:18,415 INFO engine25.gguf_transformer: GGUF load LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf -> cpu: 349 float + 328 quantised tensors (9 dropped by sd_ops), 7.68 GiB raw, 14.5s
+2026-11-25 15:42:20,708 INFO engine25.gguf_gemma4: layer stream: wrapped 0 layer(s) (48 already wrapped -- idempotent)
+2026-11-25 15:42:20,708 INFO engine25.gguf_gemma4: Text encoder placed on cuda:0 in 1.8s: 13 non-layer tensors moved, 0/48 layers resident, streaming the rest, lm_head left on CPU (shares storage with embed_tokens)
+2026-11-25 15:42:20,710 INFO engine25.gguf_transformer: PHASE 10a_te_build             {'seconds': 16.88, 'rss_gib': 25.0, 'peak_allocated_gib': 46.301, 'peak_reserved_gib': 46.877, 'current_allocated_gib': 46.301}
+2026-11-25 15:42:47,303 WARNING engine.gguf.dequant_triton: Fused GGUF dequant kernel disabled for this job (OutOfMemoryError: CUDA out of memory. Tried to allocate 114.00 MiB. GPU 0 has a total capacity of 15.99 GiB of which 0 bytes is free. Of the allocated memory 61.67 GiB is allocated by PyTorch, and 444.16 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)) - falling back to the eager PyTorch dequant. The job continues, only slower.
+2026-11-25 15:42:48,223 INFO engine25.gguf_transformer: PHASE 10_prompt_encode         {'seconds': 44.39, 'rss_gib': 15.56, 'peak_allocated_gib': 61.675, 'peak_reserved_gib': 62.127, 'current_allocated_gib': 61.32}

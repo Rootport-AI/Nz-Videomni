@@ -1,0 +1,1737 @@
+{
+  "gate": "g1",
+  "started": "2026-11-25T17:24:54",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "ON, A, Na, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "neg_method": "nag",
+        "keep_text_conditioning": true
+      },
+      "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+      "submitted_at": "2026-11-25T17:24:56",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 135.1,
+      "summary": {
+        "mp4_sha256": "bb2c7628eb04e578d49926212d93b1cfdb2000d369e6d46695e02e028faab54d",
+        "mp4_size": 1407566,
+        "mp4_rel": "outputs/4d27e238-a6a8-4acf-86d5-c5aef4aeb906/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 134.59,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "miss",
+            "negative": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "9816dfc8bc1ec00620613ebc1f273e4a3432124fd36db156aa4e7b0cd337789a",
+              "audio": "473f8c85c83aea44a52921acc5cba97cd92da8c57701ed7aea5b5eb7703ae7e4"
+            },
+            "negative": {
+              "video": "dfd1bd29add904abd0216ceeb76c3922ce837b1ee4d83067fb17eb2828e0e117",
+              "audio": "d5aad7f1ec8af27609a08d23524c6dda7491b83d2e75dd24b39a0422feff9469"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "OFF, A, Na, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "neg_method": "nag"
+      },
+      "job_id": "0d2fb735-9dca-4286-b951-5c2ce8a49075",
+      "submitted_at": "2026-11-25T17:27:11",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 130.1,
+      "summary": {
+        "mp4_sha256": "bb2c7628eb04e578d49926212d93b1cfdb2000d369e6d46695e02e028faab54d",
+        "mp4_size": 1407566,
+        "mp4_rel": "outputs/0d2fb735-9dca-4286-b951-5c2ce8a49075/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 127.55,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "ON, A, Na, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "neg_method": "nag",
+        "keep_text_conditioning": true
+      },
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "submitted_at": "2026-11-25T17:29:22",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 135.1,
+      "summary": {
+        "mp4_sha256": "bb2c7628eb04e578d49926212d93b1cfdb2000d369e6d46695e02e028faab54d",
+        "mp4_size": 1407566,
+        "mp4_rel": "outputs/16883ccc-2b31-40f8-ae32-d2fbdbf43841/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 132.12,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "miss",
+            "negative": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "9816dfc8bc1ec00620613ebc1f273e4a3432124fd36db156aa4e7b0cd337789a",
+              "audio": "473f8c85c83aea44a52921acc5cba97cd92da8c57701ed7aea5b5eb7703ae7e4"
+            },
+            "negative": {
+              "video": "dfd1bd29add904abd0216ceeb76c3922ce837b1ee4d83067fb17eb2828e0e117",
+              "audio": "d5aad7f1ec8af27609a08d23524c6dda7491b83d2e75dd24b39a0422feff9469"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "4": {
+      "label": "4",
+      "cond": "ON, A, Na, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "neg_method": "nag",
+        "keep_text_conditioning": true
+      },
+      "job_id": "3c3e2b60-3b06-4731-bb57-4d9e8b8927da",
+      "submitted_at": "2026-11-25T17:31:37",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 85.0,
+      "summary": {
+        "mp4_sha256": "bb2c7628eb04e578d49926212d93b1cfdb2000d369e6d46695e02e028faab54d",
+        "mp4_size": 1407566,
+        "mp4_rel": "outputs/3c3e2b60-3b06-4731-bb57-4d9e8b8927da/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 82.65,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "hit",
+            "negative": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "9816dfc8bc1ec00620613ebc1f273e4a3432124fd36db156aa4e7b0cd337789a",
+              "audio": "473f8c85c83aea44a52921acc5cba97cd92da8c57701ed7aea5b5eb7703ae7e4"
+            },
+            "negative": {
+              "video": "dfd1bd29add904abd0216ceeb76c3922ce837b1ee4d83067fb17eb2828e0e117",
+              "audio": "d5aad7f1ec8af27609a08d23524c6dda7491b83d2e75dd24b39a0422feff9469"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "5": {
+      "label": "5",
+      "cond": "ON, A, Nb, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "nag",
+        "keep_text_conditioning": true
+      },
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "submitted_at": "2026-11-25T17:33:03",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 125.2,
+      "summary": {
+        "mp4_sha256": "4fcba20312453e2c2975e041b0b3b01a87bba6c6455bfded2199991901929228",
+        "mp4_size": 1281639,
+        "mp4_rel": "outputs/e735c655-214a-4819-8577-e2ec53224182/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 122.89,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "hit",
+            "negative": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "9816dfc8bc1ec00620613ebc1f273e4a3432124fd36db156aa4e7b0cd337789a",
+              "audio": "473f8c85c83aea44a52921acc5cba97cd92da8c57701ed7aea5b5eb7703ae7e4"
+            },
+            "negative": {
+              "video": "e43fe2145183b650811a68731a32f7bbc9c3a4166a161839230a6fc50e73b359",
+              "audio": "732d0ebe3dae00739b9bfdeab1b76d0511f1086db7fd3c1553fd84893f7b44af"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "6": {
+      "label": "6",
+      "cond": "ON, B, Nb, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "nag",
+        "keep_text_conditioning": true
+      },
+      "job_id": "aca2c432-3027-45d5-9699-1b40a516aecc",
+      "submitted_at": "2026-11-25T17:35:08",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 130.1,
+      "summary": {
+        "mp4_sha256": "f408201e310dee731afad90bb688fca1ba25f9bfb0239a0aabbaf3d973f47505",
+        "mp4_size": 1255672,
+        "mp4_rel": "outputs/aca2c432-3027-45d5-9699-1b40a516aecc/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 126.49,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "miss",
+            "negative": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "8b0eafb4a843c8206214b5e2385efc9fd516b6e70d83502ce59ffc9db909d9da",
+              "audio": "7229fdf9ac70c2dfafcbc2d1351300249378bc66eb4fd700341fec4935282951"
+            },
+            "negative": {
+              "video": "e43fe2145183b650811a68731a32f7bbc9c3a4166a161839230a6fc50e73b359",
+              "audio": "732d0ebe3dae00739b9bfdeab1b76d0511f1086db7fd3c1553fd84893f7b44af"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "7": {
+      "label": "7",
+      "cond": "ON, B, Nb, vsf",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "vsf",
+        "keep_text_conditioning": true
+      },
+      "job_id": "ed10b4f9-6c1f-4c02-b77d-8f130273d9ec",
+      "submitted_at": "2026-11-25T17:37:18",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 80.1,
+      "summary": {
+        "mp4_sha256": "34b4abefce8d1a3819cad62f72ec535c614ae8a6d9ef1110f36806ae45c70bd8",
+        "mp4_size": 1140625,
+        "mp4_rel": "outputs/ed10b4f9-6c1f-4c02-b77d-8f130273d9ec/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 78.8,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "hit",
+            "negative": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "8b0eafb4a843c8206214b5e2385efc9fd516b6e70d83502ce59ffc9db909d9da",
+              "audio": "7229fdf9ac70c2dfafcbc2d1351300249378bc66eb4fd700341fec4935282951"
+            },
+            "negative": {
+              "video": "e43fe2145183b650811a68731a32f7bbc9c3a4166a161839230a6fc50e73b359",
+              "audio": "732d0ebe3dae00739b9bfdeab1b76d0511f1086db7fd3c1553fd84893f7b44af"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "8": {
+      "label": "8",
+      "cond": "ON, B, Nb, vsf, keep_resident",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": true,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "vsf",
+        "keep_text_conditioning": true
+      },
+      "job_id": "a533fa9a-740a-48ee-8c13-b3da27153a27",
+      "submitted_at": "2026-11-25T17:38:39",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 80.0,
+      "summary": {
+        "mp4_sha256": "34b4abefce8d1a3819cad62f72ec535c614ae8a6d9ef1110f36806ae45c70bd8",
+        "mp4_size": 1140625,
+        "mp4_rel": "outputs/a533fa9a-740a-48ee-8c13-b3da27153a27/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 79.37,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": true,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "positive": "hit",
+            "negative": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": {
+              "video": "8b0eafb4a843c8206214b5e2385efc9fd516b6e70d83502ce59ffc9db909d9da",
+              "audio": "7229fdf9ac70c2dfafcbc2d1351300249378bc66eb4fd700341fec4935282951"
+            },
+            "negative": {
+              "video": "e43fe2145183b650811a68731a32f7bbc9c3a4166a161839230a6fc50e73b359",
+              "audio": "732d0ebe3dae00739b9bfdeab1b76d0511f1086db7fd3c1553fd84893f7b44af"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            true
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "on"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 2,
+          "bytes": 25165824
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "9": {
+      "label": "9",
+      "cond": "OFF, A, Nb, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "nag"
+      },
+      "job_id": "84584307-2ddc-4301-8ce6-1af77b3ef8f6",
+      "submitted_at": "2026-11-25T17:39:59",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 130.0,
+      "summary": {
+        "mp4_sha256": "4fcba20312453e2c2975e041b0b3b01a87bba6c6455bfded2199991901929228",
+        "mp4_size": 1281639,
+        "mp4_rel": "outputs/84584307-2ddc-4301-8ce6-1af77b3ef8f6/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 129.57,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "10": {
+      "label": "10",
+      "cond": "OFF, B, Nb, nag",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "nag"
+      },
+      "job_id": "673ab960-9d75-4f35-9232-6b2a9f6fc871",
+      "submitted_at": "2026-11-25T17:42:09",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 125.1,
+      "summary": {
+        "mp4_sha256": "f408201e310dee731afad90bb688fca1ba25f9bfb0239a0aabbaf3d973f47505",
+        "mp4_size": 1255672,
+        "mp4_rel": "outputs/673ab960-9d75-4f35-9232-6b2a9f6fc871/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 124.7,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "11": {
+      "label": "11",
+      "cond": "OFF, B, Nb, vsf",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "num_frames": 121,
+        "nag_enabled": true,
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "neg_method": "vsf"
+      },
+      "job_id": "e47257d6-41f6-464c-95ed-4a735cb52440",
+      "submitted_at": "2026-11-25T17:44:15",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 125.1,
+      "summary": {
+        "mp4_sha256": "34b4abefce8d1a3819cad62f72ec535c614ae8a6d9ef1110f36806ae45c70bd8",
+        "mp4_size": 1140625,
+        "mp4_rel": "outputs/e47257d6-41f6-464c-95ed-4a735cb52440/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 122.68,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.num_frames",
+            121
+          ],
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "5.041667",
+            "nb_read_frames": "121"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "5.010000",
+            "nb_read_frames": "235"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 7,
+    "at": [
+      "2026-11-25T17:29:27",
+      "2026-11-25T17:33:58",
+      "2026-11-25T17:34:48",
+      "2026-11-25T17:35:58",
+      "2026-11-25T17:36:53",
+      "2026-11-25T17:39:04",
+      "2026-11-25T17:43:24"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T17:24:54"
+  ],
+  "pre": {
+    "active_base_model": "LTX23",
+    "transformer_active": "default",
+    "categories_active": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "LTX23",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T17:46:20",
+  "gate_pass": true
+}

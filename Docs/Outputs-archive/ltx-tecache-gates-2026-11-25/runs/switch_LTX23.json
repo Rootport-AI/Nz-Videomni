@@ -1,0 +1,127 @@
+{
+  "started": "2026-11-25T17:24:45",
+  "want": "LTX23",
+  "models_before": {
+    "active_base_model": "MiniMaxH3"
+  },
+  "status_before": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": false,
+      "pipeline_type": null,
+      "state": "unloaded",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    }
+  },
+  "load_call": {
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "LTX23",
+    "models": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "finished": true
+  },
+  "loaded": {
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "LTX23",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    },
+    "active_base_model": "LTX23",
+    "transformer_active": "default",
+    "categories_active": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    }
+  },
+  "ok": true
+}

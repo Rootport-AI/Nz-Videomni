@@ -458,7 +458,10 @@ class AlphaGenRequest(BaseModel):
     are forwarded verbatim. They are not new knobs: on LTX 2.5 an absent
     ``keep_resident`` / ``keep_resident_embeddings`` key is the RELEASE request
     (``services/engines/ltx25/adapter.py``), so a matte job built from defaults
-    would silently drop a user's residency setting.
+    would silently drop a user's residency setting. ``keep_text_conditioning``
+    is the sixth: an absent key is the same release request for the text
+    encoder's kept conditioning (LTX 2.5), so a matte job built from defaults
+    would drop what the user keeps between jobs.
     """
 
     reference_video_id: str = Field(..., min_length=1)
@@ -473,6 +476,7 @@ class AlphaGenRequest(BaseModel):
     keep_resident: bool = KEEP_RESIDENT_DEFAULT
     keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
     fused_gguf_dequant_kernel: bool = FUSED_GGUF_DEQUANT_KERNEL_DEFAULT
+    keep_text_conditioning: bool = False
 
     @field_validator("num_frames")
     @classmethod
@@ -774,6 +778,21 @@ class GenerateRequest(BaseModel):
     # REJECT_TABLE）。連結スキーマにも同じ形で置く。GET /status には載せない
     # （sol_vae と同じ規律）。
     keep_reference_latents: bool = False
+
+    # keep_text_conditioning: テキストエンコーダーの出力（条件付け）を、ワーカー
+    # のメインメモリに保持する。MiniMax H3・LTX 2.3・LTX 2.5 で使える。既定の
+    # false は今日の生成と一切変わらない。true のときは、入力が同じ次の生成と連結
+    # のクリップで、テキストエンコーダーの段を省く（生成結果は変わらない）。
+    # 当たる単位はエンジンごとに違う。MiniMax H3 は Positive（プロンプトとテキスト
+    # エンコーダーが読む素材）と Negative を別々に持つ。LTX 2.3 は文字列ごと
+    # （Positive と Negative で共用）。LTX 2.5 はそのジョブが渡す文字列の並びの
+    # 全体が同じときだけ当たる。メインメモリを使う。false のジョブが来ると
+    # 保持した分は消える。MiniMax H3 の keep_reference_latents とは別の機能で、
+    # 同時に使える。
+    # true のときだけワーカーへ送る加算的コントラクト（偽のときは鍵を足さない）。
+    # 連結スキーマにも同じ形で置く。GET /status には載せない
+    # （keep_reference_latents と同じ規律）。
+    keep_text_conditioning: bool = False
 
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
@@ -1505,6 +1524,10 @@ class GenerateChainRequest(BaseModel):
     # 一切変わらない）。LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る
     # （各アダプタの CHAIN_REJECT_TABLE）。
     keep_reference_latents: bool = False
+    # keep_text_conditioning: 詳細は GenerateRequest の同名フィールドを参照
+    # （テキストエンコーダーの条件付けの保持。MiniMax H3・LTX 2.3・LTX 2.5 で
+    # 使える。既定 false は今日の連結と一切変わらない）。
+    keep_text_conditioning: bool = False
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1963,7 +1986,9 @@ class GenerateChainRequest(BaseModel):
         record would otherwise claim the default), and so are ``vram16_mode``,
         ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX) and
         ``pi_h3`` / ``sol_vae`` / ``keep_reference_latents`` (MiniMax H3's;
-        ``"off"`` / ``False`` on LTX, which refuses any other).
+        ``"off"`` / ``False`` on LTX, which refuses any other) and
+        ``keep_text_conditioning`` (every engine's; an LTX chain forwards it
+        to the worker as the single path does).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -2013,6 +2038,7 @@ class GenerateChainRequest(BaseModel):
             pi_h3=self.pi_h3,
             sol_vae=self.sol_vae,
             keep_reference_latents=self.keep_reference_latents,
+            keep_text_conditioning=self.keep_text_conditioning,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

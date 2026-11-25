@@ -1,0 +1,130 @@
+[
+ {
+  "n": 1,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": true,
+  "te_build_seconds": 32.3,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 2,
+  "kind": "single",
+  "keep_text_conditioning": "False",
+  "te_built": true,
+  "te_build_seconds": 27.9,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 3,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": true,
+  "te_build_seconds": 28.7,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 4,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": false,
+  "te_build_seconds": null,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 5,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": true,
+  "te_build_seconds": 25.2,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 6,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": true,
+  "te_build_seconds": 29.3,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 7,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": false,
+  "te_build_seconds": null,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 8,
+  "kind": "single",
+  "keep_text_conditioning": "True",
+  "te_built": false,
+  "te_build_seconds": null,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 9,
+  "kind": "single",
+  "keep_text_conditioning": "False",
+  "te_built": true,
+  "te_build_seconds": 27.3,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 10,
+  "kind": "single",
+  "keep_text_conditioning": "False",
+  "te_built": true,
+  "te_build_seconds": 25.5,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 11,
+  "kind": "single",
+  "keep_text_conditioning": "False",
+  "te_built": true,
+  "te_build_seconds": 26.0,
+  "chain_prompts_line": null
+ },
+ {
+  "n": 12,
+  "kind": "chain",
+  "keep_text_conditioning": "False",
+  "te_built": true,
+  "te_build_seconds": 25.8,
+  "chain_prompts_line": "chain prompts: 4 distinct encoded; stage-2 prompt is one extra encode"
+ },
+ {
+  "n": 13,
+  "kind": "chain",
+  "keep_text_conditioning": "True",
+  "te_built": true,
+  "te_build_seconds": 24.2,
+  "chain_prompts_line": "chain prompts: 4 distinct encoded; stage-2 prompt is one extra encode"
+ },
+ {
+  "n": 14,
+  "kind": "chain",
+  "keep_text_conditioning": "True",
+  "te_built": false,
+  "te_build_seconds": null,
+  "chain_prompts_line": "chain prompts: 4 distinct encoded; stage-2 prompt is one extra encode"
+ },
+ {
+  "n": 15,
+  "kind": "chain",
+  "keep_text_conditioning": "True",
+  "te_built": true,
+  "te_build_seconds": 25.5,
+  "chain_prompts_line": "chain prompts: 4 distinct encoded; stage-2 prompt is one extra encode"
+ },
+ {
+  "n": 16,
+  "kind": "chain",
+  "keep_text_conditioning": "False",
+  "te_built": true,
+  "te_build_seconds": 26.8,
+  "chain_prompts_line": "chain prompts: 4 distinct encoded; stage-2 prompt is one extra encode"
+ }
+]

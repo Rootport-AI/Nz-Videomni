@@ -1,0 +1,128 @@
+python.exe : Traceback (most recent call last):
+At line:1 char:492
++ ... -Videomni"; & ".\.venv-engine-ltx25\Scripts\python.exe" "outputs\ltx2 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File ".\outputs\ltx25-te-bundle-spike-2026-11-25\spike.py", line 358, i
+n <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File ".\outputs\ltx25-te-bundle-spike-2026-11-25\spike.py", line 241, i
+n main
+    out, wall, phases = run_once(pipe, prompts)
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\outputs\ltx25-te-bundle-spike-2026-11-25\spike.py", line 156, i
+n run_once
+    out = pipe.prompt_encoder(
+          ^^^^^^^^^^^^^^^^^^^^
+  File ".\engine25\pipeline25.py", line 670, in __call__
+    return super().__call__(prompts, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\ltx_pipelines\utils\blocks
+.py", line 787, in __call__
+    raw_outputs = text_encoder.encode(prompts)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\ltx_core\text_encoders\gem
+ma\encoders\base_encoder.py", line 68, in encode
+    outputs = self.model.model(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\utils\generic
+.py", line 1040, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\utils\generic
+.py", line 911, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\models\gemma4
+_unified\modeling_gemma4_unified.py", line 1126, in forward
+    outputs = self.language_model(
+              ^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\utils\generic
+.py", line 1040, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\utils\output_
+capturing.py", line 262, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\models\gemma4
+_unified\modeling_gemma4_unified.py", line 682, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\modeling_laye
+rs.py", line 110, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1881, in _call_impl
+    return inner()
+           ^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1829, in inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\engine25\gguf_gemma4.py", line 631, in streamed
+    return original(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\models\gemma4
+_unified\modeling_gemma4_unified.py", line 539, in forward
+    hidden_states = self.mlp(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\transformers\models\gemma4
+_unified\modeling_gemma4_unified.py", line 492, in forward
+    down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+                                                                ^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1775, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\.venv-engine-ltx25\Lib\site-packages\torch\nn\modules\module.py
+", line 1786, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\engine\gguf\quant_service.py", line 518, in ggml_linear_forward
+    bf16 = dequantize_ggml_tensor(raw, w._ggml_type, w._float_shape, x.dtype)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\engine\gguf\quant_service.py", line 141, in dequantize_ggml_ten
+sor
+    return _dequant_q4_k(raw, original_shape, out_dtype)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File ".\engine\gguf\quant_service.py", line 209, in _dequant_q4_k
+    qs = blocks[:, 4 + _K_SCALE_SIZE:].to(torch.int32)           # (n,128)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 114.00 MiB. GPU 0 has a total capacity of 15.99 GiB of wh
+ich 0 bytes is free. Of the allocated memory 61.68 GiB is allocated by PyTorch, and 444.40 MiB is reserved by PyTorch b
+ut unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:Tru
+e to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#en
+vironment-variables)

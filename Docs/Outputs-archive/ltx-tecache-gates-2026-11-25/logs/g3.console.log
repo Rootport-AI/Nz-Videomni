@@ -1,0 +1,24 @@
+g3-1: job c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66 (ON)
+  BACKEND_UNREACHABLE (1) 2026-11-25T18:56:51
+  BACKEND_UNREACHABLE (2) 2026-11-25T18:57:21
+  BACKEND_UNREACHABLE (3) 2026-11-25T18:57:36
+  c7ecfb4e running stage=stage1_denoise clip=None step=7/8 t=115s
+  c7ecfb4e running stage=stage1_denoise clip=None step=8/8 t=160s
+  c7ecfb4e running stage=stage2_denoise clip=None step=2/2 t=205s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:00:16
+g3-1: mp4 df6db3da te={'positive': 'miss'} gen=220.27 phases=None problems=[]
+g3-2: job b795bf79-7d46-48ce-b41f-00866cd8a0b5 (ON (same))
+  b795bf79 running stage=stage1_denoise clip=None step=2/8 t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:01:52
+  b795bf79 running stage=stage2_denoise clip=None step=1/2 t=140s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:02:52
+g3-2: mp4 df6db3da te={'positive': 'hit'} gen=175.73 phases=None problems=[]
+g3-3: job 03e47eb4-5969-4fc5-a993-772a6b90047f (OFF)
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:03:48
+  03e47eb4 running stage=None clip=None step=None/None t=80s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:05:13
+  BACKEND_UNREACHABLE (2) 2026-11-25T19:05:33
+  03e47eb4 running stage=stage2_denoise clip=None step=1/2 t=180s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:06:58
+g3-3: mp4 df6db3da te=None gen=226.16 phases=None problems=[]
+GATE g3 PASS

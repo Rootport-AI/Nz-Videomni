@@ -1,0 +1,86 @@
+{
+  "gate": "g1",
+  "pass": true,
+  "stopped": null,
+  "error": null,
+  "jobs": {
+    "1": {
+      "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+      "cond": "ON, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "2": {
+      "job_id": "0d2fb735-9dca-4286-b951-5c2ce8a49075",
+      "cond": "OFF, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "3": {
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "cond": "ON, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "4": {
+      "job_id": "3c3e2b60-3b06-4731-bb57-4d9e8b8927da",
+      "cond": "ON, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "5": {
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "cond": "ON, A, Nb, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "6": {
+      "job_id": "aca2c432-3027-45d5-9699-1b40a516aecc",
+      "cond": "ON, B, Nb, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "7": {
+      "job_id": "ed10b4f9-6c1f-4c02-b77d-8f130273d9ec",
+      "cond": "ON, B, Nb, vsf",
+      "checked_ok": true,
+      "problems": []
+    },
+    "8": {
+      "job_id": "a533fa9a-740a-48ee-8c13-b3da27153a27",
+      "cond": "ON, B, Nb, vsf, keep_resident",
+      "checked_ok": true,
+      "problems": []
+    },
+    "9": {
+      "job_id": "84584307-2ddc-4301-8ce6-1af77b3ef8f6",
+      "cond": "OFF, A, Nb, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "10": {
+      "job_id": "673ab960-9d75-4f35-9232-6b2a9f6fc871",
+      "cond": "OFF, B, Nb, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "11": {
+      "job_id": "e47257d6-41f6-464c-95ed-4a735cb52440",
+      "cond": "OFF, B, Nb, vsf",
+      "checked_ok": true,
+      "problems": []
+    }
+  },
+  "unreachable": {
+    "count": 7,
+    "at": [
+      "2026-11-25T17:29:27",
+      "2026-11-25T17:33:58",
+      "2026-11-25T17:34:48",
+      "2026-11-25T17:35:58",
+      "2026-11-25T17:36:53",
+      "2026-11-25T17:39:04",
+      "2026-11-25T17:43:24"
+    ]
+  }
+}

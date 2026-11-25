@@ -7150,3 +7150,156 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 実機への配置（`scripts/deploy.ps1`）は済みました。案内のオーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。§181 のチェックそのもののオーナーの確認は合格しました（記録簿 §232.11）。
 
 > **更新（2026-11-25）**: 案内のオーナーの実機での確認も合格し、§181 の分とあわせて項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296 へ移りました（結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232.13）。main へ取り込む前のアプリの試験の全件 1 回は通りました（同 §233.15）。main への取り込みは、そのあとに行います。
+
+## 184. MiniMax H3 の Settings の Acceleration に「テキストエンコーダーの条件付けのキャッシュ（MiniMax H3）」の行を足す — ON／OFF の 2 つのボタンと ON のときだけの注意書き・保存の欄 `keepTextConditioning`・共通の関数で全部の要求に載せる・LTX での隠し方・「参照素材の潜在の常駐」の行とは独立（設計正本 裁定 111。2026-11-25）
+
+### 184.1 結論
+
+- **Settings の「Acceleration: / 生成の高速化:」の欄のいちばん下（「参照素材の潜在の常駐（MiniMax H3）」の行の下）に、行「テキストエンコーダーの条件付けのキャッシュ（MiniMax H3）」（英語 `Text encoder conditioning cache (MiniMax H3)`）を、ほかの行と同じ ON／OFF の 2 つのボタンで置きました。** 既定は OFF で、ON のあいだだけ要求に `keep_text_conditioning: true` を載せ、行の下に注意書きを出します。
+- 動き（何がどうなるか）と注意書きの文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 111・§6.10（「操作パネル」）で、本節には写しません。**本節は実装の形と、将来の改修者への注意（184.5）の正本です。**
+- 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §235 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-298 にだけ書きます。**実機への配置は済み、オーナーの実機での確認は未了です。**
+- 同じテーマで、エンジン（条件付けの使い回しそのもの）、API・アダプター、MCP も変えました（バックエンドの dev の `04162b29`・`495a92cd`）。プラグイン本体（C++）は変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。
+
+### 184.2 進め方とコミット
+
+計画はオーナーが了承しました（2026-11-25）。操作パネルは、エンジンとアプリと一度に、別の担当が実装しました。実装のあと、別の担当が差分の全体を読み、指摘はありませんでした（残骸が無いことも確かめた）。コミットは dev です。
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト、配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `f9643c54` |
+
+本節を含む文書は、別のコミットで入れます。
+
+### 184.3 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは省きました（184.6）。§182.3 と同じ並びです。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts` | 設定 `keepTextConditioning`（既定 `false`。定数 `KEEP_TEXT_CONDITIONING_SERVER_DEFAULT`）。保存の欄と読み戻し（欄の無い保存値は既定で読む）。`withServerDefaults` の書き戻し。`effectiveAccelerationFields` の欄。`accelerationRequestFields` で、既定と違うとき（真のとき）だけ `keep_text_conditioning` を載せる |
+| `shell/useAccelerationSettings.ts` | 書き換えの関数 `setKeepTextConditioning` と保存 |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | 行・2 つのボタン・ON のときだけの注意書き。行を隠す条件 `keepTextConditioningUnsupported` |
+| `shell/featureScope.ts` | 機能の名前 `keep_text_conditioning` で行を隠し、保存値を既定に戻す（`FEATURE_UI` の行と `SettingsRowsHidden.keepTextConditioning`） |
+| `i18n/strings.ts` | 行の名前・ボタン・注意書き（英語と日本語） |
+| `api/types.ts` | 単発と連結の要求の型に `keep_text_conditioning` |
+| `bridge/mockBridge.ts` | 開発用の模擬に、LTX の `unsupported_features` の `keep_text_conditioning` と、LTX の拒否（単発と連結。文は本物のサーバーと同じ） |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 1 行（快適上限マーカーの計算は変えていない） |
+
+### 184.4 採った選択と理由
+
+- **§182 の行と同じ形**: ON／OFF の 2 つのボタン・注意書きは ON のときだけ・`/status` の能力の旗もほかの行への依存も無い・快適上限マーカーの計算に加えない、の 4 点は §182.4 と同じ理由です。
+- **「参照素材の潜在の常駐」の行とつながりを持たない**: 2 つは別の持ち物で、同時に ON にできます（オーナーの裁定 2026-11-25）。片方の ON／OFF でもう片方の表示や保存の値は変わりません。
+- **注意書きの目安の数**: 文の中の「プロンプトだけなら 1 件 1MB 未満。参照素材が多いと 1 件で数百 MB」の根拠（実測した値と見積もり）は記録簿 §235 です。
+
+### 184.5 将来の改修者への注意
+
+§182.5 の (a)・(b) は、この行にもそのまま当てはまります（正本は §182.5）。
+
+- **(a)** `keep_text_conditioning` も、共通の関数 `accelerationRequestFields` から、単発・連結・バッチ・Edit の全部の要求へ同じ規則で載ります。
+- **(b)** MiniMax H3 以外では行が隠れ、保存の値は既定（OFF）へ戻ります（`featureScope.ts` の表）。行の出し分けだけを変えて書き戻しを外すと、LTX の要求に `true` が載って 422 になります。
+- **(c) 2 つのキャッシュの行の独立を崩さない。** 「参照素材の潜在の常駐」の行と片方の ON でもう片方を連動させたくなったときは、バックエンドの 2 つの持ち物が独立であるという設計（設計正本 §6.10 の「ほかの持ち物との関係」）と一緒に見直すこと。
+
+### 184.6 テスト
+
+- `shell/accelerationSettings.test.ts`: 既定、保存と読み戻し（欄の無い保存値）、真のときだけ要求に載ること。
+- `shell/useAccelerationSettings.test.ts`: 書き換えの関数と保存。
+- `shell/keepTextConditioning.paths.test.ts`（新設）: ON なら単発・連結・バッチの i2v の要求の本文に `keep_text_conditioning: true` が載り、OFF ならどの本文にも鍵が無いこと。`keep_reference_latents` とは独立で、ON にした鍵だけが載ること。
+- `shell/SettingsPanel.test.tsx`: 行と 2 つのボタン、注意書きが ON のときだけ出ること、文言。
+- `shell/featureScope.test.ts`・`shell/AppShell.featureScope.test.tsx`: LTX で行が隠れ、保存値が OFF に戻ること。
+- `bridge/mockBridge.h3.test.ts`・`bridge/mockBridge.test.ts`: 模擬の `unsupported_features` と LTX の拒否。
+- ほかに、設定の型に欄が増えたことに合わせた既存の試験の期待値の更新（`useBaseModels.test.ts`・`comfortTable.test.ts`・`useGenerationForm.test.ts`・`prefillSeed.test.ts`）。
+- 機械の確認の結果（型検査・テストの件数・aux2 の大きさと SHA-256・配置）は記録簿 §235 です。
+
+### 184.7 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-298 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-298）。
+
+## 185. 「テキストエンコーダーの条件付けのキャッシュ」を 3 つのベースモデルに共通の行にする — 表示名から「（MiniMax H3）」を外す・注意書きを 3 つのモデルに合う文に直す・LTX でも行が出て ON が残る・行を隠す仕掛けは残す・Alpha Gen の送信に 6 つ目の欄を足す（設計正本 裁定 112。2026-11-25）
+
+### 185.1 結論
+
+- **Settings の行「テキストエンコーダーの条件付けのキャッシュ」は、MiniMax H3・LTX 2.3・LTX 2.5 に共通の 1 行になりました。** サーバーが LTX 2.3・2.5 でも `keep_text_conditioning` を受け付けるようになったためです（バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-299）。ベースモデルを切り替えても、行は出たままで、ON の選択も残ります。
+- 表示名は「テキストエンコーダーの条件付けのキャッシュ」（英語 `Text encoder conditioning cache`）で、「（MiniMax H3）」を外しました。ON のときだけの注意書きは、3 つのモデルに合う文に直しました（文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.10 の「操作パネル」）。
+- Alpha Gen の送信に、高速化の設定を受け渡す欄の 6 つ目として `keep_text_conditioning` を足しました（ON のときだけ載る）。
+- 動き（何がどうなるか）の正本はバックエンド [`MULTI_ENGINE_DESIGN.md`](../../../Docs/MULTI_ENGINE_DESIGN.md) §5.9 と [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 112・§6.10 で、本節には写しません。**本節は実装の形と、将来の改修者への注意（185.4）の正本です。** 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §236、オーナーの実機での確認の項目はバックエンド台帳 §2 の 1-299 にだけ書きます。
+
+### 185.2 コミット
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト | `dc8b2b06` |
+| 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `2fe5c235` |
+
+プラグイン本体（C++）は変えていません。本節を含む文書は、別のコミットで入れます。
+
+### 185.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | 行の名前と注意書き（英語と日本語）。名前から「（MiniMax H3）」を外し、注意書きに LTX の 1 件の大きさと、LTX 2.5 はプロンプトのどれか 1 つでも変わると全部作り直すことを足した |
+| `modes/edit/useAlphaGenForm.ts` | Alpha Gen の送信の本文に、`accelerationRequestFields()` の結果から `keep_text_conditioning` を載せる（ほかの 5 つと同じく、値があるときだけ。この欄は ON のときだけ値がある） |
+| `api/types.ts` | Alpha Gen の要求の型（`AlphaGenRequestBody`）に `keep_text_conditioning` を足し、単発の要求の型の説明を今の事実に直した |
+| `bridge/mockBridge.ts` | 開発用の模擬の LTX 2.3・2.5 から、`unsupported_features` の `keep_text_conditioning` と、単発と連結の拒否を外した |
+| `shell/accelerationSettings.ts`・`shell/SettingsPanel.tsx` | 説明のコメントだけを今の事実に直した（動きは変えていない） |
+
+- **テスト**: `shell/AppShell.featureScope.test.tsx`（模擬の LTX でも行が出て ON が残ること。古いサーバーのまねとして、`unsupported_features` に名前を足したときは今までどおり隠れて OFF に戻ること）、`shell/SettingsPanel.test.tsx`（新しい名前と注意書き）、`modes/edit/useAlphaGenForm.test.tsx`（ON のときだけ Alpha Gen の本文に欄が載ること）、`bridge/mockBridge.test.ts`・`bridge/mockBridge.h3.test.ts`（模擬の LTX が欄を断らないこと）、`shell/useBaseModels.test.ts`（模擬の LTX の `unsupported_features` の期待値）、`shell/keepTextConditioning.paths.test.ts`（説明のコメントだけ）。
+
+### 185.4 採った選択と、将来の改修者への注意
+
+- **(a) 行を隠す仕掛けは残しました**（`shell/featureScope.ts` の表の `keep_text_conditioning` の行と、`AppShell` の書き戻し。設計正本 裁定 112 ⑦）。サーバーが `unsupported_features` にこの名前を載せているあいだだけ行を隠し、保存の値を OFF に戻す汎用の仕掛けで、今のサーバーはどのモデルでも名前を載せないので、消さなくても行は出ます。残しておけば、新しい操作パネルが古いサーバー（LTX でこの欄を断るもの）と組んだときに、ON のせいで LTX の生成が断られることを防げます。**消さないこと。**
+- **(b)** §184.5 の (b)（「MiniMax H3 以外では行が隠れる」）は、今のサーバーでは当てはまりません。行の出し分けを変えるときに書き戻しを外してはいけない理由（古いサーバーで `true` が載ると 422 になる）は、そのまま生きています。
+- **(c)** Alpha Gen の送信は、高速化の欄を 1 つずつ書き出す作りです（`vae_mode`・`embed_mp4_metadata` は Alpha Gen の要求に無いため）。高速化の欄を足すときは、Alpha Gen の要求（バックエンドの `AlphaGenRequest`）が受けるかどうかを確かめ、受けるなら `useAlphaGenForm.ts` にも足すこと。
+
+### 185.5 実機の門
+
+- 監督がプラグインを作り直し、実機に配置しました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-299 です（1-298 の項目とまとめて 1 回）。
+
+## 186. 「テキストエンコーダーの条件付けのキャッシュ」の注意書きの文を、オーナーの指定の文に差し替える — 動きは変えない・古い文の最後の 1 文は注意書きから外れる（設計正本 §6.10。2026-11-25）
+
+### 186.1 結論
+
+- **Settings の行「テキストエンコーダーの条件付けのキャッシュ」を ON にしたときに出る注意書きの文を、オーナーの指定（2026-11-25。オーナーの実機での確認のあと）の文に差し替えました。** 英語と日本語の両方です。動き（何がどうなるか）は変えていません。
+- 新しい文の全文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.10 の「操作パネル」で、本節には写しません。
+- 古い文の最後の 1 文（LTX 2.5 はプロンプトのどれか 1 つでも変わると全部作り直す、という説明）は、新しい文に無いので、注意書きから外れました。この説明は、README の同じ節・設計正本 §6.10 の「使い分けの表」・[`MULTI_ENGINE_DESIGN.md`](../../../Docs/MULTI_ENGINE_DESIGN.md) §5.9 に残っています。
+- 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §237 にだけ書きます。
+
+### 186.2 コミット
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト | `6575241d` |
+| 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `760a363b` |
+| 敵対的なレビューを受けたコメントの直し（下の 186.3 のあと） | `d2d0d36d` |
+
+プラグイン本体（C++）は変えていません。本節を含む文書は、別のコミットで入れます。
+
+### 186.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | `accelKeepTextConditioningNote` の英語と日本語と、その上の説明のコメント |
+| `shell/SettingsPanel.test.tsx` | 文の全文を固定している 2 か所（英語の定数、日本語の期待値） |
+| `shell/AppShell.featureScope.test.tsx` | 英語の書き出しを固定している正規表現 1 か所 |
+| `shell/accelerationSettings.ts` | `KEEP_TEXT_CONDITIONING_SERVER_DEFAULT` の上のコメント。「LTX では行が隠れる」と言い切っていたのを、今の動き（3 つのベースモデルが受け付け、サーバーが「使えない」と言うときだけ隠れる）に直した |
+| `shell/featureScope.ts` | 機能の表の説明のコメント。`keep_text_conditioning` を「MiniMax H3 専用で、LTX は名前を載せる」と書いていたのを、今の動きに直した |
+
+- **コメントの直し（`d2d0d36d`）**: 敵対的なレビューを受けて、`shell/SettingsPanel.test.tsx`・`shell/AppShell.featureScope.test.tsx`・`shell/featureScope.ts`・`shell/accelerationSettings.ts` のコメントを直しました。コードの行は変えていません。埋め込む HTML（`dist-single/index.html`）は作り直しても SHA-256 が同じだったので、aux2 は作り直していません。経過は記録簿 §237.5 です。
+
+### 186.4 採った選択
+
+- **英語の「※…ため」は `because` で訳しました**（日本語の「（※キャッシュをメインメモリに置くため。…）」に対応）。
+- 計画は、別の担当が現物と突き合わせて検証し、致命的な指摘はありませんでした。採ったのは、`featureScope.ts` の同じ種類の古いコメントも直すこと、`strings.ts` の説明のコメントも直すこと、英語の訳し方の 3 点です。
+
+### 186.5 機械の門と配置
+
+- 型検査（`npm run typecheck`）は合格しました。
+- 操作パネルの試験の全件（`npx vitest run --exclude "**/backend.integration.test.ts"`）は、実装担当の 1 回目が 210 ファイル中 209・4,157 本中 4,156 本の合格で、落ちた 1 本は `src/shell/AppShell.minimaxH3.test.tsx` の、ベースモデルの選択の切り替わりを待つ所の 5 秒の時間切れでした（今回触ったファイルではない。そのファイルだけを流すと 35 本とも合格）。監督が全件を流し直すと、210 ファイル・4,157 本がすべて合格しました。時間切れは 1 回だけ出て、再現しませんでした（原因は調べていません）。
+- `build.ps1` → `deploy.ps1` で、実機と配布用の写し（`AviUtl2-Plugin/NzVideomni.aux2`）に置きました。大きさは 1,661,440 バイト、SHA-256 の頭は `104d1d768127a7b8` で、実機・配布用・ビルドの成果物の 3 つとも同じです。新しい日本語の文と英語の文がそれぞれ 1 か所入っていて、古い文が無いことを、実機と配布用の両方で確かめました。
+
+### 186.6 実機の門
+
+- オーナーの実機での確認は、全部済みました。差し替えたあとの注意書き（ON を押すと新しい文が出て、文の中に「メモリ64GB以上推奨」がある）は、2026-11-25 にオーナーが新しい版のプラグインで確かめて合格しています。結果の正本は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §237 です。

@@ -18,7 +18,7 @@ import type { UseAlphaGenFormDeps } from "./useAlphaGenForm";
  *  - 寸法の注意 2 種
  *  - 生成時のアップロードの query 2 通りと `window_start_sec`
  *  - サーバーの実測で切り下げたらトーストを 1 回
- *  - 本文は素通しの 5 鍵だけ・`seed: -1`・`frame_rate` 無し
+ *  - 本文は素通しの鍵だけ（keep_text_conditioning は ON のときだけ足される）・`seed: -1`・`frame_rate` 無し
  *  - アップロード中に画面が作り直されたら送らない
  */
 
@@ -426,7 +426,24 @@ describe("useAlphaGenForm — prepareRequest", () => {
     expect(onAdjusted).not.toHaveBeenCalled();
   });
 
-  it("素通しは 5 鍵だけ（vae_mode / embed_mp4_metadata は送らない）・seed は -1・frame_rate 無し", async () => {
+  it("keep_text_conditioning は ON のときだけ載り、OFF のときは今日と同じ要求（台帳 §1-299）", async () => {
+    const run = async (keepTextConditioning: boolean) => {
+      const { result } = renderForm({
+        initialIntent: intent(),
+        acceleration: { ...ACCELERATION_DEFAULTS, keepTextConditioning },
+      });
+      await waitMeasured(result);
+      let body: Awaited<ReturnType<typeof result.current.prepareRequest>> = null;
+      await act(async () => {
+        body = await result.current.prepareRequest();
+      });
+      return body;
+    };
+    expect(await run(true)).toMatchObject({ keep_text_conditioning: true });
+    expect(await run(false)).not.toHaveProperty("keep_text_conditioning");
+  });
+
+  it("素通しの鍵だけ（keep_text_conditioning は OFF のとき無し・vae_mode / embed_mp4_metadata は送らない）・seed は -1・frame_rate 無し", async () => {
     const acceleration: AccelerationSettings = {
       ...ACCELERATION_DEFAULTS,
       attentionBackend: "sage",

@@ -1,0 +1,618 @@
+{
+  "job_id": "8ffa507d-b708-495a-a9c4-6b020c46ac40",
+  "created_at": "2026-11-25T04:40:55Z",
+  "started_at": "2026-11-25T04:40:55Z",
+  "completed_at": "2026-11-25T04:46:32Z",
+  "status": "completed",
+  "kind": "chain",
+  "request": {
+    "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": true,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": false,
+    "vram16_mode": true,
+    "pi_h3": "off",
+    "sol_vae": false,
+    "keep_reference_latents": false,
+    "keep_text_conditioning": true,
+    "width": 1280,
+    "height": 768,
+    "crop_output": null,
+    "frame_rate": 24.0,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "overlap_frames": 3,
+    "overlap_strength": 0.5,
+    "clips": [
+      {
+        "prompt": "Small boats rock gently beside the pier.",
+        "num_frames": 73,
+        "conditioning_images": [
+          {
+            "image_id": "909e6474-c402-48f0-bc53-76a31142226c",
+            "frame_idx": 0,
+            "strength": null,
+            "crf": null
+          }
+        ],
+        "references": [],
+        "source_audio": null
+      },
+      {
+        "prompt": "Mist drifts slowly over the calm water.",
+        "num_frames": 73,
+        "conditioning_images": [],
+        "references": [],
+        "source_audio": null
+      },
+      {
+        "prompt": "The first sunlight reaches the far shore.",
+        "num_frames": 73,
+        "conditioning_images": [],
+        "references": [],
+        "source_audio": null
+      }
+    ],
+    "source_video": null,
+    "source_audio": null,
+    "retake": null,
+    "end_source": null,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8,
+        "audio_strength": null
+      }
+    ],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "chunked_upsample": true,
+    "stage2_window": "standard"
+  },
+  "generation_mode": "chain",
+  "seed_used": 42,
+  "attention_used": "sdpa",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "on",
+  "keep_resident_embeddings_used": null,
+  "fused_gguf_dequant_kernel_used": null,
+  "vae_mode_used": null,
+  "vram16_mode_used": "on",
+  "peak_vram_reserved_mb": 7568,
+  "generation_time_seconds": 337.5,
+  "backend": "minimax-h3",
+  "chain": {
+    "num_clips": 3,
+    "architecture": "h3_masked_av_latent_carry",
+    "overlap_frames": 22,
+    "overlap_strength": 1.0,
+    "total_frames": 175,
+    "clip_num_frames": [
+      73,
+      73,
+      73
+    ],
+    "segment_seam_junctions": [
+      72,
+      123
+    ],
+    "tile_seam_junctions": [],
+    "all_junctions": [
+      71,
+      72,
+      73,
+      122,
+      123,
+      124
+    ],
+    "video_tiles": [],
+    "n_tiles": 0,
+    "stage2_window": null,
+    "v_tile": null,
+    "kt_v": null
+  },
+  "output": {
+    "path": "outputs/8ffa507d-b708-495a-a9c4-6b020c46ac40/output.mp4",
+    "resolution": "1280x768",
+    "duration_seconds": 7.292,
+    "frame_rate": 24.0,
+    "file_size_bytes": 3476166
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 6357
+  },
+  "models": {
+    "base_model": "MiniMaxH3",
+    "selection": {
+      "transformer": {
+        "name": "minimax_h3_ref2va_pruned_int8_convrot",
+        "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "minimax_h3_video_vae_fp16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "minimax_h3_audio_vae_fp32.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "h3": {
+    "sampler": "euler",
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images_used": 1,
+    "rss_peak_gib": 31.28,
+    "commit_gib": 36.57,
+    "commit_peak_gib": 45.85,
+    "seconds": 337.49,
+    "phases": {
+      "clips": [
+        {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.3
+            },
+            "rss_after_load_gib": 28.16,
+            "commit_after_load_gib": 36.36,
+            "te_read": {
+              "read_gib": 25.28,
+              "read_seconds": 18.1,
+              "layers_read": 50,
+              "encode_seconds": 18.41,
+              "tokens": 989,
+              "vision_tokens": 960,
+              "vision_tokens_per_image": [
+                960
+              ]
+            },
+            "rss_after_release_gib": 27.94,
+            "commit_after_release_gib": 36.42,
+            "te_cache": {
+              "positive": "miss"
+            },
+            "conditioning_sha256": {
+              "positive": "7b251f6858205410586c09b8b5d52b07306af0aa35aed493e33daac09195f0ef",
+              "tags": "5334a888a216bb1b97bab38d29beee3c9f2f5660b089d6b90ab93af074613961"
+            },
+            "text_tokens": 989,
+            "seconds": 19.17,
+            "rss_end_gib": 27.94,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.42,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 2664,
+            "peak_vram_reserved_mb": 2700
+          },
+          "image_encode": {
+            "latent_shape": [
+              1,
+              24,
+              1,
+              48,
+              80
+            ],
+            "vision_tokens": 960,
+            "canvas": [
+              1280,
+              768
+            ],
+            "source_size": [
+              [
+                969,
+                561
+              ]
+            ],
+            "seconds": 1.21,
+            "rss_end_gib": 27.94,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.38,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 1054,
+            "peak_vram_reserved_mb": 1458
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 27.93,
+            "commit_after_load_gib": 36.38,
+            "rss_after_place_gib": 28.84,
+            "commit_after_place_gib": 41.11,
+            "sequence": {
+              "text": 989,
+              "cond": 960,
+              "audio": 244,
+              "video": 21120,
+              "total": 23313,
+              "latent_frames": 22,
+              "audio_latents": 122,
+              "grid": [
+                24,
+                40
+              ]
+            },
+            "m_per_step": [
+              2,
+              3,
+              3,
+              3
+            ],
+            "block_swap_prefetch_used": "on",
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 407
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.42,
+            "commit_after_release_gib": 37.99,
+            "seconds": 97.85,
+            "rss_end_gib": 29.42,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 37.99,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 4267,
+            "peak_vram_reserved_mb": 5182
+          }
+        },
+        {
+          "encode": {
+            "te_read": {
+              "tokens": 22,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": []
+            },
+            "te_cache": {
+              "positive": "hit"
+            },
+            "conditioning_sha256": {
+              "positive": "d1a9189989f57659feb4917343b2dde226a48e902d10aac867780e0bbb2f66dc",
+              "tags": "8f37100bb82b8f78575975ccf96996da3386e3d237e435ac32f498d5c8d6a46b"
+            },
+            "text_tokens": 22,
+            "seconds": 0.0,
+            "rss_end_gib": 29.43,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 37.93,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 8,
+            "peak_vram_reserved_mb": 22
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 29.43,
+            "commit_after_load_gib": 37.93,
+            "rss_after_place_gib": 28.94,
+            "commit_after_place_gib": 41.11,
+            "sequence": {
+              "text": 22,
+              "cond": 0,
+              "audio": 244,
+              "video": 21120,
+              "total": 21386,
+              "latent_frames": 22,
+              "audio_latents": 122,
+              "grid": [
+                24,
+                40
+              ]
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 244,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 21120,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 350
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.5,
+            "commit_after_release_gib": 38.01,
+            "seconds": 84.96,
+            "rss_end_gib": 29.49,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.01,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 4067,
+            "peak_vram_reserved_mb": 4944
+          }
+        },
+        {
+          "encode": {
+            "te_read": {
+              "tokens": 21,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": []
+            },
+            "te_cache": {
+              "positive": "hit"
+            },
+            "conditioning_sha256": {
+              "positive": "9e415102496538817e3cffb657a685850ad4687b6478a213e2868853903bd81c",
+              "tags": "7b0f2fad20a85cf0019788e98b3bf0246e7c45861e5741368767c361c16c2392"
+            },
+            "text_tokens": 21,
+            "seconds": 0.0,
+            "rss_end_gib": 29.49,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 37.94,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 8,
+            "peak_vram_reserved_mb": 22
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 29.49,
+            "commit_after_load_gib": 37.94,
+            "rss_after_place_gib": 28.96,
+            "commit_after_place_gib": 41.12,
+            "sequence": {
+              "text": 21,
+              "cond": 0,
+              "audio": 244,
+              "video": 21120,
+              "total": 21385,
+              "latent_frames": 22,
+              "audio_latents": 122,
+              "grid": [
+                24,
+                40
+              ]
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 244,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 21120,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 350
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.54,
+            "commit_after_release_gib": 38.04,
+            "seconds": 84.91,
+            "rss_end_gib": 29.53,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.04,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 4067,
+            "peak_vram_reserved_mb": 4944
+          }
+        }
+      ],
+      "decode": {
+        "vae_source": "resident",
+        "audio_samples": 233333,
+        "audio_samples_decoded": 233600,
+        "frames": 175,
+        "seconds": 48.58,
+        "rss_end_gib": 28.12,
+        "rss_process_peak_gib": 31.28,
+        "commit_end_gib": 36.57,
+        "commit_process_peak_gib": 45.85,
+        "peak_vram_mb": 6357,
+        "peak_vram_reserved_mb": 7568
+      }
+    },
+    "quant_backends": {
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      }
+    },
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8,
+        "layout": "ab",
+        "dtype": "BF16",
+        "pairs_applied": 208,
+        "skipped": []
+      }
+    ],
+    "clips": [
+      {
+        "prompt_sha256": "cf6b81673f53e0a729c54ef41e8b24ce1b7690e3248e1e36f09fdaa2d1bf2a6d",
+        "seconds": {
+          "encode": 19.17,
+          "image_encode": 1.21,
+          "denoise": 97.85
+        },
+        "latents_sha256": {
+          "video": "41080a310a377cdfbdf454283b62820ba0fc68429c406bc276594a384963467f",
+          "audio": "9c792cd3c31e9be00117f1f89832aaa5a74cd2620ef9cb837b4fb781a5790348"
+        },
+        "head_equals_prev_tail": null
+      },
+      {
+        "prompt_sha256": "d80e7ca0694be2649821e1424f9a4376c15b9f6816dcf7ecdd8c5e27c00217cf",
+        "seconds": {
+          "encode": 0.0,
+          "denoise": 84.96
+        },
+        "latents_sha256": {
+          "video": "267e074d16a6d46d4bb9f28709b67d02a128b8d1358d4ac602d37e0f1aa12f97",
+          "audio": "614682fdc9ed6bb863f93f252803349be607405baffcc72a8665b248df61e540"
+        },
+        "head_equals_prev_tail": true
+      },
+      {
+        "prompt_sha256": "5681e3530676416cbc143098717104670c3fb696c66eb97d3446728cffb929ec",
+        "seconds": {
+          "encode": 0.0,
+          "denoise": 84.91
+        },
+        "latents_sha256": {
+          "video": "1e7b4ef6212aba45a09909c0d867b41af352c4ebcb0e3ff17dda93e49c51d9db",
+          "audio": "b087449e74c931fd257abb439411d235f5c6031e438ae4fd1b3497d047ba98a6"
+        },
+        "head_equals_prev_tail": true
+      }
+    ],
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "audio_latent_excess": 0,
+    "audio_drift_flags": [
+      false,
+      false,
+      false
+    ],
+    "overlap_frames": 22,
+    "inject_clean": 1.0,
+    "decode": "once"
+  }
+}

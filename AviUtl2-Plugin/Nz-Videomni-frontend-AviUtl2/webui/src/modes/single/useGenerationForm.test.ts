@@ -596,6 +596,7 @@ describe("useGenerationForm", () => {
       piH3: "off",
       solVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       embedMp4Metadata: true,
     };
 

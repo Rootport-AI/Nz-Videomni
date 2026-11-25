@@ -1,6 +1,6 @@
 # 未着手タスク台帳
 
-- 作成: 2026-07-15／最終更新: 2026-11-25
+- 作成: 2026-07-15／最終更新: 2026-11-26
 - 位置づけ: **セッション開始時に「次に何をすべきか」を確認するための台帳であり、セッションの入口は本書ただ 1 つである**（引き継ぎ専用の文書＝`NEXT_SESSION_HANDOFF.md`・`NEXT_SESSION_WORKORDER.md`のような役割の重複する文書は、新設しない）。プロジェクト全体（バックエンド `Nz-Videomni` と、フロントエンド `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2`）の課題をここへ一本化している。優先度の高い順に次の4つへ分ける（**運用規則の正本は末尾「本台帳の位置づけ（運用規則）」節**）。
   1. **近日中の改修項目** — 実装・修正の内容が具体的で、まだ着手していないもの。**全項目が片づいて空になったら、本節は見出しごと削除する**（次に着手すべき項目が出た時点で節ごと立て直す）。
   2. **実装済み・ユーザーのテスト待ち** — 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。書式は**チェックリスト形式**である——各項目を「何を操作して確認するか → どうなれば合格か」の1〜2行にし、`- [ ]`の箇条書きを画面・機能ごとの小見出しでまとめる。テストではなく仕様の是非をオーナーが判断する項目は「オーナー判断待ち」の小見出しへ分ける。**全項目が合格して空になったら、本節は見出しごと削除する**（次に確認待ちの項目が出た時点で節ごと立て直す）。
@@ -20,22 +20,6 @@
 - **概要**: 一部のブロックを BF16 のまま残した重み（種類 `bf16_blocks`。`Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49`・`10Eros_Max_h3_8stepTURBO_beta7_int8HQ`）の快適上限の線は、概算による暫定の値である。この暫定の線を、実機で測った境界に基づく線で置き換える。1920×1088 と 2560×1472 で、快適の上端とその 1 段上の OOM の点を測り、記述子の `bf16_blocks` の値を決める。
 - **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
 - **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
-
-### 1-298. MiniMax H3 のテキストエンコーダーの出力（条件付け）を、メインメモリに置いて使い回す（起票：2026-11-24）
-
-- **概要**: MiniMax H3 で、プロンプトと参照素材がどちらも前回と同じなら、テキストエンコーダーの出力（条件付け＝プロンプトと参照を読み取った内部の表現）をメインメモリに置いて使い回し、テキストエンコーダーの段を省く。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297（参照素材の潜在の使い回し。2026-11-25 にクローズ）とは別のテーマである。1-297 は参照素材が同じでプロンプトが違う場合（Chained で参照が共通で、クリップごとのプロンプトが入力済みの場合など）に効き、本項はプロンプトも同じ場合に効く。LTX 系の同じ考えは本書 §1-299。
-**追加の要件**: Positive Prompt と Negative Prompt の条件付けは独立してキャッシュし、一方の入力だけが変更された場合にも、他方の条件付けを使い回せるようにする。Single のジョブ間、Chained のクリップ間およびジョブ間での再利用を対象とする。モデル重みの常駐機能とは独立した機能とし、キャッシュの有無によって生成結果が変化しないことを実機で確認する。
-- **まだ決まっていないこと**: 設計の全体。着手のときにオーナーと相談して決める。
-- **判断材料**: H3 のテキストエンコーダーは、プロンプトのほかに参照の画像と動画も読む（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §3.2 の「テキストエンコーダーへの提示」）。テキストエンコーダーの段の作り（層ごとにファイルから直接読む）は同 §4。参照つきのテキストエンコーダーの段の所要時間の実測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §194.8・§196.3。
-- **出典**: オーナー指示 2026-11-24。
-
-### 1-299. LTX 系のテキストエンコーダーの出力（条件付け）を、メインメモリに置いて使い回す（起票：2026-11-24）
-
-- **概要**: 本書 §1-298 と同じ考え（入力が前回と同じなら、テキストエンコーダーの出力を使い回してその段を省く）を、LTX 系のエンジン（LTX 2.3・LTX 2.5）に入れる。MiniMax H3 向けの §1-298 とは別のテーマとして扱う。LTX 2.5 の Settings の項目 `keep_resident_embeddings` は、埋め込み処理器という部品の重みをジョブをまたいでメインメモリに残すもので、出力を使い回す本項とは別物である。
-**追加の要件**: Positive Prompt と Negative Prompt の条件付けは独立してキャッシュし、一方の入力だけが変更された場合にも、他方の条件付けを使い回せるようにする。Single のジョブ間、Chained のクリップ間およびジョブ間での再利用を対象とする。モデル重みの常駐機能とは独立した機能とし、キャッシュの有無によって生成結果が変化しないことを実機で確認する。
-- **まだ決まっていないこと**: 設計の全体。着手のときにオーナーと相談して決める。
-- **判断材料**: 同じ案（プロンプトの埋め込みのジョブ間のキャッシュ）は研究ノート [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) の「未着手の候補」(1) にあり、同「次の一歩」で、LTX 2.3 のテキストエンコードの所要時間の実測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50）を根拠に優先度を下げている。LTX 2.5 には同じ内訳の実測が無い（本書 §3-53）。`keep_resident_embeddings` の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-114、実測は記録簿 §92。
-- **出典**: オーナー指示 2026-11-24。
 
 ## 2. 実装済み・ユーザーのテスト待ち
 
@@ -71,7 +55,7 @@
 
 #### 3-53. 生成時間の小粒最適化の積み上げ（起票：2026-08-03）
 
-- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。工程ごとの内訳（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声）はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50、**現ベースライン（119.20秒）は同 §52.8 が正本**（§50 の総時間はベースラインに使わない）。**分解計測もベースラインもLTX 2.3のものだけで、LTX 2.5側には同種の内訳が無い**——2.5で本項を扱うなら分解計測から始めること。
+- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。工程ごとの内訳（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声）はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50、**現ベースライン（119.20秒）は同 §52.8 が正本**（§50 の総時間はベースラインに使わない）。**ここに挙げた分解計測とベースラインはLTX 2.3のもの**である。LTX 2.5は、生成の記録 `metadata.json` の `ltx25.phases` に段ごとの秒数が残り、テキストエンコード（`10_prompt_encode`）にはその内訳（`10a_te_build`〔テキストエンコーダーの組み立て〕・`10b_ep_build`〔埋め込み処理器の組み立て〕）もある（記録の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6 の `ltx25` の行）。
   - 映像VAEデコードの短縮（PrunaVAED。短縮幅は同 §52.8）は**既定OFFの選択制**なので、既定のジョブの時間は縮んでいない。
   - **最大の候補は動画エンコード（x264）である。**
     - **着手の入口**: エンコードの実体は固定ホイール`ltx_pipelines/utils/media_io.py`の`encode_video`（呼び出し口は`engine/pipeline/common.py`の`encode_video_output`）。PyAV＋libx264で**preset/crf未指定＝x264既定のまま**・デコードと同一スレッドで交互実行＝**並行化なし**。改修するならラッパーの中身を自前実装へ差し替える確立パターン。**NVENC（h264_nvenc）はGPUの専用エンコーダASICで動くためCUDA演算と競合せず、CPUエンコード比で数倍高速になることも珍しくない。**
@@ -197,9 +181,11 @@
 #### 3-281. 軽い症状の原因究明（受け皿）（起票：2026-11-11）
 
 - **概要**: 再現はするが実害が小さい症状の原因究明を溜め、ある程度の数が溜まったところでまとめて調べる受け皿です（オーナー指示 2026-11-11）。いま溜まっているもの。
-  - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認（2026-11-24）でも、ジョブの実行中に合計 12 回返し、そのあいだサーバーのログにエラーは無く、サーバーへ直接問い合わせるとジョブは running のまま進んでいました（同 §233.13）。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 の GPU での確認（2026-11-25）でも、ジョブの実行中に 3 回返しました（同 §234.6）。原因は調べていません。
+  - GPU の負荷が高い段（MiniMax H3 のノイズ除去の開始など）で、MCP〔AI エージェント向けの道具の口〕の `wait_for_job` がバックエンドとの接続を失う（`Server disconnected` → `BACKEND_UNREACHABLE`〔接続できない〕）。門の台本は再試行で続き、ジョブ自体は影響を受けません。観測は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §121.10・§205.19・§206.10。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-297 の GPU での確認（2026-11-24）でも、ジョブの実行中に合計 12 回返し、そのあいだサーバーのログにエラーは無く、サーバーへ直接問い合わせるとジョブは running のまま進んでいました（同 §233.13）。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-300 の GPU での確認（2026-11-25）でも、ジョブの実行中に 3 回返しました（同 §234.6）。[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-299 の GPU での確認（2026-11-25。LTX 2.3・LTX 2.5）でも返しました（同 §236）。原因は調べていません。
   - Gradio の試験（`tests/test_gradio_*.py`）の実行中に、試験の既定の向き先（`http://127.0.0.1:8000/api/v1/loras/reload`）への 500 の警告が出る（変更の前からある。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227.7）。どの試験が実際の通信を出しているかは調べていません。
   - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
+  - MiniMax H3 のサーバーのログで、テキストエンコーダーの段（encode）の進捗が「6/5」「5/4」のように、番号が総数を超えて表示される（オーナーが以前から見ていた症状で、実害が少ないため放置していた。オーナー指示 2026-11-25）。単発（`generate text encode`）は「3/5 → 4/5 → 5/5 → 6/5」や「3/4 → 4/4 → 5/4」、連結（`chain text encode`）は「3/4 → 4/4 → 5/4」と、段の最後の行だけが総数を 1 超えます（段の最初の行は「1/N」で、0 ではなく 1 から始まります）。キャッシュの ON／OFF にかかわらず出ており（1-298 の GPU での確認のログ `Docs/Outputs-archive/h3-tecache-gates-2026-11-25/logs/server.stderr.log` の単発の 6/5 と連結の 5/4、`Docs/Outputs-archive/h3-refcache-gates-2026-11-24/logs/server.console.excerpt.log` の 1-297 の確認の 5/4）、1-298 の変更で起きたものではありません。判断材料として、番号と総数を出している場所は、worker 側が `engine_h3/pipeline_h3.py` の `_encode`（`self._progress("encode", index, total)`。総数は `encode_steps`）、ログの行を組み立てる側が `services/engines/ltx/adapter.py` の `_log_stage_progress` を呼ぶ手前（`done = idx if is_step else idx + 1`。`encode` は `_STEP_STAGES` に入っていないので `idx + 1` の側を通る）です。worker 側の最後の呼び出し（`self._progress("encode", 3 + int(has_neg), total)` など）は番号に総数と同じ値を渡すので、`+ 1` された行が総数を超える、というところまでは読み取れましたが、原因としては確かめていません（原因は未調査）。実害の範囲: `encode` の段の進捗の番号は、操作パネルの進捗の帯の位置の計算に使われていません（`_progress_frac` は `encode` で番号を読まない。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §235.3 の棚卸し）。ログの見た目だけの症状です。
+  - ベースモデルを切り替えて戻すと、戻った側の重みの選択が `default` になる（設計の文書の記述と、仕様書・実装が食い違っている）。`POST /pipeline/load` を `base_model` だけ指定して呼ぶと、切り替え先の選択は全部のカテゴリが `default` から始まります（`api/pipeline.py` の `carried = pm.active_models if not base_changed else {}` と、その次の `effective` の行）。読み込みが成功すると、その選択が状態ファイル（`state.json`）のそのベースモデルの欄に書かれ（`services/pipeline_manager.py` の `_remember` → `services/runtime_state.py` の `save`）、前に選んでいた名前は上書きされます。仕様書 [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.1 の呼び方の表の「`base_model` のみ」の行は、実装と同じことを書いています。一方、設計 [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.3 は「2 回目以降は、`state.json` が覚えている、そのベースモデルで最後に使った組み合わせ」と書いており、`webui/src/shell/useBaseModels.ts` のベースモデルの切り替えの所のコメントと、`services/runtime_state.py` の `save` の説明文も、覚えている選択が戻る前提で書いてあります。覚えている選択が実際に使われるのは、サーバーの起動のときだけです（`api/context.py` の `_restore_selection`）。操作パネルのヘッダーのベースモデルの切り替えは、選択を空にしてベースモデルだけを送るので（`useBaseModels.ts` の `client.loadPipeline({}, id)`）、コードの上では同じ動きになります（実機では未確認）。観測は、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-299 の GPU での確認で、MCP の `load_pipeline` を `base_model` だけで呼んで MiniMax H3 へ戻したとき、H3 の変換器の選択が `default` になったこと（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §236）。**決めること**: 実装を設計 §6.3（覚えている選択へ戻す）に寄せるか、文書を仕様書（`default` から始まる）に寄せるか。オーナーの判断が要ります。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。
 - **留意**: 調べるときは仮説を立てて順番に潰す（先行の設計変更へ跳ばない）。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。

@@ -1,0 +1,1696 @@
+{
+  "gate": "g3",
+  "started": "2026-11-25T13:16:00",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "ON, image X",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+                "frame_idx": 0
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "83c340b9-b3e7-43c5-9825-c6f575ea98e1",
+      "submitted_at": "2026-11-25T13:16:02",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 390.1,
+      "summary": {
+        "mp4_sha256": "bcf6e8bbc4190a1d8a4be8ab02a127c89c0140ecb251e32f49a941274bd9c1d4",
+        "mp4_size": 6238286,
+        "mp4_rel": "outputs/83c340b9-b3e7-43c5-9825-c6f575ea98e1/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 381.34,
+        "rss_peak_gib": 31.28,
+        "commit_peak_gib": 45.85,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.clips[0].encode.te_cache",
+          "h3.phases.clips[1].encode.te_cache",
+          "h3.phases.clips[2].encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.clips[0].encode.conditioning_sha256",
+          "h3.phases.clips[1].encode.conditioning_sha256",
+          "h3.phases.clips[2].encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "clips": [
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "730222e58a38be350be66ce8e300778578ca6f09ef8e31639643c5ddb58d7391",
+                "tags": "5334a888a216bb1b97bab38d29beee3c9f2f5660b089d6b90ab93af074613961"
+              },
+              "seconds": 17.85,
+              "text_tokens": 989,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 28.01,
+              "commit_end_gib": 36.34,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "649fe704bd65ebe882c541536653a2b75b2bee6386eddcd0ae92f607f56aa0a3",
+              "audio": "290a63a12246e7eae4a95e07dbd57dc486c73c06a513811a0e3758004d63536e"
+            },
+            "clip_seconds": {
+              "encode": 17.85,
+              "image_encode": 1.14,
+              "denoise": 97.81
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "d1a9189989f57659feb4917343b2dde226a48e902d10aac867780e0bbb2f66dc",
+                "tags": "8f37100bb82b8f78575975ccf96996da3386e3d237e435ac32f498d5c8d6a46b"
+              },
+              "seconds": 22.19,
+              "text_tokens": 22,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.82,
+              "commit_end_gib": 36.15,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "6e41f295b0d2bfd2d8895a739a929c9c418b0aa776a6e122326e49aa21415d84",
+              "audio": "0892d71a0735183810d78443e5fe548ba11b2d2097cfa7dbb9d41ef5f4a90ad0"
+            },
+            "clip_seconds": {
+              "encode": 22.19,
+              "denoise": 85.47
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "9e415102496538817e3cffb657a685850ad4687b6478a213e2868853903bd81c",
+                "tags": "7b0f2fad20a85cf0019788e98b3bf0246e7c45861e5741368767c361c16c2392"
+              },
+              "seconds": 21.99,
+              "text_tokens": 21,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.84,
+              "commit_end_gib": 36.17,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "33f012263ad7c4119409e3fab685a0257b06abb3bc24afd7b780b9dd66594b7b",
+              "audio": "71ee60e2c49015e8d5544fd4f6fef7c7a371b0926ca3a90a9c3f3014c1a2a862"
+            },
+            "clip_seconds": {
+              "encode": 21.99,
+              "denoise": 85.48
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          }
+        ],
+        "seeds": [
+          42,
+          43,
+          44
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 89600,
+            "duration": "7.291667",
+            "nb_read_frames": "175"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 233344,
+            "duration": "7.292000",
+            "nb_read_frames": "228"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "OFF, same input as 1",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+                "frame_idx": 0
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ]
+      },
+      "job_id": "ab3a17d8-9ff6-4e7f-b2e0-0cf8204c4d7c",
+      "submitted_at": "2026-11-25T13:22:32",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 385.1,
+      "summary": {
+        "mp4_sha256": "bcf6e8bbc4190a1d8a4be8ab02a127c89c0140ecb251e32f49a941274bd9c1d4",
+        "mp4_size": 6238286,
+        "mp4_rel": "outputs/ab3a17d8-9ff6-4e7f-b2e0-0cf8204c4d7c/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 380.92,
+        "rss_peak_gib": 31.28,
+        "commit_peak_gib": 45.85,
+        "latent_cache_paths": [],
+        "te_cache_paths": [],
+        "conditioning_sha256_paths": [],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": false,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "clips": [
+          {
+            "encode": {
+              "te_cache": null,
+              "conditioning_sha256": null,
+              "seconds": 17.45,
+              "text_tokens": 989,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.89,
+              "commit_end_gib": 36.38,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "649fe704bd65ebe882c541536653a2b75b2bee6386eddcd0ae92f607f56aa0a3",
+              "audio": "290a63a12246e7eae4a95e07dbd57dc486c73c06a513811a0e3758004d63536e"
+            },
+            "clip_seconds": {
+              "encode": 17.45,
+              "image_encode": 1.19,
+              "denoise": 97.79
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": null,
+              "conditioning_sha256": null,
+              "seconds": 22.15,
+              "text_tokens": 22,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.72,
+              "commit_end_gib": 36.14,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "6e41f295b0d2bfd2d8895a739a929c9c418b0aa776a6e122326e49aa21415d84",
+              "audio": "0892d71a0735183810d78443e5fe548ba11b2d2097cfa7dbb9d41ef5f4a90ad0"
+            },
+            "clip_seconds": {
+              "encode": 22.15,
+              "denoise": 85.35
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": null,
+              "conditioning_sha256": null,
+              "seconds": 22.02,
+              "text_tokens": 21,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.7,
+              "commit_end_gib": 36.15,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "33f012263ad7c4119409e3fab685a0257b06abb3bc24afd7b780b9dd66594b7b",
+              "audio": "71ee60e2c49015e8d5544fd4f6fef7c7a371b0926ca3a90a9c3f3014c1a2a862"
+            },
+            "clip_seconds": {
+              "encode": 22.02,
+              "denoise": 85.45
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          }
+        ],
+        "seeds": [
+          42,
+          43,
+          44
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 89600,
+            "duration": "7.291667",
+            "nb_read_frames": "175"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 233344,
+            "duration": "7.292000",
+            "nb_read_frames": "228"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "ON, same input as 1",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+                "frame_idx": 0
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "cca52412-ccb2-4283-8cfe-9bd6bf5373fb",
+      "submitted_at": "2026-11-25T13:28:58",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 395.1,
+      "summary": {
+        "mp4_sha256": "bcf6e8bbc4190a1d8a4be8ab02a127c89c0140ecb251e32f49a941274bd9c1d4",
+        "mp4_size": 6238286,
+        "mp4_rel": "outputs/cca52412-ccb2-4283-8cfe-9bd6bf5373fb/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 381.47,
+        "rss_peak_gib": 31.28,
+        "commit_peak_gib": 45.85,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.clips[0].encode.te_cache",
+          "h3.phases.clips[1].encode.te_cache",
+          "h3.phases.clips[2].encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.clips[0].encode.conditioning_sha256",
+          "h3.phases.clips[1].encode.conditioning_sha256",
+          "h3.phases.clips[2].encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "clips": [
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "730222e58a38be350be66ce8e300778578ca6f09ef8e31639643c5ddb58d7391",
+                "tags": "5334a888a216bb1b97bab38d29beee3c9f2f5660b089d6b90ab93af074613961"
+              },
+              "seconds": 18.23,
+              "text_tokens": 989,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.91,
+              "commit_end_gib": 36.41,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "649fe704bd65ebe882c541536653a2b75b2bee6386eddcd0ae92f607f56aa0a3",
+              "audio": "290a63a12246e7eae4a95e07dbd57dc486c73c06a513811a0e3758004d63536e"
+            },
+            "clip_seconds": {
+              "encode": 18.23,
+              "image_encode": 1.29,
+              "denoise": 97.78
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "d1a9189989f57659feb4917343b2dde226a48e902d10aac867780e0bbb2f66dc",
+                "tags": "8f37100bb82b8f78575975ccf96996da3386e3d237e435ac32f498d5c8d6a46b"
+              },
+              "seconds": 21.94,
+              "text_tokens": 22,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.72,
+              "commit_end_gib": 36.14,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "6e41f295b0d2bfd2d8895a739a929c9c418b0aa776a6e122326e49aa21415d84",
+              "audio": "0892d71a0735183810d78443e5fe548ba11b2d2097cfa7dbb9d41ef5f4a90ad0"
+            },
+            "clip_seconds": {
+              "encode": 21.94,
+              "denoise": 85.33
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "9e415102496538817e3cffb657a685850ad4687b6478a213e2868853903bd81c",
+                "tags": "7b0f2fad20a85cf0019788e98b3bf0246e7c45861e5741368767c361c16c2392"
+              },
+              "seconds": 21.97,
+              "text_tokens": 21,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.7,
+              "commit_end_gib": 36.16,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "33f012263ad7c4119409e3fab685a0257b06abb3bc24afd7b780b9dd66594b7b",
+              "audio": "71ee60e2c49015e8d5544fd4f6fef7c7a371b0926ca3a90a9c3f3014c1a2a862"
+            },
+            "clip_seconds": {
+              "encode": 21.97,
+              "denoise": 85.46
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          }
+        ],
+        "seeds": [
+          42,
+          43,
+          44
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 89600,
+            "duration": "7.291667",
+            "nb_read_frames": "175"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 233344,
+            "duration": "7.292000",
+            "nb_read_frames": "228"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "4": {
+      "label": "4",
+      "cond": "ON, same input as 1",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+                "frame_idx": 0
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "e3cfd85e-83e7-4c3b-a037-f654fbb734cd",
+      "submitted_at": "2026-11-25T13:35:34",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 320.2,
+      "summary": {
+        "mp4_sha256": "bcf6e8bbc4190a1d8a4be8ab02a127c89c0140ecb251e32f49a941274bd9c1d4",
+        "mp4_size": 6238286,
+        "mp4_rel": "outputs/e3cfd85e-83e7-4c3b-a037-f654fbb734cd/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 318.35,
+        "rss_peak_gib": 31.28,
+        "commit_peak_gib": 45.85,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.clips[0].encode.te_cache",
+          "h3.phases.clips[1].encode.te_cache",
+          "h3.phases.clips[2].encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.clips[0].encode.conditioning_sha256",
+          "h3.phases.clips[1].encode.conditioning_sha256",
+          "h3.phases.clips[2].encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "clips": [
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "hit"
+              },
+              "conditioning_sha256": {
+                "positive": "730222e58a38be350be66ce8e300778578ca6f09ef8e31639643c5ddb58d7391",
+                "tags": "5334a888a216bb1b97bab38d29beee3c9f2f5660b089d6b90ab93af074613961"
+              },
+              "seconds": 0.0,
+              "text_tokens": 989,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 28.1,
+              "commit_end_gib": 36.36,
+              "te_loaded": false,
+              "keys": [
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "649fe704bd65ebe882c541536653a2b75b2bee6386eddcd0ae92f607f56aa0a3",
+              "audio": "290a63a12246e7eae4a95e07dbd57dc486c73c06a513811a0e3758004d63536e"
+            },
+            "clip_seconds": {
+              "encode": 0.0,
+              "image_encode": 1.32,
+              "denoise": 97.69
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "hit"
+              },
+              "conditioning_sha256": {
+                "positive": "d1a9189989f57659feb4917343b2dde226a48e902d10aac867780e0bbb2f66dc",
+                "tags": "8f37100bb82b8f78575975ccf96996da3386e3d237e435ac32f498d5c8d6a46b"
+              },
+              "seconds": 0.0,
+              "text_tokens": 22,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 29.43,
+              "commit_end_gib": 37.92,
+              "te_loaded": false,
+              "keys": [
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "6e41f295b0d2bfd2d8895a739a929c9c418b0aa776a6e122326e49aa21415d84",
+              "audio": "0892d71a0735183810d78443e5fe548ba11b2d2097cfa7dbb9d41ef5f4a90ad0"
+            },
+            "clip_seconds": {
+              "encode": 0.0,
+              "denoise": 84.94
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "hit"
+              },
+              "conditioning_sha256": {
+                "positive": "9e415102496538817e3cffb657a685850ad4687b6478a213e2868853903bd81c",
+                "tags": "7b0f2fad20a85cf0019788e98b3bf0246e7c45861e5741368767c361c16c2392"
+              },
+              "seconds": 0.0,
+              "text_tokens": 21,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 29.5,
+              "commit_end_gib": 37.95,
+              "te_loaded": false,
+              "keys": [
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "33f012263ad7c4119409e3fab685a0257b06abb3bc24afd7b780b9dd66594b7b",
+              "audio": "71ee60e2c49015e8d5544fd4f6fef7c7a371b0926ca3a90a9c3f3014c1a2a862"
+            },
+            "clip_seconds": {
+              "encode": 0.0,
+              "denoise": 84.98
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          }
+        ],
+        "seeds": [
+          42,
+          43,
+          44
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 89600,
+            "duration": "7.291667",
+            "nb_read_frames": "175"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 233344,
+            "duration": "7.292000",
+            "nb_read_frames": "228"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "5": {
+      "label": "5",
+      "cond": "ON, image Y (rest same)",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "909e6474-c402-48f0-bc53-76a31142226c",
+                "frame_idx": 0
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "8ffa507d-b708-495a-a9c4-6b020c46ac40",
+      "submitted_at": "2026-11-25T13:40:55",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 340.1,
+      "summary": {
+        "mp4_sha256": "741b00f06f29862710e1977b9cc396f29f5287a644a53b99eeb536215747884e",
+        "mp4_size": 3476166,
+        "mp4_rel": "outputs/8ffa507d-b708-495a-a9c4-6b020c46ac40/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 337.5,
+        "rss_peak_gib": 31.28,
+        "commit_peak_gib": 45.85,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.clips[0].encode.te_cache",
+          "h3.phases.clips[1].encode.te_cache",
+          "h3.phases.clips[2].encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.clips[0].encode.conditioning_sha256",
+          "h3.phases.clips[1].encode.conditioning_sha256",
+          "h3.phases.clips[2].encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "clips": [
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "miss"
+              },
+              "conditioning_sha256": {
+                "positive": "7b251f6858205410586c09b8b5d52b07306af0aa35aed493e33daac09195f0ef",
+                "tags": "5334a888a216bb1b97bab38d29beee3c9f2f5660b089d6b90ab93af074613961"
+              },
+              "seconds": 19.17,
+              "text_tokens": 989,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.94,
+              "commit_end_gib": 36.42,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "41080a310a377cdfbdf454283b62820ba0fc68429c406bc276594a384963467f",
+              "audio": "9c792cd3c31e9be00117f1f89832aaa5a74cd2620ef9cb837b4fb781a5790348"
+            },
+            "clip_seconds": {
+              "encode": 19.17,
+              "image_encode": 1.21,
+              "denoise": 97.85
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "hit"
+              },
+              "conditioning_sha256": {
+                "positive": "d1a9189989f57659feb4917343b2dde226a48e902d10aac867780e0bbb2f66dc",
+                "tags": "8f37100bb82b8f78575975ccf96996da3386e3d237e435ac32f498d5c8d6a46b"
+              },
+              "seconds": 0.0,
+              "text_tokens": 22,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 29.43,
+              "commit_end_gib": 37.93,
+              "te_loaded": false,
+              "keys": [
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "267e074d16a6d46d4bb9f28709b67d02a128b8d1358d4ac602d37e0f1aa12f97",
+              "audio": "614682fdc9ed6bb863f93f252803349be607405baffcc72a8665b248df61e540"
+            },
+            "clip_seconds": {
+              "encode": 0.0,
+              "denoise": 84.96
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": {
+                "positive": "hit"
+              },
+              "conditioning_sha256": {
+                "positive": "9e415102496538817e3cffb657a685850ad4687b6478a213e2868853903bd81c",
+                "tags": "7b0f2fad20a85cf0019788e98b3bf0246e7c45861e5741368767c361c16c2392"
+              },
+              "seconds": 0.0,
+              "text_tokens": 21,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 29.49,
+              "commit_end_gib": 37.94,
+              "te_loaded": false,
+              "keys": [
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "conditioning_sha256",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te_cache",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "1e7b4ef6212aba45a09909c0d867b41af352c4ebcb0e3ff17dda93e49c51d9db",
+              "audio": "b087449e74c931fd257abb439411d235f5c6031e438ae4fd1b3497d047ba98a6"
+            },
+            "clip_seconds": {
+              "encode": 0.0,
+              "denoise": 84.91
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          }
+        ],
+        "seeds": [
+          42,
+          43,
+          44
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 89600,
+            "duration": "7.291667",
+            "nb_read_frames": "175"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 233344,
+            "duration": "7.292000",
+            "nb_read_frames": "228"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "6": {
+      "label": "6",
+      "cond": "OFF, same input as 5",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "909e6474-c402-48f0-bc53-76a31142226c",
+                "frame_idx": 0
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ]
+      },
+      "job_id": "39eaef40-6ed1-43f8-bc28-f8bd1f1b9151",
+      "submitted_at": "2026-11-25T13:46:35",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 385.1,
+      "summary": {
+        "mp4_sha256": "741b00f06f29862710e1977b9cc396f29f5287a644a53b99eeb536215747884e",
+        "mp4_size": 3476166,
+        "mp4_rel": "outputs/39eaef40-6ed1-43f8-bc28-f8bd1f1b9151/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 382.21,
+        "rss_peak_gib": 31.28,
+        "commit_peak_gib": 45.85,
+        "latent_cache_paths": [],
+        "te_cache_paths": [],
+        "conditioning_sha256_paths": [],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": false,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "clips": [
+          {
+            "encode": {
+              "te_cache": null,
+              "conditioning_sha256": null,
+              "seconds": 18.8,
+              "text_tokens": 989,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.92,
+              "commit_end_gib": 36.41,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "41080a310a377cdfbdf454283b62820ba0fc68429c406bc276594a384963467f",
+              "audio": "9c792cd3c31e9be00117f1f89832aaa5a74cd2620ef9cb837b4fb781a5790348"
+            },
+            "clip_seconds": {
+              "encode": 18.8,
+              "image_encode": 1.24,
+              "denoise": 97.91
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": null,
+              "conditioning_sha256": null,
+              "seconds": 21.6,
+              "text_tokens": 22,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.67,
+              "commit_end_gib": 36.13,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "267e074d16a6d46d4bb9f28709b67d02a128b8d1358d4ac602d37e0f1aa12f97",
+              "audio": "614682fdc9ed6bb863f93f252803349be607405baffcc72a8665b248df61e540"
+            },
+            "clip_seconds": {
+              "encode": 21.6,
+              "denoise": 85.53
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          },
+          {
+            "encode": {
+              "te_cache": null,
+              "conditioning_sha256": null,
+              "seconds": 22.16,
+              "text_tokens": 21,
+              "negative_tokens": null,
+              "rss_process_peak_gib": 31.28,
+              "commit_process_peak_gib": 45.85,
+              "rss_end_gib": 27.7,
+              "commit_end_gib": 36.16,
+              "te_loaded": true,
+              "keys": [
+                "commit_after_load_gib",
+                "commit_after_release_gib",
+                "commit_end_gib",
+                "commit_process_peak_gib",
+                "peak_vram_mb",
+                "peak_vram_reserved_mb",
+                "rss_after_load_gib",
+                "rss_after_release_gib",
+                "rss_end_gib",
+                "rss_process_peak_gib",
+                "seconds",
+                "te",
+                "te_read",
+                "text_tokens"
+              ]
+            },
+            "latents_sha256": {
+              "video": "1e7b4ef6212aba45a09909c0d867b41af352c4ebcb0e3ff17dda93e49c51d9db",
+              "audio": "b087449e74c931fd257abb439411d235f5c6031e438ae4fd1b3497d047ba98a6"
+            },
+            "clip_seconds": {
+              "encode": 22.16,
+              "denoise": 85.46
+            },
+            "reference_encode_seconds": null,
+            "references": null,
+            "seed": null
+          }
+        ],
+        "seeds": [
+          42,
+          43,
+          44
+        ]
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 89600,
+            "duration": "7.291667",
+            "nb_read_frames": "175"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 233344,
+            "duration": "7.292000",
+            "nb_read_frames": "228"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 17,
+    "at": [
+      "2026-11-25T13:18:37",
+      "2026-11-25T13:18:52",
+      "2026-11-25T13:20:17",
+      "2026-11-25T13:22:22",
+      "2026-11-25T13:22:37",
+      "2026-11-25T13:22:57",
+      "2026-11-25T13:28:42",
+      "2026-11-25T13:35:23",
+      "2026-11-25T13:39:19",
+      "2026-11-25T13:42:00",
+      "2026-11-25T13:42:30",
+      "2026-11-25T13:45:30",
+      "2026-11-25T13:46:15",
+      "2026-11-25T13:47:10",
+      "2026-11-25T13:47:45",
+      "2026-11-25T13:48:25",
+      "2026-11-25T13:50:10"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T13:16:00"
+  ],
+  "backend_status": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 13,
+        "failed": 0
+      }
+    }
+  },
+  "models_before": {
+    "active_base_model": "MiniMaxH3",
+    "transformer_active": "minimax_h3_ref2va_pruned_int8_convrot"
+  },
+  "load_call": {
+    "no_op": true,
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled"
+  },
+  "loaded": {
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 13,
+        "failed": 0
+      }
+    },
+    "active_base_model": "MiniMaxH3",
+    "transformer_active": "minimax_h3_ref2va_pruned_int8_convrot"
+  },
+  "upload_ids": {
+    "image_x": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+    "image_y": "909e6474-c402-48f0-bc53-76a31142226c"
+  },
+  "uploads": {
+    "image_x": {
+      "image_id": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+      "original_filename": "aux2_001.jpg",
+      "width": 783,
+      "height": 428,
+      "content_type": "image/jpeg",
+      "source_rel": "images/aux2_001.jpg",
+      "stored_path_rel": "uploads/8059af6d-309a-484f-a1d7-2e8ce10fc102/input.png"
+    },
+    "image_y": {
+      "image_id": "909e6474-c402-48f0-bc53-76a31142226c",
+      "original_filename": "aux2_002.jpg",
+      "width": 969,
+      "height": 561,
+      "content_type": "image/jpeg",
+      "source_rel": "images/aux2_002.jpg",
+      "stored_path_rel": "uploads/909e6474-c402-48f0-bc53-76a31142226c/input.png"
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T13:53:01",
+  "gate_pass": true
+}

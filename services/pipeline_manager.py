@@ -2192,6 +2192,13 @@ class PipelineManager:
         ltx25 = cm.get("ltx25")
         if ltx25 is not None:
             metadata["ltx25"] = ltx25
+        # LTX 2.3 engine facts (additive, the same route): only present on a
+        # ``keep_text_conditioning`` chain, so any other chain carries no
+        # ``ltx23`` key. The engine's own ``chain["ltx23"]`` sub-dict, relayed
+        # verbatim.
+        ltx23 = cm.get("ltx23")
+        if ltx23 is not None:
+            metadata["ltx23"] = ltx23
         # MiniMax H3 engine facts (additive, the same route): only present on
         # an H3 chain. The adapter puts the engine's facts (phases, LoRA
         # report, shifts ...) and the chain's own (overlap, inject, one decode)
@@ -2485,6 +2492,11 @@ class PipelineManager:
         # generation, so a 2.3 (or mock) job carries no ``ltx25`` key.
         if outcome.ltx25 is not None:
             metadata["ltx25"] = outcome.ltx25
+        # LTX 2.3 engine facts (additive): only present on a
+        # ``keep_text_conditioning`` job (single, Outpainting, Inpainting), so
+        # any other job carries no ``ltx23`` key. Relayed verbatim.
+        if getattr(outcome, "ltx23", None) is not None:
+            metadata["ltx23"] = outcome.ltx23
         # MiniMax H3 engine facts (additive, the ``ltx25`` precedent): only
         # present on a real H3 generation, so an LTX (or mock) job carries no
         # ``h3`` key. An A2V job's engine record (``done.h3.a2v``) is lifted out

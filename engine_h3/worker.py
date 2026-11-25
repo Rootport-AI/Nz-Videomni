@@ -44,7 +44,7 @@ Protocol (one JSON object per line; parent -> worker):
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
    [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3], [sol_vae],
-   [keep_reference_latents]}
+   [keep_reference_latents], [keep_text_conditioning]}
       One T2V, I2V, A2V, Outpainting or Inpainting job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -109,11 +109,18 @@ Protocol (one JSON object per line; parent -> worker):
       and each record of ``h3.phases.reference_encode.references`` gains
       ``latent_cache`` "hit" / "miss". A chain takes it too (one job for all
       its clips).
+      ``keep_text_conditioning`` (台帳 §1-298): absent / null / false = off (the
+      app sends it only when true). True keeps the text encoder's conditioning
+      (positive and negative apart) in main memory for the next job, by the
+      same rules, and ``h3.phases.encode`` (a chain: each clip's) gains
+      ``te_cache`` ({[positive], [negative]} "hit" / "miss"; a side only when it
+      was looked up, so no positive when a file could not be stat'ed) and
+      ``conditioning_sha256`` ({positive, tags, [negative]}). A chain takes it too.
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
-   [loras], [source], [retake], [nag], [keep_reference_latents]}
+   [loras], [source], [retake], [nag], [keep_reference_latents], [keep_text_conditioning]}
       One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
       of ``{"prompt", "num_frames", [references], [images], [source_audio]}`` (2..24 clips, 1..24
       with a ``source``, exactly 1 with a ``retake``; each prompt is the clip's whole text, the top-level
@@ -311,7 +318,7 @@ _GENERATE_FIELDS = frozenset({
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
     "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint", "pi_h3", "sol_vae",
-    "keep_reference_latents",
+    "keep_reference_latents", "keep_text_conditioning",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -797,6 +804,7 @@ def _generate_request(
         pi_h3=pi_h3,
         sol_vae=sol_vae,
         keep_reference_latents=_or("keep_reference_latents", False, bool),
+        keep_text_conditioning=_or("keep_text_conditioning", False, bool),
     )
 
 
@@ -836,6 +844,7 @@ def _do_generate(msg: dict) -> None:
         f"steps={req.num_inference_steps} shift={req.shift_video}/{req.shift_audio} "
         f"attention={effective} images={len(req.images)} keep_resident={req.keep_resident} "
         f"keep_reference_latents={req.keep_reference_latents} "
+        f"keep_text_conditioning={req.keep_text_conditioning} "
         f"prefetch={req.block_swap_prefetch} vram16={req.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in req.loras]} "
         + (
@@ -1025,6 +1034,7 @@ def _do_generate_chain(msg: dict) -> None:
         f"steps={base.num_inference_steps} shift={base.shift_video}/{base.shift_audio} "
         f"attention={effective} keep_resident={base.keep_resident} "
         f"keep_reference_latents={base.keep_reference_latents} "
+        f"keep_text_conditioning={base.keep_text_conditioning} "
         f"prefetch={base.block_swap_prefetch} vram16={base.vram16_mode} "
         f"loras={[(Path(item.path).name, item.strength) for item in base.loras]} "
         + (f"images={[len(c.images) for c in clips]} " if any(c.images for c in clips) else "")

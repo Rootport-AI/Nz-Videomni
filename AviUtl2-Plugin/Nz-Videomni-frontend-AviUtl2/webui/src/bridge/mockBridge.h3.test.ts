@@ -559,6 +559,43 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await load(chained, "MiniMaxH3")).status).toBe(200);
     expect((await chain(chained, { keep_reference_latents: true })).status).toBe(202);
   });
+
+  // 台帳 §1-298: keep the text encoder's conditioning cached.
+  it("does NOT publish `keep_text_conditioning` in any engine's unsupported_features (台帳 §1-299)", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    for (const id of ["MiniMaxH3", "LTX23", "LTX25"]) expect(blocksFeature(blocks, id)).not.toContain("keep_text_conditioning");
+  });
+
+  it("accepts keep_text_conditioning: true on LTX (single and chain)", async () => {
+    for (const id of ["LTX23", "LTX25"]) {
+      const single = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(single, id)).status).toBe(200);
+      expect(
+        (await generate(single, { ...BODY, num_frames: 121, width: 1280, height: 704, keep_text_conditioning: true })).status,
+      ).toBe(202);
+      // The chain may still 422 on this fixture's own clip rules; what matters
+      // is that the key is not what it refuses, and that it changes nothing.
+      const loaded = async () => {
+        const b = createMockBridge({ delayMs: 0 });
+        if (id !== "LTX23") expect((await load(b, id)).status).toBe(200);
+        return b;
+      };
+      const withKey = await chain(await loaded(), { keep_text_conditioning: true }, [{ num_frames: 121 }]);
+      const withoutKey = await chain(await loaded(), {}, [{ num_frames: 121 }]);
+      expect(withKey.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+      expect(withKey.status).toBe(withoutKey.status);
+    }
+  });
+
+  it("accepts keep_text_conditioning on MiniMax H3, single and chain", async () => {
+    // One bridge per request: the fixture runs a single job at a time (409).
+    const single = createMockBridge({ delayMs: 0 });
+    expect((await load(single, "MiniMaxH3")).status).toBe(200);
+    expect((await generate(single, { ...BODY, keep_text_conditioning: true })).status).toBe(202);
+    const chained = createMockBridge({ delayMs: 0 });
+    expect((await load(chained, "MiniMaxH3")).status).toBe(200);
+    expect((await chain(chained, { keep_text_conditioning: true })).status).toBe(202);
+  });
 });
 
 function blocksFeature(blocks: BaseModelBlock[], id: string): string[] {

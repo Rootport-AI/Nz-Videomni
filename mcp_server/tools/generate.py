@@ -60,6 +60,10 @@ LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結
 ``keep_reference_latents``（MiniMax H3 の参照素材の符号化結果の保持。真偽値）は
 ``sol_vae`` の後ろに置き、``True`` のときだけ送る。LTX では ``True`` が 422。
 
+``keep_text_conditioning``（テキストエンコーダーの条件付けの保持。真偽値）は
+引数の並びのいちばん後ろに置き、``True`` のときだけ送る。送る前の検査はしない。MiniMax H3・
+LTX 2.3・LTX 2.5 で使える。
+
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
 違うときだけ送る）を持ち、読み出しは ``outputs`` の ``get_mp4_info`` が担う
@@ -262,6 +266,7 @@ async def submit_generate(
     sol_vae: bool = False,
     keep_reference_latents: bool = False,
     references: list[ReferenceArg] | None = None,
+    keep_text_conditioning: bool = False,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -721,6 +726,17 @@ async def submit_generate(
             **MiniMax H3 専用**で、LTX では 422 FEATURE_UNSUPPORTED。省略または
             空ならキーごと送りません（``max_sec`` も省略するとキーごと送りません）。
             使い方は上の「参照素材からの生成」の節。
+        keep_text_conditioning: テキストエンコーダーの出力（条件付け）の
+            保持。MiniMax H3・LTX 2.3・LTX 2.5 で使えます。既定の ``False`` ならキーは送られません。``True`` にすると、条件付けを
+            ワーカーのメインメモリに保持し、入力が同じ次の生成と連結のクリップで、
+            テキストエンコーダーの段を省きます。省くのは、入力（プロンプトの文字列と、
+            テキストエンコーダーが読む素材）が同じときだけです。違えば通し直します。
+            Positive と Negative は別々に持ち、片方だけが変わったら、もう片方は使い回します
+            （MiniMax H3 と LTX 2.3 の場合。LTX 2.5 は、そのジョブが渡す文字列の並びの
+            全体が同じときだけ使い回します）。
+            生成結果は変わりません。メインメモリを使います。この引数が ``False`` の
+            ジョブが来ると、保持した分は消えます。MiniMax H3 の ``keep_reference_latents``
+            とは別の機能で、同時に使えます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -858,6 +874,10 @@ async def submit_generate(
     # default is False).
     if keep_reference_latents:
         payload["keep_reference_latents"] = True
+    # keep_text_conditioning (all three base models): sent only when True (the
+    # server's default is False).
+    if keep_text_conditioning:
+        payload["keep_text_conditioning"] = True
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -1055,6 +1075,7 @@ async def submit_chain(
     num_inference_steps: int | None = None,
     shift_video: float | None = None,
     shift_audio: float | None = None,
+    keep_text_conditioning: bool = False,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -1078,7 +1099,7 @@ async def submit_chain(
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
     ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です
-    （``sol_vae=True`` と ``keep_reference_latents=True`` も同じです）。
+    （``sol_vae=True``・``keep_reference_latents=True`` も同じです）。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -1450,6 +1471,15 @@ async def submit_chain(
         shift_audio: 音声のノイズスケジュールの shift（MiniMax H3 用。省略で
             送らない＝既定値。H3 は既定 3・範囲 1〜20。LTX では無視）。連結の
             全クリップに 1 つの値が効きます。
+        keep_text_conditioning: submit_generate と同じ意味（テキスト
+            エンコーダーの条件付けの保持。MiniMax H3・LTX 2.3・LTX 2.5 で使えます。既定の ``False`` ならキーは送りません）。
+            条件付けをワーカーのメインメモリに保持し、入力が同じ次の生成と連結の
+            クリップで、テキストエンコーダーの段を省きます。省くのは、入力（プロンプトの
+            文字列と、テキストエンコーダーが読む素材）が同じときだけです。Positive と
+            Negative は別々に持ちます。生成結果は変わりません。メインメモリを使います。
+            この引数が ``False`` のジョブが来ると、保持した分は消えます。
+            MiniMax H3 の ``keep_reference_latents`` とは別の機能で、同時に使えます。
+            LTX 2.5 は、そのジョブが渡す文字列の並びの全体が同じときだけ使い回します。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1559,6 +1589,9 @@ async def submit_chain(
     # keep_reference_latents: same rule as submit_generate (sent only when True).
     if keep_reference_latents:
         payload["keep_reference_latents"] = True
+    # keep_text_conditioning: same rule as submit_generate (sent only when True).
+    if keep_text_conditioning:
+        payload["keep_text_conditioning"] = True
     # stage2_window: same rule as vae_mode (sent only when it differs from the
     # server default "standard"). No pre-check here: the server's 422 is the
     # single source of truth (full_length shape / V2V context / retake window).

@@ -538,6 +538,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // in the server's REJECT_TABLE. Hides the Settings row; the chain refusal
     // has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
     "keep_reference_latents",
+    // 台帳 §1-299: `keep_text_conditioning` is NOT listed — LTX takes it (1-298
+    // listed it; 1-299 lets LTX 2.3 / 2.5 use the cache).
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -617,6 +619,7 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "sol_vae",
     // 台帳 §1-297: `keep_reference_latents` — see the LTX23 entry above.
     "keep_reference_latents",
+    // 台帳 §1-299: `keep_text_conditioning` is NOT listed — LTX takes it.
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature

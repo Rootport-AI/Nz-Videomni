@@ -274,6 +274,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "fused_gguf_dequant_kernel",
         "keep_resident",
         "keep_resident_embeddings",
+        # Keeping the text encoder's conditioning between jobs; rides the payload
+        # only when true (an absent key = off).
+        "keep_text_conditioning",
         "attention_backend",
         "outpaint",
         # Listed next to ``outpaint`` because the two are one mechanism seen
@@ -484,6 +487,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "fused_gguf_dequant_kernel",
         "keep_resident",
         "keep_resident_embeddings",
+        # Keeping the text encoder's conditioning between jobs; rides the payload
+        # only when true (an absent key = off).
+        "keep_text_conditioning",
         "attention_backend",
         # The non-CFG negative prompt (NAG / VSF): the single path's seven, on
         # the chain schema, carrying the identical payload block.
@@ -1112,6 +1118,11 @@ class _RealBackend25(_RealBackend):
         # same as the blocks above.
         if request.keep_resident_embeddings:
             payload["keep_resident_embeddings"] = True
+        # keep_text_conditioning: appended last, rides only when True (an absent
+        # key = off, and the worker's release request). The worker's record of
+        # it joins the ``ltx25`` dict it already reports.
+        if request.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
 
         with self._lock:
             try:
@@ -1472,6 +1483,9 @@ class _RealBackend25(_RealBackend):
         # tests/test_ltx25_adapter.py.
         if chain.keep_resident_embeddings:
             payload["keep_resident_embeddings"] = True
+        # keep_text_conditioning: the single path's block, key for key.
+        if chain.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
 
         with self._lock:
             try:

@@ -48,6 +48,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "pi_h3",
         "sol_vae",
         "keep_reference_latents",
+        "keep_text_conditioning",
         "fused_gguf_dequant_kernel",
       ].sort(),
     );
@@ -184,6 +185,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: false,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
@@ -192,6 +194,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: false,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -203,6 +206,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: false,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
@@ -211,6 +215,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: false,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
@@ -219,6 +224,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: true,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["fused_gguf_dequant_kernel"])).toEqual({
@@ -227,6 +233,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: false,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -239,6 +246,7 @@ describe("settingsRowsHiddenFor", () => {
         vram16: false,
         fastVae: true,
         keepReferenceLatents: false,
+        keepTextConditioning: false,
         fusedGgufDequantKernel: false,
       });
     }
@@ -251,6 +259,19 @@ describe("settingsRowsHiddenFor", () => {
       vram16: false,
       fastVae: false,
       keepReferenceLatents: true,
+      keepTextConditioning: false,
+      fusedGgufDequantKernel: false,
+    });
+  });
+
+  it("maps keep_text_conditioning onto its own row only (台帳 §1-298)", () => {
+    expect(settingsRowsHiddenFor(["keep_text_conditioning"])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      fastVae: false,
+      keepReferenceLatents: false,
+      keepTextConditioning: true,
       fusedGgufDequantKernel: false,
     });
   });
@@ -266,6 +287,7 @@ describe("settingsRowsHiddenFor", () => {
       vram16: true,
       fastVae: false,
       keepReferenceLatents: false,
+      keepTextConditioning: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -286,6 +308,11 @@ describe("accelerationResetsFor", () => {
     expect(accelerationResetsFor(["sol_vae"])).toEqual(["solVae"]);
     expect(accelerationResetsFor(["pi_h3", "sol_vae"])).toEqual(["piH3", "solVae"]);
     expect(accelerationResetsFor(["keep_reference_latents"])).toEqual(["keepReferenceLatents"]);
+    expect(accelerationResetsFor(["keep_text_conditioning"])).toEqual(["keepTextConditioning"]);
+    expect(accelerationResetsFor(["keep_reference_latents", "keep_text_conditioning"])).toEqual([
+      "keepReferenceLatents",
+      "keepTextConditioning",
+    ]);
   });
 
   it("collects both without duplicates", () => {

@@ -1,0 +1,1045 @@
+{
+  "gate": "g2",
+  "started": "2026-11-25T17:46:26",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "OFF",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ]
+      },
+      "job_id": "3757c114-7c34-45e4-a335-638c1e0d3859",
+      "submitted_at": "2026-11-25T17:46:29",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 305.2,
+      "summary": {
+        "mp4_sha256": "b9445e04d98933ddfd0df7f5f13fe79743b2d287da23a0f75e140bdef6aff425",
+        "mp4_size": 3440290,
+        "mp4_rel": "outputs/3757c114-7c34-45e4-a335-638c1e0d3859/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 301.49,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708333",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "ON",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "0f7c7384-2c8e-4989-8de9-df23a5ad57c3",
+      "submitted_at": "2026-11-25T17:51:35",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 305.2,
+      "summary": {
+        "mp4_sha256": "b9445e04d98933ddfd0df7f5f13fe79743b2d287da23a0f75e140bdef6aff425",
+        "mp4_size": 3440290,
+        "mp4_rel": "outputs/0f7c7384-2c8e-4989-8de9-df23a5ad57c3/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 302.73,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "clips": [
+              "miss",
+              "miss",
+              "miss"
+            ],
+            "stage2": "miss"
+          },
+          "conditioning_sha256": {
+            "clips": [
+              {
+                "video": "79bb9411c10139226303e0f18978ed95c295cf33091f2262351619ce9395e6e6",
+                "audio": "8ac86f8a94ba20084a843de684b22deae800fa106a303fc6a555d963ecb717bd"
+              },
+              {
+                "video": "a0fabcb424a5c052ed8c8f860d22c1a268eb9e26e42755c3a022667235725986",
+                "audio": "d513f5b3f335c0d55acdfb0669a0208127d7bf398f6ff82e6f6067e9c47bee91"
+              },
+              {
+                "video": "00000ac608383f2a91596c0ce354207b805d61fe03398736bbb17ed1594648b8",
+                "audio": "e4ed101612bac42d2e62602f0a6df939a166995054f2beacab03f45858f976df"
+              }
+            ],
+            "stage2": {
+              "video": "426e48390750cdeccdb230928c8ade7778d4fa7f12a83a2d985a5fa73b966026",
+              "audio": "06cd66779ce423965e98d8f7e663a225532c0c6c00af1bfa8c2c79ff3cdff48c"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 4,
+          "bytes": 50331648
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708333",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "ON (same)",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "cddd5657-f8ce-4ee8-b5cd-29c0f57c62f6",
+      "submitted_at": "2026-11-25T17:56:41",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 220.1,
+      "summary": {
+        "mp4_sha256": "b9445e04d98933ddfd0df7f5f13fe79743b2d287da23a0f75e140bdef6aff425",
+        "mp4_size": 3440290,
+        "mp4_rel": "outputs/cddd5657-f8ce-4ee8-b5cd-29c0f57c62f6/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 218.3,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "clips": [
+              "hit",
+              "hit",
+              "hit"
+            ],
+            "stage2": "hit"
+          },
+          "conditioning_sha256": {
+            "clips": [
+              {
+                "video": "79bb9411c10139226303e0f18978ed95c295cf33091f2262351619ce9395e6e6",
+                "audio": "8ac86f8a94ba20084a843de684b22deae800fa106a303fc6a555d963ecb717bd"
+              },
+              {
+                "video": "a0fabcb424a5c052ed8c8f860d22c1a268eb9e26e42755c3a022667235725986",
+                "audio": "d513f5b3f335c0d55acdfb0669a0208127d7bf398f6ff82e6f6067e9c47bee91"
+              },
+              {
+                "video": "00000ac608383f2a91596c0ce354207b805d61fe03398736bbb17ed1594648b8",
+                "audio": "e4ed101612bac42d2e62602f0a6df939a166995054f2beacab03f45858f976df"
+              }
+            ],
+            "stage2": {
+              "video": "426e48390750cdeccdb230928c8ade7778d4fa7f12a83a2d985a5fa73b966026",
+              "audio": "06cd66779ce423965e98d8f7e663a225532c0c6c00af1bfa8c2c79ff3cdff48c"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 4,
+          "bytes": 50331648
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708333",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "4": {
+      "label": "4",
+      "cond": "ON, clip 2 -> p2'",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "41b5ce49-cd39-41a8-b673-16ea0c5b1e1a",
+      "submitted_at": "2026-11-25T18:00:21",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 290.1,
+      "summary": {
+        "mp4_sha256": "1232740ab9407caea1e737a96a58cdf5fd7838af29530352e6edf776071253a2",
+        "mp4_size": 3313167,
+        "mp4_rel": "outputs/41b5ce49-cd39-41a8-b673-16ea0c5b1e1a/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 288.76,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": {
+          "te_cache": {
+            "clips": [
+              "hit",
+              "miss",
+              "hit"
+            ],
+            "stage2": "hit"
+          },
+          "conditioning_sha256": {
+            "clips": [
+              {
+                "video": "79bb9411c10139226303e0f18978ed95c295cf33091f2262351619ce9395e6e6",
+                "audio": "8ac86f8a94ba20084a843de684b22deae800fa106a303fc6a555d963ecb717bd"
+              },
+              {
+                "video": "9de0e8c70d0c297183b90540c59c43386ae2dcab52ff7e3de8a606ac4f3fd7cd",
+                "audio": "4d077888a9395469c85386557456def39f894a46d1d0ee3590fd502111461838"
+              },
+              {
+                "video": "00000ac608383f2a91596c0ce354207b805d61fe03398736bbb17ed1594648b8",
+                "audio": "e4ed101612bac42d2e62602f0a6df939a166995054f2beacab03f45858f976df"
+              }
+            ],
+            "stage2": {
+              "video": "426e48390750cdeccdb230928c8ade7778d4fa7f12a83a2d985a5fa73b966026",
+              "audio": "06cd66779ce423965e98d8f7e663a225532c0c6c00af1bfa8c2c79ff3cdff48c"
+            }
+          }
+        },
+        "has_ltx23_key": true,
+        "te_cache_paths": [
+          "ltx23.te_cache"
+        ],
+        "csha_paths": [
+          "ltx23.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 4,
+          "bytes": 50331648
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708333",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "5": {
+      "label": "5",
+      "cond": "OFF (same input as 4)",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ]
+      },
+      "job_id": "1efd86c9-d795-4646-adbb-0fa99694f719",
+      "submitted_at": "2026-11-25T18:05:12",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 295.2,
+      "summary": {
+        "mp4_sha256": "1232740ab9407caea1e737a96a58cdf5fd7838af29530352e6edf776071253a2",
+        "mp4_size": 3313167,
+        "mp4_rel": "outputs/1efd86c9-d795-4646-adbb-0fa99694f719/output.mp4",
+        "backend": "ltx-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 291.26,
+        "models": {
+          "base_model": "LTX23",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "gemma-3-12b-it-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "LTX23_video_vae_bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "LTX23_audio_vae_bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            null
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": null,
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708333",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 6,
+    "at": [
+      "2026-11-25T17:49:04",
+      "2026-11-25T17:54:05",
+      "2026-11-25T17:56:15",
+      "2026-11-25T18:00:01",
+      "2026-11-25T18:02:31",
+      "2026-11-25T18:06:17"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T17:46:26"
+  ],
+  "pre": {
+    "active_base_model": "LTX23",
+    "transformer_active": "default",
+    "categories_active": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "LTX23",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 11,
+        "failed": 0
+      }
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T18:10:08",
+  "gate_pass": true
+}

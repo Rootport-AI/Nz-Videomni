@@ -1251,35 +1251,54 @@ def run_chain(
     # event implicitly ends it).
     if progress:
         progress("encode", 0, 1)
-    text_encoder = ledger.text_encoder()
-    clip_prompts = [c.prompt for c in clips]
-    seg_ctx, stage2_ctx = _encode_chain_prompts(
-        lambda p: encode_text(text_encoder, prompts=[p])[0],
-        clip_prompts,
-        stage2_prompt,
-    )
-    logger.info(
-        "chain prompts: %d distinct encoded; stage-2 prompt %s",
-        len(dict.fromkeys([*clip_prompts, stage2_prompt])),
-        "shared with a clip" if stage2_prompt in clip_prompts else "is one extra encode",
-    )
-    # NAG/VSF negative encode: one extra call against the SAME live text_encoder
-    # (avoids a second Gemma load), stashed in NagState before it's freed below.
-    # Inert when this chain didn't request either (pipe._nag.requested is False).
-    # VSF additionally trims the encoding to the prompt's real tokens — its
-    # single shared softmax must not sign-flip the connector's learned register
-    # embeddings (see encode_negative's docstring); NAG passes False and keeps
-    # the full-length encoding.
-    if pipe._nag.requested:
-        nvc, nac = encode_negative(
-            text_encoder,
-            pipe._nag.params.negative_prompt,
-            slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+    if pipe._keep_text_conditioning_job:
+        # keep_text_conditioning (台帳 §1-299): the same distinct strings, in the
+        # same order, through the pipeline's conditioning cache (which also
+        # encodes the negative into NagState and frees a text encoder it built,
+        # in the order below), then the same per-clip fan-out.
+        clip_prompts = [c.prompt for c in clips]
+        distinct = list(dict.fromkeys([*clip_prompts, stage2_prompt]))
+        by_prompt = dict(zip(
+            distinct, pipe._encode_conditioning(distinct, ledger.text_encoder, release=True)
+        ))
+        seg_ctx, stage2_ctx = _encode_chain_prompts(
+            by_prompt.__getitem__, clip_prompts, stage2_prompt
         )
-        pipe._nag.set_contexts(nvc, nac)
-    torch.cuda.synchronize()
-    del text_encoder
-    cleanup_memory()
+        logger.info(
+            "chain prompts: %d distinct encoded; stage-2 prompt %s",
+            len(dict.fromkeys([*clip_prompts, stage2_prompt])),
+            "shared with a clip" if stage2_prompt in clip_prompts else "is one extra encode",
+        )
+    else:
+        text_encoder = ledger.text_encoder()
+        clip_prompts = [c.prompt for c in clips]
+        seg_ctx, stage2_ctx = _encode_chain_prompts(
+            lambda p: encode_text(text_encoder, prompts=[p])[0],
+            clip_prompts,
+            stage2_prompt,
+        )
+        logger.info(
+            "chain prompts: %d distinct encoded; stage-2 prompt %s",
+            len(dict.fromkeys([*clip_prompts, stage2_prompt])),
+            "shared with a clip" if stage2_prompt in clip_prompts else "is one extra encode",
+        )
+        # NAG/VSF negative encode: one extra call against the SAME live text_encoder
+        # (avoids a second Gemma load), stashed in NagState before it's freed below.
+        # Inert when this chain didn't request either (pipe._nag.requested is False).
+        # VSF additionally trims the encoding to the prompt's real tokens — its
+        # single shared softmax must not sign-flip the connector's learned register
+        # embeddings (see encode_negative's docstring); NAG passes False and keeps
+        # the full-length encoding.
+        if pipe._nag.requested:
+            nvc, nac = encode_negative(
+                text_encoder,
+                pipe._nag.params.negative_prompt,
+                slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+            )
+            pipe._nag.set_contexts(nvc, nac)
+        torch.cuda.synchronize()
+        del text_encoder
+        cleanup_memory()
 
     # The internal band segment REUSES the last clip's encoding — it is the tail of
     # that same scene, and its audio (the one modality still generated freely there)

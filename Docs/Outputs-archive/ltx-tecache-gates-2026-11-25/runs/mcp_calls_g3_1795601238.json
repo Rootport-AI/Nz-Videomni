@@ -1,0 +1,389 @@
+[
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.17,
+    "at": "2026-11-25T18:56:35"
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:56:35",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "LTX23",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1536,
+      "height": 896,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": false,
+      "keep_text_conditioning": true,
+      "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+      "outpaint_pad_left": 128,
+      "outpaint_pad_right": 128,
+      "outpaint_pad_top": 64,
+      "outpaint_pad_bottom": 64,
+      "outpaint_blend_dilation_stage1": 5
+    },
+    "is_error": false,
+    "seconds": 0.47,
+    "at": "2026-11-25T18:56:36",
+    "result": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "status": "running",
+      "created_at": "2026-11-25T09:56:36Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T18:56:51",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.03,
+    "at": "2026-11-25T18:57:21",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.0,
+    "at": "2026-11-25T18:57:36",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.08,
+    "at": "2026-11-25T18:58:31"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T18:59:16"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T19:00:01"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.0,
+    "at": "2026-11-25T19:00:16",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T19:00:26"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1536,
+      "height": 896,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": false,
+      "keep_text_conditioning": true,
+      "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+      "outpaint_pad_left": 128,
+      "outpaint_pad_right": 128,
+      "outpaint_pad_top": 64,
+      "outpaint_pad_bottom": 64,
+      "outpaint_blend_dilation_stage1": 5
+    },
+    "is_error": false,
+    "seconds": 0.36,
+    "at": "2026-11-25T19:00:27",
+    "result": {
+      "job_id": "b795bf79-7d46-48ce-b41f-00866cd8a0b5",
+      "status": "running",
+      "created_at": "2026-11-25T10:00:27Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "b795bf79-7d46-48ce-b41f-00866cd8a0b5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T19:01:12"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "b795bf79-7d46-48ce-b41f-00866cd8a0b5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 40.0,
+    "at": "2026-11-25T19:01:52",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "b795bf79-7d46-48ce-b41f-00866cd8a0b5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T19:02:47"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "b795bf79-7d46-48ce-b41f-00866cd8a0b5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.0,
+    "at": "2026-11-25T19:02:52",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "b795bf79-7d46-48ce-b41f-00866cd8a0b5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 25.02,
+    "at": "2026-11-25T19:03:27"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1536,
+      "height": 896,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": false,
+      "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+      "outpaint_pad_left": 128,
+      "outpaint_pad_right": 128,
+      "outpaint_pad_top": 64,
+      "outpaint_pad_bottom": 64,
+      "outpaint_blend_dilation_stage1": 5
+    },
+    "is_error": false,
+    "seconds": 0.34,
+    "at": "2026-11-25T19:03:28",
+    "result": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "status": "running",
+      "created_at": "2026-11-25T10:03:28Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.02,
+    "at": "2026-11-25T19:03:48",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 50.0,
+    "at": "2026-11-25T19:04:48"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.02,
+    "at": "2026-11-25T19:05:13",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.0,
+    "at": "2026-11-25T19:05:33",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T19:06:28"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 29.98,
+    "at": "2026-11-25T19:06:58",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "03e47eb4-5969-4fc5-a993-772a6b90047f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 10.0,
+    "at": "2026-11-25T19:07:18"
+  }
+]

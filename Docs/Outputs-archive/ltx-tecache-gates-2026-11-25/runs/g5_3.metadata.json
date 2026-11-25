@@ -1,0 +1,170 @@
+{
+  "job_id": "95e37065-04f4-471e-951e-5a1b824f07f9",
+  "created_at": "2026-11-25T09:13:43Z",
+  "started_at": "2026-11-25T09:13:43Z",
+  "completed_at": "2026-11-25T09:14:47Z",
+  "status": "completed",
+  "request": {
+    "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": false,
+    "vram16_mode": null,
+    "pi_h3": "off",
+    "sol_vae": false,
+    "keep_reference_latents": false,
+    "keep_text_conditioning": true,
+    "width": 1280,
+    "height": 768,
+    "crop_output": null,
+    "num_frames": 121,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "shift_video": null,
+    "shift_audio": null,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "conditioning_images": [],
+    "loras": [],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "outpaint": null,
+    "inpaint": null,
+    "alpha_gen": null,
+    "source_audio": null,
+    "references": []
+  },
+  "generation_mode": "t2v",
+  "seed_used": 42,
+  "attention_used": "sdpa",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "off",
+  "vram16_mode_used": null,
+  "keep_resident_embeddings_used": "off",
+  "fused_gguf_dequant_kernel_used": "on",
+  "vae_mode_used": "conv",
+  "peak_vram_reserved_mb": 6828,
+  "generation_time_seconds": 64.48,
+  "backend": "ltx25-distilled",
+  "output": {
+    "path": "outputs/95e37065-04f4-471e-951e-5a1b824f07f9/output.mp4",
+    "resolution": "1280x768",
+    "duration_seconds": 5.042,
+    "frame_rate": 24.0,
+    "file_size_bytes": 3102844
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 6606
+  },
+  "models": {
+    "base_model": "LTX25",
+    "selection": {
+      "transformer": {
+        "name": "default",
+        "file": "LTX-2.5-22B-distilled-transformer.gguf"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "ltx-2.5-audio-vae-bf16.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "ltx25": {
+    "encode_fps": 24,
+    "video_chunks": 3,
+    "tiling": "TileSizeConfig(frames=DimensionSizeConfig(tile_size=80, overlap=24), height=DimensionSizeConfig(tile_size=448, overlap=64), width=DimensionSizeConfig(tile_size=768, overlap=64))",
+    "size_bytes": 3102844,
+    "phases": {
+      "10a_te_build": {
+        "seconds": 4.53,
+        "rss_gib": 26.09,
+        "peak_allocated_gib": 1.981,
+        "peak_reserved_gib": 1.998,
+        "current_allocated_gib": 1.981
+      },
+      "10b_ep_build": {
+        "seconds": 3.32,
+        "rss_gib": 18.51,
+        "peak_allocated_gib": 5.014,
+        "peak_reserved_gib": 5.223,
+        "current_allocated_gib": 5.014
+      },
+      "10_prompt_encode": {
+        "seconds": 10.37,
+        "rss_gib": 18.51,
+        "peak_allocated_gib": 6.451,
+        "peak_reserved_gib": 6.668,
+        "current_allocated_gib": 0.021
+      },
+      "21_stage1_denoise": {
+        "seconds": 16.53,
+        "rss_gib": 18.51,
+        "peak_allocated_gib": 3.228,
+        "peak_reserved_gib": 3.408,
+        "current_allocated_gib": 0.023
+      },
+      "22_stage2_denoise": {
+        "seconds": 26.78,
+        "rss_gib": 18.51,
+        "peak_allocated_gib": 5.883,
+        "peak_reserved_gib": 6.539,
+        "current_allocated_gib": 0.034
+      },
+      "30_decode_encode": {
+        "seconds": 7.57,
+        "rss_gib": 18.51,
+        "peak_allocated_gib": 2.714,
+        "peak_reserved_gib": 4.383,
+        "current_allocated_gib": 0.011
+      },
+      "40_job_end": {
+        "seconds": 0.0,
+        "rss_gib": 18.51,
+        "peak_allocated_gib": 2.714,
+        "peak_reserved_gib": 4.383,
+        "current_allocated_gib": 0.009
+      }
+    },
+    "te_cache": "miss",
+    "conditioning_sha256": [
+      {
+        "video": "8b25124b70612ba73cc73bee64b29c4a4c021949ed670c116be5bf0bb3d49477",
+        "audio": "06788e73e78d177b2709108f659ea7f4fc606b05237ad00f688d3def6e297b48",
+        "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+      }
+    ]
+  }
+}

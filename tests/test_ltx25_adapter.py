@@ -629,6 +629,8 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # FIVE with ``references`` (Ref2VA, H3 only). SIX with ``pi_h3`` (H3 only).
     # SEVEN with ``sol_vae`` (Sol-H3-VAE, H3 only). EIGHT with
     # ``keep_reference_latents`` (keeping the encoded reference latents, H3 only).
+    # ``keep_text_conditioning`` (台帳 §1-299) was a ninth name for a day, until
+    # the engine learned it: it is honoured now, so the count is EIGHT again.
     assert len(ltx25.UNSUPPORTED_FEATURES) == 8
 
 

@@ -135,6 +135,15 @@
  *    every other row. Scope: LTX 2.3 / 2.5 publish `keep_reference_latents` in
  *    `unsupported_features`, and `AppShell` hides the row and writes a leftover
  *    `true` back to `false`.
+ *  - `keepTextConditioning` — REAL (台帳 §1-298, widened by §1-299). The text
+ *    encoder output (the conditioning) is cached in main memory, so a generation
+ *    whose prompt and media are the same as last time skips the text encoder;
+ *    the output does not change. Sent as `keep_text_conditioning`; the server
+ *    default is `false`, so the key rides along only while it is ON. Independent
+ *    of every other row, `keepReferenceLatents` included. Scope: MiniMax H3,
+ *    LTX 2.3 and LTX 2.5 all take it. Only a server that still refuses it on
+ *    LTX publishes `keep_text_conditioning` in `unsupported_features`; then
+ *    `AppShell` hides the row and writes a leftover `true` back to `false`.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -228,6 +237,13 @@ export interface AccelerationSettings {
    * `false`. LTX 2.3 / 2.5 publish the name in `unsupported_features`, so the
    * row is hidden there. */
   keepReferenceLatents: boolean;
+  /** REAL (台帳 §1-298): "Text encoder conditioning cache" — MiniMax H3, LTX 2.3, LTX 2.5 (§1-299).
+   * Caches the text encoder's conditioning in main memory so a generation with
+   * the same prompt and media as last time skips the text encoder; the output
+   * does not change. Sent as `keep_text_conditioning` — but only while ON, since
+   * the server defaults to `false`. A server that still refuses it on LTX
+   * publishes the name in `unsupported_features`; the row is hidden there. */
+  keepTextConditioning: boolean;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -320,6 +336,13 @@ export const SOL_VAE_SERVER_DEFAULT = false;
  * turns it ON. On LTX the row is hidden and the stored value is reset to this
  * default. */
 export const KEEP_REFERENCE_LATENTS_SERVER_DEFAULT = false;
+/** Server default for `keep_text_conditioning` as of 台帳 §1-298: `false`. Same
+ * direction as `keep_reference_latents`: the key rides along only while the
+ * user turns it ON. MiniMax H3, LTX 2.3 and LTX 2.5 all take it (台帳 §1-299),
+ * so the row is shown on LTX too; only a server that still refuses it there
+ * publishes the name in `unsupported_features`, and then the row is hidden and
+ * the stored value is reset to this default. */
+export const KEEP_TEXT_CONDITIONING_SERVER_DEFAULT = false;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -348,6 +371,7 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   piH3: PI_H3_DEFAULT,
   solVae: SOL_VAE_SERVER_DEFAULT,
   keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+  keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
@@ -420,6 +444,9 @@ export function withServerDefaults(
     keepReferenceLatents: at("keepReferenceLatents")
       ? ACCELERATION_DEFAULTS.keepReferenceLatents
       : acceleration.keepReferenceLatents,
+    keepTextConditioning: at("keepTextConditioning")
+      ? ACCELERATION_DEFAULTS.keepTextConditioning
+      : acceleration.keepTextConditioning,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -445,6 +472,8 @@ export interface StoredAcceleration {
   solVae: boolean;
   /** 台帳 §1-297: keep reference latents resident, persisted from its first day. */
   keepReferenceLatents: boolean;
+  /** 台帳 §1-298: text encoder conditioning cache, persisted from its first day. */
+  keepTextConditioning: boolean;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -460,6 +489,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   piH3: PI_H3_DEFAULT,
   solVae: SOL_VAE_SERVER_DEFAULT,
   keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+  keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
@@ -476,7 +506,8 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *     "blockSwapPrefetch":...,"keepResident":...,
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
  *     "keepResidentEmbeddings":...,"vram16Mode":...,"piH3":...,
- *     "solVae":...,"keepReferenceLatents":...,"embedMp4Metadata":...}`
+ *     "solVae":...,"keepReferenceLatents":...,"keepTextConditioning":...,
+ *     "embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
@@ -485,7 +516,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
  * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
  * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`), or a pre-ruling-107
  * one (no `piH3`), or a pre-Sol one (no `solVae`), or a pre-§1-297 one (no
- * `keepReferenceLatents`) — read back
+ * `keepReferenceLatents`), or a pre-§1-298 one (no `keepTextConditioning`) — read back
  * cleanly. `solVae` is also normalized against `piH3` (a pi-H3 choice other
  * than off wins and Sol reads back off). EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
@@ -511,6 +542,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       piH3: PI_H3_DEFAULT,
       solVae: SOL_VAE_SERVER_DEFAULT,
       keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+      keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -547,6 +579,10 @@ export function readStoredAcceleration(): StoredAcceleration {
         typeof rec.keepReferenceLatents === "boolean"
           ? rec.keepReferenceLatents
           : KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+      keepTextConditioning:
+        typeof rec.keepTextConditioning === "boolean"
+          ? rec.keepTextConditioning
+          : KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -664,6 +700,10 @@ export interface AccelerationRequestFields {
   /** 台帳 §1-297: keep reference latents resident — `/generate` and
    * `/generate/chain` (MiniMax H3 only). Never sent as `false`. */
   keep_reference_latents?: boolean;
+  /** 台帳 §1-298: text encoder conditioning cache — `/generate` and
+   * `/generate/chain` (MiniMax H3, LTX 2.3, LTX 2.5), and `/generate/alpha`.
+   * Never sent as `false`. */
+  keep_text_conditioning?: boolean;
 }
 
 /**
@@ -718,6 +758,8 @@ export function effectiveAccelerationFields(
     // Likewise no served row's `requires` names it (a memory cache; the
     // output does not change), so it takes no part in the match.
     keep_reference_latents: acceleration.keepReferenceLatents,
+    // Likewise no served row's `requires` names it.
+    keep_text_conditioning: acceleration.keepTextConditioning,
   };
 }
 
@@ -830,6 +872,14 @@ export function accelerationRequestFields(
   // name, the row is hidden and the stored choice is written back to `false`.
   if (acceleration.keepReferenceLatents !== KEEP_REFERENCE_LATENTS_SERVER_DEFAULT) {
     out.keep_reference_latents = acceleration.keepReferenceLatents;
+  }
+  // 台帳 §1-298: text encoder conditioning cache. Same direction and same scope
+  // half as `keep_reference_latents`: the key only ever appears as `true`, and
+  // `AppShell` hides the row and writes the stored choice back to `false` on a
+  // server that still names the feature in `unsupported_features`.
+  // INDEPENDENT of `keep_reference_latents`.
+  if (acceleration.keepTextConditioning !== KEEP_TEXT_CONDITIONING_SERVER_DEFAULT) {
+    out.keep_text_conditioning = acceleration.keepTextConditioning;
   }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order

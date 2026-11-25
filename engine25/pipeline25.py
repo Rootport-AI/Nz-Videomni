@@ -102,6 +102,14 @@ is not an acceleration knob -- it changes what the model computes, on purpose,
 which is why it has its own method rather than another argument to
 ``set_acceleration_job``.
 
+``keep_text_conditioning`` (台帳 §1-299) is armed the same way, after the
+negative prompt: :meth:`Ltx25Pipeline.set_text_conditioning_job` /
+:meth:`Ltx25Pipeline.end_text_conditioning_job`. A job that asks for it keeps
+the prompt encoder's whole result for its bundle (every string handed to the
+one official encode, the negative prompt last -- :func:`text_conditioning_bundle`)
+in main memory, and the next job with the same bundle skips the encode; a job
+that does not ask drops everything kept and runs the official encode untouched.
+
 Determinism
 -----------
 Same seed, same file. The video half gets there on its own -- two runs at one
@@ -132,6 +140,10 @@ from typing import Any, Callable, Sequence
 import torch
 
 from engine.gguf import dequant_triton
+# The text encoder's conditioning kept between jobs (keep_text_conditioning,
+# 台帳 §1-299): the cache keeper and the copy/hash helpers the three engines share.
+from engine.ref_latent_cache import RefLatentCache
+from engine.te_conditioning import device_copy, host_copy, tensor_sha256
 # SHARED WITH LTX 2.3, imported rather than reimplemented: 2.5's attention
 # contract is 2.3's to the letter (flat (B, S, H*D) q/k/v, head dims 128/64, six
 # attention modules per block), so a second copy could only drift. The module's
@@ -553,6 +565,39 @@ class Ltx25ProgressStage(Ltx25DiffusionStage):
                 self.vram.record(phase, time.perf_counter() - started)
 
 
+def text_conditioning_bundle(prompts: Sequence[str], negative_prompt: str | None = None) -> tuple:
+    """The bundle: the whole list one official encode is handed, as an ordered tuple.
+
+    THE KEY OF THE HELD CONDITIONING (``keep_text_conditioning``, 台帳 §1-299), and
+    the ONE place it is built: :meth:`Ltx25Pipeline.set_text_conditioning_job`
+    (which bundle this job keeps) and :meth:`Ltx25PromptEncoder._encode_bundle`
+    (which bundle it looks up) both call this. ``negative_prompt`` is None for a
+    job without NAG / VSF (``tuple(prompts)``); with one it is appended LAST,
+    which is the list ``_call_with_negative`` hands the official encode.
+
+    Why the whole bundle and not one entry per string: MEASURED on the GPU
+    (2026-11-25), one bundle encoded twice gives the same values, but the same
+    string encoded inside bundles of different sizes does not. So a per-string
+    cache would change the generation; a per-bundle one cannot.
+    """
+    if negative_prompt is None:
+        return tuple(prompts)
+    return (*prompts, negative_prompt)
+
+
+def _conditioning_sha256(output: Any) -> dict[str, str | None]:
+    """``{"video", "audio", "mask"}`` SHA-256s of one held ``EmbeddingsProcessorOutput``
+    (a None tensor -- ``audio_encoding`` may be one -- is None), computed in place."""
+    def digest(t: Any) -> str | None:
+        return None if t is None else tensor_sha256(t)
+
+    return {
+        "video": digest(output.video_encoding),
+        "audio": digest(output.audio_encoding),
+        "mask": digest(output.attention_mask),
+    }
+
+
 class Ltx25PromptEncoder(PromptEncoder):
     """The official prompt encoder, fed by engine25's two ``gguf_gemma4`` builders.
 
@@ -573,6 +618,7 @@ class Ltx25PromptEncoder(PromptEncoder):
         text_encoder_builder: Any,
         embeddings_processor_builder: Any,
         neg_state_provider: Callable[[], NagState] | None = None,
+        te_cache_provider: Callable[[], RefLatentCache | None] | None = None,
         alloc_trim_strategy: AllocatorTrimStrategy = AllocatorTrimStrategy.TRIM,
     ) -> None:
         super().__init__(
@@ -597,9 +643,19 @@ class Ltx25PromptEncoder(PromptEncoder):
         #: "never encode a negative prompt", which is what :meth:`__call__`
         #: falls back to.
         self._neg_state_provider = neg_state_provider
+        #: The held conditioning (``keep_text_conditioning``, 台帳 §1-299), read
+        #: through a closure on every call like the NAG state: the cache while
+        #: the CURRENT job keeps conditioning, None otherwise (and None for a
+        #: direct library user) -- None means the official encode, untouched.
+        self._te_cache_provider = te_cache_provider
+        #: What the last encode of a job that keeps conditioning looked up:
+        #: ``{"te_cache": "hit" | "miss", "conditioning_sha256": [...]}``. Set
+        #: only on that path; cleared by ``Ltx25Pipeline.set_text_conditioning_job``.
+        self.te_cache_report: dict | None = None
         #: The tokenizer the last :meth:`_build_text_encoder` produced, kept
         #: because the VSF slice needs it AFTER the encoder itself has been
-        #: freed -- see :meth:`_build_text_encoder`.
+        #: freed -- and, on a held-conditioning hit, in a job that never built
+        #: the encoder at all. See :meth:`_build_text_encoder`.
         self._tokenizer: Any = None
 
     # -- sub-phase timers ----------------------------------------------------
@@ -627,9 +683,16 @@ class Ltx25PromptEncoder(PromptEncoder):
         and frees it before returning, so by the time the VSF slice needs the
         prompt's real token count the encoder object is gone. What is kept is
         the tokenizer alone -- vocabulary, no weights -- and it is REPLACED on
-        every build, so it can never go stale: the encoder is rebuilt once per
-        job, and the tokenizer that comes with it is the one that produced this
-        job's embeddings.
+        every build, so it can never go stale: the encoder is rebuilt on every
+        job that runs the official encode, and the tokenizer that comes with it
+        is the one that produced those embeddings.
+
+        A job that HITS the held conditioning (``keep_text_conditioning``,
+        台帳 §1-299) builds no encoder, and uses the tokenizer kept from an
+        earlier job. That one is never None there: an entry is only ever put
+        by an official encode on this same encoder object, which built the
+        text encoder (and so passed through here) first; and every build reads
+        the same tokenizer files, so it tokenizes the same way.
         """
         started = time.perf_counter()
         try:
@@ -653,11 +716,19 @@ class Ltx25PromptEncoder(PromptEncoder):
         """The official encode, plus this job's negative prompt when it has one.
 
         THE BRANCH IS THE POINT. A job that did not ask for a negative prompt
-        takes the ``super().__call__(prompts, **kwargs)`` line below -- the
-        official call with the caller's own arguments -- so its encode is not
-        merely equivalent to the official one, it is the same code path.
-        Routing every job through the negative-prompt helper and having it
-        no-op would not give a non-NAG job that guarantee.
+        hands :meth:`_encode_bundle` the caller's own list, and a job that did
+        not ask to keep conditioning either takes that helper's FIRST return --
+        ``super().__call__(encode_list, **kwargs)``, where ``encode_list`` IS the
+        caller's own list object: the official call with the caller's own
+        arguments -- so its encode is not merely equivalent to
+        the official one, it is the same code path. Routing every job through
+        the negative-prompt helper and having it no-op would not give a
+        non-NAG job that guarantee.
+
+        The progress pair and ``10_prompt_encode`` are emitted the same way on
+        every path, a held-conditioning hit included (its seconds are then
+        near zero, and ``10a_te_build`` / ``10b_ep_build`` do not appear,
+        because nothing is built).
         """
         if self.progress is not None:
             self.progress(STAGE_ENCODE, 0, 1)
@@ -667,13 +738,65 @@ class Ltx25PromptEncoder(PromptEncoder):
         try:
             state = None if self._neg_state_provider is None else self._neg_state_provider()
             if state is None or not state.requested:
-                return super().__call__(prompts, **kwargs)
+                return self._encode_bundle(prompts, None, **kwargs)
             return self._call_with_negative(state, prompts, **kwargs)
         finally:
             if self.vram is not None:
                 self.vram.record("10_prompt_encode", time.perf_counter() - started)
             if self.progress is not None:
                 self.progress(STAGE_ENCODE, 1, 1)
+
+    def _encode_bundle(self, prompts: list[str], negative_prompt: str | None, **kwargs: Any) -> Any:
+        """The official encode of ``prompts`` (+ ``negative_prompt`` last, when
+        given), or the held conditioning of that same bundle.
+
+        The ONE place both encode paths (:meth:`__call__` and
+        :meth:`_call_with_negative`) reach the official ``super().__call__``.
+
+        * OFF -- this job does not keep conditioning (the provider gives None),
+          or ``enhance_first_prompt`` is asked for (it rewrites ``prompts[0]``,
+          so the strings handed in are not what is encoded): the official
+          encode, with today's list and the caller's own arguments, and nothing
+          else.
+        * ON, miss: the same official call, ONCE, on the same list; a main
+          memory copy of its whole result (one ``EmbeddingsProcessorOutput``
+          per string) is put, and the official result itself is returned.
+        * ON, hit: no official call -- so neither the text encoder nor the
+          embeddings processor is built -- and a NEW list of NEW copies on the
+          held device (same type, same dtypes, the mask included) is returned,
+          so the caller's ``pop`` / ``.view`` / VSF slice can never reach the
+          held values.
+
+        The key is ``(text_conditioning_bundle(prompts, negative_prompt), ())``.
+        The other kwargs (``enhance_prompt_image`` / ``_seed`` /
+        ``_static_cache``) only act when ``enhance_first_prompt`` is true, so
+        they are not part of it.
+        """
+        encode_list = prompts if negative_prompt is None else [*prompts, negative_prompt]
+        cache = None if self._te_cache_provider is None else self._te_cache_provider()
+        if cache is None or kwargs.get("enhance_first_prompt"):
+            return super().__call__(encode_list, **kwargs)
+
+        key = (text_conditioning_bundle(prompts, negative_prompt), ())
+        held = cache.get(key)
+        if held is None:
+            outputs = super().__call__(encode_list, **kwargs)
+            device = next(
+                (t.device for out in outputs for t in out if isinstance(t, torch.Tensor)),
+                self._device,
+            )
+            held = (host_copy(outputs), device)
+            cache.put(key, held)
+            status, result = "miss", outputs
+        else:
+            values, device = held
+            status, result = "hit", device_copy(values, device)
+        self.te_cache_report = {
+            "te_cache": status,
+            "conditioning_sha256": [_conditioning_sha256(out) for out in held[0]],
+        }
+        logger.info("text conditioning cache: %s (%d string(s) in the bundle)", status, len(key[0]))
+        return result
 
     def _call_with_negative(self, state: NagState, prompts: list[str], **kwargs: Any) -> Any:
         """Encode the negative prompt in the SAME Gemma pass, then slice it off.
@@ -702,7 +825,7 @@ class Ltx25PromptEncoder(PromptEncoder):
         """
         params = state.params
         assert params is not None  # implied by state.requested at the call site
-        outputs = list(super().__call__([*prompts, params.negative_prompt], **kwargs))
+        outputs = list(self._encode_bundle(prompts, params.negative_prompt, **kwargs))
         if len(outputs) != len(prompts) + 1:
             raise Ltx25PipelineError(
                 f"the prompt encoder returned {len(outputs)} outputs for "
@@ -1064,6 +1187,13 @@ class Ltx25Pipeline:
         #   many times per job and the encoded contexts have to outlive every
         #   one of those builds.
         self._nag = NagState()
+        # * the held text conditioning (``keep_text_conditioning``, 台帳 §1-299)
+        #   is a SIXTH shape: a cache that OUTLIVES the job (that is the
+        #   feature), plus a per-job "this job keeps conditioning" mark the
+        #   prompt encoder reads through a closure. One bundle per entry -- see
+        #   :func:`text_conditioning_bundle`. :meth:`close` leaves it alone.
+        self._te_conditioning = RefLatentCache()
+        self._te_on = False
 
         started = time.perf_counter()
         self.vram.reset()
@@ -1212,6 +1342,9 @@ class Ltx25Pipeline:
             # state the stage's service reads. Passed as a closure for the same
             # reason the service gets one -- this object outlives every job.
             neg_state_provider=lambda: self._nag,
+            # The held conditioning, by the same closure and for the same
+            # reason: only while the CURRENT job keeps it, None otherwise.
+            te_cache_provider=lambda: self._te_conditioning if self._te_on else None,
         )
         prompt_encoder.vram = self.vram
         pipeline.prompt_encoder = prompt_encoder
@@ -1433,6 +1566,45 @@ class Ltx25Pipeline:
         risk the next job's build finding a populated state it never asked for.
         """
         self._nag.reset()
+
+    def set_text_conditioning_job(self, on: bool, prompts: Sequence[str]) -> None:
+        """Start this job's held text conditioning (``keep_text_conditioning``, 台帳 §1-299).
+
+        Called AFTER :meth:`set_nag_job` -- the bundle ends with the job's
+        negative prompt when it has one -- with the strings the job hands the
+        prompt encoder, in the order it hands them. OFF: everything held is
+        dropped and the encoder runs the official encode untouched. ON: every
+        bundle but this job's is dropped, and the encoder looks this one up.
+        A ``prompts`` that disagrees with what the encoder is actually handed
+        only costs the hit (the lookup is keyed by what was handed), never a
+        wrong value. Paired with :meth:`end_text_conditioning_job`.
+        """
+        self._te_on = False
+        self.prompt_encoder.te_cache_report = None
+        if not on:
+            self._te_conditioning.begin(set())
+            return
+        params = self._nag.params
+        negative = None if params is None else params.negative_prompt
+        self._te_conditioning.begin({text_conditioning_bundle(prompts, negative)})
+        self._te_on = True
+
+    def end_text_conditioning_job(self, ok: bool) -> None:
+        """End of the job: a job that ended well keeps only what it used, a failed
+        one drops what it put (``RefLatentCache.end``); the ON mark always goes.
+
+        **Never raises**: it runs in the worker's ``finally``."""
+        try:
+            self._te_conditioning.end(bool(ok))
+        except Exception:  # pragma: no cover -- never-raise discipline
+            logger.exception("text conditioning cache end failed; continuing")
+        finally:
+            self._te_on = False
+
+    def text_conditioning_report(self) -> dict | None:
+        """The last job's ``{"te_cache", "conditioning_sha256"}`` when it kept
+        conditioning (and encoded), else None. Read after the job's end."""
+        return self.prompt_encoder.te_cache_report
 
     def reset_acceleration_job(self) -> None:
         """End-of-job counterpart: freeze the verdicts and disarm.

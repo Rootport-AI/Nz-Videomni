@@ -2630,6 +2630,16 @@ export const en = {
      * reader needs at that moment; not an output warning. */
     accelKeepReferenceLatentsNote:
       "64GB or more of main memory recommended. Keeps the encoded reference pictures, videos and audio in main memory, so the next generation with the same references and the following clips of a Chained job skip their encoding. The output does not change.",
+    /** Acceleration (台帳 §1-298 / §1-299): "Text encoder conditioning cache" —
+     * MiniMax H3, LTX 2.3 and LTX 2.5 all take it, so the label names no engine.
+     * Still hidden where an older server publishes `keep_text_conditioning` in
+     * `unsupported_features`. */
+    accelKeepTextConditioningLabel: "Text encoder conditioning cache",
+    accelKeepTextConditioningOn: "ON",
+    accelKeepTextConditioningOff: "OFF",
+    /** Shown under the row while it is on: what the row does and its main-memory cost. */
+    accelKeepTextConditioningNote:
+      "Caches the conditioning the text encoder outputs and reuses it to speed up generation. 64GB or more of memory recommended (because the cache is kept in main memory. LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained)",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -4186,6 +4196,11 @@ export const ja: Strings = {
     accelKeepReferenceLatentsOff: "OFF",
     accelKeepReferenceLatentsNote:
       "メインメモリ64GB以上を推奨。参照画像・参照動画・参照音声を符号化した結果をメインメモリに保持し、同じ参照素材を使う次の生成と、Chainedの後続クリップで符号化を省きます。生成結果は変わりません。",
+    accelKeepTextConditioningLabel: "テキストエンコーダーの条件付けのキャッシュ",
+    accelKeepTextConditioningOn: "ON",
+    accelKeepTextConditioningOff: "OFF",
+    accelKeepTextConditioningNote:
+      "テキストエンコーダーの出力する条件付けをキャッシュして使い回すことで、生成を高速化します。メモリ64GB以上推奨（※キャッシュをメインメモリに置くため。LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

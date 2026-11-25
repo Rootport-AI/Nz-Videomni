@@ -1,0 +1,532 @@
+[
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.2,
+    "at": "2026-11-25T18:22:37"
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:22:37",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "LTX25",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 26,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "submit_chain",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+      "nag_enabled": false,
+      "clips": [
+        {
+          "num_frames": 121,
+          "prompt": "Small boats rock gently beside the pier."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "Mist drifts slowly over the calm water."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "The first sunlight reaches the far shore."
+        }
+      ]
+    },
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T18:22:37",
+    "result": {
+      "job_id": "8b0d4a69-1ec6-4657-a2ae-27ee422329a7",
+      "status": "running",
+      "created_at": "2026-11-25T09:22:37Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8b0d4a69-1ec6-4657-a2ae-27ee422329a7",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T18:23:22"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8b0d4a69-1ec6-4657-a2ae-27ee422329a7",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T18:24:07"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8b0d4a69-1ec6-4657-a2ae-27ee422329a7",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T18:24:52"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "8b0d4a69-1ec6-4657-a2ae-27ee422329a7",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 44.98,
+    "at": "2026-11-25T18:25:37"
+  },
+  {
+    "tool": "submit_chain",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+      "nag_enabled": false,
+      "clips": [
+        {
+          "num_frames": 121,
+          "prompt": "Small boats rock gently beside the pier."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "Mist drifts slowly over the calm water."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "The first sunlight reaches the far shore."
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:25:38",
+    "result": {
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "status": "running",
+      "created_at": "2026-11-25T09:25:38Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T18:26:23"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.02,
+    "at": "2026-11-25T18:26:33",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.01,
+    "at": "2026-11-25T18:27:28"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 45.02,
+    "at": "2026-11-25T18:28:13",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 15.02,
+    "at": "2026-11-25T18:28:39"
+  },
+  {
+    "tool": "submit_chain",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+      "nag_enabled": false,
+      "clips": [
+        {
+          "num_frames": 121,
+          "prompt": "Small boats rock gently beside the pier."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "Mist drifts slowly over the calm water."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "The first sunlight reaches the far shore."
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:28:40",
+    "result": {
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "status": "running",
+      "created_at": "2026-11-25T09:28:40Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T18:29:25"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.05,
+    "at": "2026-11-25T18:29:40",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 40.0,
+    "at": "2026-11-25T18:30:30",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.03,
+    "at": "2026-11-25T18:31:00",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 15.0,
+    "at": "2026-11-25T18:31:25"
+  },
+  {
+    "tool": "submit_chain",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+      "nag_enabled": false,
+      "clips": [
+        {
+          "num_frames": 121,
+          "prompt": "Small boats rock gently beside the pier."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "A gull glides low over the calm water."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "The first sunlight reaches the far shore."
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:31:26",
+    "result": {
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "status": "running",
+      "created_at": "2026-11-25T09:31:26Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.0,
+    "at": "2026-11-25T18:31:51",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T18:32:46"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T18:33:01",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T18:33:56"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 30.02,
+    "at": "2026-11-25T18:34:26"
+  },
+  {
+    "tool": "submit_chain",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+      "nag_enabled": false,
+      "clips": [
+        {
+          "num_frames": 121,
+          "prompt": "Small boats rock gently beside the pier."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "A gull glides low over the calm water."
+        },
+        {
+          "num_frames": 121,
+          "prompt": "The first sunlight reaches the far shore."
+        }
+      ]
+    },
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T18:34:27",
+    "result": {
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "status": "running",
+      "created_at": "2026-11-25T09:34:27Z",
+      "num_clips": 3,
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T18:35:12"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T18:35:57"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T18:36:42"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 45.03,
+    "at": "2026-11-25T18:37:27",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:37:37"
+  }
+]

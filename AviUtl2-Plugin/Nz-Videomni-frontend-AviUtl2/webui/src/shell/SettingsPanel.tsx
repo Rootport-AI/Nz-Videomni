@@ -128,6 +128,14 @@ export interface SettingsPanelProps {
    * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the name and
    * hide this row (and its note). */
   keepReferenceLatentsUnsupported: boolean;
+  /** Acceleration (台帳 §1-298): "Text encoder conditioning cache" (MiniMax H3,
+   * LTX 2.3, LTX 2.5; §1-299). INDEPENDENT of every other row, the reference-latents row included. */
+  onKeepTextConditioningChange: (value: boolean) => void;
+  /** Whether the LOADED base model's engine refuses `keep_text_conditioning` —
+   * derived by `AppShell` from `GET /models`' `unsupported_features`, never
+   * from a base-model id. Same HIDE-don't-grey treatment as
+   * {@link keepReferenceLatentsUnsupported}. */
+  keepTextConditioningUnsupported: boolean;
   /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
    * conditions written into their `comment` tag. Stored alongside the
    * acceleration choices (`acceleration.embedMp4Metadata`). */
@@ -186,6 +194,8 @@ export function SettingsPanel({
   fastVaeUnsupported,
   onKeepReferenceLatentsChange,
   keepReferenceLatentsUnsupported,
+  onKeepTextConditioningChange,
+  keepTextConditioningUnsupported,
   onEmbedMp4MetadataChange,
   baseModelOptions,
   baseModelValue,
@@ -748,6 +758,43 @@ export function SettingsPanel({
             </div>
             {acceleration.keepReferenceLatents && (
               <p className="field-hint">{strings.settings.accelKeepReferenceLatentsNote}</p>
+            )}
+          </>
+        )}
+
+        {/* Text encoder conditioning cache (台帳 §1-298 / §1-299) — MiniMax H3,
+            LTX 2.3 and LTX 2.5. Same shape as the reference-latents row above:
+            two buttons, default OFF, note shown only while ON, hidden outright
+            (row and note) only on an engine whose `unsupported_features` name
+            `keep_text_conditioning` (an older server that still refuses it on
+            LTX). */}
+        {!keepTextConditioningUnsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelKeepTextConditioningLabel}</span>
+              <div
+                className="settings-lang-toggle"
+                role="group"
+                aria-label={strings.settings.accelKeepTextConditioningLabel}
+              >
+                {[
+                  { on: true, label: strings.settings.accelKeepTextConditioningOn },
+                  { on: false, label: strings.settings.accelKeepTextConditioningOff },
+                ].map(({ on, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`mode-tab${acceleration.keepTextConditioning === on ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.keepTextConditioning === on}
+                    onClick={() => onKeepTextConditioningChange(on)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {acceleration.keepTextConditioning && (
+              <p className="field-hint">{strings.settings.accelKeepTextConditioningNote}</p>
             )}
           </>
         )}

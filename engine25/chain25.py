@@ -1525,6 +1525,17 @@ def _drop_leading_frames(
 # ---------------------------------------------------------------------------
 
 
+def distinct_chain_prompts(clip_prompts: Sequence[str], stage2_prompt: str) -> list[str]:
+    """Every DISTINCT string of the chain, first-seen order: the clips', then stage 2's.
+
+    The list :func:`_encode_chain_prompts` hands the prompt encoder, and the one
+    the worker names when it starts the job's held text conditioning
+    (``keep_text_conditioning``, 台帳 §1-299) -- one function, so the two cannot
+    drift apart.
+    """
+    return list(dict.fromkeys([*clip_prompts, stage2_prompt]))
+
+
 def _encode_chain_prompts(
     prompt_encoder: Callable[[list[str]], Sequence[Any]],
     clip_prompts: Sequence[str],
@@ -1545,7 +1556,7 @@ def _encode_chain_prompts(
     so what comes back is one entry per string passed in -- ``strict=True``
     makes any other length an error rather than a misaligned mapping.
     """
-    distinct = list(dict.fromkeys([*clip_prompts, stage2_prompt]))
+    distinct = distinct_chain_prompts(clip_prompts, stage2_prompt)
     encoded = prompt_encoder(distinct)
     ctx_by_prompt = {
         prompt: (out.video_encoding, out.audio_encoding)

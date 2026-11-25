@@ -13,6 +13,7 @@ import {
   PI_H3_DEFAULT,
   SOL_VAE_SERVER_DEFAULT,
   KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+  KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
 } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 
@@ -38,6 +39,7 @@ describe("useAccelerationSettings", () => {
       piH3: PI_H3_DEFAULT,
       solVae: SOL_VAE_SERVER_DEFAULT,
       keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+      keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     });
   });
@@ -76,6 +78,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -94,6 +97,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -119,6 +123,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -137,6 +142,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -184,6 +190,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -202,6 +209,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -296,6 +304,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -371,6 +380,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -418,6 +428,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -502,6 +513,7 @@ describe("useAccelerationSettings", () => {
         piH3: PI_H3_DEFAULT,
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+        keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -639,6 +651,56 @@ describe("useAccelerationSettings", () => {
 
     const { result: result2 } = renderHook(() => useAccelerationSettings());
     expect(result2.current.acceleration.keepReferenceLatents).toBe(true);
+  });
+
+  // 台帳 §1-298: text encoder conditioning cache, persisted from its first day.
+  it("setKeepTextConditioning updates state, writes through, and survives a remount", async () => {
+    const { result, unmount } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.keepTextConditioning).toBe(KEEP_TEXT_CONDITIONING_SERVER_DEFAULT);
+
+    act(() => result.current.setKeepTextConditioning(true));
+
+    expect(result.current.acceleration.keepTextConditioning).toBe(true);
+    // Independent of the reference-latents row and the other H3 rows.
+    expect(result.current.acceleration.keepReferenceLatents).toBe(KEEP_REFERENCE_LATENTS_SERVER_DEFAULT);
+    expect(result.current.acceleration.vram16Mode).toBe(VRAM16_MODE_SERVER_DEFAULT);
+    expect(result.current.acceleration.solVae).toBe(SOL_VAE_SERVER_DEFAULT);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).keepTextConditioning).toBe(true);
+    });
+    unmount();
+
+    const { result: result2 } = renderHook(() => useAccelerationSettings());
+    expect(result2.current.acceleration.keepTextConditioning).toBe(true);
+    expect(result2.current.acceleration.keepReferenceLatents).toBe(false);
+  });
+
+  it("the two memory settings change independently and persist independently", async () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setKeepReferenceLatents(true));
+    act(() => result.current.setKeepTextConditioning(true));
+    act(() => result.current.setKeepReferenceLatents(false));
+    expect(result.current.acceleration.keepReferenceLatents).toBe(false);
+    expect(result.current.acceleration.keepTextConditioning).toBe(true);
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!);
+      expect(stored.keepReferenceLatents).toBe(false);
+      expect(stored.keepTextConditioning).toBe(true);
+    });
+  });
+
+  it("resetToServerDefaults([\"keepTextConditioning\"]) writes it back to off, persists it, and leaves keepReferenceLatents", async () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setKeepReferenceLatents(true));
+    act(() => result.current.setKeepTextConditioning(true));
+    act(() => result.current.resetToServerDefaults(["keepTextConditioning"]));
+    expect(result.current.acceleration.keepTextConditioning).toBe(false);
+    expect(result.current.acceleration.keepReferenceLatents).toBe(true);
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!);
+      expect(stored.keepTextConditioning).toBe(false);
+      expect(stored.keepReferenceLatents).toBe(true);
+    });
   });
 
   it("resetToServerDefaults([\"keepReferenceLatents\"]) writes it back to off and persists it", async () => {

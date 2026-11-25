@@ -1,0 +1,1812 @@
+{
+  "gate": "g6",
+  "started": "2026-11-25T18:22:36",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "OFF",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ]
+      },
+      "job_id": "8b0d4a69-1ec6-4657-a2ae-27ee422329a7",
+      "submitted_at": "2026-11-25T18:22:37",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 180.0,
+      "summary": {
+        "mp4_sha256": "8eee12464fb5cea277f37cc8a7b94cdc93a329520c2d07eb99a3ca7c1b727847",
+        "mp4_size": 9361864,
+        "mp4_rel": "outputs/8b0d4a69-1ec6-4657-a2ae-27ee422329a7/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 177.95,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.clear_keyframes_on_carry",
+            true
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            26.72
+          ],
+          [
+            "ltx25.phases.10a_te_build.rss_gib",
+            26.72
+          ],
+          [
+            "ltx25.phases.10b_ep_build.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c0.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c1.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c2.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.23_upsample.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t0.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t1.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t2.rss_gib",
+            19.16
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            19.29
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": {
+          "10a_te_build": {
+            "seconds": 4.43,
+            "rss_gib": 26.72,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.018,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.36,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.791,
+            "current_allocated_gib": 6.084
+          },
+          "10_prompt_encode": {
+            "seconds": 11.69,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.236,
+            "current_allocated_gib": 0.056
+          },
+          "21_stage1_denoise_c0": {
+            "seconds": 16.49,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 3.261,
+            "peak_reserved_gib": 5.744,
+            "current_allocated_gib": 0.058
+          },
+          "21_stage1_denoise_c1": {
+            "seconds": 16.44,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 3.263,
+            "peak_reserved_gib": 3.586,
+            "current_allocated_gib": 0.06
+          },
+          "21_stage1_denoise_c2": {
+            "seconds": 16.41,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 3.264,
+            "peak_reserved_gib": 3.586,
+            "current_allocated_gib": 0.061
+          },
+          "23_upsample": {
+            "seconds": 1.55,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 1.417,
+            "peak_reserved_gib": 2.793,
+            "current_allocated_gib": 0.06
+          },
+          "22_stage2_denoise_t0": {
+            "seconds": 40.6,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 7.276,
+            "peak_reserved_gib": 8.406,
+            "current_allocated_gib": 0.073
+          },
+          "22_stage2_denoise_t1": {
+            "seconds": 39.25,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 7.281,
+            "peak_reserved_gib": 8.406,
+            "current_allocated_gib": 0.078
+          },
+          "22_stage2_denoise_t2": {
+            "seconds": 10.74,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 3.679,
+            "peak_reserved_gib": 3.996,
+            "current_allocated_gib": 0.072
+          },
+          "30_decode_encode": {
+            "seconds": 24.37,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.897,
+            "peak_reserved_gib": 6.131,
+            "current_allocated_gib": 0.068
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.897,
+            "peak_reserved_gib": 6.131,
+            "current_allocated_gib": 0.058
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 11.69,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.236,
+            "current_allocated_gib": 0.056
+          },
+          "10a_te_build": {
+            "seconds": 4.43,
+            "rss_gib": 26.72,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.018,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.36,
+            "rss_gib": 19.16,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.791,
+            "current_allocated_gib": 6.084
+          }
+        },
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708008",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "ON",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0",
+      "submitted_at": "2026-11-25T18:25:38",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 180.1,
+      "summary": {
+        "mp4_sha256": "8eee12464fb5cea277f37cc8a7b94cdc93a329520c2d07eb99a3ca7c1b727847",
+        "mp4_size": 9361864,
+        "mp4_rel": "outputs/d23c5c4d-cd9e-4fb4-9650-6efd7e62d3a0/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 175.19,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [
+          "ltx25.te_cache"
+        ],
+        "csha_paths": [
+          "ltx25.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.clear_keyframes_on_carry",
+            true
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            26.88
+          ],
+          [
+            "ltx25.phases.10a_te_build.rss_gib",
+            26.88
+          ],
+          [
+            "ltx25.phases.10b_ep_build.rss_gib",
+            19.32
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            19.32
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c0.rss_gib",
+            19.32
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c1.rss_gib",
+            19.32
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c2.rss_gib",
+            19.32
+          ],
+          [
+            "ltx25.phases.23_upsample.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t0.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t1.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t2.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            19.29
+          ]
+        ],
+        "ltx25_te_cache": "miss",
+        "ltx25_csha": [
+          {
+            "video": "017ca98518167beffa8c5d52ec706cc24f6a286e5da789bad1a06a1bc393551f",
+            "audio": "a1a5b477c6b2829dfe0f9b8fb08519286efdc7fa84c1550d075e4810f651eddb",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "80c68ce27559e1b3bcf3568340be5174dab57621dde15224b0deb8aca988426c",
+            "audio": "d53925c15dd0441c2b35a4e224b01f793b7124b0ca929bf278b4d2146e803dd5",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "a120bc5b1dba96b3cadb2edf327df3616ef96b5a4fbb911ab026161a203960d2",
+            "audio": "dc93766aaa214c89da5692c94ecf7ab1ea2d3e3abdc4ca7e16a2996ffffd6762",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "947c10d972c5a0565035c7b41348d7b72e8d5c6b437f21d02bf74c7b4ced0245",
+            "audio": "ba16b01ee8da3c03acc05b06de57497dce213cf2384458cc48fe0419cebffdc7",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          }
+        ],
+        "ltx25_phases": {
+          "10a_te_build": {
+            "seconds": 4.5,
+            "rss_gib": 26.88,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.633,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.34,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.857,
+            "current_allocated_gib": 6.084
+          },
+          "10_prompt_encode": {
+            "seconds": 11.67,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.303,
+            "current_allocated_gib": 0.056
+          },
+          "21_stage1_denoise_c0": {
+            "seconds": 16.49,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 3.261,
+            "peak_reserved_gib": 5.967,
+            "current_allocated_gib": 0.058
+          },
+          "21_stage1_denoise_c1": {
+            "seconds": 16.41,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 3.263,
+            "peak_reserved_gib": 3.594,
+            "current_allocated_gib": 0.06
+          },
+          "21_stage1_denoise_c2": {
+            "seconds": 16.38,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 3.264,
+            "peak_reserved_gib": 3.594,
+            "current_allocated_gib": 0.061
+          },
+          "23_upsample": {
+            "seconds": 1.54,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 1.417,
+            "peak_reserved_gib": 2.801,
+            "current_allocated_gib": 0.06
+          },
+          "22_stage2_denoise_t0": {
+            "seconds": 39.34,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 7.276,
+            "peak_reserved_gib": 8.414,
+            "current_allocated_gib": 0.073
+          },
+          "22_stage2_denoise_t1": {
+            "seconds": 39.26,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 7.281,
+            "peak_reserved_gib": 8.414,
+            "current_allocated_gib": 0.078
+          },
+          "22_stage2_denoise_t2": {
+            "seconds": 9.35,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 3.679,
+            "peak_reserved_gib": 4.004,
+            "current_allocated_gib": 0.072
+          },
+          "30_decode_encode": {
+            "seconds": 24.34,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.896,
+            "peak_reserved_gib": 6.02,
+            "current_allocated_gib": 0.068
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.896,
+            "peak_reserved_gib": 6.02,
+            "current_allocated_gib": 0.058
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 11.67,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.303,
+            "current_allocated_gib": 0.056
+          },
+          "10a_te_build": {
+            "seconds": 4.5,
+            "rss_gib": 26.88,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.633,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.34,
+            "rss_gib": 19.32,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.857,
+            "current_allocated_gib": 6.084
+          }
+        },
+        "held": {
+          "bundles": 1,
+          "entries": 4,
+          "bytes": 50364416
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708008",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "ON (same)",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "ee0b3cf3-0e38-4735-93b2-4007adcdf3bd",
+      "submitted_at": "2026-11-25T18:28:40",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 165.1,
+      "summary": {
+        "mp4_sha256": "8eee12464fb5cea277f37cc8a7b94cdc93a329520c2d07eb99a3ca7c1b727847",
+        "mp4_size": 9361864,
+        "mp4_rel": "outputs/ee0b3cf3-0e38-4735-93b2-4007adcdf3bd/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 163.88,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [
+          "ltx25.te_cache"
+        ],
+        "csha_paths": [
+          "ltx25.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.clear_keyframes_on_carry",
+            true
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c0.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c1.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c2.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.23_upsample.rss_gib",
+            19.3
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t0.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t1.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t2.rss_gib",
+            19.31
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            19.29
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            19.29
+          ]
+        ],
+        "ltx25_te_cache": "hit",
+        "ltx25_csha": [
+          {
+            "video": "017ca98518167beffa8c5d52ec706cc24f6a286e5da789bad1a06a1bc393551f",
+            "audio": "a1a5b477c6b2829dfe0f9b8fb08519286efdc7fa84c1550d075e4810f651eddb",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "80c68ce27559e1b3bcf3568340be5174dab57621dde15224b0deb8aca988426c",
+            "audio": "d53925c15dd0441c2b35a4e224b01f793b7124b0ca929bf278b4d2146e803dd5",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "a120bc5b1dba96b3cadb2edf327df3616ef96b5a4fbb911ab026161a203960d2",
+            "audio": "dc93766aaa214c89da5692c94ecf7ab1ea2d3e3abdc4ca7e16a2996ffffd6762",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "947c10d972c5a0565035c7b41348d7b72e8d5c6b437f21d02bf74c7b4ced0245",
+            "audio": "ba16b01ee8da3c03acc05b06de57497dce213cf2384458cc48fe0419cebffdc7",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          }
+        ],
+        "ltx25_phases": {
+          "10_prompt_encode": {
+            "seconds": 0.03,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 0.056,
+            "peak_reserved_gib": 0.766,
+            "current_allocated_gib": 0.056
+          },
+          "21_stage1_denoise_c0": {
+            "seconds": 16.67,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.261,
+            "peak_reserved_gib": 3.592,
+            "current_allocated_gib": 0.058
+          },
+          "21_stage1_denoise_c1": {
+            "seconds": 16.47,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.261,
+            "peak_reserved_gib": 3.541,
+            "current_allocated_gib": 0.06
+          },
+          "21_stage1_denoise_c2": {
+            "seconds": 16.42,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.262,
+            "peak_reserved_gib": 3.541,
+            "current_allocated_gib": 0.061
+          },
+          "23_upsample": {
+            "seconds": 1.56,
+            "rss_gib": 19.3,
+            "peak_allocated_gib": 1.417,
+            "peak_reserved_gib": 2.182,
+            "current_allocated_gib": 0.06
+          },
+          "22_stage2_denoise_t0": {
+            "seconds": 39.37,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 7.275,
+            "peak_reserved_gib": 8.293,
+            "current_allocated_gib": 0.073
+          },
+          "22_stage2_denoise_t1": {
+            "seconds": 39.25,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 7.28,
+            "peak_reserved_gib": 8.299,
+            "current_allocated_gib": 0.078
+          },
+          "22_stage2_denoise_t2": {
+            "seconds": 9.29,
+            "rss_gib": 19.31,
+            "peak_allocated_gib": 3.681,
+            "peak_reserved_gib": 4.074,
+            "current_allocated_gib": 0.072
+          },
+          "30_decode_encode": {
+            "seconds": 24.4,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.896,
+            "peak_reserved_gib": 6.012,
+            "current_allocated_gib": 0.068
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 3.896,
+            "peak_reserved_gib": 6.012,
+            "current_allocated_gib": 0.058
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 0.03,
+            "rss_gib": 19.29,
+            "peak_allocated_gib": 0.056,
+            "peak_reserved_gib": 0.766,
+            "current_allocated_gib": 0.056
+          },
+          "10a_te_build": null,
+          "10b_ep_build": null
+        },
+        "held": {
+          "bundles": 1,
+          "entries": 4,
+          "bytes": 50364416
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708008",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "4": {
+      "label": "4",
+      "cond": "ON, clip 2 -> p2'",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4",
+      "submitted_at": "2026-11-25T18:31:26",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 180.1,
+      "summary": {
+        "mp4_sha256": "4caff9358c3fa777d53f5fc87cd4a779f4aee8de7c74d767c4b46195d904d328",
+        "mp4_size": 9411070,
+        "mp4_rel": "outputs/57bdf1c7-d9e3-47fa-aed0-3b5eba64dde4/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 175.22,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": true,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [
+          "ltx25.te_cache"
+        ],
+        "csha_paths": [
+          "ltx25.conditioning_sha256"
+        ],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.clear_keyframes_on_carry",
+            true
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            26.87
+          ],
+          [
+            "ltx25.phases.10a_te_build.rss_gib",
+            26.87
+          ],
+          [
+            "ltx25.phases.10b_ep_build.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c0.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c1.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c2.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.23_upsample.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t0.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t1.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t2.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            19.58
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            19.58
+          ]
+        ],
+        "ltx25_te_cache": "miss",
+        "ltx25_csha": [
+          {
+            "video": "017ca98518167beffa8c5d52ec706cc24f6a286e5da789bad1a06a1bc393551f",
+            "audio": "a1a5b477c6b2829dfe0f9b8fb08519286efdc7fa84c1550d075e4810f651eddb",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "8c4783177f5b5585ccd9118e2fb021a06b058831c63b93e29d543c4275a3cffc",
+            "audio": "f16b26d21147796dbed8b46ad769e471657192dea7cd7c0a58860bb2d64bb72e",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "a120bc5b1dba96b3cadb2edf327df3616ef96b5a4fbb911ab026161a203960d2",
+            "audio": "dc93766aaa214c89da5692c94ecf7ab1ea2d3e3abdc4ca7e16a2996ffffd6762",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          },
+          {
+            "video": "947c10d972c5a0565035c7b41348d7b72e8d5c6b437f21d02bf74c7b4ced0245",
+            "audio": "ba16b01ee8da3c03acc05b06de57497dce213cf2384458cc48fe0419cebffdc7",
+            "mask": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c"
+          }
+        ],
+        "ltx25_phases": {
+          "10a_te_build": {
+            "seconds": 4.48,
+            "rss_gib": 26.87,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.023,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.3,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.678,
+            "current_allocated_gib": 6.084
+          },
+          "10_prompt_encode": {
+            "seconds": 11.62,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.123,
+            "current_allocated_gib": 0.056
+          },
+          "21_stage1_denoise_c0": {
+            "seconds": 16.44,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 3.262,
+            "peak_reserved_gib": 5.443,
+            "current_allocated_gib": 0.058
+          },
+          "21_stage1_denoise_c1": {
+            "seconds": 16.46,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 3.264,
+            "peak_reserved_gib": 3.549,
+            "current_allocated_gib": 0.06
+          },
+          "21_stage1_denoise_c2": {
+            "seconds": 16.39,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 3.265,
+            "peak_reserved_gib": 3.549,
+            "current_allocated_gib": 0.061
+          },
+          "23_upsample": {
+            "seconds": 1.55,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 1.417,
+            "peak_reserved_gib": 2.541,
+            "current_allocated_gib": 0.06
+          },
+          "22_stage2_denoise_t0": {
+            "seconds": 39.33,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 7.276,
+            "peak_reserved_gib": 8.156,
+            "current_allocated_gib": 0.073
+          },
+          "22_stage2_denoise_t1": {
+            "seconds": 39.24,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 7.28,
+            "peak_reserved_gib": 8.156,
+            "current_allocated_gib": 0.078
+          },
+          "22_stage2_denoise_t2": {
+            "seconds": 9.34,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 3.682,
+            "peak_reserved_gib": 4.096,
+            "current_allocated_gib": 0.072
+          },
+          "30_decode_encode": {
+            "seconds": 24.43,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.897,
+            "peak_reserved_gib": 6.072,
+            "current_allocated_gib": 0.068
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.897,
+            "peak_reserved_gib": 6.072,
+            "current_allocated_gib": 0.058
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 11.62,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.123,
+            "current_allocated_gib": 0.056
+          },
+          "10a_te_build": {
+            "seconds": 4.48,
+            "rss_gib": 26.87,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.023,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.3,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.678,
+            "current_allocated_gib": 6.084
+          }
+        },
+        "held": {
+          "bundles": 1,
+          "entries": 4,
+          "bytes": 50364416
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708008",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "5": {
+      "label": "5",
+      "cond": "OFF (same input as 4)",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "nag_enabled": false,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ]
+      },
+      "job_id": "4cfad7e1-19a7-4256-8a92-432ba0d5d9c2",
+      "submitted_at": "2026-11-25T18:34:27",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 190.1,
+      "summary": {
+        "mp4_sha256": "4caff9358c3fa777d53f5fc87cd4a779f4aee8de7c74d767c4b46195d904d328",
+        "mp4_size": 9411070,
+        "mp4_rel": "outputs/4cfad7e1-19a7-4256-8a92-432ba0d5d9c2/output.mp4",
+        "backend": "ltx25-distilled",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 175.07,
+        "models": {
+          "base_model": "LTX25",
+          "selection": {
+            "transformer": {
+              "name": "default",
+              "file": "LTX-2.5-22B-distilled-transformer.gguf"
+            },
+            "text_encoder": {
+              "name": "default",
+              "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+            },
+            "video_vae": {
+              "name": "default",
+              "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+            },
+            "audio": {
+              "name": "default",
+              "file": "ltx-2.5-audio-vae-bf16.safetensors"
+            }
+          }
+        },
+        "request_embed_mp4_metadata": false,
+        "request_keep_text_conditioning": false,
+        "request_keep_resident": false,
+        "request_keep_resident_embeddings": false,
+        "request_seed": 42,
+        "request_size": [
+          1280,
+          768
+        ],
+        "ltx23_top": null,
+        "has_ltx23_key": false,
+        "te_cache_paths": [],
+        "csha_paths": [],
+        "keep_resident_fields": [
+          [
+            "request.block_swap_prefetch",
+            true
+          ],
+          [
+            "request.keep_resident",
+            false
+          ],
+          [
+            "request.keep_resident_embeddings",
+            false
+          ],
+          [
+            "block_swap_prefetch_used",
+            "on"
+          ],
+          [
+            "keep_resident_used",
+            "off"
+          ],
+          [
+            "keep_resident_embeddings_used",
+            "off"
+          ]
+        ],
+        "memory_fields": [
+          [
+            "request.frame_rate",
+            24.0
+          ],
+          [
+            "request.overlap_frames",
+            3
+          ],
+          [
+            "request.clips[0].num_frames",
+            121
+          ],
+          [
+            "request.clips[1].num_frames",
+            121
+          ],
+          [
+            "request.clips[2].num_frames",
+            121
+          ],
+          [
+            "chain.overlap_frames",
+            3
+          ],
+          [
+            "chain.total_frames",
+            329
+          ],
+          [
+            "chain.clip_num_frames",
+            "<list>"
+          ],
+          [
+            "output.frame_rate",
+            24.0
+          ],
+          [
+            "ltx25.clear_keyframes_on_carry",
+            true
+          ],
+          [
+            "ltx25.vram.rss_peak_gib",
+            27.16
+          ],
+          [
+            "ltx25.phases.10a_te_build.rss_gib",
+            27.16
+          ],
+          [
+            "ltx25.phases.10b_ep_build.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.10_prompt_encode.rss_gib",
+            19.61
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c0.rss_gib",
+            19.58
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c1.rss_gib",
+            19.58
+          ],
+          [
+            "ltx25.phases.21_stage1_denoise_c2.rss_gib",
+            19.58
+          ],
+          [
+            "ltx25.phases.23_upsample.rss_gib",
+            19.6
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t0.rss_gib",
+            19.6
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t1.rss_gib",
+            19.6
+          ],
+          [
+            "ltx25.phases.22_stage2_denoise_t2.rss_gib",
+            19.6
+          ],
+          [
+            "ltx25.phases.30_decode_encode.rss_gib",
+            19.58
+          ],
+          [
+            "ltx25.phases.40_job_end.rss_gib",
+            19.58
+          ]
+        ],
+        "ltx25_te_cache": null,
+        "ltx25_csha": null,
+        "ltx25_phases": {
+          "10a_te_build": {
+            "seconds": 4.49,
+            "rss_gib": 27.16,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.383,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.33,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.906,
+            "current_allocated_gib": 6.084
+          },
+          "10_prompt_encode": {
+            "seconds": 11.61,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.352,
+            "current_allocated_gib": 0.056
+          },
+          "21_stage1_denoise_c0": {
+            "seconds": 16.44,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.261,
+            "peak_reserved_gib": 5.891,
+            "current_allocated_gib": 0.058
+          },
+          "21_stage1_denoise_c1": {
+            "seconds": 16.45,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.264,
+            "peak_reserved_gib": 3.447,
+            "current_allocated_gib": 0.06
+          },
+          "21_stage1_denoise_c2": {
+            "seconds": 16.39,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.265,
+            "peak_reserved_gib": 3.447,
+            "current_allocated_gib": 0.061
+          },
+          "23_upsample": {
+            "seconds": 1.54,
+            "rss_gib": 19.6,
+            "peak_allocated_gib": 1.418,
+            "peak_reserved_gib": 2.896,
+            "current_allocated_gib": 0.06
+          },
+          "22_stage2_denoise_t0": {
+            "seconds": 39.33,
+            "rss_gib": 19.6,
+            "peak_allocated_gib": 7.277,
+            "peak_reserved_gib": 8.348,
+            "current_allocated_gib": 0.073
+          },
+          "22_stage2_denoise_t1": {
+            "seconds": 39.23,
+            "rss_gib": 19.6,
+            "peak_allocated_gib": 7.282,
+            "peak_reserved_gib": 8.348,
+            "current_allocated_gib": 0.078
+          },
+          "22_stage2_denoise_t2": {
+            "seconds": 9.28,
+            "rss_gib": 19.6,
+            "peak_allocated_gib": 3.679,
+            "peak_reserved_gib": 4.1,
+            "current_allocated_gib": 0.072
+          },
+          "30_decode_encode": {
+            "seconds": 24.37,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.897,
+            "peak_reserved_gib": 6.146,
+            "current_allocated_gib": 0.068
+          },
+          "40_job_end": {
+            "seconds": 0.0,
+            "rss_gib": 19.58,
+            "peak_allocated_gib": 3.897,
+            "peak_reserved_gib": 6.146,
+            "current_allocated_gib": 0.058
+          }
+        },
+        "phase_seconds": {
+          "10_prompt_encode": {
+            "seconds": 11.61,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 7.556,
+            "peak_reserved_gib": 8.352,
+            "current_allocated_gib": 0.056
+          },
+          "10a_te_build": {
+            "seconds": 4.49,
+            "rss_gib": 27.16,
+            "peak_allocated_gib": 1.981,
+            "peak_reserved_gib": 2.383,
+            "current_allocated_gib": 1.981
+          },
+          "10b_ep_build": {
+            "seconds": 3.33,
+            "rss_gib": 19.61,
+            "peak_allocated_gib": 6.084,
+            "peak_reserved_gib": 6.906,
+            "current_allocated_gib": 6.084
+          }
+        },
+        "held": {
+          "strings": 0,
+          "bytes": 0
+        }
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration": "13.708008",
+            "nb_read_frames": "329"
+          },
+          {
+            "codec_type": "audio",
+            "r_frame_rate": "0/0",
+            "duration": "13.690000",
+            "nb_read_frames": "642"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 8,
+    "at": [
+      "2026-11-25T18:26:33",
+      "2026-11-25T18:28:13",
+      "2026-11-25T18:29:40",
+      "2026-11-25T18:30:30",
+      "2026-11-25T18:31:00",
+      "2026-11-25T18:31:51",
+      "2026-11-25T18:33:01",
+      "2026-11-25T18:37:27"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T18:22:36"
+  ],
+  "pre": {
+    "active_base_model": "LTX25",
+    "transformer_active": "default",
+    "categories_active": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "LTX25",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 26,
+        "failed": 0
+      }
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T18:37:38",
+  "gate_pass": true
+}

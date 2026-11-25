@@ -65,6 +65,9 @@ export interface UseAccelerationSettingsResult {
    * {@link setVram16Mode} — whether this PC has the main memory to spare is a
    * machine-level fact (台帳 §1-297). */
   setKeepReferenceLatents: (value: boolean) => void;
+  /** Write-through to `localStorage`, same rationale as
+   * {@link setKeepReferenceLatents} (台帳 §1-298). INDEPENDENT of it. */
+  setKeepTextConditioning: (value: boolean) => void;
   /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
    * panel's Output row — whether finished mp4s carry their generation
    * conditions. A standing preference, persisted like the rows above. */
@@ -101,7 +104,7 @@ export interface UseAccelerationSettingsResult {
  * Output row that shares this store; it too was persisted from its first day,
  * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), `piH3` (ruling 107,
  * 2026-11-23), `solVae` (Sol-H3-VAE, 2026-11-24) and
- * `keepReferenceLatents` (台帳 §1-297).
+ * `keepReferenceLatents` (台帳 §1-297) and `keepTextConditioning` (台帳 §1-298).
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -139,6 +142,7 @@ export function useAccelerationSettings(
       piH3: stored.piH3,
       solVae: stored.solVae,
       keepReferenceLatents: stored.keepReferenceLatents,
+      keepTextConditioning: stored.keepTextConditioning,
       embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
@@ -158,6 +162,7 @@ export function useAccelerationSettings(
       piH3: acceleration.piH3,
       solVae: acceleration.solVae,
       keepReferenceLatents: acceleration.keepReferenceLatents,
+      keepTextConditioning: acceleration.keepTextConditioning,
       embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
@@ -171,6 +176,7 @@ export function useAccelerationSettings(
     acceleration.piH3,
     acceleration.solVae,
     acceleration.keepReferenceLatents,
+    acceleration.keepTextConditioning,
     acceleration.embedMp4Metadata,
   ]);
 
@@ -210,6 +216,10 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, keepReferenceLatents: value }));
   }, []);
 
+  const setKeepTextConditioning = useCallback((value: boolean) => {
+    setAcceleration((prev) => ({ ...prev, keepTextConditioning: value }));
+  }, []);
+
   const setEmbedMp4Metadata = useCallback((value: boolean) => {
     setAcceleration((prev) => ({ ...prev, embedMp4Metadata: value }));
   }, []);
@@ -244,6 +254,7 @@ export function useAccelerationSettings(
     setVram16Mode,
     setFastVae,
     setKeepReferenceLatents,
+    setKeepTextConditioning,
     setEmbedMp4Metadata,
     resetToServerDefaults,
   };

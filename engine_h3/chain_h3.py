@@ -497,6 +497,9 @@ def run_chain_h3(
             P.validate_request(req, dit_path=pipe.paths.transformer)
         # The reference latents kept from earlier jobs: only the files of this chain's clips stay.
         pipe._ref_latents.begin(P.reference_identities(requests, bool(base.keep_reference_latents)))
+        # The conditioning kept from earlier jobs (台帳 §1-298): only the inputs of this chain's clips stay.
+        keep_te = bool(base.keep_text_conditioning)
+        pipe._te_conditioning.begin(P.text_conditioning_heads(requests, keep_te))
         # Sol-H3-VAE: decided once for the chain's one decode (None without sol_vae).
         sol = P.sol_start(base, pipe.device)
         pi_feats: list = []         # pi-H3: each clip's last-evaluation rows (CPU)
@@ -561,15 +564,16 @@ def run_chain_h3(
                 with torch.no_grad():
                     # Key frames (clip 0 only, 台帳 §1-121): read on the CPU before the
                     # text encoder, as in a single I2V job. Only the first and the last
-                    # frame go to the vision tower (裁定 59); none with references.
+                    # frame go to the vision tower (裁定 59); none with references
+                    # (P.te_key_frames). For the conditioning's key (台帳 §1-298) their
+                    # files are stat'ed before they are read.
+                    te_frames = {int(img.frame_idx) for img in P.te_key_frames(req)}
+                    frame_ids = P.te_frame_identities(P.te_key_frames(req)) if keep_te else None
                     canvases, cond_frame_idx, source_size = _load_key_frames(req)
-                    last = int(req.num_frames) - 1
-                    vision_images = [c for m, c in zip(cond_frame_idx, canvases) if m in (0, last)]
+                    vision_images = [c for m, c in zip(cond_frame_idx, canvases) if m in te_frames]
                     # Ref2VA (台帳 §1-109): the clip's references are read on the CPU
                     # before its text encoder, as in a single job; none = as before.
                     media = pipe._read_references(req)
-                    if media:
-                        vision_images = []
                     # The clip's own A2V source audio (台帳 §1-120): read on the CPU
                     # before its text encoder, as in a single A2V job, from the audio
                     # latent boundary of its offset; none = as before.
@@ -614,10 +618,16 @@ def run_chain_h3(
                     neg_kw = {"negative_prompt": req.negative_prompt} if has_neg_i else {}
                     # Only an A2V clip passes has_audio: every other call is the same as before.
                     audio_kw = {"has_audio": True} if encode_audio_i else {}
+                    # Only a keep_text_conditioning chain passes the keys (台帳 §1-298); the
+                    # negative's only on clip 0, where it is encoded.
+                    te_kw = {"te_keys": (
+                        P.te_positive_key(req, media, frame_ids),
+                        P.te_negative_key(req.negative_prompt) if has_neg_i else None,
+                    )} if keep_te else {}
                     with phases.phase("encode") as entry:
                         encoded = pipe._encode(
                             req.prompt, phases, images=vision_images, has_cond=has_cond,
-                            refs=pipe._te_references(media), **neg_kw, **audio_kw,
+                            refs=pipe._te_references(media), **neg_kw, **audio_kw, **te_kw,
                         )
                         if has_neg_i:
                             hidden, tags, negative_hidden = encoded
@@ -838,6 +848,7 @@ def run_chain_h3(
     finally:
         # First, so a raise below cannot skip it; a clip that failed fails the whole chain.
         pipe._ref_latents.end(ok)
+        pipe._te_conditioning.end(ok)
         if not (ok and keep):
             pipe.release_resident()
         P._free_cuda()

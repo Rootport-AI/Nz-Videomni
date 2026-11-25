@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "active_base_model": "MiniMaxH3",
+  "selections": {
+    "LTX23": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "LTX25": {
+      "transformer": "default",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "MiniMaxH3": {
+      "transformer": "minimax_h3_ref2va_pruned_int8_convrot",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    }
+  }
+}

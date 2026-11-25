@@ -57,6 +57,7 @@ export type UiTarget =
   | "settingsRow.vram16"
   | "settingsRow.fastVae"
   | "settingsRow.keepReferenceLatents"
+  | "settingsRow.keepTextConditioning"
   | "settingsRow.fusedGgufDequantKernel"
   | "chainPanel.startImageStrength";
 
@@ -185,6 +186,10 @@ interface FeatureUiEntry {
  *    `resets`, scoped like `vram16_mode` (MiniMax H3 only, so LTX 2.3 / 2.5
  *    publish the name). Its default is OFF, so the write-back lands on
  *    `false` — which is what an LTX request then omits.
+ *  - **keep_text_conditioning** (台帳 §1-298 / §1-299) is a Settings row with
+ *    a `resets` too, but MiniMax H3, LTX 2.3 and LTX 2.5 all take it, so
+ *    today's server publishes the name for none of them and the row always
+ *    shows. The entry stays for an older server that still refuses it on LTX.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses
@@ -221,6 +226,10 @@ export const FEATURE_UI = {
   keep_reference_latents: {
     disables: ["settingsRow.keepReferenceLatents"],
     resets: "keepReferenceLatents",
+  },
+  keep_text_conditioning: {
+    disables: ["settingsRow.keepTextConditioning"],
+    resets: "keepTextConditioning",
   },
   fused_gguf_dequant_kernel: {
     disables: ["settingsRow.fusedGgufDequantKernel"],
@@ -486,6 +495,9 @@ export interface SettingsRowsHidden {
   /** MiniMax H3's "Keep reference latents resident" row and its ON-only note
    * (`keep_reference_latents`). */
   keepReferenceLatents: boolean;
+  /** The "Text encoder conditioning cache" row and its ON-only note
+   * (`keep_text_conditioning`). */
+  keepTextConditioning: boolean;
   /** The Fused GGUF Dequantization Kernel row and its ON-only note
    * (`fused_gguf_dequant_kernel`). */
   fusedGgufDequantKernel: boolean;
@@ -508,6 +520,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     vram16: disabled.has("settingsRow.vram16"),
     fastVae: disabled.has("settingsRow.fastVae"),
     keepReferenceLatents: disabled.has("settingsRow.keepReferenceLatents"),
+    keepTextConditioning: disabled.has("settingsRow.keepTextConditioning"),
     fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };
 }

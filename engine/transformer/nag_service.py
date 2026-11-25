@@ -259,6 +259,41 @@ def encode_negative(
     return video_context, audio_context
 
 
+def negative_from_encoded(
+    video_context: torch.Tensor,
+    audio_context: torch.Tensor,
+    real_tokens: int | None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """The second half of :func:`encode_negative`, on contexts already encoded.
+
+    Pure: no encoder, no tokenizer. ``video_context`` / ``audio_context`` are the
+    two tensors ``encode_text(text_encoder, [prompt])[0]`` returned for the
+    negative prompt; ``real_tokens`` is that prompt's real token count, counted
+    the way :func:`encode_negative` counts it, or ``None`` for NAG (no slice).
+    The same ``.view`` reshape, the same ``0 < N <= seq_len`` check and the same
+    slice as :func:`encode_negative` (see its docstring for why each exists), so
+    for the same encoding the two return the same values. Used by the LTX 2.3
+    text conditioning cache (keep_text_conditioning, 台帳 §1-299), which keeps
+    the encoding and its token count instead of the text encoder.
+    """
+    video_context = video_context.view(video_context.shape[0], -1, video_context.shape[-1])
+    audio_context = audio_context.view(audio_context.shape[0], -1, audio_context.shape[-1])
+
+    if real_tokens is not None:
+        n_real = int(real_tokens)
+        seq_len = int(min(video_context.shape[1], audio_context.shape[1]))
+        if n_real <= 0 or n_real > seq_len:
+            raise RuntimeError(
+                f"negative_from_encoded: tokenizer reports {n_real} real tokens "
+                f"for a context of length {seq_len} — expected 0 < N <= "
+                "seq_len. Refusing to guess."
+            )
+        video_context = video_context[:, :n_real, :]
+        audio_context = audio_context[:, :n_real, :]
+
+    return video_context, audio_context
+
+
 def nag_combine(
     z_pos: torch.Tensor,
     z_neg: torch.Tensor,

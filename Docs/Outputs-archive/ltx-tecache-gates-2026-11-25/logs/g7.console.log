@@ -1,0 +1,16 @@
+g7-1: job 46b5350f-fd80-4460-8d13-b1bc399c29aa (ON)
+  46b5350f running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:18:04
+  46b5350f running stage=decode clip=None step=None/None t=130s
+g7-1: mp4 b7f8ded1 te=miss gen=170.59 phases={'10_prompt_encode': {'seconds': 18.97, 'rss_gib': 7.48, 'peak_allocated_gib': 6.789, 'peak_reserved_gib': 7.012, 'current_allocated_gib': 0.021}, '10a_te_build': {'seconds': 8.96, 'rss_gib': 8.48, 'peak_allocated_gib': 1.973, 'peak_reserved_gib': 1.994, 'current_allocated_gib': 1.973}, '10b_ep_build': {'seconds': 5.27, 'rss_gib': 7.29, 'peak_allocated_gib': 5.01, 'peak_reserved_gib': 5.203, 'current_allocated_gib': 5.01}} problems=[]
+g7-2: job e5640d8f-42ad-44c6-b92d-3bd49190fa4f (ON (same))
+  e5640d8f running stage=stage1_denoise clip=None step=5/8 t=45s
+  e5640d8f running stage=decode clip=None step=None/None t=90s
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:21:40
+g7-2: mp4 b7f8ded1 te=hit gen=135.34 phases={'10_prompt_encode': {'seconds': 0.01, 'rss_gib': 21.94, 'peak_allocated_gib': 0.021, 'peak_reserved_gib': 0.248, 'current_allocated_gib': 0.021}, '10a_te_build': None, '10b_ep_build': None} problems=[]
+g7-3: job c3902ec2-98aa-4356-8361-c83d5a9d18cd (OFF)
+  BACKEND_UNREACHABLE (1) 2026-11-25T19:22:51
+  c3902ec2 running stage=decode clip=None step=None/None t=100s
+  c3902ec2 running stage=decode clip=None step=None/None t=145s
+g7-3: mp4 b7f8ded1 te=None gen=150.13 phases={'10_prompt_encode': {'seconds': 15.41, 'rss_gib': 24.7, 'peak_allocated_gib': 6.452, 'peak_reserved_gib': 6.682, 'current_allocated_gib': 0.021}, '10a_te_build': {'seconds': 6.57, 'rss_gib': 29.55, 'peak_allocated_gib': 1.981, 'peak_reserved_gib': 2.012, 'current_allocated_gib': 1.981}, '10b_ep_build': {'seconds': 5.85, 'rss_gib': 24.7, 'peak_allocated_gib': 5.015, 'peak_reserved_gib': 5.236, 'current_allocated_gib': 5.015}} problems=[]
+GATE g7 PASS

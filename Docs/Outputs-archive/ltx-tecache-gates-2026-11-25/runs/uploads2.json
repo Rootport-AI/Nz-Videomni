@@ -1,0 +1,56 @@
+{
+  "started": "2026-11-25T18:56:05",
+  "source_rel": "outputs/43761f33-1030-48ec-babf-0fc0798c3aef/output.mp4",
+  "source_sha256": "eb03049b7359d4009ed400eea9f80758367c0307cb03987b43b5f7d53313dc0c",
+  "source_probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_type": "video",
+        "width": 1280,
+        "height": 768,
+        "r_frame_rate": "24/1",
+        "duration": "5.041667",
+        "nb_read_frames": "121"
+      },
+      {
+        "codec_type": "audio",
+        "r_frame_rate": "0/0",
+        "duration": "5.010000",
+        "nb_read_frames": "235"
+      }
+    ]
+  },
+  "mask_rel": "outputs/inpaint_spike/material_full/mask.mp4",
+  "mask_sha256": "a6f5a27055c44af205f067f155900759ca5a3d5de19b0dcdf3fb298276fd991d",
+  "mask_probe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_type": "video",
+        "width": 1280,
+        "height": 768,
+        "r_frame_rate": "24/1",
+        "duration": "5.041667",
+        "nb_read_frames": "121"
+      }
+    ]
+  },
+  "source_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+  "source_upload": {
+    "original_filename": "output.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 1918364,
+    "trimmed": false
+  },
+  "mask_video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+  "mask_upload": {
+    "original_filename": "mask.mp4",
+    "content_type": "video/mp4",
+    "size_bytes": 8180,
+    "trimmed": false
+  },
+  "ok": true
+}

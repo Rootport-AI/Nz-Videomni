@@ -1,0 +1,343 @@
+{
+  "job_id": "c3902ec2-98aa-4356-8361-c83d5a9d18cd",
+  "created_at": "2026-11-25T10:22:06Z",
+  "started_at": "2026-11-25T10:22:06Z",
+  "completed_at": "2026-11-25T10:24:36Z",
+  "status": "completed",
+  "request": {
+    "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": false,
+    "vram16_mode": null,
+    "pi_h3": "off",
+    "sol_vae": false,
+    "keep_reference_latents": false,
+    "keep_text_conditioning": false,
+    "width": 1536,
+    "height": 896,
+    "crop_output": null,
+    "num_frames": 121,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "shift_video": null,
+    "shift_audio": null,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "conditioning_images": [],
+    "loras": [
+      {
+        "name": "in-outpainting",
+        "strength": 1.0,
+        "audio_strength": null
+      }
+    ],
+    "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "outpaint": {
+      "pad_left": 128,
+      "pad_right": 128,
+      "pad_top": 64,
+      "pad_bottom": 64,
+      "blend_dilation_stage1": 5,
+      "blend_dilation_stage2": 2,
+      "freeze_source_audio": true,
+      "source_video_id": null,
+      "audio_strength": null
+    },
+    "inpaint": null,
+    "alpha_gen": null,
+    "source_audio": null,
+    "references": []
+  },
+  "generation_mode": "t2v",
+  "seed_used": 42,
+  "attention_used": "sdpa",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "off",
+  "vram16_mode_used": null,
+  "keep_resident_embeddings_used": "off",
+  "fused_gguf_dequant_kernel_used": "on",
+  "vae_mode_used": "conv",
+  "peak_vram_reserved_mb": 9052,
+  "generation_time_seconds": 150.13,
+  "backend": "ltx25-distilled",
+  "output": {
+    "path": "outputs/c3902ec2-98aa-4356-8361-c83d5a9d18cd/output.mp4",
+    "resolution": "1536x896",
+    "duration_seconds": 5.042,
+    "frame_rate": 24.0,
+    "file_size_bytes": 2801305
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 7754
+  },
+  "models": {
+    "base_model": "LTX25",
+    "selection": {
+      "transformer": {
+        "name": "default",
+        "file": "LTX-2.5-22B-distilled-transformer.gguf"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "ltx-2.5-video-vae-conv-bf16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "ltx-2.5-audio-vae-bf16.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "ic_lora": {
+    "loras": [
+      {
+        "name": "in-outpainting",
+        "strength": 1.0,
+        "preprocess": "none"
+      }
+    ],
+    "reference_video_id": "b57b1b67-bd78-4207-8417-d22b54e94371"
+  },
+  "ltx25": {
+    "stage1_sampler": "ancestral",
+    "stage1_eta": 1.0,
+    "stage2_sampler": "euler",
+    "stage2_noise_scale": 0.7250000238418579,
+    "stage2_seed": 142,
+    "stage2_audio_init_policy": "stage1_carry",
+    "reference_frames": 121,
+    "reference_downscale_factor": 1,
+    "reference_attention_strength": 1.0,
+    "encode_fps": 24,
+    "video_chunks": 16,
+    "pixel_chunk_frames": 8,
+    "tiling": "TileSizeConfig(frames=DimensionSizeConfig(tile_size=80, overlap=24), height=DimensionSizeConfig(tile_size=448, overlap=64), width=DimensionSizeConfig(tile_size=768, overlap=64))",
+    "size_bytes": 2801305,
+    "vram": {
+      "count": 15,
+      "peak_allocated_gib": 7.572,
+      "peak_reserved_gib": 8.84,
+      "rss_peak_gib": 29.55,
+      "seconds_total": 133.39,
+      "by_kind": {
+        "te_build": {
+          "count": 1,
+          "seconds": 6.57,
+          "peak_allocated_gib": 1.981
+        },
+        "ep_build": {
+          "count": 1,
+          "seconds": 5.85,
+          "peak_allocated_gib": 5.015
+        },
+        "prompt_encode": {
+          "count": 1,
+          "seconds": 15.41,
+          "peak_allocated_gib": 6.452
+        },
+        "audio_conditioning": {
+          "count": 1,
+          "seconds": 0.18,
+          "peak_allocated_gib": 0.118
+        },
+        "reference_encode": {
+          "count": 1,
+          "seconds": 2.91,
+          "peak_allocated_gib": 3.036
+        },
+        "stage1_denoise": {
+          "count": 1,
+          "seconds": 49.53,
+          "peak_allocated_gib": 5.236
+        },
+        "stage1_decode": {
+          "count": 1,
+          "seconds": 2.81,
+          "peak_allocated_gib": 2.2
+        },
+        "blend1": {
+          "count": 1,
+          "seconds": 0.47,
+          "peak_allocated_gib": 0.544
+        },
+        "pixel_upscale": {
+          "count": 1,
+          "seconds": 0.1,
+          "peak_allocated_gib": 0.39
+        },
+        "stage2_encode": {
+          "count": 1,
+          "seconds": 13.54,
+          "peak_allocated_gib": 3.041
+        },
+        "stage2_denoise": {
+          "count": 1,
+          "seconds": 27.92,
+          "peak_allocated_gib": 7.572
+        },
+        "stage2_decode": {
+          "count": 1,
+          "seconds": 11.69,
+          "peak_allocated_gib": 3.592
+        },
+        "blend2": {
+          "count": 1,
+          "seconds": 7.77,
+          "peak_allocated_gib": 2.105
+        },
+        "decode_encode": {
+          "count": 1,
+          "seconds": 1.06,
+          "peak_allocated_gib": 0.021
+        },
+        "job_end": {
+          "count": 1,
+          "seconds": 0.0,
+          "peak_allocated_gib": 0.021
+        }
+      }
+    },
+    "phases": {
+      "10a_te_build": {
+        "seconds": 6.57,
+        "rss_gib": 29.55,
+        "peak_allocated_gib": 1.981,
+        "peak_reserved_gib": 2.012,
+        "current_allocated_gib": 1.981
+      },
+      "10b_ep_build": {
+        "seconds": 5.85,
+        "rss_gib": 24.7,
+        "peak_allocated_gib": 5.015,
+        "peak_reserved_gib": 5.236,
+        "current_allocated_gib": 5.015
+      },
+      "10_prompt_encode": {
+        "seconds": 15.41,
+        "rss_gib": 24.7,
+        "peak_allocated_gib": 6.452,
+        "peak_reserved_gib": 6.682,
+        "current_allocated_gib": 0.021
+      },
+      "12_audio_conditioning": {
+        "seconds": 0.18,
+        "rss_gib": 24.68,
+        "peak_allocated_gib": 0.118,
+        "peak_reserved_gib": 1.338,
+        "current_allocated_gib": 0.022
+      },
+      "11_reference_encode": {
+        "seconds": 2.91,
+        "rss_gib": 24.72,
+        "peak_allocated_gib": 3.036,
+        "peak_reserved_gib": 3.514,
+        "current_allocated_gib": 0.617
+      },
+      "21_stage1_denoise": {
+        "seconds": 49.53,
+        "rss_gib": 25.93,
+        "peak_allocated_gib": 5.236,
+        "peak_reserved_gib": 5.988,
+        "current_allocated_gib": 0.025
+      },
+      "24_stage1_decode": {
+        "seconds": 2.81,
+        "rss_gib": 25.93,
+        "peak_allocated_gib": 2.2,
+        "peak_reserved_gib": 3.193,
+        "current_allocated_gib": 0.022
+      },
+      "25_blend1": {
+        "seconds": 0.47,
+        "rss_gib": 25.92,
+        "peak_allocated_gib": 0.544,
+        "peak_reserved_gib": 0.688,
+        "current_allocated_gib": 0.021
+      },
+      "26_pixel_upscale": {
+        "seconds": 0.1,
+        "rss_gib": 25.92,
+        "peak_allocated_gib": 0.39,
+        "peak_reserved_gib": 0.619,
+        "current_allocated_gib": 0.021
+      },
+      "27_stage2_encode": {
+        "seconds": 13.54,
+        "rss_gib": 25.92,
+        "peak_allocated_gib": 3.041,
+        "peak_reserved_gib": 3.514,
+        "current_allocated_gib": 0.026
+      },
+      "22_stage2_denoise": {
+        "seconds": 27.92,
+        "rss_gib": 25.92,
+        "peak_allocated_gib": 7.572,
+        "peak_reserved_gib": 8.84,
+        "current_allocated_gib": 0.037
+      },
+      "28_stage2_decode": {
+        "seconds": 11.69,
+        "rss_gib": 25.92,
+        "peak_allocated_gib": 3.592,
+        "peak_reserved_gib": 7.914,
+        "current_allocated_gib": 0.026
+      },
+      "29_blend2": {
+        "seconds": 7.77,
+        "rss_gib": 25.96,
+        "peak_allocated_gib": 2.105,
+        "peak_reserved_gib": 2.5,
+        "current_allocated_gib": 0.021
+      },
+      "30_decode_encode": {
+        "seconds": 1.06,
+        "rss_gib": 25.91,
+        "peak_allocated_gib": 0.021,
+        "peak_reserved_gib": 0.498,
+        "current_allocated_gib": 0.021
+      },
+      "40_job_end": {
+        "seconds": 0.0,
+        "rss_gib": 25.91,
+        "peak_allocated_gib": 0.021,
+        "peak_reserved_gib": 0.498,
+        "current_allocated_gib": 0.021
+      }
+    },
+    "intentional_differences": {
+      "stage1_sampler": "2.3 runs euler in both stages; 2.5 runs ancestral in stage 1",
+      "stage2_audio_init": "stage1_carry",
+      "stage2_encode_tiling": "decode config + channels_last_3d (no tile-area budget)"
+    }
+  }
+}

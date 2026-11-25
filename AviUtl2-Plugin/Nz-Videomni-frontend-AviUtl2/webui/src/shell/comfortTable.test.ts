@@ -34,6 +34,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     piH3: "off",
     solVae: false,
     keepReferenceLatents: false,
+    keepTextConditioning: false,
     embedMp4Metadata: true,
     ...overrides,
   };

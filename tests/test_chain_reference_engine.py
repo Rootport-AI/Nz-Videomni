@@ -337,6 +337,8 @@ def _drive_stage1(monkeypatch, *, num_clips, ref_frames, clip_frames=25, kv=2):
         _vae_spatial_tile_size = 0
         _vae_temporal_tile_size = 0
         _nag = FakeNag()
+        # An OFF job of the conditioning cache (台帳 §1-299): today's encode.
+        _keep_text_conditioning_job = False
 
         def _set_nag_job(self, nag):
             events.append(("set_nag_job", nag))
@@ -532,6 +534,8 @@ def _drive_stage1_no_reference(monkeypatch, *, num_clips=2):
         _vae_spatial_tile_size = 0
         _vae_temporal_tile_size = 0
         _nag = FakeNag()
+        # An OFF job of the conditioning cache (台帳 §1-299): today's encode.
+        _keep_text_conditioning_job = False
 
         def _set_nag_job(self, nag):
             pass

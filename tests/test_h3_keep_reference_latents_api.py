@@ -130,6 +130,8 @@ def test_ltx_refuses_with_the_h3_only_sentence(adapter):
         assert ei.value.detail == H3_ONLY_DETAIL
         reject(off)  # no raise
     assert FIELD in adapter.UNSUPPORTED_FEATURES
+    # keep_text_conditioning's row came after this one, and went again when the
+    # LTX engines learned that field (台帳 §1-299).
     assert adapter.REJECT_TABLE[-1][1] == FIELD
     assert adapter.CHAIN_REJECT_TABLE[-1][1] == FIELD
 

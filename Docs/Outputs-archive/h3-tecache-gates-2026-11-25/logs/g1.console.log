@@ -1,0 +1,109 @@
+  load: state=ready loaded=True t=0s
+g1-1: job 73494daa-129e-45d8-9832-64093ca54b16 (ON, prompt A, negative Na)
+  73494daa running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:22:08
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:22:28
+  BACKEND_UNREACHABLE (3) 2026-11-25T09:23:13
+  73494daa running stage=stage1_denoise clip=None step=1/4 t=200s
+  73494daa running stage=stage1_denoise clip=None step=1/4 t=245s
+  73494daa running stage=stage1_denoise clip=None step=2/4 t=290s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:25:48
+  73494daa running stage=stage1_denoise clip=None step=3/4 t=355s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:26:53
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:27:13
+  BACKEND_UNREACHABLE (3) 2026-11-25T09:27:59
+g1-1: mp4 589977c0 te={'positive': 'miss', 'negative': 'miss'} lat=[None, None, None] gen=448.95 problems=[]
+g1-2: job 952d6174-a146-4d33-b6bf-43417a0b64ab (OFF, same input as 1)
+  952d6174 running stage=encode clip=None step=None/None t=50s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:29:14
+  952d6174 running stage=stage1_denoise clip=None step=0/4 t=110s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:30:24
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:30:59
+  952d6174 running stage=stage1_denoise clip=None step=1/4 t=215s
+  952d6174 running stage=stage1_denoise clip=None step=2/4 t=265s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:33:04
+  952d6174 running stage=stage1_denoise clip=None step=2/4 t=340s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:34:29
+  952d6174 running stage=decode clip=None step=None/None t=425s
+g1-2: mp4 589977c0 te=None lat=[None, None, None] gen=443.49 problems=[]
+g1-3: job 27bfbe72-ea91-4c5c-9181-ecfcff3033a5 (ON, same input as 1)
+  27bfbe72 running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:36:34
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:37:09
+  BACKEND_UNREACHABLE (3) 2026-11-25T09:37:25
+  27bfbe72 running stage=stage1_denoise clip=None step=0/4 t=155s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:38:50
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:39:05
+  27bfbe72 running stage=stage1_denoise clip=None step=1/4 t=255s
+  27bfbe72 running stage=stage1_denoise clip=None step=2/4 t=300s
+  27bfbe72 running stage=stage1_denoise clip=None step=3/4 t=345s
+  27bfbe72 running stage=stage1_denoise clip=None step=3/4 t=390s
+  27bfbe72 running stage=decode clip=None step=None/None t=435s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:43:05
+g1-3: mp4 589977c0 te={'positive': 'miss', 'negative': 'miss'} lat=[None, None, None] gen=440.47 problems=[]
+g1-4: job 37955ed3-86d3-4eed-a118-6ec65eeaed8a (ON, same input as 1)
+  37955ed3 running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:44:25
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:45:15
+  37955ed3 running stage=stage1_denoise clip=None step=1/4 t=175s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:46:50
+  37955ed3 running stage=stage1_denoise clip=None step=2/4 t=270s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:48:00
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:48:25
+  BACKEND_UNREACHABLE (3) 2026-11-25T09:48:55
+  37955ed3 running stage=decode clip=None step=None/None t=395s
+g1-4: mp4 589977c0 te={'positive': 'hit', 'negative': 'hit'} lat=[None, None, None] gen=397.01 problems=[]
+g1-5: job a489d449-753b-4a85-a1b6-c755303f311f (ON, prompt A, negative Nb)
+  a489d449 running stage=encode clip=None step=None/None t=45s
+  a489d449 running stage=stage1_denoise clip=None step=0/4 t=90s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:51:51
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:52:41
+  BACKEND_UNREACHABLE (3) 2026-11-25T09:53:06
+  BACKEND_UNREACHABLE (4) 2026-11-25T09:53:31
+  BACKEND_UNREACHABLE (5) 2026-11-25T09:53:56
+  a489d449 running stage=stage1_denoise clip=None step=2/4 t=295s
+  a489d449 running stage=stage1_denoise clip=None step=3/4 t=340s
+  a489d449 running stage=stage1_denoise clip=None step=3/4 t=385s
+g1-5: mp4 2ffd0c46 te={'positive': 'hit', 'negative': 'miss'} lat=[None, None, None] gen=419.8 problems=[]
+g1-6: job fe0417c8-ef19-477d-bc98-bf7a99aaed83 (ON, prompt B, negative Nb)
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:57:31
+  fe0417c8 running stage=stage1_denoise clip=None step=0/4 t=90s
+  fe0417c8 running stage=stage1_denoise clip=None step=0/4 t=135s
+  BACKEND_UNREACHABLE (1) 2026-11-25T09:59:16
+  BACKEND_UNREACHABLE (2) 2026-11-25T09:59:36
+  fe0417c8 running stage=stage1_denoise clip=None step=1/4 t=215s
+  fe0417c8 running stage=stage1_denoise clip=None step=2/4 t=260s
+  fe0417c8 running stage=stage1_denoise clip=None step=2/4 t=305s
+  fe0417c8 running stage=stage1_denoise clip=None step=3/4 t=350s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:03:06
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:03:41
+g1-6: mp4 b65ec0ca te={'positive': 'miss', 'negative': 'hit'} lat=[None, None, None] gen=420.51 problems=[]
+g1-7: job e6ed8286-47b5-4658-9be5-c9ce28cce42a (OFF, same input as 5)
+  e6ed8286 running stage=encode clip=None step=None/None t=50s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:05:12
+  e6ed8286 running stage=stage1_denoise clip=None step=0/4 t=130s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:06:27
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:06:42
+  e6ed8286 running stage=stage1_denoise clip=None step=1/4 t=215s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:08:17
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:09:02
+  e6ed8286 running stage=stage1_denoise clip=None step=3/4 t=355s
+  e6ed8286 running stage=stage1_denoise clip=None step=3/4 t=400s
+g1-7: mp4 2ffd0c46 te=None lat=[None, None, None] gen=440.42 problems=[]
+g1-8: job 20eebd93-2ead-4b78-aee0-2ae172433ef6 (OFF, same input as 6)
+  20eebd93 running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:12:57
+  20eebd93 running stage=stage1_denoise clip=None step=0/4 t=145s
+  20eebd93 running stage=stage1_denoise clip=None step=1/4 t=190s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:14:48
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:15:03
+  20eebd93 running stage=stage1_denoise clip=None step=2/4 t=270s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:16:13
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:16:33
+  BACKEND_UNREACHABLE (3) 2026-11-25T10:17:08
+  BACKEND_UNREACHABLE (4) 2026-11-25T10:17:23
+  BACKEND_UNREACHABLE (5) 2026-11-25T10:17:43
+  BACKEND_UNREACHABLE (6) 2026-11-25T10:18:03
+  BACKEND_UNREACHABLE (7) 2026-11-25T10:18:33
+g1-8: mp4 b65ec0ca te=None lat=[None, None, None] gen=440.38 problems=[]
+GATE g1 PASS

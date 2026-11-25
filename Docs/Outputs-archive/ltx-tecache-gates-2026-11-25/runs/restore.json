@@ -1,0 +1,90 @@
+{
+  "started": "2026-11-25T18:38:09",
+  "base": "MiniMaxH3",
+  "transformer": "minimax_h3_ref2va_pruned_int8_convrot",
+  "before": {
+    "active_base_model": "MiniMaxH3",
+    "transformer_active": "default",
+    "transformer_entries": [
+      "default",
+      "10Eros_Max_8stepTurbo_v1.0_hybrid-int8_HQ",
+      "10Eros_Max_h3_8stepTURBO_beta7_int8HQ",
+      "10Eros_Max_h3_TURBO-hybrid_beta5_w4a8_14gb_optimized",
+      "PulpCut_minimax_h3_fl2va_pruned_turbo_int8_convrot",
+      "Sulphur-3_Ref2VA-hybrid_mid_int8_convrot_keepB0-1-49",
+      "h3ErosMax_beta5_3178732_int8_TURBO_Hybrid",
+      "minimax_h3_ref2va_pruned_int8_convrot",
+      "pinkcherryMinimaxH3_v18Hybrid_int8",
+      "s3_raw_int8"
+    ]
+  },
+  "load_call": {
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "base_model": "MiniMaxH3",
+    "models": {
+      "transformer": "minimax_h3_ref2va_pruned_int8_convrot",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    },
+    "finished": true
+  },
+  "loaded": {
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 31,
+        "failed": 0
+      }
+    },
+    "active_base_model": "MiniMaxH3",
+    "transformer_active": "minimax_h3_ref2va_pruned_int8_convrot",
+    "categories_active": {
+      "transformer": "minimax_h3_ref2va_pruned_int8_convrot",
+      "text_encoder": "default",
+      "video_vae": "default",
+      "audio": "default"
+    }
+  },
+  "ok": true
+}

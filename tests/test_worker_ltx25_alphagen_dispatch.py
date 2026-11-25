@@ -71,6 +71,13 @@ class _RecordingPipe:
     def reset_nag_job(self) -> None:
         pass
 
+    # The held text conditioning's start / end (台帳 §1-299): every job calls both.
+    def set_text_conditioning_job(self, _on, _prompts) -> None:
+        pass
+
+    def end_text_conditioning_job(self, _ok) -> None:
+        pass
+
     def reset_acceleration_job(self) -> None:
         pass
 

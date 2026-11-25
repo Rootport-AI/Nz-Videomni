@@ -1,0 +1,267 @@
+  load: state=ready loaded=True t=0s
+g2-1: job ef5e2b92-bf2a-4d5d-a455-37177dbad680 (both OFF)
+  ef5e2b92 running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:23:11
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:23:51
+  BACKEND_UNREACHABLE (3) 2026-11-25T10:24:26
+  BACKEND_UNREACHABLE (4) 2026-11-25T10:24:46
+  ef5e2b92 running stage=stage1_denoise clip=1 step=2/4 t=235s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:26:11
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:26:41
+  ef5e2b92 running stage=stage1_denoise clip=1 step=3/4 t=350s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:27:46
+  ef5e2b92 running stage=encode clip=1 step=None/None t=420s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:29:21
+  ef5e2b92 running stage=stage1_denoise clip=2 step=0/4 t=510s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:30:26
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:30:41
+  ef5e2b92 running stage=stage1_denoise clip=2 step=0/4 t=590s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=0/4 t=635s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=0/4 t=680s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=1/4 t=725s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=1/4 t=770s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=1/4 t=815s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=1/4 t=860s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:36:31
+  ef5e2b92 running stage=stage1_denoise clip=2 step=2/4 t=940s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:38:11
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:38:56
+  BACKEND_UNREACHABLE (3) 2026-11-25T10:39:16
+  ef5e2b92 running stage=stage1_denoise clip=2 step=3/4 t=1106s
+  ef5e2b92 running stage=stage1_denoise clip=2 step=3/4 t=1151s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:41:31
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:41:56
+  ef5e2b92 running stage=stage1_denoise clip=2 step=3/4 t=1266s
+  ef5e2b92 running stage=encode clip=2 step=None/None t=1311s
+  ef5e2b92 running stage=encode clip=2 step=None/None t=1361s
+  ef5e2b92 running stage=stage1_denoise clip=3 step=0/4 t=1406s
+  ef5e2b92 running stage=stage1_denoise clip=3 step=0/4 t=1451s
+  ef5e2b92 running stage=stage1_denoise clip=3 step=1/4 t=1496s
+  ef5e2b92 running stage=stage1_denoise clip=3 step=2/4 t=1541s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:47:56
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:48:21
+  BACKEND_UNREACHABLE (3) 2026-11-25T10:49:01
+  BACKEND_UNREACHABLE (4) 2026-11-25T10:49:56
+  ef5e2b92 running stage=encode clip=3 step=None/None t=1746s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:51:36
+  ef5e2b92 running stage=stage1_denoise clip=4 step=0/4 t=1846s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:52:41
+  BACKEND_UNREACHABLE (2) 2026-11-25T10:53:27
+  BACKEND_UNREACHABLE (3) 2026-11-25T10:54:12
+  BACKEND_UNREACHABLE (4) 2026-11-25T10:55:02
+  BACKEND_UNREACHABLE (5) 2026-11-25T10:55:17
+  BACKEND_UNREACHABLE (6) 2026-11-25T10:55:32
+  BACKEND_UNREACHABLE (7) 2026-11-25T10:56:02
+  ef5e2b92 running stage=decode clip=4 step=None/None t=2111s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:57:27
+g2-1: mp4 793fe5c4 te=[None, None, None, None] lat=[[None], [None], [None], [None]] gen=2164.15 problems=[]
+g2-2: job 6f008c05-6578-4d02-8350-1fd9a1243f5a (both ON)
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:58:02
+  6f008c05 running stage=encode clip=None step=None/None t=70s
+  BACKEND_UNREACHABLE (1) 2026-11-25T10:59:38
+  6f008c05 running stage=stage1_denoise clip=1 step=1/4 t=160s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:01:18
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:01:43
+  BACKEND_UNREACHABLE (3) 2026-11-25T11:02:03
+  6f008c05 running stage=stage1_denoise clip=1 step=2/4 t=305s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:03:33
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:04:08
+  6f008c05 running stage=encode clip=1 step=None/None t=435s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:05:48
+  6f008c05 running stage=stage1_denoise clip=2 step=0/4 t=530s
+  6f008c05 running stage=stage1_denoise clip=2 step=0/4 t=575s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:07:48
+  6f008c05 running stage=stage1_denoise clip=2 step=0/4 t=650s
+  6f008c05 running stage=stage1_denoise clip=2 step=0/4 t=695s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:09:33
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:10:13
+  6f008c05 running stage=stage1_denoise clip=2 step=1/4 t=795s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:11:38
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:12:33
+  BACKEND_UNREACHABLE (3) 2026-11-25T11:12:48
+  BACKEND_UNREACHABLE (4) 2026-11-25T11:13:23
+  6f008c05 running stage=stage1_denoise clip=2 step=2/4 t=986s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:14:28
+  6f008c05 running stage=stage1_denoise clip=2 step=2/4 t=1051s
+  6f008c05 running stage=stage1_denoise clip=2 step=2/4 t=1096s
+  6f008c05 running stage=stage1_denoise clip=2 step=3/4 t=1141s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:17:33
+  6f008c05 running stage=stage1_denoise clip=2 step=3/4 t=1236s
+  6f008c05 running stage=stage1_denoise clip=2 step=3/4 t=1281s
+  6f008c05 running stage=encode clip=2 step=None/None t=1326s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:20:03
+  6f008c05 running stage=stage1_denoise clip=3 step=0/4 t=1386s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:21:43
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:22:33
+  BACKEND_UNREACHABLE (3) 2026-11-25T11:23:18
+  BACKEND_UNREACHABLE (4) 2026-11-25T11:23:38
+  6f008c05 running stage=stage1_denoise clip=3 step=3/4 t=1601s
+  6f008c05 running stage=encode clip=3 step=None/None t=1651s
+  6f008c05 running stage=stage1_denoise clip=4 step=0/4 t=1696s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:26:28
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:26:43
+  6f008c05 running stage=stage1_denoise clip=4 step=1/4 t=1786s
+  6f008c05 running stage=stage1_denoise clip=4 step=2/4 t=1836s
+  6f008c05 running stage=stage1_denoise clip=4 step=2/4 t=1881s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:29:54
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:30:09
+  6f008c05 running stage=decode clip=4 step=None/None t=1996s
+  6f008c05 running stage=decode clip=4 step=None/None t=2041s
+g2-2: mp4 793fe5c4 te=[{'positive': 'miss'}, {'positive': 'miss'}, {'positive': 'miss'}, {'positive': 'miss'}] lat=[['miss'], ['miss'], ['hit'], ['hit']] gen=2065.04 problems=[]
+g2-3: job 3be313d8-b5dc-481d-b8a0-5540b0c7648c (both ON, same input as 2)
+  3be313d8 running stage=stage1_denoise clip=1 step=0/4 t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:33:44
+  3be313d8 running stage=stage1_denoise clip=1 step=1/4 t=145s
+  3be313d8 running stage=stage1_denoise clip=1 step=2/4 t=195s
+  3be313d8 running stage=stage1_denoise clip=1 step=2/4 t=240s
+  3be313d8 running stage=stage1_denoise clip=1 step=3/4 t=290s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:37:24
+  3be313d8 running stage=stage1_denoise clip=2 step=0/4 t=360s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:38:24
+  3be313d8 running stage=stage1_denoise clip=2 step=0/4 t=420s
+  3be313d8 running stage=stage1_denoise clip=2 step=0/4 t=470s
+  3be313d8 running stage=stage1_denoise clip=2 step=0/4 t=520s
+  3be313d8 running stage=stage1_denoise clip=2 step=1/4 t=565s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:42:14
+  3be313d8 running stage=stage1_denoise clip=2 step=1/4 t=650s
+  3be313d8 running stage=stage1_denoise clip=2 step=1/4 t=695s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:44:35
+  3be313d8 running stage=stage1_denoise clip=2 step=2/4 t=790s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:46:00
+  3be313d8 running stage=stage1_denoise clip=2 step=2/4 t=875s
+  3be313d8 running stage=stage1_denoise clip=2 step=2/4 t=920s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:47:55
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:48:10
+  BACKEND_UNREACHABLE (3) 2026-11-25T11:48:25
+  3be313d8 running stage=stage1_denoise clip=2 step=3/4 t=1020s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:49:30
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:50:10
+  3be313d8 running stage=encode clip=2 step=None/None t=1125s
+  3be313d8 running stage=stage1_denoise clip=3 step=0/4 t=1170s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:52:10
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:52:50
+  BACKEND_UNREACHABLE (3) 2026-11-25T11:53:15
+  3be313d8 running stage=stage1_denoise clip=3 step=2/4 t=1310s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:54:50
+  3be313d8 running stage=stage1_denoise clip=3 step=3/4 t=1406s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:56:15
+  BACKEND_UNREACHABLE (2) 2026-11-25T11:56:30
+  BACKEND_UNREACHABLE (3) 2026-11-25T11:56:45
+  BACKEND_UNREACHABLE (4) 2026-11-25T11:57:05
+  BACKEND_UNREACHABLE (5) 2026-11-25T11:57:40
+  3be313d8 running stage=stage1_denoise clip=4 step=1/4 t=1576s
+  3be313d8 running stage=stage1_denoise clip=4 step=2/4 t=1621s
+  BACKEND_UNREACHABLE (1) 2026-11-25T11:59:45
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:00:25
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:00:40
+  3be313d8 running stage=stage1_denoise clip=4 step=3/4 t=1756s
+  3be313d8 running stage=decode clip=4 step=None/None t=1806s
+g2-3: mp4 793fe5c4 te=[{'positive': 'hit'}, {'positive': 'hit'}, {'positive': 'hit'}, {'positive': 'hit'}] lat=[['hit'], ['hit'], ['hit'], ['hit']] gen=1840.09 problems=[]
+g2-4: job 0ff167ed-7ce5-4e4e-b7d4-b4f35fe54d92 (both ON, clip 3 prompt changed)
+  0ff167ed running stage=stage1_denoise clip=1 step=0/4 t=50s
+  0ff167ed running stage=stage1_denoise clip=1 step=1/4 t=100s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:04:51
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:05:26
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:05:46
+  0ff167ed running stage=stage1_denoise clip=1 step=2/4 t=220s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:07:21
+  0ff167ed running stage=stage1_denoise clip=1 step=3/4 t=315s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:09:01
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:09:51
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:10:21
+  0ff167ed running stage=stage1_denoise clip=2 step=0/4 t=495s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:11:36
+  0ff167ed running stage=stage1_denoise clip=2 step=1/4 t=570s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:12:36
+  0ff167ed running stage=stage1_denoise clip=2 step=1/4 t=630s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:14:01
+  0ff167ed running stage=stage1_denoise clip=2 step=1/4 t=715s
+  0ff167ed running stage=stage1_denoise clip=2 step=2/4 t=760s
+  0ff167ed running stage=stage1_denoise clip=2 step=2/4 t=805s
+  0ff167ed running stage=stage1_denoise clip=2 step=2/4 t=855s
+  0ff167ed running stage=stage1_denoise clip=2 step=2/4 t=900s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:18:21
+  0ff167ed running stage=stage1_denoise clip=2 step=3/4 t=975s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:20:01
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:20:26
+  0ff167ed running stage=stage1_denoise clip=2 step=3/4 t=1100s
+  0ff167ed running stage=encode clip=2 step=None/None t=1145s
+  0ff167ed running stage=stage1_denoise clip=3 step=0/4 t=1190s
+  0ff167ed running stage=stage1_denoise clip=3 step=1/4 t=1235s
+  0ff167ed running stage=stage1_denoise clip=3 step=1/4 t=1280s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:24:41
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:25:11
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:25:41
+  0ff167ed running stage=stage1_denoise clip=3 step=3/4 t=1416s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:27:12
+  0ff167ed running stage=stage1_denoise clip=4 step=0/4 t=1506s
+  0ff167ed running stage=stage1_denoise clip=4 step=1/4 t=1551s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:29:32
+  0ff167ed running stage=stage1_denoise clip=4 step=2/4 t=1646s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:31:07
+  0ff167ed running stage=stage1_denoise clip=4 step=3/4 t=1741s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:32:27
+  0ff167ed running stage=decode clip=4 step=None/None t=1826s
+g2-4: mp4 e67c59d6 te=[{'positive': 'hit'}, {'positive': 'hit'}, {'positive': 'miss'}, {'positive': 'hit'}] lat=[['hit'], ['hit'], ['hit'], ['hit']] gen=1863.67 problems=[]
+g2-5: job 9d25755e-50fe-4076-a528-b347e466983c (both OFF, same input as 4)
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:34:48
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:35:43
+  9d25755e running stage=stage1_denoise clip=1 step=0/4 t=150s
+  9d25755e running stage=stage1_denoise clip=1 step=1/4 t=195s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:37:28
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:38:03
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:38:33
+  BACKEND_UNREACHABLE (4) 2026-11-25T12:38:48
+  9d25755e running stage=stage1_denoise clip=1 step=3/4 t=335s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:39:58
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:40:38
+  9d25755e running stage=encode clip=1 step=None/None t=445s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:41:43
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:42:23
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:42:53
+  9d25755e running stage=stage1_denoise clip=2 step=0/4 t=580s
+  9d25755e running stage=stage1_denoise clip=2 step=0/4 t=625s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:44:38
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:45:28
+  9d25755e running stage=stage1_denoise clip=2 step=1/4 t=735s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:46:38
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:47:28
+  9d25755e running stage=stage1_denoise clip=2 step=1/4 t=855s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:48:53
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:49:38
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:50:33
+  BACKEND_UNREACHABLE (4) 2026-11-25T12:51:08
+  9d25755e running stage=stage1_denoise clip=2 step=2/4 t=1076s
+  9d25755e running stage=stage1_denoise clip=2 step=3/4 t=1121s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:53:08
+  9d25755e running stage=stage1_denoise clip=2 step=3/4 t=1196s
+  9d25755e running stage=stage1_denoise clip=2 step=3/4 t=1241s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:55:08
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:55:23
+  BACKEND_UNREACHABLE (3) 2026-11-25T12:55:48
+  9d25755e running stage=encode clip=2 step=None/None t=1356s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:56:48
+  9d25755e running stage=stage1_denoise clip=3 step=0/4 t=1416s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:58:03
+  9d25755e running stage=stage1_denoise clip=3 step=1/4 t=1491s
+  BACKEND_UNREACHABLE (1) 2026-11-25T12:59:18
+  BACKEND_UNREACHABLE (2) 2026-11-25T12:59:53
+  BACKEND_UNREACHABLE (3) 2026-11-25T13:00:23
+  9d25755e running stage=stage1_denoise clip=3 step=3/4 t=1631s
+  9d25755e running stage=stage1_denoise clip=3 step=3/4 t=1676s
+  9d25755e running stage=encode clip=3 step=None/None t=1721s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:03:09
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:03:49
+  9d25755e running stage=stage1_denoise clip=4 step=0/4 t=1836s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:04:54
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:05:19
+  BACKEND_UNREACHABLE (3) 2026-11-25T13:05:34
+  9d25755e running stage=stage1_denoise clip=4 step=2/4 t=1941s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:06:39
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:07:14
+  BACKEND_UNREACHABLE (3) 2026-11-25T13:07:29
+  9d25755e running stage=stage1_denoise clip=4 step=3/4 t=2056s
+  9d25755e running stage=decode clip=4 step=None/None t=2101s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:09:29
+g2-5: mp4 e67c59d6 te=[None, None, None, None] lat=[[None], [None], [None], [None]] gen=2163.23 problems=[]
+GATE g2 PASS

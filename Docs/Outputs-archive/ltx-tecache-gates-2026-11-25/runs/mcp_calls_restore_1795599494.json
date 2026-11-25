@@ -1,0 +1,100 @@
+[
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.2,
+    "at": "2026-11-25T18:38:11"
+  },
+  {
+    "tool": "load_pipeline",
+    "args": {
+      "models": {
+        "transformer": "minimax_h3_ref2va_pruned_int8_convrot"
+      },
+      "base_model": "MiniMaxH3",
+      "wait_sec": 45
+    },
+    "is_error": false,
+    "seconds": 3.19,
+    "at": "2026-11-25T18:38:14",
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "models": {
+        "transformer": "minimax_h3_ref2va_pruned_int8_convrot",
+        "text_encoder": "default",
+        "video_vae": "default",
+        "audio": "default"
+      },
+      "finished": true
+    }
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:38:14",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 31,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:38:14"
+  }
+]

@@ -1,0 +1,1692 @@
+{
+  "gate": "g1",
+  "started": "2026-11-25T09:20:44",
+  "jobs": {
+    "1": {
+      "label": "1",
+      "cond": "ON, prompt A, negative Na",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "submitted_at": "2026-11-25T09:20:48",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 450.4,
+      "summary": {
+        "mp4_sha256": "589977c011bb8d5605f7948ab21f44ffd700be8c9bc8643d1b6ff27258d2242c",
+        "mp4_size": 2058940,
+        "mp4_rel": "outputs/73494daa-129e-45d8-9832-64093ca54b16/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 448.95,
+        "rss_peak_gib": 28.33,
+        "commit_peak_gib": 42.99,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": {
+            "positive": "miss",
+            "negative": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": "2d97f1ed1401473471b7edb4a30ead48abb2817c5f54638a5cfdf132ff2ce3ce",
+            "tags": "b6d7c2282447838a7983aad8e13c136517eea123ca33868aa3bff143a97cf0d8",
+            "negative": "ffa49610c2c655a3521dabad333b2d7843197ef81d5f6393387948815afae13f"
+          },
+          "seconds": 34.87,
+          "text_tokens": 4260,
+          "negative_tokens": 8,
+          "rss_process_peak_gib": 3.44,
+          "commit_process_peak_gib": 9.28,
+          "rss_end_gib": 2.01,
+          "commit_end_gib": 3.81,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "conditioning_sha256",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_cache",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.29,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.29
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.29
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.3
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "2": {
+      "label": "2",
+      "cond": "OFF, same input as 1",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ]
+      },
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "submitted_at": "2026-11-25T09:28:19",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 445.3,
+      "summary": {
+        "mp4_sha256": "589977c011bb8d5605f7948ab21f44ffd700be8c9bc8643d1b6ff27258d2242c",
+        "mp4_size": 2058940,
+        "mp4_rel": "outputs/952d6174-a146-4d33-b6bf-43417a0b64ab/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 443.49,
+        "rss_peak_gib": 29.54,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [],
+        "conditioning_sha256_paths": [],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": false,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": null,
+          "conditioning_sha256": null,
+          "seconds": 45.95,
+          "text_tokens": 4260,
+          "negative_tokens": 8,
+          "rss_process_peak_gib": 29.37,
+          "commit_process_peak_gib": 42.99,
+          "rss_end_gib": 27.84,
+          "commit_end_gib": 36.4,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.34,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.32
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.3
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.27
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "3": {
+      "label": "3",
+      "cond": "ON, same input as 1",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "submitted_at": "2026-11-25T09:35:44",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 450.5,
+      "summary": {
+        "mp4_sha256": "589977c011bb8d5605f7948ab21f44ffd700be8c9bc8643d1b6ff27258d2242c",
+        "mp4_size": 2058940,
+        "mp4_rel": "outputs/27bfbe72-ea91-4c5c-9181-ecfcff3033a5/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 440.47,
+        "rss_peak_gib": 29.54,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": {
+            "positive": "miss",
+            "negative": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": "2d97f1ed1401473471b7edb4a30ead48abb2817c5f54638a5cfdf132ff2ce3ce",
+            "tags": "b6d7c2282447838a7983aad8e13c136517eea123ca33868aa3bff143a97cf0d8",
+            "negative": "ffa49610c2c655a3521dabad333b2d7843197ef81d5f6393387948815afae13f"
+          },
+          "seconds": 42.95,
+          "text_tokens": 4260,
+          "negative_tokens": 8,
+          "rss_process_peak_gib": 29.54,
+          "commit_process_peak_gib": 44.04,
+          "rss_end_gib": 27.87,
+          "commit_end_gib": 36.39,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "conditioning_sha256",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_cache",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.26,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.23
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.32
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.27
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "4": {
+      "label": "4",
+      "cond": "ON, same input as 1",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "submitted_at": "2026-11-25T09:43:15",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 400.3,
+      "summary": {
+        "mp4_sha256": "589977c011bb8d5605f7948ab21f44ffd700be8c9bc8643d1b6ff27258d2242c",
+        "mp4_size": 2058940,
+        "mp4_rel": "outputs/37955ed3-86d3-4eed-a118-6ec65eeaed8a/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 397.01,
+        "rss_peak_gib": 29.54,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": {
+            "positive": "hit",
+            "negative": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": "2d97f1ed1401473471b7edb4a30ead48abb2817c5f54638a5cfdf132ff2ce3ce",
+            "tags": "b6d7c2282447838a7983aad8e13c136517eea123ca33868aa3bff143a97cf0d8",
+            "negative": "ffa49610c2c655a3521dabad333b2d7843197ef81d5f6393387948815afae13f"
+          },
+          "seconds": 0.02,
+          "text_tokens": 4260,
+          "negative_tokens": 8,
+          "rss_process_peak_gib": 29.54,
+          "commit_process_peak_gib": 44.04,
+          "rss_end_gib": 27.93,
+          "commit_end_gib": 36.25,
+          "te_loaded": false,
+          "keys": [
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "conditioning_sha256",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te_cache",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.12,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.2
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.36
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.2
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "5": {
+      "label": "5",
+      "cond": "ON, prompt A, negative Nb",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "submitted_at": "2026-11-25T09:49:56",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 420.2,
+      "summary": {
+        "mp4_sha256": "2ffd0c461ca6b79fa2fa1da20adb4c9afeceac3a223f313abb5637aa2032b11e",
+        "mp4_size": 2124796,
+        "mp4_rel": "outputs/a489d449-753b-4a85-a1b6-c755303f311f/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 419.8,
+        "rss_peak_gib": 29.54,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": {
+            "positive": "hit",
+            "negative": "miss"
+          },
+          "conditioning_sha256": {
+            "positive": "2d97f1ed1401473471b7edb4a30ead48abb2817c5f54638a5cfdf132ff2ce3ce",
+            "tags": "b6d7c2282447838a7983aad8e13c136517eea123ca33868aa3bff143a97cf0d8",
+            "negative": "c3905f7fa769d57d415a7e625fc35b7837887371067bed6312ef31db618776e5"
+          },
+          "seconds": 22.15,
+          "text_tokens": 4260,
+          "negative_tokens": 10,
+          "rss_process_peak_gib": 29.54,
+          "commit_process_peak_gib": 44.04,
+          "rss_end_gib": 27.8,
+          "commit_end_gib": 36.39,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "conditioning_sha256",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_cache",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.35,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.29
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.36
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.27
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "6": {
+      "label": "6",
+      "cond": "ON, prompt B, negative Nb",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks softly with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "keep_text_conditioning": true
+      },
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "submitted_at": "2026-11-25T09:56:56",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 425.3,
+      "summary": {
+        "mp4_sha256": "b65ec0caa23f7184c3d171546c2bbfc3716581646444ee15db5b0b7ef3efeee7",
+        "mp4_size": 2073955,
+        "mp4_rel": "outputs/fe0417c8-ef19-477d-bc98-bf7a99aaed83/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 420.51,
+        "rss_peak_gib": 29.54,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [
+          "h3.phases.encode.te_cache"
+        ],
+        "conditioning_sha256_paths": [
+          "h3.phases.encode.conditioning_sha256"
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": true,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": {
+            "positive": "miss",
+            "negative": "hit"
+          },
+          "conditioning_sha256": {
+            "positive": "a9ee5d3ba555ca070a131e816ad36413652741e568dac47230cfa872419eab7f",
+            "tags": "7033522990798b4917e53b064cd2e4baa63c7773e8e2ae81f637057f05d5a063",
+            "negative": "c3905f7fa769d57d415a7e625fc35b7837887371067bed6312ef31db618776e5"
+          },
+          "seconds": 23.18,
+          "text_tokens": 4261,
+          "negative_tokens": 10,
+          "rss_process_peak_gib": 29.54,
+          "commit_process_peak_gib": 44.04,
+          "rss_end_gib": 27.81,
+          "commit_end_gib": 36.25,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "conditioning_sha256",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_cache",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.13,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.13
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.41
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.27
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "7": {
+      "label": "7",
+      "cond": "OFF, same input as 5",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ]
+      },
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "submitted_at": "2026-11-25T10:04:02",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 445.2,
+      "summary": {
+        "mp4_sha256": "2ffd0c461ca6b79fa2fa1da20adb4c9afeceac3a223f313abb5637aa2032b11e",
+        "mp4_size": 2124796,
+        "mp4_rel": "outputs/e6ed8286-47b5-4658-9be5-c9ce28cce42a/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 440.42,
+        "rss_peak_gib": 29.59,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [],
+        "conditioning_sha256_paths": [],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": false,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": null,
+          "conditioning_sha256": null,
+          "seconds": 42.69,
+          "text_tokens": 4260,
+          "negative_tokens": 10,
+          "rss_process_peak_gib": 29.54,
+          "commit_process_peak_gib": 44.04,
+          "rss_end_gib": 27.96,
+          "commit_end_gib": 36.41,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.35,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.32
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.34
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.26
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    },
+    "8": {
+      "label": "8",
+      "cond": "OFF, same input as 6",
+      "args": {
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "attention_backend": "sdpa",
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks softly with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "nag_enabled": true,
+        "neg_method": "vsf",
+        "num_frames": 73,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ]
+      },
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "submitted_at": "2026-11-25T10:11:27",
+      "final": {
+        "status": "completed",
+        "error": null,
+        "timed_out": false,
+        "wait_limit_exceeded": null
+      },
+      "wall_seconds": 440.5,
+      "summary": {
+        "mp4_sha256": "b65ec0caa23f7184c3d171546c2bbfc3716581646444ee15db5b0b7ef3efeee7",
+        "mp4_size": 2073955,
+        "mp4_rel": "outputs/20eebd93-2ead-4b78-aee0-2ae172433ef6/output.mp4",
+        "backend": "minimax-h3",
+        "attention_used": "sdpa",
+        "generation_time_seconds": 440.38,
+        "rss_peak_gib": 29.59,
+        "commit_peak_gib": 44.04,
+        "latent_cache_paths": [],
+        "te_cache_paths": [],
+        "conditioning_sha256_paths": [],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+            "strength": 0.8,
+            "layout": "ab",
+            "dtype": "BF16",
+            "pairs_applied": 208,
+            "skipped": []
+          }
+        ],
+        "steps_shift": [
+          4,
+          12.0,
+          3.0
+        ],
+        "request_keep_text_conditioning": false,
+        "request_keep_reference_latents": false,
+        "request_embed_mp4_metadata": false,
+        "encode": {
+          "te_cache": null,
+          "conditioning_sha256": null,
+          "seconds": 42.92,
+          "text_tokens": 4261,
+          "negative_tokens": 10,
+          "rss_process_peak_gib": 29.59,
+          "commit_process_peak_gib": 44.04,
+          "rss_end_gib": 27.99,
+          "commit_end_gib": 36.41,
+          "te_loaded": true,
+          "keys": [
+            "commit_after_load_gib",
+            "commit_after_release_gib",
+            "commit_end_gib",
+            "commit_process_peak_gib",
+            "negative_tokens",
+            "peak_vram_mb",
+            "peak_vram_reserved_mb",
+            "rss_after_load_gib",
+            "rss_after_release_gib",
+            "rss_end_gib",
+            "rss_process_peak_gib",
+            "seconds",
+            "te",
+            "te_read",
+            "te_read_negative",
+            "text_tokens"
+          ]
+        },
+        "reference_encode_seconds": 49.27,
+        "references": [
+          {
+            "kind": "picture",
+            "slot": 1,
+            "source_size": [
+              384,
+              384
+            ],
+            "size": [
+              384,
+              384
+            ],
+            "vision_tokens": 144,
+            "rows": 144,
+            "seconds": 0.23
+          },
+          {
+            "kind": "video",
+            "slot": 1,
+            "source_frames": 73,
+            "used_frames": 73,
+            "latent_t": 22,
+            "pairs": 4,
+            "rows": 22176,
+            "seconds": 48.33
+          },
+          {
+            "kind": "audio",
+            "slot": 1,
+            "samples": 165888,
+            "latent_t": 208,
+            "rows": 416,
+            "seconds": 0.27
+          }
+        ],
+        "latents_sha256": null
+      },
+      "mp4_probe": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_type": "video",
+            "width": 1280,
+            "height": 768,
+            "r_frame_rate": "24/1",
+            "duration_ts": 37376,
+            "duration": "3.041667",
+            "nb_read_frames": "73"
+          },
+          {
+            "codec_type": "audio",
+            "sample_rate": "32000",
+            "r_frame_rate": "0/0",
+            "duration_ts": 97344,
+            "duration": "3.042000",
+            "nb_read_frames": "96"
+          }
+        ]
+      },
+      "problems": [],
+      "checked_ok": true
+    }
+  },
+  "unreachable": {
+    "count": 49,
+    "at": [
+      "2026-11-25T09:22:08",
+      "2026-11-25T09:22:28",
+      "2026-11-25T09:23:13",
+      "2026-11-25T09:25:48",
+      "2026-11-25T09:26:53",
+      "2026-11-25T09:27:13",
+      "2026-11-25T09:27:59",
+      "2026-11-25T09:29:14",
+      "2026-11-25T09:30:24",
+      "2026-11-25T09:30:59",
+      "2026-11-25T09:33:04",
+      "2026-11-25T09:34:29",
+      "2026-11-25T09:36:34",
+      "2026-11-25T09:37:09",
+      "2026-11-25T09:37:25",
+      "2026-11-25T09:38:50",
+      "2026-11-25T09:39:05",
+      "2026-11-25T09:43:05",
+      "2026-11-25T09:44:25",
+      "2026-11-25T09:45:15",
+      "2026-11-25T09:46:50",
+      "2026-11-25T09:48:00",
+      "2026-11-25T09:48:25",
+      "2026-11-25T09:48:55",
+      "2026-11-25T09:51:51",
+      "2026-11-25T09:52:41",
+      "2026-11-25T09:53:06",
+      "2026-11-25T09:53:31",
+      "2026-11-25T09:53:56",
+      "2026-11-25T09:57:31",
+      "2026-11-25T09:59:16",
+      "2026-11-25T09:59:36",
+      "2026-11-25T10:03:06",
+      "2026-11-25T10:03:41",
+      "2026-11-25T10:05:12",
+      "2026-11-25T10:06:27",
+      "2026-11-25T10:06:42",
+      "2026-11-25T10:08:17",
+      "2026-11-25T10:09:02",
+      "2026-11-25T10:12:57",
+      "2026-11-25T10:14:48",
+      "2026-11-25T10:15:03",
+      "2026-11-25T10:16:13",
+      "2026-11-25T10:16:33",
+      "2026-11-25T10:17:08",
+      "2026-11-25T10:17:23",
+      "2026-11-25T10:17:43",
+      "2026-11-25T10:18:03",
+      "2026-11-25T10:18:33"
+    ]
+  },
+  "resumes": [
+    "2026-11-25T09:20:44"
+  ],
+  "backend_status": {
+    "reachable": true,
+    "base_url": "http://127.0.0.1:18620",
+    "api_key_configured": false,
+    "pipeline_load_in_flight": false,
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": false,
+      "pipeline_type": null,
+      "state": "unloaded",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    }
+  },
+  "models_before": {
+    "active_base_model": "MiniMaxH3",
+    "transformer_active": "minimax_h3_ref2va_pruned_int8_convrot"
+  },
+  "load_call": {
+    "pipeline_loaded": true,
+    "pipeline_type": "distilled",
+    "state": "ready",
+    "finished": true
+  },
+  "loaded": {
+    "status": {
+      "server": "running",
+      "version": "0.4.0",
+      "host": "127.0.0.1",
+      "port": 18620,
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "base_model": "MiniMaxH3",
+      "gpu": {
+        "available": false,
+        "name": null,
+        "vram_total_mb": 0,
+        "vram_used_mb": 0,
+        "vram_free_mb": 0
+      },
+      "vram_optimization": {
+        "low_vram_mode": true,
+        "low_vram_profile": "16gb_safe",
+        "fp8_transformer": true,
+        "cpu_offload_text_encoder": true,
+        "vae_tiling": true,
+        "attention_tiling": false,
+        "block_swap": true,
+        "low_vram_disabled_required": false
+      },
+      "acceleration": {
+        "attention_backends": [
+          "sdpa",
+          "sage"
+        ],
+        "sage_available": true,
+        "block_swap_prefetch_available": true
+      },
+      "tracking": {
+        "available": true
+      },
+      "queue": {
+        "mode": "single_job_in_memory",
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0
+      }
+    },
+    "active_base_model": "MiniMaxH3",
+    "transformer_active": "minimax_h3_ref2va_pruned_int8_convrot"
+  },
+  "upload_ids": {
+    "picture": "330a814b-3499-497b-88a0-c3edfe89abf7",
+    "video_short": "43986536-2da1-4e49-a509-c191be7ad8c6",
+    "audio": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e"
+  },
+  "uploads": {
+    "picture": {
+      "image_id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+      "original_filename": "i2v_input_square.png",
+      "width": 384,
+      "height": 384,
+      "content_type": "image/png",
+      "source_rel": "Docs/Outputs-archive/h3-gate2/i2v_input_square.png",
+      "stored_path_rel": "uploads/330a814b-3499-497b-88a0-c3edfe89abf7/input.png"
+    },
+    "video_short": {
+      "video_id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+      "original_filename": "H3-Ref-1080p-3s.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 2546645,
+      "trimmed": false,
+      "frame_count": null,
+      "fps": null,
+      "source_rel": "outputs/comfort-calib-h3-ref-2026-11-03/materials/H3-Ref-1080p-3s.mp4",
+      "stored_path_rel": "uploads/videos/43986536-2da1-4e49-a509-c191be7ad8c6/input.mp4"
+    },
+    "audio": {
+      "audio_id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+      "original_filename": "ref_audio_raincoat_speech.wav",
+      "content_type": "audio/wav",
+      "size_bytes": 663630,
+      "source_rel": "outputs/h3-ref2va-2026-10-28/ref_audio_raincoat_speech.wav",
+      "stored_path_rel": "uploads/audios/413ea2b6-4a55-4b42-9d7b-8c402b796f2e/input.wav"
+    }
+  },
+  "ok_run": true,
+  "finished": "2026-11-25T10:18:48",
+  "gate_pass": true
+}

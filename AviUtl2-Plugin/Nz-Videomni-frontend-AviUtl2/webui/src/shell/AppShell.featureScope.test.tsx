@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { bridge as appBridge } from "../bridge";
 import { createMockBridge } from "../bridge/mockBridge";
-import type { MockBridgeOptions } from "../bridge/mockBridge";
+import type { MockBridge, MockBridgeOptions } from "../bridge/mockBridge";
 import { withExtraUnsupportedFeatures } from "../test/unsupportedFeatures";
 import { ACCELERATION_STORAGE_KEY, readStoredAcceleration } from "./accelerationSettings";
 import { AppShell } from "./AppShell";
@@ -24,8 +25,12 @@ const AS_LTX25: MockBridgeOptions = {
   ltx25Install: "full",
 };
 
-async function renderApp(options: MockBridgeOptions = {}, extraUnsupported: readonly string[] = []) {
-  const base = createMockBridge({ delayMs: 0, ...options });
+async function renderApp(
+  options: MockBridgeOptions = {},
+  extraUnsupported: readonly string[] = [],
+  existing?: MockBridge,
+) {
+  const base = existing ?? createMockBridge({ delayMs: 0, ...options });
   const bridge = extraUnsupported.length
     ? withExtraUnsupportedFeatures(base, "LTX25", extraUnsupported)
     : base;
@@ -805,6 +810,106 @@ describe("AppShell — base-model feature scope", () => {
     expect(select.value).toBe("LTX23");
 
     await waitFor(() => expect(readStoredAcceleration().keepReferenceLatents).toBe(false));
+  });
+
+  // -- 台帳 §1-298 / §1-299: Text encoder conditioning cache --------------------
+  //
+  // MiniMax H3, LTX 2.3 and LTX 2.5 all take it now (§1-299), so the fixture's
+  // LTX engines no longer publish `keep_text_conditioning`: the row shows and
+  // a stored ON survives. The hiding mechanism itself stays for a server that
+  // still refuses it on LTX; those tests hand the name in through
+  // `withExtraUnsupportedFeatures` (an older server, imitated).
+
+  function keepTextConditioningRow() {
+    return screen.queryByRole("group", { name: /^Text encoder conditioning cache$/ });
+  }
+
+  function keepTextConditioningNote() {
+    return screen.queryByText(/^Caches the conditioning the text encoder outputs and reuses it to speed up generation\./);
+  }
+
+  it("shows the Text encoder conditioning cache row on LTX 2.3, LTX 2.5 and MiniMax H3, and a stored ON survives", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: true }));
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    // LTX 2.3 (the starting base model).
+    expect(keepTextConditioningRow()).toBeInTheDocument();
+    expect(within(keepTextConditioningRow()!).getByRole("button", { name: "ON" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(keepTextConditioningNote()).toBeInTheDocument();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(keepTextConditioningRow()).toBeInTheDocument();
+    expect(keepTextConditioningNote()).toBeInTheDocument();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(keepTextConditioningRow()).toBeInTheDocument());
+    expect(keepTextConditioningNote()).toBeInTheDocument();
+    // Never written back anywhere along the way.
+    expect(readStoredAcceleration().keepTextConditioning).toBe(true);
+  });
+
+  it("LTX 2.3 sends keep_text_conditioning: true when the stored choice is ON", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: true }));
+    // Create submits through the app-wide singleton client, so the app-wide
+    // fixture (LTX 2.3 active) is what carries the request here.
+    const { bridge } = await renderApp({}, [], appBridge as MockBridge);
+    const original = bridge.request.bind(bridge);
+    const requestSpy = vi.spyOn(bridge, "request").mockImplementation(((method: string, params: unknown) => {
+      // Recorded and answered with a 422 so no job is left running.
+      if (method === "backend.request" && (params as { path?: string }).path === "/api/v1/generate") {
+        return Promise.resolve({
+          status: 422,
+          body: { error: { code: "VALIDATION_ERROR", message: "recorded by the test", detail: [] } },
+        });
+      }
+      return (original as (m: string, p: unknown) => Promise<unknown>)(method, params);
+    }) as typeof bridge.request);
+    const user = userEvent.setup();
+
+    await user.type(screen.getByPlaceholderText(/describe the video/i), "a cat riding a skateboard");
+    const generate = screen.getByRole("button", { name: /^generate$/i });
+    await waitFor(() => expect(generate).not.toBeDisabled());
+    await user.click(generate);
+
+    const isGenerate = (c: unknown[]) =>
+      c[0] === "backend.request" && (c[1] as { path?: string }).path === "/api/v1/generate";
+    await waitFor(() => expect(requestSpy.mock.calls.some(isGenerate)).toBe(true));
+    const call = requestSpy.mock.calls.find(isGenerate);
+    const body = (call?.[1] as { body?: Record<string, unknown> } | undefined)?.body ?? {};
+    expect(body.keep_text_conditioning).toBe(true);
+  });
+
+  // The hiding mechanism, kept for an older server that still names the
+  // feature on LTX.
+  it("an older server that names keep_text_conditioning on LTX 2.5: the row and its note are hidden there", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: true }));
+    const { select } = await renderApp(AS_LTX25, ["keep_text_conditioning"]);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    // LTX 2.3 does not publish the name here, so the row shows.
+    expect(keepTextConditioningRow()).toBeInTheDocument();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    await waitFor(() => expect(keepTextConditioningRow()).toBeNull());
+    expect(keepTextConditioningNote()).toBeNull();
+  });
+
+  it("an older server that names keep_text_conditioning on LTX 2.5: a leftover ON is written back to off", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: true }));
+    const { select } = await renderApp(AS_LTX25, ["keep_text_conditioning"]);
+    expect(readStoredAcceleration().keepTextConditioning).toBe(true);
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(readStoredAcceleration().keepTextConditioning).toBe(false));
   });
 
   // -- 台帳 §1-100: Fused GGUF Dequantization Kernel, hidden on MiniMax H3 -----

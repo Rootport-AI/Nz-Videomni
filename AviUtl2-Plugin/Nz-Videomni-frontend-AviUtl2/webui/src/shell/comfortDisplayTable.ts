@@ -152,6 +152,8 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
   solVae: false,
   // 台帳 §1-297: a memory cache, no row's `requires` names it.
   keepReferenceLatents: false,
+  // 台帳 §1-298: a memory cache, no row's `requires` names it.
+  keepTextConditioning: false,
   // Output setting sharing the store (§3-164); the comfort matcher ignores it.
   embedMp4Metadata: true,
 };

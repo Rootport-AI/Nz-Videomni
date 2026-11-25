@@ -538,6 +538,10 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // in the server's REJECT_TABLE. Hides the Settings row; the chain refusal
     // has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
     "keep_reference_latents",
+    // 台帳 §1-298: `keep_text_conditioning` likewise — last, after
+    // `keep_reference_latents` as in the server's REJECT_TABLE. Hides the
+    // Settings row; the chain refusal has its `MOCK_CHAIN_FEATURE_FIELDS` row.
+    "keep_text_conditioning",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -617,6 +621,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "sol_vae",
     // 台帳 §1-297: `keep_reference_latents` — see the LTX23 entry above.
     "keep_reference_latents",
+    // 台帳 §1-298: `keep_text_conditioning` — see the LTX23 entry above.
+    "keep_text_conditioning",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -775,6 +781,14 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   {
     field: "keep_reference_latents",
     feature: "keep_reference_latents",
+    isSet: (v) => v === true,
+  },
+  // 台帳 §1-298: keep the text encoder's conditioning cached (MiniMax H3 only —
+  // both LTX engines declare `keep_text_conditioning`). Last, like the real LTX
+  // `CHAIN_REJECT_TABLE` row; refused only when `true`.
+  {
+    field: "keep_text_conditioning",
+    feature: "keep_text_conditioning",
     isSet: (v) => v === true,
   },
 ];
@@ -2110,6 +2124,24 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
             message:
               "'keep_reference_latents' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
             detail: "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
+          },
+        },
+      };
+    }
+
+    // 台帳 §1-298: LTX engines refuse a `true` (the server's REJECT_TABLE row).
+    if (
+      req.keep_text_conditioning === true &&
+      (MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("keep_text_conditioning")
+    ) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "FEATURE_UNSUPPORTED",
+            message:
+              "'keep_text_conditioning' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            detail: "テキストエンコーダーの条件付けの保持（keep_text_conditioning）は MiniMax H3 専用です。LTX では使えません。",
           },
         },
       };

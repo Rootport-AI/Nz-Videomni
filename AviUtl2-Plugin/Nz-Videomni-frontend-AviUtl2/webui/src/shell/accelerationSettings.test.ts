@@ -3,6 +3,7 @@ import {
   ACCELERATION_DEFAULTS,
   ACCELERATION_STORAGE_KEY,
   KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
+  KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
   accelerationRequestFields,
   readStoredAcceleration,
   writeStoredAcceleration,
@@ -37,6 +38,7 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     piH3: "off",
     solVae: false,
     keepReferenceLatents: false,
+    keepTextConditioning: false,
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -59,6 +61,8 @@ describe("effectiveAccelerationFields", () => {
       sol_vae: false,
       // 台帳 §1-297: likewise named by no row.
       keep_reference_latents: false,
+      // 台帳 §1-298: likewise named by no row.
+      keep_text_conditioning: false,
     });
   });
 
@@ -74,6 +78,7 @@ describe("effectiveAccelerationFields", () => {
       "keep_reference_latents",
       "keep_resident",
       "keep_resident_embeddings",
+      "keep_text_conditioning",
       "pi_h3",
       "sol_vae",
       "vae_mode",
@@ -90,6 +95,7 @@ describe("effectiveAccelerationFields", () => {
       pi_h3: "off",
       sol_vae: false,
       keep_reference_latents: false,
+      keep_text_conditioning: false,
     });
   });
 
@@ -359,6 +365,81 @@ describe("keepReferenceLatents (§1-297)", () => {
     it("reads a malformed value as off", () => {
       window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepReferenceLatents: "yes" }));
       expect(readStoredAcceleration().keepReferenceLatents).toBe(false);
+    });
+  });
+});
+
+/** 台帳 §1-298: text encoder conditioning cache (MiniMax H3). */
+describe("keepTextConditioning (§1-298)", () => {
+  it("defaults to off, matching the server default", () => {
+    expect(ACCELERATION_DEFAULTS.keepTextConditioning).toBe(false);
+    expect(KEEP_TEXT_CONDITIONING_SERVER_DEFAULT).toBe(false);
+  });
+
+  it("sends nothing while off — not even keep_text_conditioning: false", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).toEqual({});
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("keep_text_conditioning");
+  });
+
+  it("sends keep_text_conditioning: true only while on, and nothing else", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepTextConditioning: true })).toEqual({
+      keep_text_conditioning: true,
+    });
+  });
+
+  it("is independent of keepReferenceLatents in the request fields", () => {
+    expect(
+      accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepReferenceLatents: true, keepTextConditioning: true }),
+    ).toEqual({ keep_reference_latents: true, keep_text_conditioning: true });
+    expect(
+      accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepReferenceLatents: true, keepTextConditioning: false }),
+    ).toEqual({ keep_reference_latents: true });
+    expect(
+      accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepReferenceLatents: false, keepTextConditioning: true }),
+    ).toEqual({ keep_text_conditioning: true });
+  });
+
+  it("withServerDefaults writes it back to off (the feature-scope reset on LTX) and leaves keepReferenceLatents alone", () => {
+    const before = makeAllOn({ keepReferenceLatents: true, keepTextConditioning: true });
+    const after = withServerDefaults(before, ["keepTextConditioning"]);
+    expect(after.keepTextConditioning).toBe(false);
+    expect(after.keepReferenceLatents).toBe(true);
+  });
+
+  it("withServerDefaults leaves it alone when another field is the one reset", () => {
+    const before = makeAllOn({ keepReferenceLatents: true, keepTextConditioning: true });
+    expect(withServerDefaults(before, ["keepReferenceLatents"]).keepTextConditioning).toBe(true);
+    expect(withServerDefaults(before, ["solVae"]).keepTextConditioning).toBe(true);
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back an on value", () => {
+      writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, keepTextConditioning: true });
+      expect(readStoredAcceleration().keepTextConditioning).toBe(true);
+      expect(readStoredAcceleration().keepReferenceLatents).toBe(false);
+    });
+
+    it("reads a JSON blob without the key (written before §1-298) as off, keeping the other value", () => {
+      window.localStorage.setItem(
+        ACCELERATION_STORAGE_KEY,
+        JSON.stringify({ attentionBackend: "sage", keepReferenceLatents: true }),
+      );
+      expect(readStoredAcceleration().keepTextConditioning).toBe(false);
+      expect(readStoredAcceleration().keepReferenceLatents).toBe(true);
+    });
+
+    it("reads the pre-2026-08-01 bare string form as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sdpa");
+      expect(readStoredAcceleration().keepTextConditioning).toBe(false);
+    });
+
+    it("reads a malformed value as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: "yes" }));
+      expect(readStoredAcceleration().keepTextConditioning).toBe(false);
     });
   });
 });

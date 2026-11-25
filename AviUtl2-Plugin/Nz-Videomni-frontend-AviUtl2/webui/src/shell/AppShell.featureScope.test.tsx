@@ -807,6 +807,63 @@ describe("AppShell — base-model feature scope", () => {
     await waitFor(() => expect(readStoredAcceleration().keepReferenceLatents).toBe(false));
   });
 
+  // -- 台帳 §1-298: Text encoder conditioning cache, MiniMax H3's own row ------
+  //
+  // Scoped exactly like the reference-latents row above (both LTX engines
+  // publish `keep_text_conditioning`); default OFF, so the write-back lands on
+  // `false`, and the note shows only while ON.
+
+  function keepTextConditioningRow() {
+    return screen.queryByRole("group", { name: /^Text encoder conditioning cache \(MiniMax H3\)$/ });
+  }
+
+  function keepTextConditioningNote() {
+    return screen.queryByText(/^Skips the text encoder when the prompt and media are the same as last time\./);
+  }
+
+  it("hides the Text encoder conditioning cache row AND its note on LTX 2.3 and 2.5, and shows them on MiniMax H3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: true }));
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(keepTextConditioningRow()).toBeNull();
+    expect(keepTextConditioningNote()).toBeNull();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(keepTextConditioningRow()).toBeNull();
+    expect(keepTextConditioningNote()).toBeNull();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(keepTextConditioningRow()).toBeInTheDocument());
+    // The leftover ON was written back to off on LTX, and stays off on H3.
+    expect(within(keepTextConditioningRow()!).getByRole("button", { name: "OFF" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(keepTextConditioningNote()).toBeNull();
+    await user.click(within(keepTextConditioningRow()!).getByRole("button", { name: "ON" }));
+    await waitFor(() => expect(keepTextConditioningNote()).toBeInTheDocument());
+  });
+
+  it("writes a leftover Text encoder conditioning cache ON back to off on LTX 2.3", async () => {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({ keepReferenceLatents: true, keepTextConditioning: true }),
+    );
+    expect(readStoredAcceleration().keepTextConditioning).toBe(true);
+    const { select } = await renderApp(AS_LTX25);
+    // LTX 2.3 is the active base model (it publishes both names).
+    expect(select.value).toBe("LTX23");
+
+    await waitFor(() => expect(readStoredAcceleration().keepTextConditioning).toBe(false));
+    // Both names are published on LTX, so each row is written back by its own
+    // name and both end at off here.
+    await waitFor(() => expect(readStoredAcceleration().keepReferenceLatents).toBe(false));
+  });
+
   // -- 台帳 §1-100: Fused GGUF Dequantization Kernel, hidden on MiniMax H3 -----
   //
   // MiniMax H3 has no GGUF weights, so it publishes `fused_gguf_dequant_kernel`

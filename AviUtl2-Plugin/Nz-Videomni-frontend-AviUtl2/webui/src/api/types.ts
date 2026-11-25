@@ -367,6 +367,16 @@ export interface GenerateRequest {
    * `unsupported_features` and 422 a `true`. Mirrored on
    * {@link GenerateChainRequest}. */
   keep_reference_latents?: boolean;
+  /** Acceleration (台帳 §1-298): keep the text encoder's conditioning cached in
+   * main memory — MiniMax H3 only. Skips the text encoder when the prompt and
+   * media are the same as last time; the output does not change. Built
+   * exclusively by `shell/accelerationSettings.ts`'s
+   * `accelerationRequestFields` and spread in — omitted entirely while the
+   * server default (`false`) is selected, so this key only ever appears as
+   * `true`. LTX 2.3 / 2.5 publish `keep_text_conditioning` in
+   * `unsupported_features` and 422 a `true`. Mirrored on
+   * {@link GenerateChainRequest}. */
+  keep_text_conditioning?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
@@ -617,6 +627,11 @@ export interface GenerateChainRequest {
    * "sent only as `true`" rule; it lets the following clips reuse the encoded
    * references. */
   keep_reference_latents?: boolean;
+  /** Keep the text encoder's conditioning cached (台帳 §1-298): mirrors
+   * {@link GenerateRequest.keep_text_conditioning} — same single builder, same
+   * "sent only as `true`" rule; it lets the clips of a Chained job and the next
+   * job skip the text encoder. */
+  keep_text_conditioning?: boolean;
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;

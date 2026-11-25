@@ -96,6 +96,16 @@ Protocol (one JSON object per line; parent -> worker):
       sub-dict, which the app does write into metadata.json. ``vae_mode_used``
       and ``ltx25`` are different: metadata.json DOES carry both -- the app
       reads only the top-level ``ltx25``, never ``outpaint.ltx25``.
+      ``keep_text_conditioning`` (台帳 §1-299; absent / false = off, and an
+      off job drops whatever earlier jobs kept): the prompt encoder's whole
+      result for the job's bundle (the strings of its one encode, the negative
+      prompt last) is kept in main memory, and a later job with the same
+      bundle skips the encode. Only such a job's ``ltx25`` gains
+      ``te_cache`` ("hit" / "miss", one for the bundle) and
+      ``conditioning_sha256`` ([{video, audio, mask}, ...] in bundle order;
+      ``audio`` None where the encoding is None) -- on a copy, so on an
+      outpaint job ``outpaint.ltx25`` is then not the same object. Every
+      other job's ``ltx25`` is unchanged.
   {"op": "generate_chain", prompt, output_path, seed, clips, width, height,
    frame_rate, num_steps, overlap_frames, overlap_strength, [chunked_upsample],
    [stage2_window], [source], [audio_source], [retake], [end_source]}
@@ -139,7 +149,10 @@ Protocol (one JSON object per line; parent -> worker):
       in 2.3's shape -- including its ``v2v`` / ``a2v`` blocks when those modes
       ran, and its own ``ltx25`` sub-dict (``chain["ltx25"]``). Unlike the
       single op, no additive top-level ``ltx25`` key: ``chain`` already carries
-      it, one level down.
+      it, one level down. ``keep_text_conditioning`` is the single op's, with
+      the whole chain as one job and one bundle (every distinct clip string,
+      then stage 2's, then the negative prompt); its two keys land in
+      ``chain["ltx25"]``.
   {"op": "shutdown"}
 
 Replies are framed with the SAME unique prefix as the 2.3 worker so the shared
@@ -599,6 +612,28 @@ def _resolve_keep_resident_embeddings(msg: dict) -> bool:
     return bool(msg.get("keep_resident_embeddings", False))
 
 
+def _resolve_keep_text_conditioning(msg: dict) -> bool:
+    """Resolve a job's ``keep_text_conditioning`` (台帳 §1-299). Missing key -> False.
+
+    The same absent-means-release contract as the two keep-resident readers: a
+    job without the key drops whatever conditioning earlier jobs kept (see
+    :meth:`engine25.pipeline25.Ltx25Pipeline.set_text_conditioning_job`). The
+    key is shared with the other two engines (MiniMax H3's 台帳 §1-298).
+    """
+    return bool(msg.get("keep_text_conditioning", False))
+
+
+def _with_te_report(ltx25: dict, report: dict | None) -> dict:
+    """``ltx25`` with the job's held-conditioning record added, as a NEW dict.
+
+    ``report`` is None (a job that did not keep conditioning) -> ``ltx25`` itself,
+    unchanged. Otherwise a copy, because ``ltx25`` may be shared (an outpaint
+    job's is the same object as ``outpaint["ltx25"]``)."""
+    if report is None:
+        return ltx25
+    return {**ltx25, "te_cache": report["te_cache"], "conditioning_sha256": report["conditioning_sha256"]}
+
+
 def _resolve_nag(msg: dict):
     """Resolve a worker ``nag`` block -> NagParams / VsfParams, or None when
     absent/falsy.
@@ -817,6 +852,8 @@ def _do_generate(msg: dict) -> None:
     # changes what the model computes -- which is why it is armed through its
     # own method below.
     nag = _resolve_nag(msg)
+    # The held text conditioning (台帳 §1-299), absent-means-off like the rest.
+    keep_te = _resolve_keep_text_conditioning(msg)
 
     # ONE line per job, after the parse: what the request ASKED for, in the
     # worker's own log, so "I attached a LoRA and nothing happened" can be told
@@ -847,7 +884,8 @@ def _do_generate(msg: dict) -> None:
         f"attention={attention} "
         # off / nag / vsf, in 2.3's spelling: the two engines' worker logs are
         # read side by side when a result is compared.
-        f"neg={_neg_label(nag)}"
+        f"neg={_neg_label(nag)} "
+        f"keep_text_conditioning={keep_te}"
     )
 
     # OUTSIDE the try, and before the build: the fused kernels have to be armed
@@ -870,7 +908,12 @@ def _do_generate(msg: dict) -> None:
     # Armed on EVERY job, ``None`` included -- that is what clears a previous
     # job's negative prompt on a resident worker rather than inheriting it.
     _PIPE.set_nag_job(nag)
+    ok = False
     try:
+        # AFTER set_nag_job (the bundle ends with the negative prompt, when there
+        # is one), and inside the try so the finally always ends it. Every job
+        # kind on this op hands the encoder exactly this one string.
+        _PIPE.set_text_conditioning_job(keep_te, [str(msg["prompt"])])
         if inpaint is not None:
             # Inpainting. ``reference_video.path`` is ALREADY the green-FILLED
             # canvas the app built (the mask's white region painted #66FF00, padded
@@ -1050,11 +1093,14 @@ def _do_generate(msg: dict) -> None:
         # works on an outpaint or inpaint job too.
         report = result.as_dict()
         _log(f"GENERATE_REPORT {json.dumps(report, ensure_ascii=False, default=str)}")
+        ok = True
     finally:
         # Runs on the failure path too: this is what stops a crashed job from
         # leaving the kernels armed -- or a negative prompt encoded -- for the
-        # next one. Neither call raises. The negative prompt goes FIRST because
-        # it is the one holding tensors.
+        # next one. None of these calls raises. The held conditioning ends
+        # first (a failed job drops what it put), then the negative prompt,
+        # because it is the one holding tensors.
+        _PIPE.end_text_conditioning_job(ok)
         _PIPE.reset_nag_job()
         _PIPE.reset_acceleration_job()
 
@@ -1090,7 +1136,8 @@ def _do_generate(msg: dict) -> None:
     # ``result.metadata`` (the same dict that just went into ``extra``), so an
     # outpaint job reuses it rather than building a second, possibly-drifting
     # copy -- the app reads the TOP-LEVEL key only, never ``outpaint.ltx25``,
-    # but the two are one and the same object here. A plain generation -- and
+    # but the two are one and the same object here (unless the job keeps text
+    # conditioning: the top-level one then becomes a copy, see below). A plain generation -- and
     # an alpha_gen job, whose ``run_alpha_gen`` returns a plain
     # ``GenerationResult`` -- has no such dict to reuse, so it is built fresh
     # from the same fields the
@@ -1113,6 +1160,11 @@ def _do_generate(msg: dict) -> None:
         "size_bytes": result.size_bytes,
         "phases": result.phases,
     }
+    # A job that kept conditioning (台帳 §1-299) gains ``te_cache`` and
+    # ``conditioning_sha256`` on a COPY -- see :func:`_with_te_report`. Every
+    # other job's ``ltx25`` is the dict above, as it was.
+    if keep_te:
+        ltx25 = _with_te_report(ltx25, _PIPE.text_conditioning_report())
 
     # Read the verdicts AFTER the reset -- that is where they are computed
     # ("asked for it and dequantized nothing eligible" is a degradation, and the
@@ -1265,6 +1317,7 @@ def _do_generate_chain(msg: dict) -> None:
         EndSourceSpec,
         RetakeSpec,
         SourceSpec,
+        distinct_chain_prompts,
         run_chain,
     )
     from engine25.pipeline25 import image_conditionings  # noqa: PLC0415
@@ -1429,6 +1482,8 @@ def _do_generate_chain(msg: dict) -> None:
     # Same reader, same absent-means-off contract, as the single op's -- see
     # there. The chain is where the patch's per-build lifetime matters most.
     nag = _resolve_nag(msg)
+    # The single op's reader; the whole chain is ONE job of the held conditioning.
+    keep_te = _resolve_keep_text_conditioning(msg)
 
     spec = ChainSpec(
         prompt=str(msg["prompt"]),
@@ -1488,7 +1543,8 @@ def _do_generate_chain(msg: dict) -> None:
         # turned a 'sage' request into 'sdpa' by the time this line is written.
         f"attention={attention} "
         # off / nag / vsf, the single op's spelling and 2.3's.
-        f"neg={_neg_label(nag)}"
+        f"neg={_neg_label(nag)} "
+        f"keep_text_conditioning={keep_te}"
     )
 
     # Armed OUTSIDE the try and before the first transformer build, disarmed in
@@ -1505,7 +1561,13 @@ def _do_generate_chain(msg: dict) -> None:
     # The single op's discipline verbatim, for the same ordering reason: armed
     # outside the try, before the prompt encode, disarmed in the finally.
     _PIPE.set_nag_job(nag)
+    ok = False
     try:
+        # The single op's placement. The strings are the ones ``run_chain`` hands
+        # the encoder, through the same function (``_encode_chain_prompts``).
+        _PIPE.set_text_conditioning_job(
+            keep_te, distinct_chain_prompts([c.prompt for c in spec.clips], spec.prompt)
+        )
         result = run_chain(
             _PIPE,
             spec,
@@ -1545,11 +1607,20 @@ def _do_generate_chain(msg: dict) -> None:
                 default=str,
             )
         )
+        ok = True
     finally:
-        # Two lines here, as in the single op, and in the same order: the
-        # negative prompt goes first because it is the one holding tensors.
+        # The single op's lines, in the same order: the held conditioning ends
+        # first, then the negative prompt, because it is the one holding tensors.
+        _PIPE.end_text_conditioning_job(ok)
         _PIPE.reset_nag_job()
         _PIPE.reset_acceleration_job()
+
+    # A chain that kept conditioning gains the record in ``meta["ltx25"]``, on
+    # copies of both dicts (``result.metadata`` is left as it is).
+    if keep_te:
+        report = _PIPE.text_conditioning_report()
+        if report is not None:
+            meta = {**meta, "ltx25": _with_te_report(meta.get("ltx25") or {}, report)}
 
     _emit(
         "done",

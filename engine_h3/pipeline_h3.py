@@ -82,6 +82,10 @@ are clean and carry t = 1.0. A job without references is the same as before.
 With ``keep_reference_latents`` (台帳 §1-297) the encoded reference rows are kept
 in main memory for the next job (``engine_h3.ref_latent_cache``; the media are
 still read, the video encoder is still built).
+With ``keep_text_conditioning`` (台帳 §1-298) the text encoder's conditioning is
+kept the same way, positive and negative apart (a second ``RefLatentCache``,
+keyed by what the text encoder reads; a job whose inputs are all held builds no
+text encoder).
 
 Keeping models between jobs (``keep_resident``, Docs/MINIMAX_H3_DESIGN.md §4): at the end of
 a job that asks for it, the DiT (all of it on the CPU, block swap wrappers
@@ -97,6 +101,7 @@ inference tensor refuses; Docs/MULTI_ENGINE_DESIGN.md §5.8).
 from __future__ import annotations
 
 import gc
+import hashlib
 import logging
 import math
 import os
@@ -301,6 +306,114 @@ def reference_identities(requests, on: bool) -> set:
     return out
 
 
+# The text encoder's conditioning kept between jobs (keep_text_conditioning, 台帳 §1-298):
+# a second ``RefLatentCache``. A key is ``(head, tail)``: the head is known before
+# anything is read (what ``begin`` takes), the tail after the read. Only what the
+# text encoder reads goes in.
+
+#: The text encoder read report's numbers a held conditioning keeps for its job's record.
+TE_COUNT_FIELDS = ("tokens", "vision_tokens", "vision_tokens_per_image", "references")
+
+
+def _te_counts(read_report: dict) -> dict:
+    """The :data:`TE_COUNT_FIELDS` of a read report (those it has), as they are."""
+    return {k: read_report[k] for k in TE_COUNT_FIELDS if k in read_report}
+
+
+def te_key_frames(req) -> list:
+    """The key frames whose canvases go to the text encoder, in ascending frame
+    order: the first and the last frame only (裁定 59), none in a job with
+    references (ComfyUI's AddGuide). The one rule of the job's encode and of the
+    conditioning keys."""
+    if req.references:
+        return []
+    last = int(req.num_frames) - 1
+    return [img for img in sorted(req.images or (), key=lambda img: int(img.frame_idx))
+            if int(img.frame_idx) in (0, last)]
+
+
+def te_frame_identities(frames) -> list | None:
+    """``media_identity`` of each of ``frames`` (:func:`te_key_frames`), or None when one cannot be stat'ed."""
+    try:
+        return [RC.media_identity("key_frame", img.path) for img in frames]
+    except OSError:
+        return None
+
+
+def te_positive_head(req, ref_ids, frame_ids) -> tuple:
+    """The positive conditioning key's head: the prompt as given, the references
+    in :func:`ordered_references` order (a picture / video by kind, slot and
+    identity; an audio by kind and slot only, the text encoder reads its card
+    alone), the key frames' identities (``frame_ids``, of :func:`te_key_frames`)
+    and, only with any of those, the canvas size. ``ref_ids``: one identity per
+    reference in that order (None for an audio)."""
+    parts = tuple(
+        (str(r.kind), int(r.slot)) if str(r.kind) == "audio" else (str(r.kind), int(r.slot), ident)
+        for r, ident in zip(ordered_references(req.references), ref_ids)
+    )
+    size = (int(req.width), int(req.height)) if frame_ids else None
+    return ("positive", str(req.prompt), parts, tuple(frame_ids), size)
+
+
+def te_negative_key(negative_prompt: str) -> tuple:
+    """The negative conditioning key: the text as given (no tail)."""
+    return (("negative", str(negative_prompt)), ())
+
+
+def te_positive_key(req, media: list[dict], frame_ids) -> tuple | None:
+    """The positive conditioning key of a job whose references are read
+    (``H3Pipeline._read_references`` with ``keep_text_conditioning``, so each
+    picture / video item has ``te_identity``) and whose key frames were stat'ed
+    (``frame_ids``). The tail: each picture's resized ``(w, h)`` and each video's
+    used frames. None when any identity is missing (the job is not cached)."""
+    if frame_ids is None:
+        return None
+    ids, tail = [], []
+    for item in media:
+        if item["kind"] == "audio":
+            ids.append(None)
+            continue
+        ident = item.get("te_identity")
+        if ident is None:
+            return None
+        ids.append(ident)
+        info = item["info"]
+        tail.append(tuple(int(v) for v in info["size"]) if item["kind"] == "picture" else int(info["used_frames"]))
+    return (te_positive_head(req, ids, frame_ids), tuple(tail))
+
+
+def text_conditioning_heads(requests, on: bool) -> set:
+    """What a job hands to the conditioning's ``begin``: the positive head of
+    every request (a chain: all its clips) whose files can be stat'ed, and the
+    negative key's head of each with a negative prompt; empty when ``on`` is false."""
+    out: set = set()
+    if not on:
+        return out
+    for req in requests:
+        frame_ids = te_frame_identities(te_key_frames(req))
+        try:
+            ref_ids = [None if str(r.kind) == "audio" else RC.media_identity(str(r.kind), r.path)
+                       for r in ordered_references(req.references)]
+        except OSError:
+            ref_ids = None
+        if frame_ids is not None and ref_ids is not None:
+            out.add(te_positive_head(req, ref_ids, frame_ids))
+        if str(req.negative_prompt).strip():
+            out.add(te_negative_key(req.negative_prompt)[0])
+    return out
+
+
+def tensor_sha256(t: torch.Tensor) -> str:
+    """SHA-256 of a tensor's own bytes, without a copy: a CPU contiguous tensor is
+    viewed as the integer type of its element size (bf16 -> int16) and hashed in
+    place. Anything else is made CPU contiguous first, so its bytes are never misread."""
+    t = t.detach()
+    if t.device.type != "cpu" or not t.is_contiguous():
+        t = t.cpu().contiguous()
+    as_int = {1: torch.uint8, 2: torch.int16, 4: torch.int32, 8: torch.int64}[t.element_size()]
+    return hashlib.sha256(t.view(as_int).numpy()).hexdigest()
+
+
 @dataclass
 class H3GenerateRequest:
     prompt: str
@@ -345,6 +458,9 @@ class H3GenerateRequest:
     #: Keep the references' encoded latents for the next job (engine_h3.ref_latent_cache,
     #: 台帳 §1-297); off = nothing is kept and the job's record is unchanged.
     keep_reference_latents: bool = False
+    #: Keep the text encoder's conditioning (positive and negative apart) for the next
+    #: job (台帳 §1-298); off = the encode and the record as before.
+    keep_text_conditioning: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -872,6 +988,9 @@ class H3Pipeline:
         #: The references' encoded latents (``keep_reference_latents``, 台帳 §1-297): apart
         #: from ``_resident``, so ``release_resident()`` / ``close()`` never touch them.
         self._ref_latents = RC.RefLatentCache()
+        #: The text encoder's conditioning (``keep_text_conditioning``, 台帳 §1-298), apart
+        #: from both of the above: ``(hidden, tags, counts)`` / ``(negative hidden, counts)``.
+        self._te_conditioning = RC.RefLatentCache()
         self.quant_backends: dict = {}
         self.build_report: dict = {}
         #: The fp8 path chosen at load from the GPU generation ("scaled" / "dequant";
@@ -1011,6 +1130,9 @@ class H3Pipeline:
             validate_request(req, dit_path=self.paths.transformer)
             # The reference latents kept from earlier jobs: only this job's files stay.
             self._ref_latents.begin(reference_identities([req], bool(req.keep_reference_latents)))
+            # The conditioning kept from earlier jobs (台帳 §1-298): only this job's inputs stay.
+            keep_te = bool(req.keep_text_conditioning)
+            self._te_conditioning.begin(text_conditioning_heads([req], keep_te))
             # Sol-H3-VAE: decided once here (None for every other job).
             sol = sol_start(req, self.device)
             # Ascending frame order (stable): the condition rows and the vision
@@ -1020,6 +1142,10 @@ class H3Pipeline:
             cond_frame_idx = [int(img.frame_idx) for img in images]
             canvases: list = []
             source_size: list[list[int]] = []
+            # The key frames the text encoder reads (none with references); for the
+            # conditioning's key their files are stat'ed before they are read.
+            te_frames = {int(img.frame_idx) for img in te_key_frames(req)}
+            frame_ids = te_frame_identities(te_key_frames(req)) if keep_te else None
             if images:
                 from engine_h3.image_cond import load_canvas_image  # noqa: PLC0415
 
@@ -1029,15 +1155,13 @@ class H3Pipeline:
                     source_size.append([int(size[0]), int(size[1])])
             # Only the first and the last frame go to the vision tower; a middle
             # key frame gets condition rows only (MINIMAX_H3_DESIGN 裁定 59, §3).
-            last = int(req.num_frames) - 1
-            vision_images = [c for n, c in zip(cond_frame_idx, canvases) if n in (0, last)]
+            # With any reference the key frames go to the DiT only (condition
+            # rows), never to the vision tower (ComfyUI's AddGuide): te_key_frames.
+            vision_images = [c for n, c in zip(cond_frame_idx, canvases) if n in te_frames]
             # Ref2VA: the reference media are read here, before the text
             # encoder, in the engine's one order (pictures, videos, audios; each
-            # by slot). With any reference the key frames go to the DiT only
-            # (condition rows), never to the vision tower (ComfyUI's AddGuide).
+            # by slot).
             ref_media = self._read_references(req)
-            if ref_media:
-                vision_images = []
             # A2V: the source waveform is read here, still before the text
             # encoder, so a short or unreadable file costs no model read.
             source = req.source_audio
@@ -1141,11 +1265,16 @@ class H3Pipeline:
             negative_hidden = None
             # Only a VSF job passes the key: every other job's call is the same as before.
             neg_kw = {"negative_prompt": req.negative_prompt} if has_neg else {}
+            # Only a keep_text_conditioning job passes the keys (台帳 §1-298), the same way.
+            te_kw = {"te_keys": (
+                te_positive_key(req, ref_media, frame_ids),
+                te_negative_key(req.negative_prompt) if has_neg else None,
+            )} if keep_te else {}
             with torch.no_grad():
                 with phases.phase("encode") as entry:
                     encoded = self._encode(
                         req.prompt, phases, images=vision_images, has_cond=has_cond,
-                        has_audio=encode_audio, refs=self._te_references(ref_media), **neg_kw,
+                        has_audio=encode_audio, refs=self._te_references(ref_media), **neg_kw, **te_kw,
                     )
                     if has_neg:
                         text_hidden, text_tags, negative_hidden = encoded
@@ -1327,6 +1456,7 @@ class H3Pipeline:
         finally:
             # First, so a raise below cannot skip it.
             self._ref_latents.end(ok)
+            self._te_conditioning.end(ok)
             if not (ok and keep):
                 # No key (the LTX contract: kept only while the key is true), or a
                 # failed job: whatever is kept goes now.
@@ -1393,7 +1523,7 @@ class H3Pipeline:
 
     def _encode(
         self, prompt: str, phases: _Phases, images=(), *, has_cond: bool, has_audio: bool = False,
-        refs=None, negative_prompt: str | None = None,
+        refs=None, negative_prompt: str | None = None, te_keys=None,
     ) -> tuple[torch.Tensor, ...]:
         """The text encoder's one forward (two with a negative prompt).
         ``images``: the canvases the vision tower reads (the first / last key
@@ -1409,13 +1539,21 @@ class H3Pipeline:
         is ``(hidden, tags, negative_hidden)``. Its read report is kept under
         ``te_read_negative``; ``te_read`` stays the positive forward's.
 
+        ``te_keys`` (``keep_text_conditioning``, 台帳 §1-298; only such a job
+        passes it): ``(positive key or None, negative key or None)``. Each side
+        with a key is looked up in the held conditioning first; only a side that
+        misses goes through the text encoder (none missing: the encoder is
+        neither built nor loaded) and is put there as it is handed over. The
+        progress lines are the same either way. A hit side's ``te_read`` /
+        ``te_read_negative`` carries the held numbers only (:data:`TE_COUNT_FIELDS`);
+        the encode record gains ``te_cache`` and ``conditioning_sha256``.
+
         The result is returned on the CPU, so no text encoder tensor stays in a
         GPU segment; the denoise moves it with ``.to(dev)`` when it uses it."""
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
         images = list(images)
         refs = list(refs or ())
-        te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
         # A job with any key frame adds a further step to the same stage: the
         # key frames' VAE encode (also when none of them goes to the vision
         # tower, so a middle-only job never shows 3/3 then 4/4); a Ref2VA job
@@ -1423,36 +1561,77 @@ class H3Pipeline:
         # the source audio's encode.
         has_neg = negative_prompt is not None
         neg_hidden = None
+        pos_key, neg_key = te_keys if te_keys is not None else (None, None)
+        held = None if pos_key is None else self._te_conditioning.get(pos_key)
+        neg_held = None if neg_key is None else self._te_conditioning.get(neg_key)
+        record = phases.data["encode"]
+        run_te = held is None or (has_neg and neg_held is None)
+        if run_te:
+            te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
         total = encode_steps(has_cond=has_cond, has_audio=has_audio, has_refs=bool(refs), has_neg=has_neg)
         self._progress("encode", 0, total)
-        try:
-            info = te.load()
-            phases.data["encode"]["te"] = info
-            phases.mark("encode", "after_load")
+        if run_te:
+            try:
+                info = te.load()
+                record["te"] = info
+                phases.mark("encode", "after_load")
+                self._progress("encode", 1, total)
+                if held is not None:
+                    hidden, tags, counts = held
+                    record["te_read"] = dict(counts)
+                else:
+                    if refs:
+                        hidden, tags = te.encode(prompt, images=images, refs=refs)
+                    else:
+                        hidden, tags = te.encode(prompt, images=images)
+                    hidden, tags = hidden.to("cpu"), tags.to("cpu")
+                    record["te_read"] = te.read_report
+                    if pos_key is not None:
+                        self._te_conditioning.put(pos_key, (hidden, tags, _te_counts(te.read_report)))
+                self._progress("encode", 2, total)
+                if has_neg:
+                    if neg_held is not None:
+                        neg_hidden, counts = neg_held
+                        record["te_read_negative"] = dict(counts)
+                    else:
+                        neg_hidden, _ = te.encode(negative_prompt)
+                        neg_hidden = neg_hidden.to("cpu")
+                        record["te_read_negative"] = te.read_report
+                        if neg_key is not None:
+                            self._te_conditioning.put(neg_key, (neg_hidden, _te_counts(te.read_report)))
+                    self._progress("encode", 3, total)
+            finally:
+                te.release()
+                del te
+                _free_cuda()
+            phases.mark("encode", "after_release")
+        else:
+            # Every side held: no text encoder at all; the same progress lines.
+            hidden, tags, counts = held
+            record["te_read"] = dict(counts)
             self._progress("encode", 1, total)
-            if refs:
-                hidden, tags = te.encode(prompt, images=images, refs=refs)
-            else:
-                hidden, tags = te.encode(prompt, images=images)
-            hidden, tags = hidden.to("cpu"), tags.to("cpu")
-            phases.data["encode"]["te_read"] = te.read_report
             self._progress("encode", 2, total)
             if has_neg:
-                neg_hidden, _ = te.encode(negative_prompt)
-                neg_hidden = neg_hidden.to("cpu")
-                phases.data["encode"]["te_read_negative"] = te.read_report
+                neg_hidden, counts = neg_held
+                record["te_read_negative"] = dict(counts)
                 self._progress("encode", 3, total)
-        finally:
-            te.release()
-            del te
-            _free_cuda()
-        phases.mark("encode", "after_release")
+        if te_keys is not None:
+            # A side without a key was never looked up: no entry for it (as latent_cache).
+            record["te_cache"] = {}
+            if pos_key is not None:
+                record["te_cache"]["positive"] = "miss" if held is None else "hit"
+            record["conditioning_sha256"] = {"positive": tensor_sha256(hidden), "tags": tensor_sha256(tags)}
+            if has_neg:
+                if neg_key is not None:
+                    record["te_cache"]["negative"] = "miss" if neg_held is None else "hit"
+                record["conditioning_sha256"]["negative"] = tensor_sha256(neg_hidden)
         self._progress("encode", 3 + int(has_neg), total)
         self._log(
             f"encode: {hidden.shape[0]} text tokens"
             + (f" (with {len(images)} key frame vision block(s))" if images else "")
             + (f" (with {len(refs)} reference(s))" if refs else "")
             + (f" (negative prompt: {neg_hidden.shape[0]} tokens)" if has_neg else "")
+            + (f" (conditioning cache: {record['te_cache']})" if te_keys is not None else "")
         )
         if has_neg:
             return hidden, tags, neg_hidden
@@ -1515,6 +1694,11 @@ class H3Pipeline:
         then held under its old identity), the extent is what was read (a
         picture's resized ``(w, h)``, a video's used frames, an audio's
         samples). A file that cannot be stat'ed gets no key.
+
+        ``keep_text_conditioning`` (台帳 §1-298): each picture / video item also
+        gets ``te_identity``, its identity stat'ed at the same point (None when
+        it cannot be); apart from ``key``, whose rule is unchanged
+        (``te_positive_key`` builds the conditioning's key from it).
         """
         refs = ordered_references(req.references)
         if not refs:
@@ -1527,16 +1711,20 @@ class H3Pipeline:
         )
 
         keep_latents = bool(req.keep_reference_latents)
+        keep_te = bool(req.keep_text_conditioning)
         media: list[dict] = []
         for ref in refs:
             kind, slot = str(ref.kind), int(ref.slot)
             item: dict = {"kind": kind, "slot": slot}
             identity = None
-            if keep_latents:
+            te_wants = keep_te and kind != "audio"   # an audio's card is all the text encoder reads
+            if keep_latents or te_wants:
                 try:
                     identity = RC.media_identity(kind, ref.path)
                 except OSError:
                     identity = None
+            if te_wants:
+                item["te_identity"] = identity
             if kind == "picture":
                 item["image"], item["info"] = load_reference_image(ref.path, int(req.width), int(req.height))
             elif kind == "video":
@@ -1555,7 +1743,7 @@ class H3Pipeline:
                         f"{AUDIO_HOP} サンプル（0.025 秒）以上が必要です）: {ref.path}"
                     )
                 item["wave"], item["info"] = wave, info
-            if identity is not None:
+            if keep_latents and identity is not None:
                 if kind == "picture":
                     extent = tuple(int(v) for v in item["info"]["size"])
                 elif kind == "video":

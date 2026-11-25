@@ -285,7 +285,8 @@ def test_refused_before_any_stage(monkeypatch, frames, kw, match):
 # --------------------------------------------------------------------------- #
 
 def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), samples=2000, seen=None, decoded=None,
-                   negative_prompt="", keep_reference_latents=False, shared_files=False, pipe=None, fail_clip=None):
+                   negative_prompt="", keep_reference_latents=False, shared_files=False, pipe=None, fail_clip=None,
+                   keep_text_conditioning=False, prompts=None, clip0_images=(), video_frames=None):
     """``run_chain_h3`` through the REAL ``_encode`` / ``_read_references`` /
     ``_te_references`` / ``_encode_references`` with a stand-in text encoder,
     video encoder, audio encoder and loader (``samples`` long) and video reader
@@ -299,7 +300,11 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     (the same upload on each card). ``pipe``: a pipeline of an earlier call, to
     run a second job on (its stand-ins stay). ``fail_clip``: the clip whose
     denoise raises. ``builds`` also counts ``video_encodes`` / ``audio_encodes``
-    and holds the pipeline (``pipe``). Returns
+    and holds the pipeline (``pipe``). ``keep_text_conditioning``: the base's
+    (台帳 §1-298). ``prompts``: the clips' prompts (None = ``clip i``).
+    ``clip0_images``: clip 0's key frames, ``(frame_idx, path)``. ``video_frames``:
+    None = the reader's fixed 22 frames; a number = a reference video that long,
+    cut as the real reader cuts it (``min(length, num_frames)`` down to 17k + 5). Returns
     ``(done, te_calls, encode progress, denoise kwargs per clip, builds)``."""
     import numpy as np
     from PIL import Image
@@ -350,8 +355,12 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
         return FakeVideoEncoder()
 
     def read_video(path, *, num_frames, max_sec=None):
-        info = {"source_size": [64, 32], "size": [64, 32], "source_fps": 24.0, "source_frames": 24, "used_frames": 22}
-        return np.zeros((22, 32, 64, 3), np.uint8), info
+        source, n = 24, 22
+        if video_frames is not None:
+            source = min(int(video_frames), int(num_frames))
+            n = RM.video_frame_count(source)
+        info = {"source_size": [64, 32], "size": [64, 32], "source_fps": 24.0, "source_frames": source, "used_frames": n}
+        return np.zeros((n, 32, 64, 3), np.uint8), info
 
     monkeypatch.setattr(TE, "H3TextEncoder", FakeTE)
     monkeypatch.setattr(VV.H3VideoEncoder, "from_file", classmethod(build_video))
@@ -393,9 +402,12 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
                 else:
                     path.write_bytes(b"x")
             inputs.append(P.H3ReferenceInput(kind, str(path), slot, max_sec))
-        clips.append(CH.H3ChainClipSpec(f"clip {i}", n, references=tuple(inputs)))
+        images = tuple(P.H3ImageInput(str(p), f) for f, p in clip0_images) if i == 0 else ()
+        clips.append(CH.H3ChainClipSpec(f"clip {i}" if prompts is None else prompts[i], n,
+                                        references=tuple(inputs), images=images))
     base = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=frames[0], output_path="o.mp4",
-                               negative_prompt=negative_prompt, keep_reference_latents=keep_reference_latents)
+                               negative_prompt=negative_prompt, keep_reference_latents=keep_reference_latents,
+                               keep_text_conditioning=keep_text_conditioning)
     done = CH.run_chain_h3(pipe, CH.H3ChainSpec(base=base, clips=tuple(clips), seed=1),
                            lambda stage, i, total, **kw: progress.append((stage, i, total, kw)), lambda m: None)
     return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds

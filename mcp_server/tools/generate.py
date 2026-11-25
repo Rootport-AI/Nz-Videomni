@@ -874,8 +874,8 @@ async def submit_generate(
     # default is False).
     if keep_reference_latents:
         payload["keep_reference_latents"] = True
-    # keep_text_conditioning (MiniMax H3): sent only when True (the server's
-    # default is False). No pre-check here: LTX's 422 is the server's.
+    # keep_text_conditioning (all three base models): sent only when True (the
+    # server's default is False).
     if keep_text_conditioning:
         payload["keep_text_conditioning"] = True
 

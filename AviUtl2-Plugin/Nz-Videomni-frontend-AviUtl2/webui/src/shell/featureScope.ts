@@ -495,7 +495,7 @@ export interface SettingsRowsHidden {
   /** MiniMax H3's "Keep reference latents resident" row and its ON-only note
    * (`keep_reference_latents`). */
   keepReferenceLatents: boolean;
-  /** MiniMax H3's "Text encoder conditioning cache" row and its ON-only note
+  /** The "Text encoder conditioning cache" row and its ON-only note
    * (`keep_text_conditioning`). */
   keepTextConditioning: boolean;
   /** The Fused GGUF Dequantization Kernel row and its ON-only note

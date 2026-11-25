@@ -887,7 +887,7 @@ describe("AppShell — base-model feature scope", () => {
   });
 
   // The hiding mechanism, kept for an older server that still names the
-  // feature on LTX (台帳 §1-299 does not touch `featureScope.ts`).
+  // feature on LTX.
   it("an older server that names keep_text_conditioning on LTX 2.5: the row and its note are hidden there", async () => {
     window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: true }));
     const { select } = await renderApp(AS_LTX25, ["keep_text_conditioning"]);

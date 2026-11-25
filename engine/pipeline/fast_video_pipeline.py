@@ -2467,8 +2467,8 @@ class LTXFastVideoPipeline:
         armed here at the outermost entry point where its ``finally`` reset also
         lives, ``keep_resident`` deliberately has no reset — surviving the job
         is what the CPU-skeleton cache is for — and ``vae_mode`` needs none
-        because every job sets it afresh, and so is ``keep_text_conditioning``
-        (台帳 §1-299).
+        because every job sets it afresh. ``keep_text_conditioning`` (台帳 §1-299)
+        is begun here and ended in the finally, like ``generate_outpaint``'s.
         """
         from engine.pipeline.inpaint_pipeline import run_inpaint
 

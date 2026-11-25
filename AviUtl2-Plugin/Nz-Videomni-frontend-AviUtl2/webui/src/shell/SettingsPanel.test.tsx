@@ -127,8 +127,8 @@ function Harness({
       // covered in `AppShell.featureScope.test.tsx`.
       keepReferenceLatentsUnsupported={false}
       onKeepTextConditioningChange={accelerationControls.setKeepTextConditioning}
-      // 台帳 §1-298: hidden on an engine that publishes `keep_text_conditioning`
-      // (LTX 2.3 / 2.5); the hiding is covered in `AppShell.featureScope.test.tsx`.
+      // 台帳 §1-298 / §1-299: hidden only where a server publishes `keep_text_conditioning`
+      // (an older server, on LTX); covered in `AppShell.featureScope.test.tsx`.
       keepTextConditioningUnsupported={false}
       onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
       // §3-166: the base-model dropdown is fed by `AppShell` in production;

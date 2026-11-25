@@ -701,7 +701,7 @@ export interface AccelerationRequestFields {
    * `/generate/chain` (MiniMax H3 only). Never sent as `false`. */
   keep_reference_latents?: boolean;
   /** 台帳 §1-298: text encoder conditioning cache — `/generate` and
-   * `/generate/chain` (MiniMax H3, LTX 2.3, LTX 2.5), and `/alpha-gen`.
+   * `/generate/chain` (MiniMax H3, LTX 2.3, LTX 2.5), and `/generate/alpha`.
    * Never sent as `false`. */
   keep_text_conditioning?: boolean;
 }

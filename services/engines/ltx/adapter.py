@@ -774,8 +774,8 @@ class GenerationOutcome:
     # (``te_cache`` hit/miss per prompt, ``conditioning_sha256``) — relayed
     # verbatim from the ``done`` event's top level (a chain carries it inside
     # ``chain_metadata["ltx23"]`` instead) into metadata.json as
-    # ``metadata["ltx23"]``. None for every other job, and then metadata.json
-    # carries no ``ltx23`` key at all.
+    # ``metadata["ltx23"]``. None for every other job; a chain's record
+    # still reaches metadata.json's top level, from ``chain_metadata``.
     ltx23: dict | None = None
 
 

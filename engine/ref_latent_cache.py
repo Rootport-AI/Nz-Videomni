@@ -1,7 +1,7 @@
 """A generic cache of encoded values kept in main memory between jobs (台帳 §1-297).
 
 torch-free: the values are held as they are given (never copied, never looked
-into), and the keys are not looked into either. Each owner holds its own
+into), and a key is read only for its first element, the head ``begin`` matches. Each owner holds its own
 instance, apart from what ``keep_resident`` keeps: ``release_resident()``
 never touches it. The owners:
 
@@ -12,14 +12,15 @@ never touches it. The owners:
 * LTX 2.5: the text encoder's conditioning (``Ltx25Pipeline._te_conditioning``;
   keyed by the whole sequence of strings handed to the encoding).
 
-Identity of a file (:func:`media_identity`): ``(kind, str(path), st_size,
-st_mtime_ns)``. A key is ``(identity, extent)``: the identity plus what was
-actually encoded (a picture's resized ``(w, h)``, a video's used frame count,
-an audio's sample count), so one file read to two extents is held twice.
+A key is ``(head, tail)``; ``begin`` keeps the keys whose head it is given.
+For the references, the head is a file's identity (:func:`media_identity`:
+``(kind, str(path), st_size, st_mtime_ns)``) and the tail what was actually
+encoded (a picture's resized ``(w, h)``, a video's used frame count, an
+audio's sample count), so one file read to two extents is held twice.
 
 One job, four calls (:class:`RefLatentCache`):
 
-* ``begin(identities)``: every key whose identity is not in ``identities`` is
+* ``begin(identities)``: every key whose head is not in ``identities`` is
   dropped (a job that keeps nothing passes an empty set: all go); the job's
   notes ("used" / "put") are cleared.
 * ``get(key)``: the held value or None; a hit is noted as used.

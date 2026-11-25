@@ -197,7 +197,7 @@ const KEEP_REFERENCE_LATENTS_NOTE_EN =
 
 const KEEP_TEXT_CONDITIONING_LABEL = "Text encoder conditioning cache";
 const KEEP_TEXT_CONDITIONING_NOTE_EN =
-  "Skips the text encoder when the prompt and media are the same as last time. Uses main memory (LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained). On LTX 2.5, changing any one prompt re-encodes them all.";
+  "Caches the conditioning the text encoder outputs and reuses it to speed up generation. 64GB or more of memory recommended (because the cache is kept in main memory. LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained)";
 
 describe("SettingsPanel", () => {
   beforeEach(() => {
@@ -897,7 +897,7 @@ describe("SettingsPanel", () => {
     expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByText(
-        "プロンプトと素材が前回と同じとき、テキストエンコーダーの処理を省きます。メインメモリを使います（LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）。LTX 2.5 は、プロンプトのどれか 1 つでも変わると全部作り直します。",
+        "テキストエンコーダーの出力する条件付けをキャッシュして使い回すことで、生成を高速化します。メモリ64GB以上推奨（※キャッシュをメインメモリに置くため。LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）",
       ),
     ).toBeInTheDocument();
   });

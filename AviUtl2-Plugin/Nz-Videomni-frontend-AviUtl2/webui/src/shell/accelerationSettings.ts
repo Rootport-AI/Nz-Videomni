@@ -338,8 +338,10 @@ export const SOL_VAE_SERVER_DEFAULT = false;
 export const KEEP_REFERENCE_LATENTS_SERVER_DEFAULT = false;
 /** Server default for `keep_text_conditioning` as of 台帳 §1-298: `false`. Same
  * direction as `keep_reference_latents`: the key rides along only while the
- * user turns it ON. On LTX the row is hidden and the stored value is reset to
- * this default. */
+ * user turns it ON. MiniMax H3, LTX 2.3 and LTX 2.5 all take it (台帳 §1-299),
+ * so the row is shown on LTX too; only a server that still refuses it there
+ * publishes the name in `unsupported_features`, and then the row is hidden and
+ * the stored value is reset to this default. */
 export const KEEP_TEXT_CONDITIONING_SERVER_DEFAULT = false;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE

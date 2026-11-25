@@ -825,7 +825,7 @@ describe("AppShell — base-model feature scope", () => {
   }
 
   function keepTextConditioningNote() {
-    return screen.queryByText(/^Skips the text encoder when the prompt and media are the same as last time\./);
+    return screen.queryByText(/^Caches the conditioning the text encoder outputs and reuses it to speed up generation\./);
   }
 
   it("shows the Text encoder conditioning cache row on LTX 2.3, LTX 2.5 and MiniMax H3, and a stored ON survives", async () => {

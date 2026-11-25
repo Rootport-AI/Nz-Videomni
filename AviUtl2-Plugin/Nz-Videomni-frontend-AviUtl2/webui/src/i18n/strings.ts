@@ -2637,9 +2637,9 @@ export const en = {
     accelKeepTextConditioningLabel: "Text encoder conditioning cache",
     accelKeepTextConditioningOn: "ON",
     accelKeepTextConditioningOff: "OFF",
-    /** Shown under the row while it is on: the main-memory cost. */
+    /** Shown under the row while it is on: what the row does and its main-memory cost. */
     accelKeepTextConditioningNote:
-      "Skips the text encoder when the prompt and media are the same as last time. Uses main memory (LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained). On LTX 2.5, changing any one prompt re-encodes them all.",
+      "Caches the conditioning the text encoder outputs and reuses it to speed up generation. 64GB or more of memory recommended (because the cache is kept in main memory. LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained)",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -4200,7 +4200,7 @@ export const ja: Strings = {
     accelKeepTextConditioningOn: "ON",
     accelKeepTextConditioningOff: "OFF",
     accelKeepTextConditioningNote:
-      "プロンプトと素材が前回と同じとき、テキストエンコーダーの処理を省きます。メインメモリを使います（LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）。LTX 2.5 は、プロンプトのどれか 1 つでも変わると全部作り直します。",
+      "テキストエンコーダーの出力する条件付けをキャッシュして使い回すことで、生成を高速化します。メモリ64GB以上推奨（※キャッシュをメインメモリに置くため。LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

@@ -186,9 +186,10 @@ interface FeatureUiEntry {
  *    `resets`, scoped like `vram16_mode` (MiniMax H3 only, so LTX 2.3 / 2.5
  *    publish the name). Its default is OFF, so the write-back lands on
  *    `false` — which is what an LTX request then omits.
- *  - **keep_text_conditioning** (台帳 §1-298) is the same, a Settings row with
- *    a `resets`, scoped like `keep_reference_latents` (MiniMax H3 only, so LTX
- *    2.3 / 2.5 publish the name).
+ *  - **keep_text_conditioning** (台帳 §1-298 / §1-299) is a Settings row with
+ *    a `resets` too, but MiniMax H3, LTX 2.3 and LTX 2.5 all take it, so
+ *    today's server publishes the name for none of them and the row always
+ *    shows. The entry stays for an older server that still refuses it on LTX.
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses

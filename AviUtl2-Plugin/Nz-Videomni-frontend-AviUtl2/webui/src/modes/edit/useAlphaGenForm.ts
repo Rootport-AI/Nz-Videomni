@@ -360,7 +360,7 @@ export function useAlphaGenForm(deps: UseAlphaGenFormDeps = {}): UseAlphaGenForm
       current.onAdjusted?.();
     }
 
-    // 6. The body. Only the five pass-through acceleration keys the endpoint
+    // 6. The body. Only the six pass-through acceleration keys the endpoint
     // takes (`AlphaGenRequest`) — `vae_mode` / `embed_mp4_metadata` are not
     // among them — and no `frame_rate`: the server measures the source's own.
     const fields = accelerationRequestFields(current.acceleration);
@@ -378,6 +378,9 @@ export function useAlphaGenForm(deps: UseAlphaGenFormDeps = {}): UseAlphaGenForm
         : {}),
       ...(fields.fused_gguf_dequant_kernel !== undefined
         ? { fused_gguf_dequant_kernel: fields.fused_gguf_dequant_kernel }
+        : {}),
+      ...(fields.keep_text_conditioning !== undefined
+        ? { keep_text_conditioning: fields.keep_text_conditioning }
         : {}),
     };
   }, [uploadPath]);

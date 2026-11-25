@@ -128,8 +128,8 @@ export interface SettingsPanelProps {
    * {@link vram16Unsupported}; it is LTX 2.3 / 2.5 that publish the name and
    * hide this row (and its note). */
   keepReferenceLatentsUnsupported: boolean;
-  /** Acceleration (台帳 §1-298): "Text encoder conditioning cache" (MiniMax H3
-   * only). INDEPENDENT of every other row, the reference-latents row included. */
+  /** Acceleration (台帳 §1-298): "Text encoder conditioning cache" (MiniMax H3,
+   * LTX 2.3, LTX 2.5; §1-299). INDEPENDENT of every other row, the reference-latents row included. */
   onKeepTextConditioningChange: (value: boolean) => void;
   /** Whether the LOADED base model's engine refuses `keep_text_conditioning` —
    * derived by `AppShell` from `GET /models`' `unsupported_features`, never
@@ -762,11 +762,12 @@ export function SettingsPanel({
           </>
         )}
 
-        {/* Text encoder conditioning cache (台帳 §1-298) — MiniMax H3 only. Same
-            shape as the reference-latents row above: two buttons, default OFF,
-            note shown only while ON, hidden outright (row and note) on an
-            engine whose `unsupported_features` name `keep_text_conditioning`
-            (LTX 2.3 / 2.5). */}
+        {/* Text encoder conditioning cache (台帳 §1-298 / §1-299) — MiniMax H3,
+            LTX 2.3 and LTX 2.5. Same shape as the reference-latents row above:
+            two buttons, default OFF, note shown only while ON, hidden outright
+            (row and note) only on an engine whose `unsupported_features` name
+            `keep_text_conditioning` (an older server that still refuses it on
+            LTX). */}
         {!keepTextConditioningUnsupported && (
           <>
             <div className="field">

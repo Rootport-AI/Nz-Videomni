@@ -2630,15 +2630,16 @@ export const en = {
      * reader needs at that moment; not an output warning. */
     accelKeepReferenceLatentsNote:
       "64GB or more of main memory recommended. Keeps the encoded reference pictures, videos and audio in main memory, so the next generation with the same references and the following clips of a Chained job skip their encoding. The output does not change.",
-    /** Acceleration (台帳 §1-298): "Text encoder conditioning cache" — MiniMax H3
-     * only; hidden where `keep_text_conditioning` is in `unsupported_features`
-     * (LTX 2.3 / 2.5), so the label names its engine like the row above. */
-    accelKeepTextConditioningLabel: "Text encoder conditioning cache (MiniMax H3)",
+    /** Acceleration (台帳 §1-298 / §1-299): "Text encoder conditioning cache" —
+     * MiniMax H3, LTX 2.3 and LTX 2.5 all take it, so the label names no engine.
+     * Still hidden where an older server publishes `keep_text_conditioning` in
+     * `unsupported_features`. */
+    accelKeepTextConditioningLabel: "Text encoder conditioning cache",
     accelKeepTextConditioningOn: "ON",
     accelKeepTextConditioningOff: "OFF",
     /** Shown under the row while it is on: the main-memory cost. */
     accelKeepTextConditioningNote:
-      "Skips the text encoder when the prompt and media are the same as last time. Uses main memory (under 1 MB per entry for a prompt alone; several hundred MB per entry with many references, held per clip in Chained).",
+      "Skips the text encoder when the prompt and media are the same as last time. Uses main memory (LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained). On LTX 2.5, changing any one prompt re-encodes them all.",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -4195,11 +4196,11 @@ export const ja: Strings = {
     accelKeepReferenceLatentsOff: "OFF",
     accelKeepReferenceLatentsNote:
       "メインメモリ64GB以上を推奨。参照画像・参照動画・参照音声を符号化した結果をメインメモリに保持し、同じ参照素材を使う次の生成と、Chainedの後続クリップで符号化を省きます。生成結果は変わりません。",
-    accelKeepTextConditioningLabel: "テキストエンコーダーの条件付けのキャッシュ（MiniMax H3）",
+    accelKeepTextConditioningLabel: "テキストエンコーダーの条件付けのキャッシュ",
     accelKeepTextConditioningOn: "ON",
     accelKeepTextConditioningOff: "OFF",
     accelKeepTextConditioningNote:
-      "プロンプトと素材が前回と同じとき、テキストエンコーダーの処理を省きます。メインメモリを使います（プロンプトだけなら 1 件 1MB 未満。参照素材が多いと 1 件で数百 MB で、Chained ではクリップごとに持ちます）。",
+      "プロンプトと素材が前回と同じとき、テキストエンコーダーの処理を省きます。メインメモリを使います（LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）。LTX 2.5 は、プロンプトのどれか 1 つでも変わると全部作り直します。",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

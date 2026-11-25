@@ -195,9 +195,9 @@ const KEEP_REFERENCE_LATENTS_LABEL = "Keep reference latents resident (MiniMax H
 const KEEP_REFERENCE_LATENTS_NOTE_EN =
   "64GB or more of main memory recommended. Keeps the encoded reference pictures, videos and audio in main memory, so the next generation with the same references and the following clips of a Chained job skip their encoding. The output does not change.";
 
-const KEEP_TEXT_CONDITIONING_LABEL = "Text encoder conditioning cache (MiniMax H3)";
+const KEEP_TEXT_CONDITIONING_LABEL = "Text encoder conditioning cache";
 const KEEP_TEXT_CONDITIONING_NOTE_EN =
-  "Skips the text encoder when the prompt and media are the same as last time. Uses main memory (under 1 MB per entry for a prompt alone; several hundred MB per entry with many references, held per clip in Chained).";
+  "Skips the text encoder when the prompt and media are the same as last time. Uses main memory (LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained). On LTX 2.5, changing any one prompt re-encodes them all.";
 
 describe("SettingsPanel", () => {
   beforeEach(() => {
@@ -854,7 +854,7 @@ describe("SettingsPanel", () => {
     ).toBeInTheDocument();
   });
 
-  // 台帳 §1-298: "Text encoder conditioning cache (MiniMax H3)". Default OFF,
+  // 台帳 §1-298: "Text encoder conditioning cache". Default OFF,
   // note only while ON, no gate, ON persists.
   it("Text encoder conditioning cache defaults to OFF without its note; selecting ON shows the note and persists", async () => {
     const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
@@ -893,11 +893,11 @@ describe("SettingsPanel", () => {
     renderPanel(bridge);
 
     await screen.findByDisplayValue("http://127.0.0.1:18620");
-    const row = within(screen.getByRole("group", { name: "テキストエンコーダーの条件付けのキャッシュ（MiniMax H3）" }));
+    const row = within(screen.getByRole("group", { name: "テキストエンコーダーの条件付けのキャッシュ" }));
     expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
     expect(
       screen.getByText(
-        "プロンプトと素材が前回と同じとき、テキストエンコーダーの処理を省きます。メインメモリを使います（プロンプトだけなら 1 件 1MB 未満。参照素材が多いと 1 件で数百 MB で、Chained ではクリップごとに持ちます）。",
+        "プロンプトと素材が前回と同じとき、テキストエンコーダーの処理を省きます。メインメモリを使います（LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）。LTX 2.5 は、プロンプトのどれか 1 つでも変わると全部作り直します。",
       ),
     ).toBeInTheDocument();
   });

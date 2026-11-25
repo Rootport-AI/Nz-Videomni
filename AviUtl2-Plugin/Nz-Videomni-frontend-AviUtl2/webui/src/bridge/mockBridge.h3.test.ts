@@ -561,24 +561,29 @@ describe("mockBridge — MiniMax H3", () => {
   });
 
   // 台帳 §1-298: keep the text encoder's conditioning cached.
-  it("publishes `keep_text_conditioning` in both LTX engines' unsupported_features, not MiniMax H3's", async () => {
+  it("does NOT publish `keep_text_conditioning` in any engine's unsupported_features (台帳 §1-299)", async () => {
     const blocks = await listModels(createMockBridge({ delayMs: 0 }));
-    expect(blocksFeature(blocks, "MiniMaxH3")).not.toContain("keep_text_conditioning");
-    for (const id of ["LTX23", "LTX25"]) expect(blocksFeature(blocks, id)).toContain("keep_text_conditioning");
+    for (const id of ["MiniMaxH3", "LTX23", "LTX25"]) expect(blocksFeature(blocks, id)).not.toContain("keep_text_conditioning");
   });
 
-  it("refuses keep_text_conditioning: true on LTX (single and chain) with 422 FEATURE_UNSUPPORTED; false passes", async () => {
+  it("accepts keep_text_conditioning: true on LTX (single and chain)", async () => {
     for (const id of ["LTX23", "LTX25"]) {
-      const bridge = createMockBridge({ delayMs: 0 });
-      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
-      const single = await generate(bridge, { ...BODY, num_frames: 121, width: 1280, height: 704, keep_text_conditioning: true });
-      expect(single.status).toBe(422);
-      expect((single.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
-      const chained = await chain(bridge, { keep_text_conditioning: true }, [{ num_frames: 121 }]);
-      expect(chained.status).toBe(422);
-      expect((chained.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
-      const offChain = await chain(bridge, { keep_text_conditioning: false }, [{ num_frames: 121 }]);
-      expect(offChain.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+      const single = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(single, id)).status).toBe(200);
+      expect(
+        (await generate(single, { ...BODY, num_frames: 121, width: 1280, height: 704, keep_text_conditioning: true })).status,
+      ).toBe(202);
+      // The chain may still 422 on this fixture's own clip rules; what matters
+      // is that the key is not what it refuses, and that it changes nothing.
+      const loaded = async () => {
+        const b = createMockBridge({ delayMs: 0 });
+        if (id !== "LTX23") expect((await load(b, id)).status).toBe(200);
+        return b;
+      };
+      const withKey = await chain(await loaded(), { keep_text_conditioning: true }, [{ num_frames: 121 }]);
+      const withoutKey = await chain(await loaded(), {}, [{ num_frames: 121 }]);
+      expect(withKey.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+      expect(withKey.status).toBe(withoutKey.status);
     }
   });
 

@@ -17,9 +17,10 @@ import { buildI2vGeneratePayload } from "../modes/batch/buildI2vGeneratePayload"
  *   ON  → every body carries `keep_text_conditioning: true`;
  *   OFF (the server default) → no body carries the key at all.
  *
- * The second half is what keeps LTX requests byte-identical: on LTX the row is
- * hidden and the stored choice is written back to OFF (see
- * `AppShell.featureScope.test.tsx`), so an LTX body never mentions the key.
+ * The second half keeps every request byte-identical while the row is OFF.
+ * Since 台帳 §1-299 LTX 2.3 / 2.5 take the key too; only a server that still
+ * refuses it on LTX hides the row and writes the stored choice back to OFF (see
+ * `AppShell.featureScope.test.tsx`).
  */
 describe("keep_text_conditioning reaches the submission paths (§1-298)", () => {
   const ON: AccelerationSettings = { ...ACCELERATION_DEFAULTS, keepTextConditioning: true };

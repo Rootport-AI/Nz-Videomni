@@ -135,14 +135,15 @@
  *    every other row. Scope: LTX 2.3 / 2.5 publish `keep_reference_latents` in
  *    `unsupported_features`, and `AppShell` hides the row and writes a leftover
  *    `true` back to `false`.
- *  - `keepTextConditioning` — REAL (台帳 §1-298). MiniMax H3's text encoder
- *    output (the conditioning) is cached in main memory, so a generation whose
- *    prompt and media are the same as last time skips the text encoder; the
- *    output does not change. Sent as `keep_text_conditioning`; the server
+ *  - `keepTextConditioning` — REAL (台帳 §1-298, widened by §1-299). The text
+ *    encoder output (the conditioning) is cached in main memory, so a generation
+ *    whose prompt and media are the same as last time skips the text encoder;
+ *    the output does not change. Sent as `keep_text_conditioning`; the server
  *    default is `false`, so the key rides along only while it is ON. Independent
- *    of every other row, `keepReferenceLatents` included. Scope: LTX 2.3 / 2.5
- *    publish `keep_text_conditioning` in `unsupported_features`, and `AppShell`
- *    hides the row and writes a leftover `true` back to `false`.
+ *    of every other row, `keepReferenceLatents` included. Scope: MiniMax H3,
+ *    LTX 2.3 and LTX 2.5 all take it. Only a server that still refuses it on
+ *    LTX publishes `keep_text_conditioning` in `unsupported_features`; then
+ *    `AppShell` hides the row and writes a leftover `true` back to `false`.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -236,12 +237,12 @@ export interface AccelerationSettings {
    * `false`. LTX 2.3 / 2.5 publish the name in `unsupported_features`, so the
    * row is hidden there. */
   keepReferenceLatents: boolean;
-  /** REAL (台帳 §1-298): "Text encoder conditioning cache" — MiniMax H3 only.
+  /** REAL (台帳 §1-298): "Text encoder conditioning cache" — MiniMax H3, LTX 2.3, LTX 2.5 (§1-299).
    * Caches the text encoder's conditioning in main memory so a generation with
    * the same prompt and media as last time skips the text encoder; the output
    * does not change. Sent as `keep_text_conditioning` — but only while ON, since
-   * the server defaults to `false`. LTX 2.3 / 2.5 publish the name in
-   * `unsupported_features`, so the row is hidden there. */
+   * the server defaults to `false`. A server that still refuses it on LTX
+   * publishes the name in `unsupported_features`; the row is hidden there. */
   keepTextConditioning: boolean;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
@@ -698,7 +699,8 @@ export interface AccelerationRequestFields {
    * `/generate/chain` (MiniMax H3 only). Never sent as `false`. */
   keep_reference_latents?: boolean;
   /** 台帳 §1-298: text encoder conditioning cache — `/generate` and
-   * `/generate/chain` (MiniMax H3 only). Never sent as `false`. */
+   * `/generate/chain` (MiniMax H3, LTX 2.3, LTX 2.5), and `/alpha-gen`.
+   * Never sent as `false`. */
   keep_text_conditioning?: boolean;
 }
 
@@ -871,8 +873,9 @@ export function accelerationRequestFields(
   }
   // 台帳 §1-298: text encoder conditioning cache. Same direction and same scope
   // half as `keep_reference_latents`: the key only ever appears as `true`, and
-  // `AppShell` hides the row on LTX and writes the stored choice back to
-  // `false`. INDEPENDENT of `keep_reference_latents`.
+  // `AppShell` hides the row and writes the stored choice back to `false` on a
+  // server that still names the feature in `unsupported_features`.
+  // INDEPENDENT of `keep_reference_latents`.
   if (acceleration.keepTextConditioning !== KEEP_TEXT_CONDITIONING_SERVER_DEFAULT) {
     out.keep_text_conditioning = acceleration.keepTextConditioning;
   }

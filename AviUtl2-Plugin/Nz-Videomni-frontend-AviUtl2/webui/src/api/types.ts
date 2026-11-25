@@ -368,13 +368,13 @@ export interface GenerateRequest {
    * {@link GenerateChainRequest}. */
   keep_reference_latents?: boolean;
   /** Acceleration (台帳 §1-298): keep the text encoder's conditioning cached in
-   * main memory — MiniMax H3 only. Skips the text encoder when the prompt and
-   * media are the same as last time; the output does not change. Built
-   * exclusively by `shell/accelerationSettings.ts`'s
+   * main memory — MiniMax H3, LTX 2.3 and LTX 2.5 (§1-299). Skips the text
+   * encoder when the prompt and media are the same as last time; the output
+   * does not change. Built exclusively by `shell/accelerationSettings.ts`'s
    * `accelerationRequestFields` and spread in — omitted entirely while the
    * server default (`false`) is selected, so this key only ever appears as
-   * `true`. LTX 2.3 / 2.5 publish `keep_text_conditioning` in
-   * `unsupported_features` and 422 a `true`. Mirrored on
+   * `true`. An older server that still refuses it on LTX publishes
+   * `keep_text_conditioning` in `unsupported_features`. Mirrored on
    * {@link GenerateChainRequest}. */
   keep_text_conditioning?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
@@ -426,6 +426,9 @@ export interface AlphaGenRequestBody {
   keep_resident?: boolean;
   keep_resident_embeddings?: boolean;
   fused_gguf_dequant_kernel?: boolean;
+  /** 台帳 §1-299: the text encoder conditioning cache — same rule as
+   * {@link GenerateRequest.keep_text_conditioning} (only ever sent as `true`). */
+  keep_text_conditioning?: boolean;
 }
 
 /** One clip in a `/generate/chain` request (Docs/API_REFERENCE.md §5.2

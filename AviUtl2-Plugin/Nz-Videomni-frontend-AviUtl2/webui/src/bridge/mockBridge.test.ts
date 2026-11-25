@@ -1021,8 +1021,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       "sol_vae",
       // 台帳 §1-297: MiniMax H3's keep-reference-latents-resident row.
       "keep_reference_latents",
-      // 台帳 §1-298: MiniMax H3's text-encoder-conditioning-cache row.
-      "keep_text_conditioning",
+      // 台帳 §1-299: `keep_text_conditioning` is NOT here — LTX takes it.
     ]);
   });
 
@@ -1034,8 +1033,9 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     // 台帳 §1-101: `vram16_mode` joined — VRAM 16GB mode is MiniMax H3's own.
     expect(features).toEqual(
-      expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio", "references", "pi_h3", "sol_vae", "keep_reference_latents", "keep_text_conditioning"]),
+      expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio", "references", "pi_h3", "sol_vae", "keep_reference_latents"]),
     );
+    expect(features).not.toContain("keep_text_conditioning");
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
     // chains now, and its absence is what un-greys the Chained tab. §3-102
     // second stage: `v2v` and `a2v` left with it — the engine takes a source
@@ -1099,9 +1099,9 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // the membership above.
     // Ruling 107 made it six: `pi_h3` (MiniMax H3's pi-H3). Sol-H3-VAE
     // (2026-11-24) made it seven: `sol_vae`. 台帳 §1-297 made it eight:
-    // `keep_reference_latents`. 台帳 §1-298 made it nine:
-    // `keep_text_conditioning`.
-    expect(features).toHaveLength(9);
+    // `keep_reference_latents`. (台帳 §1-298 added a ninth,
+    // `keep_text_conditioning`, and 台帳 §1-299 took it out again.)
+    expect(features).toHaveLength(8);
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {

@@ -7271,6 +7271,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 |---|---|
 | 操作パネルのコードとテスト | `6575241d` |
 | 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `760a363b` |
+| 敵対的なレビューを受けたコメントの直し（下の 186.3 のあと） | `d2d0d36d` |
 
 プラグイン本体（C++）は変えていません。本節を含む文書は、別のコミットで入れます。
 
@@ -7285,6 +7286,8 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 | `shell/AppShell.featureScope.test.tsx` | 英語の書き出しを固定している正規表現 1 か所 |
 | `shell/accelerationSettings.ts` | `KEEP_TEXT_CONDITIONING_SERVER_DEFAULT` の上のコメント。「LTX では行が隠れる」と言い切っていたのを、今の動き（3 つのベースモデルが受け付け、サーバーが「使えない」と言うときだけ隠れる）に直した |
 | `shell/featureScope.ts` | 機能の表の説明のコメント。`keep_text_conditioning` を「MiniMax H3 専用で、LTX は名前を載せる」と書いていたのを、今の動きに直した |
+
+- **コメントの直し（`d2d0d36d`）**: 敵対的なレビューを受けて、`shell/SettingsPanel.test.tsx`・`shell/AppShell.featureScope.test.tsx`・`shell/featureScope.ts`・`shell/accelerationSettings.ts` のコメントを直しました。コードの行は変えていません。埋め込む HTML（`dist-single/index.html`）は作り直しても SHA-256 が同じだったので、aux2 は作り直していません。経過は記録簿 §237.5 です。
 
 ### 186.4 採った選択
 

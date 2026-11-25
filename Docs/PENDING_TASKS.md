@@ -27,7 +27,7 @@
 **追加の要件**: Positive Prompt と Negative Prompt の条件付けは独立してキャッシュし、一方の入力だけが変更された場合にも、他方の条件付けを使い回せるようにする。Single のジョブ間、Chained のクリップ間およびジョブ間での再利用を対象とする。モデル重みの常駐機能とは独立した機能とし、キャッシュの有無によって生成結果が変化しないことを実機で確認する。
 - **まだ決まっていないこと**: 設計の全体。着手のときにオーナーと相談して決める。
 - **決まっていること**: API の欄は、§1-298 で足した `keep_text_conditioning` を共用する（名前にモデル名を入れていないのはこのため。設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 111 ⑧。いまは LTX 2.3・2.5 で `true` を送ると 422 `FEATURE_UNSUPPORTED`）。
-- **判断材料**: 同じ案（プロンプトの埋め込みのジョブ間のキャッシュ）は研究ノート [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) の「未着手の候補」(1) にあり、同「次の一歩」で、LTX 2.3 のテキストエンコードの所要時間の実測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50）を根拠に優先度を下げている。LTX 2.5 には同じ内訳の実測が無い（本書 §3-53）。`keep_resident_embeddings` の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-114、実測は記録簿 §92。
+- **判断材料**: 同じ案（プロンプトの埋め込みのジョブ間のキャッシュ）は研究ノート [`ACCELERATION_RESEARCH_NOTES.md`](ACCELERATION_RESEARCH_NOTES.md) の「未着手の候補」(1) にあり、同「次の一歩」で、LTX 2.3 のテキストエンコードの所要時間の実測（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50）を根拠に優先度を下げている。LTX 2.5 では、テキストエンコードの所要時間とその内訳の秒数が、生成の記録 `metadata.json` の `ltx25.phases` に残る（本書 §3-53）。`keep_resident_embeddings` の記録は [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 3-114、実測は記録簿 §92。
 - **出典**: オーナー指示 2026-11-24。
 
 ## 2. 実装済み・ユーザーのテスト待ち
@@ -87,7 +87,7 @@
 
 #### 3-53. 生成時間の小粒最適化の積み上げ（起票：2026-08-03）
 
-- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。工程ごとの内訳（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声）はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50、**現ベースライン（119.20秒）は同 §52.8 が正本**（§50 の総時間はベースラインに使わない）。**分解計測もベースラインもLTX 2.3のものだけで、LTX 2.5側には同種の内訳が無い**——2.5で本項を扱うなら分解計測から始めること。
+- **概要**: 生成時間を1〜2秒級の小粒最適化で積み上げて縮めるテーマ。工程ごとの内訳（テキストエンコード／stage1／アップサンプル／stage2／VAEデコード／音声）はバックエンド[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §50、**現ベースライン（119.20秒）は同 §52.8 が正本**（§50 の総時間はベースラインに使わない）。**ここに挙げた分解計測とベースラインはLTX 2.3のもの**である。LTX 2.5は、生成の記録 `metadata.json` の `ltx25.phases` に段ごとの秒数が残り、テキストエンコード（`10_prompt_encode`）にはその内訳（`10a_te_build`〔テキストエンコーダーの組み立て〕・`10b_ep_build`〔埋め込み処理器の組み立て〕）もある（記録の形は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.6 の `ltx25` の行）。
   - 映像VAEデコードの短縮（PrunaVAED。短縮幅は同 §52.8）は**既定OFFの選択制**なので、既定のジョブの時間は縮んでいない。
   - **最大の候補は動画エンコード（x264）である。**
     - **着手の入口**: エンコードの実体は固定ホイール`ltx_pipelines/utils/media_io.py`の`encode_video`（呼び出し口は`engine/pipeline/common.py`の`encode_video_output`）。PyAV＋libx264で**preset/crf未指定＝x264既定のまま**・デコードと同一スレッドで交互実行＝**並行化なし**。改修するならラッパーの中身を自前実装へ差し替える確立パターン。**NVENC（h264_nvenc）はGPUの専用エンコーダASICで動くためCUDA演算と競合せず、CPUエンコード比で数倍高速になることも珍しくない。**

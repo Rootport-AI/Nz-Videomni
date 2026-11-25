@@ -1,0 +1,49 @@
+{
+  "gate": "g2",
+  "pass": true,
+  "stopped": null,
+  "error": null,
+  "jobs": {
+    "1": {
+      "job_id": "3757c114-7c34-45e4-a335-638c1e0d3859",
+      "cond": "OFF",
+      "checked_ok": true,
+      "problems": []
+    },
+    "2": {
+      "job_id": "0f7c7384-2c8e-4989-8de9-df23a5ad57c3",
+      "cond": "ON",
+      "checked_ok": true,
+      "problems": []
+    },
+    "3": {
+      "job_id": "cddd5657-f8ce-4ee8-b5cd-29c0f57c62f6",
+      "cond": "ON (same)",
+      "checked_ok": true,
+      "problems": []
+    },
+    "4": {
+      "job_id": "41b5ce49-cd39-41a8-b673-16ea0c5b1e1a",
+      "cond": "ON, clip 2 -> p2'",
+      "checked_ok": true,
+      "problems": []
+    },
+    "5": {
+      "job_id": "1efd86c9-d795-4646-adbb-0fa99694f719",
+      "cond": "OFF (same input as 4)",
+      "checked_ok": true,
+      "problems": []
+    }
+  },
+  "unreachable": {
+    "count": 6,
+    "at": [
+      "2026-11-25T17:49:04",
+      "2026-11-25T17:54:05",
+      "2026-11-25T17:56:15",
+      "2026-11-25T18:00:01",
+      "2026-11-25T18:02:31",
+      "2026-11-25T18:06:17"
+    ]
+  }
+}

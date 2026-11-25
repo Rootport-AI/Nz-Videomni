@@ -1,0 +1,922 @@
+{
+  "at": "2026-11-25T18:55:33",
+  "bodies": {
+    "g1-1": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-2": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g1-3": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-4": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-5": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-6": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-7": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-8": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g1-9": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g1-10": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g1-11": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g2-1": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-2": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-3": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-4": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-5": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g5-1": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-2": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g5-3": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-4": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-5": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-6": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-7": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "keep_resident_embeddings": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-8": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true
+      }
+    },
+    "g5-9": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "nag",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g5-10": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "embed_mp4_metadata": false
+      }
+    },
+    "g6-1": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g6-2": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g6-3": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g6-4": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g6-5": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 121,
+            "prompt": "Small boats rock gently beside the pier."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "A gull glides low over the calm water."
+          },
+          {
+            "num_frames": 121,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-1": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "width": 1536,
+        "height": 896,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "SRC",
+        "outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64
+        },
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ]
+      }
+    },
+    "g3-2": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "width": 1536,
+        "height": 896,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "SRC",
+        "outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64
+        },
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ]
+      }
+    },
+    "g3-3": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "width": 1536,
+        "height": 896,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "reference_video_id": "SRC",
+        "outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64
+        },
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ]
+      }
+    },
+    "g4-1": {
+      "path": "/generate (direct)",
+      "body": {
+        "prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": false,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "SRC",
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ],
+        "inpaint": {
+          "mask_video_id": "MASK",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2
+        }
+      }
+    },
+    "g4-2": {
+      "path": "/generate (direct)",
+      "body": {
+        "prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": false,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "SRC",
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ],
+        "inpaint": {
+          "mask_video_id": "MASK",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2
+        }
+      }
+    },
+    "g4-3": {
+      "path": "/generate (direct)",
+      "body": {
+        "prompt": "A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "nag_enabled": false,
+        "keep_resident": false,
+        "keep_resident_embeddings": false,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": false,
+        "reference_video_id": "SRC",
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ],
+        "inpaint": {
+          "mask_video_id": "MASK",
+          "window_start_sec": 0.0,
+          "blend_dilation_stage1": 5,
+          "blend_dilation_stage2": 2
+        }
+      }
+    },
+    "g7-1": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "width": 1536,
+        "height": 896,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "SRC",
+        "outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64
+        },
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ]
+      }
+    },
+    "g7-2": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "width": 1536,
+        "height": 896,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "reference_video_id": "SRC",
+        "outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64
+        },
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ]
+      }
+    },
+    "g7-3": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement.",
+        "width": 1536,
+        "height": 896,
+        "num_frames": 121,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "embed_mp4_metadata": false,
+        "reference_video_id": "SRC",
+        "outpaint": {
+          "pad_left": 128,
+          "pad_right": 128,
+          "pad_top": 64,
+          "pad_bottom": 64
+        },
+        "loras": [
+          {
+            "name": "in-outpainting",
+            "strength": 1.0
+          }
+        ]
+      }
+    }
+  },
+  "problems": [],
+  "ok": true
+}

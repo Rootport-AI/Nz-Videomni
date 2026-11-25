@@ -1,0 +1,719 @@
+[
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.2,
+    "at": "2026-11-25T17:24:56"
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:24:56",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "LTX23",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "neg_method": "nag",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:24:56",
+    "result": {
+      "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+      "status": "running",
+      "created_at": "2026-11-25T08:24:56Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T17:25:41"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 50.0,
+    "at": "2026-11-25T17:26:31"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 40.02,
+    "at": "2026-11-25T17:27:11"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "neg_method": "nag"
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:27:11",
+    "result": {
+      "job_id": "0d2fb735-9dca-4286-b951-5c2ce8a49075",
+      "status": "running",
+      "created_at": "2026-11-25T08:27:11Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "0d2fb735-9dca-4286-b951-5c2ce8a49075",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T17:27:56"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "0d2fb735-9dca-4286-b951-5c2ce8a49075",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T17:28:41"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "0d2fb735-9dca-4286-b951-5c2ce8a49075",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 40.01,
+    "at": "2026-11-25T17:29:21"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "neg_method": "nag",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T17:29:22",
+    "result": {
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "status": "running",
+      "created_at": "2026-11-25T08:29:22Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T17:29:27",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.06,
+    "at": "2026-11-25T17:30:22"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T17:31:07"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "16883ccc-2b31-40f8-ae32-d2fbdbf43841",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 30.03,
+    "at": "2026-11-25T17:31:37"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "neg_method": "nag",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:31:37",
+    "result": {
+      "job_id": "3c3e2b60-3b06-4731-bb57-4d9e8b8927da",
+      "status": "running",
+      "created_at": "2026-11-25T08:31:37Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "3c3e2b60-3b06-4731-bb57-4d9e8b8927da",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T17:32:22"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "3c3e2b60-3b06-4731-bb57-4d9e8b8927da",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 40.03,
+    "at": "2026-11-25T17:33:02"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "nag",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:33:03",
+    "result": {
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "status": "running",
+      "created_at": "2026-11-25T08:33:02Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T17:33:48"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.05,
+    "at": "2026-11-25T17:33:58",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 40.03,
+    "at": "2026-11-25T17:34:48",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e735c655-214a-4819-8577-e2ec53224182",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 10.02,
+    "at": "2026-11-25T17:35:08"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "nag",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:35:08",
+    "result": {
+      "job_id": "aca2c432-3027-45d5-9699-1b40a516aecc",
+      "status": "running",
+      "created_at": "2026-11-25T08:35:08Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "aca2c432-3027-45d5-9699-1b40a516aecc",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 50.0,
+    "at": "2026-11-25T17:35:58",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "aca2c432-3027-45d5-9699-1b40a516aecc",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 45.05,
+    "at": "2026-11-25T17:36:53",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "aca2c432-3027-45d5-9699-1b40a516aecc",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 15.02,
+    "at": "2026-11-25T17:37:18"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "vsf",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:37:18",
+    "result": {
+      "job_id": "ed10b4f9-6c1f-4c02-b77d-8f130273d9ec",
+      "status": "running",
+      "created_at": "2026-11-25T08:37:18Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ed10b4f9-6c1f-4c02-b77d-8f130273d9ec",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T17:38:03"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "ed10b4f9-6c1f-4c02-b77d-8f130273d9ec",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 35.01,
+    "at": "2026-11-25T17:38:38"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": true,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "vsf",
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:38:39",
+    "result": {
+      "job_id": "a533fa9a-740a-48ee-8c13-b3da27153a27",
+      "status": "running",
+      "created_at": "2026-11-25T08:38:39Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a533fa9a-740a-48ee-8c13-b3da27153a27",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.03,
+    "at": "2026-11-25T17:39:04",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a533fa9a-740a-48ee-8c13-b3da27153a27",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 44.98,
+    "at": "2026-11-25T17:39:59"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "nag"
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:39:59",
+    "result": {
+      "job_id": "84584307-2ddc-4301-8ce6-1af77b3ef8f6",
+      "status": "running",
+      "created_at": "2026-11-25T08:39:59Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "84584307-2ddc-4301-8ce6-1af77b3ef8f6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 50.0,
+    "at": "2026-11-25T17:40:49"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "84584307-2ddc-4301-8ce6-1af77b3ef8f6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 49.98,
+    "at": "2026-11-25T17:41:39"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "84584307-2ddc-4301-8ce6-1af77b3ef8f6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 30.0,
+    "at": "2026-11-25T17:42:09"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "nag"
+    },
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T17:42:09",
+    "result": {
+      "job_id": "673ab960-9d75-4f35-9232-6b2a9f6fc871",
+      "status": "running",
+      "created_at": "2026-11-25T08:42:09Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "673ab960-9d75-4f35-9232-6b2a9f6fc871",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T17:42:54"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "673ab960-9d75-4f35-9232-6b2a9f6fc871",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 30.03,
+    "at": "2026-11-25T17:43:24",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "673ab960-9d75-4f35-9232-6b2a9f6fc871",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 40.09,
+    "at": "2026-11-25T17:44:14"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "embed_mp4_metadata": false,
+      "prompt": "A woman in a red raincoat walks slowly along a wooden pier at dawn. Soft light, gentle camera movement.",
+      "num_frames": 121,
+      "nag_enabled": true,
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "neg_method": "vsf"
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T17:44:15",
+    "result": {
+      "job_id": "e47257d6-41f6-464c-95ed-4a735cb52440",
+      "status": "running",
+      "created_at": "2026-11-25T08:44:15Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e47257d6-41f6-464c-95ed-4a735cb52440",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T17:45:00"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e47257d6-41f6-464c-95ed-4a735cb52440",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T17:45:45"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e47257d6-41f6-464c-95ed-4a735cb52440",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 35.02,
+    "at": "2026-11-25T17:46:20"
+  }
+]

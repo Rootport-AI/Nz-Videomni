@@ -7213,3 +7213,45 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 184.7 実機の門
 
 - 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-298 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-298）。
+
+## 185. 「テキストエンコーダーの条件付けのキャッシュ」を 3 つのベースモデルに共通の行にする — 表示名から「（MiniMax H3）」を外す・注意書きを 3 つのモデルに合う文に直す・LTX でも行が出て ON が残る・行を隠す仕掛けは残す・Alpha Gen の送信に 6 つ目の欄を足す（設計正本 裁定 112。2026-11-25）
+
+### 185.1 結論
+
+- **Settings の行「テキストエンコーダーの条件付けのキャッシュ」は、MiniMax H3・LTX 2.3・LTX 2.5 に共通の 1 行になりました。** サーバーが LTX 2.3・2.5 でも `keep_text_conditioning` を受け付けるようになったためです（バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-299）。ベースモデルを切り替えても、行は出たままで、ON の選択も残ります。
+- 表示名は「テキストエンコーダーの条件付けのキャッシュ」（英語 `Text encoder conditioning cache`）で、「（MiniMax H3）」を外しました。ON のときだけの注意書きは、3 つのモデルに合う文に直しました（文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.10 の「操作パネル」）。
+- Alpha Gen の送信に、高速化の設定を受け渡す欄の 6 つ目として `keep_text_conditioning` を足しました（ON のときだけ載る）。
+- 動き（何がどうなるか）の正本はバックエンド [`MULTI_ENGINE_DESIGN.md`](../../../Docs/MULTI_ENGINE_DESIGN.md) §5.9 と [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 112・§6.10 で、本節には写しません。**本節は実装の形と、将来の改修者への注意（185.4）の正本です。** 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §236、オーナーの実機での確認の項目はバックエンド台帳 §2 の 1-299 にだけ書きます。
+
+### 185.2 コミット
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト | `dc8b2b06` |
+| 配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `2fe5c235` |
+
+プラグイン本体（C++）は変えていません。本節を含む文書は、別のコミットで入れます。
+
+### 185.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | 行の名前と注意書き（英語と日本語）。名前から「（MiniMax H3）」を外し、注意書きに LTX の 1 件の大きさと、LTX 2.5 はプロンプトのどれか 1 つでも変わると全部作り直すことを足した |
+| `modes/edit/useAlphaGenForm.ts` | Alpha Gen の送信の本文に、`accelerationRequestFields()` の結果から `keep_text_conditioning` を載せる（ほかの 5 つと同じく、値があるときだけ。この欄は ON のときだけ値がある） |
+| `api/types.ts` | Alpha Gen の要求の型（`AlphaGenRequestBody`）に `keep_text_conditioning` を足し、単発の要求の型の説明を今の事実に直した |
+| `bridge/mockBridge.ts` | 開発用の模擬の LTX 2.3・2.5 から、`unsupported_features` の `keep_text_conditioning` と、単発と連結の拒否を外した |
+| `shell/accelerationSettings.ts`・`shell/SettingsPanel.tsx` | 説明のコメントだけを今の事実に直した（動きは変えていない） |
+
+- **テスト**: `shell/AppShell.featureScope.test.tsx`（模擬の LTX でも行が出て ON が残ること。古いサーバーのまねとして、`unsupported_features` に名前を足したときは今までどおり隠れて OFF に戻ること）、`shell/SettingsPanel.test.tsx`（新しい名前と注意書き）、`modes/edit/useAlphaGenForm.test.tsx`（ON のときだけ Alpha Gen の本文に欄が載ること）、`bridge/mockBridge.test.ts`・`bridge/mockBridge.h3.test.ts`（模擬の LTX が欄を断らないこと）、`shell/useBaseModels.test.ts`（模擬の LTX の `unsupported_features` の期待値）、`shell/keepTextConditioning.paths.test.ts`（説明のコメントだけ）。
+
+### 185.4 採った選択と、将来の改修者への注意
+
+- **(a) 行を隠す仕掛けは残しました**（`shell/featureScope.ts` の表の `keep_text_conditioning` の行と、`AppShell` の書き戻し。設計正本 裁定 112 ⑦）。サーバーが `unsupported_features` にこの名前を載せているあいだだけ行を隠し、保存の値を OFF に戻す汎用の仕掛けで、今のサーバーはどのモデルでも名前を載せないので、消さなくても行は出ます。残しておけば、新しい操作パネルが古いサーバー（LTX でこの欄を断るもの）と組んだときに、ON のせいで LTX の生成が断られることを防げます。**消さないこと。**
+- **(b)** §184.5 の (b)（「MiniMax H3 以外では行が隠れる」）は、今のサーバーでは当てはまりません。行の出し分けを変えるときに書き戻しを外してはいけない理由（古いサーバーで `true` が載ると 422 になる）は、そのまま生きています。
+- **(c)** Alpha Gen の送信は、高速化の欄を 1 つずつ書き出す作りです（`vae_mode`・`embed_mp4_metadata` は Alpha Gen の要求に無いため）。高速化の欄を足すときは、Alpha Gen の要求（バックエンドの `AlphaGenRequest`）が受けるかどうかを確かめ、受けるなら `useAlphaGenForm.ts` にも足すこと。
+
+### 185.5 実機の門
+
+- 監督がプラグインを作り直し、実機に配置しました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-299 です（1-298 の項目とまとめて 1 回）。

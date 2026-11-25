@@ -1,0 +1,81 @@
+{
+  "gate": "g5",
+  "pass": true,
+  "stopped": null,
+  "error": null,
+  "jobs": {
+    "1": {
+      "job_id": "f413721e-174b-48b5-9781-6cb92fbe66d8",
+      "cond": "ON, A, no negative",
+      "checked_ok": true,
+      "problems": []
+    },
+    "2": {
+      "job_id": "4205f743-1c57-4cc4-93b2-91c2157eb0e2",
+      "cond": "OFF, A",
+      "checked_ok": true,
+      "problems": []
+    },
+    "3": {
+      "job_id": "95e37065-04f4-471e-951e-5a1b824f07f9",
+      "cond": "ON, A",
+      "checked_ok": true,
+      "problems": []
+    },
+    "4": {
+      "job_id": "046ec92c-7177-4638-becd-eccb7692e3ab",
+      "cond": "ON, A",
+      "checked_ok": true,
+      "problems": []
+    },
+    "5": {
+      "job_id": "df093384-4957-4460-b8c4-b223914e07c9",
+      "cond": "ON, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "6": {
+      "job_id": "5226ba5d-44ca-489f-ac11-d02945820e61",
+      "cond": "ON, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "7": {
+      "job_id": "dece53fc-0e78-4845-9914-e91b169b9386",
+      "cond": "ON, A, Na, nag, keep_resident+embeddings",
+      "checked_ok": true,
+      "problems": []
+    },
+    "8": {
+      "job_id": "95940cd8-0ec7-48f4-9c4c-2dd84fe12728",
+      "cond": "ON, A, Na, vsf",
+      "checked_ok": true,
+      "problems": []
+    },
+    "9": {
+      "job_id": "b125de10-148b-4c29-ae1e-45314628790a",
+      "cond": "OFF, A, Na, nag",
+      "checked_ok": true,
+      "problems": []
+    },
+    "10": {
+      "job_id": "b5c785de-5655-4c47-b8f9-0ea63ad74e3b",
+      "cond": "OFF, A, Na, vsf",
+      "checked_ok": true,
+      "problems": []
+    }
+  },
+  "unreachable": {
+    "count": 8,
+    "at": [
+      "2026-11-25T18:11:42",
+      "2026-11-25T18:13:12",
+      "2026-11-25T18:13:32",
+      "2026-11-25T18:14:48",
+      "2026-11-25T18:16:19",
+      "2026-11-25T18:16:39",
+      "2026-11-25T18:17:14",
+      "2026-11-25T18:22:11"
+    ]
+  }
+}

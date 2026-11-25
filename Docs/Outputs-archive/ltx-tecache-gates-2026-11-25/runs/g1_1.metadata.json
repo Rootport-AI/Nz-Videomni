@@ -1,0 +1,121 @@
+{
+  "job_id": "4d27e238-a6a8-4acf-86d5-c5aef4aeb906",
+  "created_at": "2026-11-25T08:24:56Z",
+  "started_at": "2026-11-25T08:24:56Z",
+  "completed_at": "2026-11-25T08:27:10Z",
+  "status": "completed",
+  "request": {
+    "prompt": "A woman in a red raincoat walks along a wooden pier at dawn. Soft light, gentle camera movement.",
+    "negative_prompt": "blurry, low quality, distorted faces",
+    "nag_enabled": true,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": false,
+    "vram16_mode": null,
+    "pi_h3": "off",
+    "sol_vae": false,
+    "keep_reference_latents": false,
+    "keep_text_conditioning": true,
+    "width": 1280,
+    "height": 768,
+    "crop_output": null,
+    "num_frames": 121,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "shift_video": null,
+    "shift_audio": null,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "conditioning_images": [],
+    "loras": [],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "outpaint": null,
+    "inpaint": null,
+    "alpha_gen": null,
+    "source_audio": null,
+    "references": []
+  },
+  "generation_mode": "t2v",
+  "seed_used": 42,
+  "attention_used": "sdpa",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "off",
+  "vram16_mode_used": null,
+  "keep_resident_embeddings_used": null,
+  "fused_gguf_dequant_kernel_used": "on",
+  "vae_mode_used": "off",
+  "peak_vram_reserved_mb": 13808,
+  "generation_time_seconds": 134.59,
+  "backend": "ltx-distilled",
+  "output": {
+    "path": "outputs/4d27e238-a6a8-4acf-86d5-c5aef4aeb906/output.mp4",
+    "resolution": "1280x768",
+    "duration_seconds": 5.042,
+    "frame_rate": 24.0,
+    "file_size_bytes": 1407566
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 8544
+  },
+  "models": {
+    "base_model": "LTX23",
+    "selection": {
+      "transformer": {
+        "name": "default",
+        "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "gemma-3-12b-it-Q4_K_M.gguf"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "LTX23_video_vae_bf16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "LTX23_audio_vae_bf16.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "ltx23": {
+    "te_cache": {
+      "positive": "miss",
+      "negative": "miss"
+    },
+    "conditioning_sha256": {
+      "positive": {
+        "video": "9816dfc8bc1ec00620613ebc1f273e4a3432124fd36db156aa4e7b0cd337789a",
+        "audio": "473f8c85c83aea44a52921acc5cba97cd92da8c57701ed7aea5b5eb7703ae7e4"
+      },
+      "negative": {
+        "video": "dfd1bd29add904abd0216ceeb76c3922ce837b1ee4d83067fb17eb2828e0e117",
+        "audio": "d5aad7f1ec8af27609a08d23524c6dda7491b83d2e75dd24b39a0422feff9469"
+      }
+    }
+  }
+}

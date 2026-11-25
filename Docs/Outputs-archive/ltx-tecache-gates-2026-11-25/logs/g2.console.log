@@ -1,0 +1,42 @@
+g2-1: job 3757c114-7c34-45e4-a335-638c1e0d3859 (OFF)
+  3757c114 running stage=encode clip=None step=None/None t=45s
+  3757c114 running stage=stage1_denoise clip=2 step=7/8 t=90s
+  3757c114 running stage=stage2_denoise clip=3 step=1/3 t=135s
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:49:04
+  3757c114 running stage=stage2_denoise clip=3 step=1/3 t=210s
+  3757c114 running stage=decode clip=3 step=None/None t=255s
+  3757c114 running stage=decode clip=3 step=None/None t=300s
+g2-1: mp4 b9445e04 te=None gen=301.49 phases=None problems=[]
+g2-2: job 0f7c7384-2c8e-4989-8de9-df23a5ad57c3 (ON)
+  0f7c7384 running stage=encode clip=None step=None/None t=45s
+  0f7c7384 running stage=stage1_denoise clip=2 step=7/8 t=90s
+  0f7c7384 running stage=stage2_denoise clip=3 step=1/3 t=135s
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:54:05
+  0f7c7384 running stage=tile clip=3 step=None/None t=205s
+  0f7c7384 running stage=decode clip=3 step=None/None t=250s
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:56:15
+g2-2: mp4 b9445e04 te={'clips': ['miss', 'miss', 'miss'], 'stage2': 'miss'} gen=302.73 phases=None problems=[]
+g2-3: job cddd5657-f8ce-4ee8-b5cd-29c0f57c62f6 (ON (same))
+  cddd5657 running stage=stage1_denoise clip=2 step=7/8 t=45s
+  cddd5657 running stage=stage2_denoise clip=3 step=1/3 t=95s
+  cddd5657 running stage=stage2_denoise clip=3 step=1/3 t=140s
+  cddd5657 running stage=decode clip=3 step=None/None t=185s
+  BACKEND_UNREACHABLE (1) 2026-11-25T18:00:01
+g2-3: mp4 b9445e04 te={'clips': ['hit', 'hit', 'hit'], 'stage2': 'hit'} gen=218.3 phases=None problems=[]
+g2-4: job 41b5ce49-cd39-41a8-b673-16ea0c5b1e1a (ON, clip 2 -> p2')
+  41b5ce49 running stage=encode clip=None step=None/None t=50s
+  41b5ce49 running stage=stage1_denoise clip=3 step=2/8 t=95s
+  BACKEND_UNREACHABLE (1) 2026-11-25T18:02:31
+  41b5ce49 running stage=stage2_denoise clip=3 step=2/3 t=185s
+  41b5ce49 running stage=decode clip=3 step=None/None t=230s
+  41b5ce49 running stage=decode clip=3 step=None/None t=280s
+g2-4: mp4 1232740a te={'clips': ['hit', 'miss', 'hit'], 'stage2': 'hit'} gen=288.76 phases=None problems=[]
+g2-5: job 1efd86c9-d795-4646-adbb-0fa99694f719 (OFF (same input as 4))
+  1efd86c9 running stage=encode clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T18:06:17
+  1efd86c9 running stage=upsample clip=3 step=None/None t=120s
+  1efd86c9 running stage=tile clip=3 step=None/None t=165s
+  1efd86c9 running stage=stage2_denoise clip=3 step=2/3 t=210s
+  1efd86c9 running stage=decode clip=3 step=None/None t=255s
+g2-5: mp4 1232740a te=None gen=291.26 phases=None problems=[]
+GATE g2 PASS

@@ -1,0 +1,5237 @@
+{
+  "conditions": {
+    "files": {
+      "transformer": "models/LTX25/Weights/LTX-2.5-22B-distilled-transformer.gguf",
+      "text_encoder": "models/LTX25/TextEncoder/LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf",
+      "video_vae": "models/LTX25/VAE/ltx-2.5-video-vae-conv-bf16.safetensors",
+      "audio_vae": "models/LTX25/VAE/ltx-2.5-audio-vae-bf16.safetensors",
+      "spatial_upsampler": "models/LTX25/Upscaler/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
+    },
+    "load": {
+      "blocks_on_gpu": 8,
+      "te_layers_on_gpu": 0,
+      "cache_weights": true,
+      "deterministic": true
+    },
+    "load_defaults_note": {
+      "DEFAULT_BLOCKS_ON_GPU": 8,
+      "DEFAULT_TE_LAYERS_ON_GPU": 0
+    },
+    "job": {
+      "block_swap_prefetch": true,
+      "fused_gguf_dequant_kernel": true,
+      "keep_resident": false,
+      "keep_resident_embeddings": false,
+      "attention_backend": "sdpa"
+    },
+    "negative_prompt": "not requested (set_nag_job(None)) -> Ltx25PromptEncoder.__call__ takes super().__call__",
+    "call_kwargs": {
+      "enhance_first_prompt": false,
+      "enhance_static_cache": false,
+      "enhance_prompt_image": null
+    },
+    "env": {
+      "TORCH_COMPILE_DISABLE": "1",
+      "PYTHONUNBUFFERED": "1"
+    },
+    "torch": "2.9.1+cu128",
+    "cuda": "12.8",
+    "gpu": "NVIDIA GeForce RTX 4070 Ti SUPER",
+    "pipeline_build_seconds": 0.55,
+    "build_report": {
+      "deterministic": true,
+      "assets_export": {
+        "path": "models\\LTX25\\TextEncoder\\LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.assets.safetensors",
+        "action": "reused",
+        "reason": "matches the GGUF",
+        "size_bytes": 32198058,
+        "size_mib": 30.71,
+        "tensors": [
+          "hf_asset__chat_template.jinja",
+          "hf_asset__generation_config.json",
+          "hf_asset__processor_config.json",
+          "hf_asset__tokenizer_config.json",
+          "tokenizer_json"
+        ]
+      },
+      "use_ancestral_sampler": {
+        "detected": null,
+        "forced": true
+      },
+      "device": "cuda:0",
+      "blocks_on_gpu": 8,
+      "te_layers_on_gpu": 0,
+      "cache_weights": true,
+      "sampler": "euler_ancestral",
+      "video_vae_kind": "conv",
+      "stage_1_steps": 8,
+      "stage_2_steps": 3,
+      "gpu": {
+        "name": "NVIDIA GeForce RTX 4070 Ti SUPER",
+        "total_gib": 15.99
+      }
+    }
+  },
+  "strings": {
+    "A": {
+      "text": "A young woman in a red raincoat walks slowly along a wet cobblestone street at dusk, neon signs reflecting in the puddles around her feet. The camera follows her from behind at shoulder height as light rain falls, and distant traffic hums softly in the background.",
+      "words": 46
+    },
+    "B": {
+      "text": "A cat sleeps on a windowsill.",
+      "words": 6
+    },
+    "C": {
+      "text": "Aerial drone shot over a dense pine forest in early morning fog. The camera glides forward and slowly tilts down toward a winding river, sunlight breaking through the mist in long golden beams.",
+      "words": 33
+    },
+    "D": {
+      "text": "Inside a busy old-fashioned bakery before dawn, a heavyset baker with flour-dusted forearms pulls a long wooden peel out of a glowing brick oven, revealing a row of crusty round loaves that crackle as they meet the cooler air. Steam curls upward under the warm amber lamps hanging from the low wooden beams. Behind him, two apprentices knead dough at a marble counter, their hands moving in a practiced rhythm, while a radio on a shelf plays a quiet jazz tune. The camera starts in a close-up on the bread, then pulls back and drifts to the left in a slow continuous dolly move, passing baskets of rolls, jars of seeds, and a chalkboard listing the day's specials in looping handwriting. Through the front window, the street outside is still dark and empty except for a single delivery bicycle leaning against a lamppost. The baker sets the peel down, wipes his brow with the back of his wrist, and laughs at something one of the apprentices says, his voice warm and low. Fine particles of flour float through the shafts of lamplight, and the whole scene has the soft, grainy texture of film shot on a handheld camera.",
+      "words": 198
+    },
+    "E": {
+      "text": "Close-up of an old man playing chess in a park, he moves a knight and smiles at his opponent while pigeons wander across the gravel path behind the table.",
+      "words": 29
+    },
+    "S": {
+      "text": "Cinematic lighting, smooth camera motion.",
+      "words": 5
+    },
+    "N": {
+      "text": "blurry, low quality, distorted faces",
+      "words": 5
+    },
+    "EMPTY": {
+      "text": "",
+      "words": 0
+    }
+  },
+  "runs": [
+    {
+      "run": "R1",
+      "keys": [
+        "A"
+      ],
+      "n": 1,
+      "seconds_total": 19.9,
+      "phases": {
+        "10a_te_build": 9.14,
+        "10b_ep_build": 6.51,
+        "10_prompt_encode": 19.9
+      },
+      "items": {
+        "A": {
+          "video_encoding": {
+            "sha256": "9759ce80419f133703c2a97214c0c0ca5db27a9c1ab2ff582e66f26a4a495e09",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "4a6ce304190d8d8e61c82888a007d3b5b9d62e5ff704b4de243d54ef2ead8906",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R2",
+      "keys": [
+        "A"
+      ],
+      "n": 1,
+      "seconds_total": 10.67,
+      "phases": {
+        "10a_te_build": 4.76,
+        "10b_ep_build": 3.64,
+        "10_prompt_encode": 10.67
+      },
+      "items": {
+        "A": {
+          "video_encoding": {
+            "sha256": "9759ce80419f133703c2a97214c0c0ca5db27a9c1ab2ff582e66f26a4a495e09",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "4a6ce304190d8d8e61c82888a007d3b5b9d62e5ff704b4de243d54ef2ead8906",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R3",
+      "keys": [
+        "A",
+        "N"
+      ],
+      "n": 2,
+      "seconds_total": 9.91,
+      "phases": {
+        "10a_te_build": 4.08,
+        "10b_ep_build": 3.2,
+        "10_prompt_encode": 9.91
+      },
+      "items": {
+        "A": {
+          "video_encoding": {
+            "sha256": "0a0702fb6756d8691fb2f8103f740da6c554ea4273b81970313dffa8e0635da4",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "936d0041277671b876a70f516e7375f4065a37584ba9c41338d61540a6ce05c3",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "N": {
+          "video_encoding": {
+            "sha256": "1d4a5afeb9c4ed899d8d5c0535258fa87d4d931dc7c5402f45a6480464d5e5e8",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "0bbc4bd32ae29c9e18ef3d89d19166bc4011744fcc623c7316432a9a469a6d5c",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 23.0,
+        "reserved_mib": 118.0
+      }
+    },
+    {
+      "run": "R4",
+      "keys": [
+        "N"
+      ],
+      "n": 1,
+      "seconds_total": 9.42,
+      "phases": {
+        "10a_te_build": 3.96,
+        "10b_ep_build": 3.23,
+        "10_prompt_encode": 9.42
+      },
+      "items": {
+        "N": {
+          "video_encoding": {
+            "sha256": "84cebf069dfe770bba8e6f20af36df606e5eab7db26f08f421c269302037473c",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "543580a318edf662bb4b1de27199425acc0fa426fe37b80c9d0da1362ea9781d",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 508.0
+      }
+    },
+    {
+      "run": "R5",
+      "keys": [
+        "A",
+        "EMPTY"
+      ],
+      "n": 2,
+      "seconds_total": 9.93,
+      "phases": {
+        "10a_te_build": 4.07,
+        "10b_ep_build": 3.24,
+        "10_prompt_encode": 9.93
+      },
+      "items": {
+        "A": {
+          "video_encoding": {
+            "sha256": "0a0702fb6756d8691fb2f8103f740da6c554ea4273b81970313dffa8e0635da4",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "936d0041277671b876a70f516e7375f4065a37584ba9c41338d61540a6ce05c3",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "EMPTY": {
+          "video_encoding": {
+            "sha256": "ecf39ff14c2ca7547e1861ad1f32e6146d3908d2ddb9bb9c881b2ceaa4bde35f",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "e12196b05fdbdaea280b77a165d3e0f10d499f98c0bba2c6b181b7ddc6b2d3aa",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.8,
+        "reserved_mib": 200.0
+      }
+    },
+    {
+      "run": "R6",
+      "keys": [
+        "EMPTY"
+      ],
+      "n": 1,
+      "seconds_total": 9.41,
+      "phases": {
+        "10a_te_build": 3.96,
+        "10b_ep_build": 3.24,
+        "10_prompt_encode": 9.41
+      },
+      "items": {
+        "EMPTY": {
+          "video_encoding": {
+            "sha256": "96c9905c80b055c439ccccd1052a63d07a638825db17321398032bcaa347368a",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "9f002700497d50847a2f8e6690c5db0082e0598fe6a0059bd2bf65be60a4c094",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R7",
+      "keys": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "S"
+      ],
+      "n": 6,
+      "seconds_total": 12.1,
+      "phases": {
+        "10a_te_build": 3.94,
+        "10b_ep_build": 3.18,
+        "10_prompt_encode": 12.1
+      },
+      "items": {
+        "A": {
+          "video_encoding": {
+            "sha256": "713e06eef41fb7d01f82ce256bc191979414ca56ec5148ba85205873d31b86f8",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "ee0b8d789a84c4c63c5a2972dcb4a4f0639bfc9403a11d84c1c9e4c673859440",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "B": {
+          "video_encoding": {
+            "sha256": "927714a753534e2210589d97cc343093f99fe48102795f14a7a46a031ba26e1c",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "136da105d3ce3ac7214f7c11b8bee9f456f6683d95917811cac44f5ad3254b1c",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "C": {
+          "video_encoding": {
+            "sha256": "5544ce4c5ec4329bff82e2f1302fa05bcb0e4b6fd324b7be88db927b5086c5ee",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "5dd031e7997affc650249f85e097d29f774f959810532e6c8d7695f26b17ad66",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "D": {
+          "video_encoding": {
+            "sha256": "2153f152e0ff33b12d0a56645c1180c4a2d0d5c8d8630cbcee76412fe0d45a5c",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "300150398e08a521fb3b9d61541e201a0c80a311ba0cf0de0a98e7cf120e70f0",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "E": {
+          "video_encoding": {
+            "sha256": "8edd1ec382528be12571ead57ca14d2e6e814463b6cf0f96ac6e07ea821c743e",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "90977d41c74be98fa9d4b63df2cdab11e1bb72356847181cd7849b2a0572743a",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "S": {
+          "video_encoding": {
+            "sha256": "e93085774b28211b4ecda5a84d6e85e52a2387e234cba978b71cffb8018cdbea",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "f2c98965cd2a0885ad641d5488735fad519a43b13527d866dfbb204375882881",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 22.1,
+        "reserved_mib": 386.0
+      }
+    },
+    {
+      "run": "R8",
+      "keys": [
+        "B"
+      ],
+      "n": 1,
+      "seconds_total": 9.32,
+      "phases": {
+        "10a_te_build": 3.94,
+        "10b_ep_build": 3.19,
+        "10_prompt_encode": 9.32
+      },
+      "items": {
+        "B": {
+          "video_encoding": {
+            "sha256": "1bbdf225ce698eac600d237c30ee4540c6031ee9514cac9b494c09610362a4c3",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "24aab4342359c67c19b244f3d3b622768ddf062dc3348f67163837e884725242",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R9",
+      "keys": [
+        "C"
+      ],
+      "n": 1,
+      "seconds_total": 9.38,
+      "phases": {
+        "10a_te_build": 4.13,
+        "10b_ep_build": 3.21,
+        "10_prompt_encode": 9.38
+      },
+      "items": {
+        "C": {
+          "video_encoding": {
+            "sha256": "8949683121487d7447738551cfeea215c5b216f9291e1a6fb9e759a8b8259481",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "0679d7c35edff18d87ac12cc5df9925fec116a9e51c7e2c60554eb2c0a658b33",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.8,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R10",
+      "keys": [
+        "D"
+      ],
+      "n": 1,
+      "seconds_total": 9.38,
+      "phases": {
+        "10a_te_build": 4.11,
+        "10b_ep_build": 3.23,
+        "10_prompt_encode": 9.38
+      },
+      "items": {
+        "D": {
+          "video_encoding": {
+            "sha256": "61f44a3e4589eca9a92090e3149699eac4e325728bba2f75e9eac82a2bb324e0",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "25c3f3bf5f1e5831b9d37e799a000c417c8f245ad4f8c1b3105bcd026356b8fe",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R11",
+      "keys": [
+        "E"
+      ],
+      "n": 1,
+      "seconds_total": 9.58,
+      "phases": {
+        "10a_te_build": 3.94,
+        "10b_ep_build": 3.29,
+        "10_prompt_encode": 9.58
+      },
+      "items": {
+        "E": {
+          "video_encoding": {
+            "sha256": "5e9cb8b2a735602cfd33add519d4acbdda279806a32956353e2cb1fdd422677c",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "ccbb110cdbd0d9021f3717dfdee10d76353d0fac7e2e70f272c86ddf110eab0e",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.1,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R12",
+      "keys": [
+        "S"
+      ],
+      "n": 1,
+      "seconds_total": 9.61,
+      "phases": {
+        "10a_te_build": 4.02,
+        "10b_ep_build": 3.29,
+        "10_prompt_encode": 9.61
+      },
+      "items": {
+        "S": {
+          "video_encoding": {
+            "sha256": "9659313e38c29a4d62404b8b12762b221bdb340521d274e793a36c0d11a453e0",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "878fc130d17493d8e0ba83cb10c0004edb7e059a77e80458a7183df0ea3fe821",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.6,
+        "reserved_mib": 254.0
+      }
+    },
+    {
+      "run": "R13",
+      "keys": [
+        "B",
+        "A"
+      ],
+      "n": 2,
+      "seconds_total": 10.14,
+      "phases": {
+        "10a_te_build": 4.0,
+        "10b_ep_build": 3.28,
+        "10_prompt_encode": 10.14
+      },
+      "items": {
+        "B": {
+          "video_encoding": {
+            "sha256": "80f73b80274f420eb0b2fb567923274aef9b6f78abc6670eb726f712b3e299e6",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "60487e527f75f777c4191d4a99c67255b75cd410357347af53502b13c42d0008",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "A": {
+          "video_encoding": {
+            "sha256": "0a0702fb6756d8691fb2f8103f740da6c554ea4273b81970313dffa8e0635da4",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "936d0041277671b876a70f516e7375f4065a37584ba9c41338d61540a6ce05c3",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 22.0,
+        "reserved_mib": 118.0
+      }
+    },
+    {
+      "run": "R14",
+      "keys": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "S",
+        "N"
+      ],
+      "n": 7,
+      "seconds_total": 12.66,
+      "phases": {
+        "10a_te_build": 3.98,
+        "10b_ep_build": 3.16,
+        "10_prompt_encode": 12.66
+      },
+      "items": {
+        "A": {
+          "video_encoding": {
+            "sha256": "757e50f4317a8806ebf4c726ea48449db3446c1f7b62d6165b0ba3f6e104c81b",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "f526d186e965e261fc597de4d80cb545757bbe46cef931de87971555ab8d8d36",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "B": {
+          "video_encoding": {
+            "sha256": "f2186bce8445baebf198f20136cc6875e001eb19acc40ebb9e4a07f7cb5264a9",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "e96ce7f244d82fae82a211fcaea1c79ea7b27176506ad05025a08f839f6733c3",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "C": {
+          "video_encoding": {
+            "sha256": "9d3d780a707cf6411b83502492b58cef0f369048fd77a5960710683b636a501e",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "724b8e65991a1c56aa76f54ef7c4b737197cc79e2628a26a5eb6801b1fff6991",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "D": {
+          "video_encoding": {
+            "sha256": "0a44772468103330e6249890dc8a7650f5585dc2e110a4c142604db85c4ec8f8",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "2bfe7d822ebca78cbca1123bd1e1d9f6eb520cf9b9f921025ae386107aee1191",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "E": {
+          "video_encoding": {
+            "sha256": "856e644e59fc677d8e72c6a8ede75b6bcc64f8b4ff68d769342163e1243b2246",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "2b00edaa9ef6181a68da58649d4da72f8ac0b22244353d40f18346f0a4d3b302",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "S": {
+          "video_encoding": {
+            "sha256": "884dae1d3e4e8b3b4b898cffd960d7802dbee50838d140b5818903002fd2d8a0",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "40d81239da4bd5dc61bba1e6d06dd35669521cff1d04e46d9f75084476ba355d",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        },
+        "N": {
+          "video_encoding": {
+            "sha256": "ebb30c70d0724d6571abe3714e16ebe09b456fc2d8d612339b25cee0f815e0bf",
+            "shape": [
+              1,
+              1024,
+              4096
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "audio_encoding": {
+            "sha256": "7bf2a289225ccbaa319bdaf33a61a4906ccbbda0056e9fee2d96eef36de46a07",
+            "shape": [
+              1,
+              1024,
+              2048
+            ],
+            "dtype": "torch.bfloat16"
+          },
+          "attention_mask": {
+            "sha256": "bbddeafcfd3170bd6f6ce9e912a0dae026d243f2364b3d76791e06e0881c397c",
+            "shape": [
+              1,
+              1024
+            ],
+            "dtype": "torch.int64"
+          }
+        }
+      },
+      "gpu_after": {
+        "allocated_mib": 21.6,
+        "reserved_mib": 446.0
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "run": "R2",
+      "key": "A",
+      "position": 0,
+      "n": 1,
+      "ref": "R1",
+      "field": "video_encoding",
+      "match": true
+    },
+    {
+      "run": "R2",
+      "key": "A",
+      "position": 0,
+      "n": 1,
+      "ref": "R1",
+      "field": "audio_encoding",
+      "match": true
+    },
+    {
+      "run": "R2",
+      "key": "A",
+      "position": 0,
+      "n": 1,
+      "ref": "R1",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R3",
+      "key": "A",
+      "position": 0,
+      "n": 2,
+      "ref": "R1",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1229453,
+        "n_total": 4194304,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R3",
+      "key": "A",
+      "position": 0,
+      "n": 2,
+      "ref": "R1",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 987513,
+        "n_total": 2097152,
+        "max_abs": 0.265625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R3",
+      "key": "A",
+      "position": 0,
+      "n": 2,
+      "ref": "R1",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R3",
+      "key": "N",
+      "position": 1,
+      "n": 2,
+      "ref": "R4",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1292849,
+        "n_total": 4194304,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R3",
+      "key": "N",
+      "position": 1,
+      "n": 2,
+      "ref": "R4",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1084254,
+        "n_total": 2097152,
+        "max_abs": 1.625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R3",
+      "key": "N",
+      "position": 1,
+      "n": 2,
+      "ref": "R4",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R5",
+      "key": "A",
+      "position": 0,
+      "n": 2,
+      "ref": "R1",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1229453,
+        "n_total": 4194304,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R5",
+      "key": "A",
+      "position": 0,
+      "n": 2,
+      "ref": "R1",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 987513,
+        "n_total": 2097152,
+        "max_abs": 0.265625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R5",
+      "key": "A",
+      "position": 0,
+      "n": 2,
+      "ref": "R1",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R5",
+      "key": "EMPTY",
+      "position": 1,
+      "n": 2,
+      "ref": "R6",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1225918,
+        "n_total": 4194304,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R5",
+      "key": "EMPTY",
+      "position": 1,
+      "n": 2,
+      "ref": "R6",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 851843,
+        "n_total": 2097152,
+        "max_abs": 0.1875,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R5",
+      "key": "EMPTY",
+      "position": 1,
+      "n": 2,
+      "ref": "R6",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R7",
+      "key": "A",
+      "position": 0,
+      "n": 6,
+      "ref": "R1",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1257106,
+        "n_total": 4194304,
+        "max_abs": 0.375,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "A",
+      "position": 0,
+      "n": 6,
+      "ref": "R1",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 940719,
+        "n_total": 2097152,
+        "max_abs": 0.1875,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "A",
+      "position": 0,
+      "n": 6,
+      "ref": "R1",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R7",
+      "key": "B",
+      "position": 1,
+      "n": 6,
+      "ref": "R8",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1195251,
+        "n_total": 4194304,
+        "max_abs": 0.40625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "B",
+      "position": 1,
+      "n": 6,
+      "ref": "R8",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 960427,
+        "n_total": 2097152,
+        "max_abs": 1.671875,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "B",
+      "position": 1,
+      "n": 6,
+      "ref": "R8",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R7",
+      "key": "C",
+      "position": 2,
+      "n": 6,
+      "ref": "R9",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1311987,
+        "n_total": 4194304,
+        "max_abs": 4.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "C",
+      "position": 2,
+      "n": 6,
+      "ref": "R9",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 992050,
+        "n_total": 2097152,
+        "max_abs": 0.1875,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "C",
+      "position": 2,
+      "n": 6,
+      "ref": "R9",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R7",
+      "key": "D",
+      "position": 3,
+      "n": 6,
+      "ref": "R10",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1695579,
+        "n_total": 4194304,
+        "max_abs": 0.75,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "D",
+      "position": 3,
+      "n": 6,
+      "ref": "R10",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1037321,
+        "n_total": 2097152,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "D",
+      "position": 3,
+      "n": 6,
+      "ref": "R10",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R7",
+      "key": "E",
+      "position": 4,
+      "n": 6,
+      "ref": "R11",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1222292,
+        "n_total": 4194304,
+        "max_abs": 0.625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "E",
+      "position": 4,
+      "n": 6,
+      "ref": "R11",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 984797,
+        "n_total": 2097152,
+        "max_abs": 0.75,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "E",
+      "position": 4,
+      "n": 6,
+      "ref": "R11",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R7",
+      "key": "S",
+      "position": 5,
+      "n": 6,
+      "ref": "R12",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1296367,
+        "n_total": 4194304,
+        "max_abs": 0.4375,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "S",
+      "position": 5,
+      "n": 6,
+      "ref": "R12",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1114094,
+        "n_total": 2097152,
+        "max_abs": 0.34375,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R7",
+      "key": "S",
+      "position": 5,
+      "n": 6,
+      "ref": "R12",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R13",
+      "key": "B",
+      "position": 0,
+      "n": 2,
+      "ref": "R8",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1258523,
+        "n_total": 4194304,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R13",
+      "key": "B",
+      "position": 0,
+      "n": 2,
+      "ref": "R8",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 992684,
+        "n_total": 2097152,
+        "max_abs": 0.5625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R13",
+      "key": "B",
+      "position": 0,
+      "n": 2,
+      "ref": "R8",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R13",
+      "key": "A",
+      "position": 1,
+      "n": 2,
+      "ref": "R1",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1229453,
+        "n_total": 4194304,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R13",
+      "key": "A",
+      "position": 1,
+      "n": 2,
+      "ref": "R1",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 987513,
+        "n_total": 2097152,
+        "max_abs": 0.265625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R13",
+      "key": "A",
+      "position": 1,
+      "n": 2,
+      "ref": "R1",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "A",
+      "position": 0,
+      "n": 7,
+      "ref": "R1",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1233600,
+        "n_total": 4194304,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "A",
+      "position": 0,
+      "n": 7,
+      "ref": "R1",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 933293,
+        "n_total": 2097152,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "A",
+      "position": 0,
+      "n": 7,
+      "ref": "R1",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "B",
+      "position": 1,
+      "n": 7,
+      "ref": "R8",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1196875,
+        "n_total": 4194304,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "B",
+      "position": 1,
+      "n": 7,
+      "ref": "R8",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1089557,
+        "n_total": 2097152,
+        "max_abs": 2.2578125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "B",
+      "position": 1,
+      "n": 7,
+      "ref": "R8",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "C",
+      "position": 2,
+      "n": 7,
+      "ref": "R9",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1295175,
+        "n_total": 4194304,
+        "max_abs": 3.5,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "C",
+      "position": 2,
+      "n": 7,
+      "ref": "R9",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 920387,
+        "n_total": 2097152,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "C",
+      "position": 2,
+      "n": 7,
+      "ref": "R9",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "D",
+      "position": 3,
+      "n": 7,
+      "ref": "R10",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1619916,
+        "n_total": 4194304,
+        "max_abs": 0.375,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "D",
+      "position": 3,
+      "n": 7,
+      "ref": "R10",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1033400,
+        "n_total": 2097152,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "D",
+      "position": 3,
+      "n": 7,
+      "ref": "R10",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "E",
+      "position": 4,
+      "n": 7,
+      "ref": "R11",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1208624,
+        "n_total": 4194304,
+        "max_abs": 0.5625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "E",
+      "position": 4,
+      "n": 7,
+      "ref": "R11",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1017821,
+        "n_total": 2097152,
+        "max_abs": 0.875,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "E",
+      "position": 4,
+      "n": 7,
+      "ref": "R11",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "S",
+      "position": 5,
+      "n": 7,
+      "ref": "R12",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1220150,
+        "n_total": 4194304,
+        "max_abs": 0.34375,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "S",
+      "position": 5,
+      "n": 7,
+      "ref": "R12",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1141277,
+        "n_total": 2097152,
+        "max_abs": 0.3125,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "S",
+      "position": 5,
+      "n": 7,
+      "ref": "R12",
+      "field": "attention_mask",
+      "match": true
+    },
+    {
+      "run": "R14",
+      "key": "N",
+      "position": 6,
+      "n": 7,
+      "ref": "R4",
+      "field": "video_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1214987,
+        "n_total": 4194304,
+        "max_abs": 0.25,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "N",
+      "position": 6,
+      "n": 7,
+      "ref": "R4",
+      "field": "audio_encoding",
+      "match": false,
+      "diff": {
+        "n_diff": 1069209,
+        "n_total": 2097152,
+        "max_abs": 0.5625,
+        "n_token_positions_with_diff": 1024,
+        "token_positions_first_last": [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          [
+            1014,
+            1015,
+            1016,
+            1017,
+            1018,
+            1019,
+            1020,
+            1021,
+            1022,
+            1023
+          ]
+        ],
+        "diff_at_real_tokens": 1024,
+        "diff_at_pad_tokens": 0,
+        "n_real_tokens": 1024
+      }
+    },
+    {
+      "run": "R14",
+      "key": "N",
+      "position": 6,
+      "n": 7,
+      "ref": "R4",
+      "field": "attention_mask",
+      "match": true
+    }
+  ],
+  "all_match": false,
+  "te_stage_check": {
+    "bundle_run": "R3",
+    "bundle": [
+      "A",
+      "N"
+    ],
+    "key": "A",
+    "rerun_ep_outputs_match": {
+      "video_encoding": false,
+      "audio_encoding": false,
+      "attention_mask": true
+    },
+    "te_mask_match": true,
+    "te_n_hidden_layers": 49,
+    "te_layers": [
+      {
+        "layer": 0,
+        "match": true,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16"
+      },
+      {
+        "layer": 1,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 759116,
+          "n_total": 3932160,
+          "max_abs": 0.125,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 2,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 1570524,
+          "n_total": 3932160,
+          "max_abs": 0.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 3,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 2691741,
+          "n_total": 3932160,
+          "max_abs": 0.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 4,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3099882,
+          "n_total": 3932160,
+          "max_abs": 0.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 5,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3188450,
+          "n_total": 3932160,
+          "max_abs": 0.375,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 6,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3407718,
+          "n_total": 3932160,
+          "max_abs": 0.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 7,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3273483,
+          "n_total": 3932160,
+          "max_abs": 0.375,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 8,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3567207,
+          "n_total": 3932160,
+          "max_abs": 0.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 9,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3640456,
+          "n_total": 3932160,
+          "max_abs": 0.291015625,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 10,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3736654,
+          "n_total": 3932160,
+          "max_abs": 0.1875,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 11,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3565423,
+          "n_total": 3932160,
+          "max_abs": 0.1875,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 12,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3600596,
+          "n_total": 3932160,
+          "max_abs": 0.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 13,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3667275,
+          "n_total": 3932160,
+          "max_abs": 0.75,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 14,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3654538,
+          "n_total": 3932160,
+          "max_abs": 1.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 15,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3748648,
+          "n_total": 3932160,
+          "max_abs": 2.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 16,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3730183,
+          "n_total": 3932160,
+          "max_abs": 3.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 17,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3763886,
+          "n_total": 3932160,
+          "max_abs": 2.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 18,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3777243,
+          "n_total": 3932160,
+          "max_abs": 2.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 19,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3752800,
+          "n_total": 3932160,
+          "max_abs": 3.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 20,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3782681,
+          "n_total": 3932160,
+          "max_abs": 3.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 21,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3766356,
+          "n_total": 3932160,
+          "max_abs": 2.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 22,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3789258,
+          "n_total": 3932160,
+          "max_abs": 3.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 23,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3793103,
+          "n_total": 3932160,
+          "max_abs": 4.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 24,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3808666,
+          "n_total": 3932160,
+          "max_abs": 3.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 25,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3818598,
+          "n_total": 3932160,
+          "max_abs": 3.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 26,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3811614,
+          "n_total": 3932160,
+          "max_abs": 2.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 27,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3827938,
+          "n_total": 3932160,
+          "max_abs": 3.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 28,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3834038,
+          "n_total": 3932160,
+          "max_abs": 2.28125,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 29,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3844514,
+          "n_total": 3932160,
+          "max_abs": 4.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 30,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3839447,
+          "n_total": 3932160,
+          "max_abs": 4.6875,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 31,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3848699,
+          "n_total": 3932160,
+          "max_abs": 4.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 32,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3861866,
+          "n_total": 3932160,
+          "max_abs": 5.75,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 33,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3872032,
+          "n_total": 3932160,
+          "max_abs": 2.296875,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 34,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3871202,
+          "n_total": 3932160,
+          "max_abs": 7.25,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 35,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3870728,
+          "n_total": 3932160,
+          "max_abs": 13.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 36,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3878206,
+          "n_total": 3932160,
+          "max_abs": 13.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 37,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3879365,
+          "n_total": 3932160,
+          "max_abs": 11.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 38,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3881675,
+          "n_total": 3932160,
+          "max_abs": 25.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 39,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3886573,
+          "n_total": 3932160,
+          "max_abs": 33.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 40,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3882891,
+          "n_total": 3932160,
+          "max_abs": 35.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 41,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3885793,
+          "n_total": 3932160,
+          "max_abs": 23.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 42,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3889048,
+          "n_total": 3932160,
+          "max_abs": 36.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 43,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3890010,
+          "n_total": 3932160,
+          "max_abs": 43.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 44,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3884033,
+          "n_total": 3932160,
+          "max_abs": 46.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 45,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3889032,
+          "n_total": 3932160,
+          "max_abs": 49.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 46,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3890665,
+          "n_total": 3932160,
+          "max_abs": 39.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 47,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3887431,
+          "n_total": 3932160,
+          "max_abs": 15.5,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      },
+      {
+        "layer": 48,
+        "match": false,
+        "shape": [
+          1,
+          1024,
+          3840
+        ],
+        "dtype": "torch.bfloat16",
+        "diff": {
+          "n_diff": 3896128,
+          "n_total": 3932160,
+          "max_abs": 169.0,
+          "n_token_positions_with_diff": 1024,
+          "token_positions_first_last": [
+            [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            [
+              1014,
+              1015,
+              1016,
+              1017,
+              1018,
+              1019,
+              1020,
+              1021,
+              1022,
+              1023
+            ]
+          ],
+          "diff_at_real_tokens": 54,
+          "diff_at_pad_tokens": 970,
+          "n_real_tokens": 54
+        }
+      }
+    ],
+    "te_first_layer_with_diff": 1,
+    "te_all_layers_match": false
+  }
+}

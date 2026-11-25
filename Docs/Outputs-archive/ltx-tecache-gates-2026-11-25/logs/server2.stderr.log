@@ -1,0 +1,170 @@
+2026-11-25 18:55:47,695 INFO ltx: Starting server on 127.0.0.1:18620  (UI: http://127.0.0.1:18620/ui)
+2026-11-25 18:55:47,696 INFO ltx: ====================================================================
+2026-11-25 18:55:47,696 INFO ltx:   準備ができたら、次のアドレスをブラウザで開いてください
+2026-11-25 18:55:47,696 INFO ltx:       http://127.0.0.1:18620/ui
+2026-11-25 18:55:47,696 INFO ltx:   この黒い画面は閉じないでください（閉じるとサーバーが止まります）
+2026-11-25 18:55:47,696 INFO ltx: ====================================================================
+INFO:     Started server process [76236]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:18620 (Press CTRL+C to quit)
+2026-11-25 18:56:08,735 INFO ltx.pipeline: Engine family change: H3Runner -> LTXRunner (unloading the previous worker first)
+2026-11-25 18:56:08,735 INFO ltx.pipeline: Base model switched to 'LTX23'
+2026-11-25 18:56:08,736 INFO ltx.runner: Backend auto-selected: REAL.
+2026-11-25 18:56:08,738 INFO ltx.runner: Loading pipeline (REAL worker). python=.venv-engine\Scripts\python.exe engine_dir=engine block_swap=8 ckpt=
+2026-11-25 18:56:08,738 INFO ltx.runner: Model-management overrides: {'transformer': 'models\\LTX23\\Weights\\LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf', 'text_encoder': 'models\\LTX23\\TextEncoder\\gemma-3-12b-it-Q4_K_M.gguf', 'video_vae': 'models\\LTX23\\VAE\\LTX23_video_vae_bf16.safetensors', 'audio': 'models\\LTX23\\VAE\\LTX23_audio_vae_bf16.safetensors'}
+2026-11-25 18:56:31,349 INFO ltx.runner: LTX worker ready. sage_available=True
+2026-11-25 18:56:36,455 INFO ltx.pipeline: Job c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66 start mode=t2v 1536x896 frames=121 steps=8 fps=24 seed=42
+2026-11-25 18:56:38,540 INFO ltx.pipeline: Job c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66 outpaint canvas 1536x896 pads l/r/t/b=128/128/64/64 -> outpaint_canvas.mp4
+2026-11-25 18:56:38,540 INFO ltx.pipeline: Job c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66 base=LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf loras=in-outpainting(strength=1) prompt="A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement."
+2026-11-25 18:57:51,600 INFO ltx.runner: generate stage-1 denoise [1/1] started (8 steps)
+2026-11-25 18:57:58,222 INFO ltx.runner: generate stage-1 denoise [1/1] 2/8 steps (0.15 step/s, 6.6s elapsed)
+2026-11-25 18:58:04,880 INFO ltx.runner: generate stage-1 denoise [1/1] 3/8 steps (0.15 step/s, 13.3s elapsed)
+2026-11-25 18:58:11,515 INFO ltx.runner: generate stage-1 denoise [1/1] 4/8 steps (0.15 step/s, 19.9s elapsed)
+2026-11-25 18:58:18,140 INFO ltx.runner: generate stage-1 denoise [1/1] 5/8 steps (0.15 step/s, 26.5s elapsed)
+2026-11-25 18:58:24,764 INFO ltx.runner: generate stage-1 denoise [1/1] 6/8 steps (0.15 step/s, 33.2s elapsed)
+2026-11-25 18:58:31,394 INFO ltx.runner: generate stage-1 denoise [1/1] 7/8 steps (0.15 step/s, 39.8s elapsed)
+2026-11-25 18:58:38,036 INFO ltx.runner: generate stage-1 denoise [1/1] 8/8 steps (0.15 step/s, 46.4s elapsed)
+2026-11-25 18:59:26,512 INFO ltx.runner: generate stage-2 denoise [1/1] started (2 steps)
+2026-11-25 18:59:42,355 INFO ltx.runner: generate stage-2 denoise [1/1] 2/2 steps (0.06 step/s, 15.8s elapsed)
+2026-11-25 19:00:16,730 INFO ltx.pipeline: Job c7ecfb4e-90eb-4a29-8ac2-206bd2fecd66 done in 220.3s peak_vram=8586MB -> completed
+2026-11-25 19:00:27,585 INFO ltx.pipeline: Job b795bf79-7d46-48ce-b41f-00866cd8a0b5 start mode=t2v 1536x896 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:00:29,657 INFO ltx.pipeline: Job b795bf79-7d46-48ce-b41f-00866cd8a0b5 outpaint canvas 1536x896 pads l/r/t/b=128/128/64/64 -> outpaint_canvas.mp4
+2026-11-25 19:00:29,657 INFO ltx.pipeline: Job b795bf79-7d46-48ce-b41f-00866cd8a0b5 base=LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf loras=in-outpainting(strength=1) prompt="A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement."
+2026-11-25 19:01:00,325 INFO ltx.runner: generate stage-1 denoise [1/1] started (8 steps)
+2026-11-25 19:01:06,982 INFO ltx.runner: generate stage-1 denoise [1/1] 2/8 steps (0.15 step/s, 6.7s elapsed)
+2026-11-25 19:01:13,607 INFO ltx.runner: generate stage-1 denoise [1/1] 3/8 steps (0.15 step/s, 13.3s elapsed)
+2026-11-25 19:01:20,232 INFO ltx.runner: generate stage-1 denoise [1/1] 4/8 steps (0.15 step/s, 19.9s elapsed)
+2026-11-25 19:01:26,863 INFO ltx.runner: generate stage-1 denoise [1/1] 5/8 steps (0.15 step/s, 26.5s elapsed)
+2026-11-25 19:01:33,489 INFO ltx.runner: generate stage-1 denoise [1/1] 6/8 steps (0.15 step/s, 33.2s elapsed)
+2026-11-25 19:01:40,120 INFO ltx.runner: generate stage-1 denoise [1/1] 7/8 steps (0.15 step/s, 39.8s elapsed)
+2026-11-25 19:01:46,745 INFO ltx.runner: generate stage-1 denoise [1/1] 8/8 steps (0.15 step/s, 46.4s elapsed)
+2026-11-25 19:02:33,542 INFO ltx.runner: generate stage-2 denoise [1/1] started (2 steps)
+2026-11-25 19:02:49,352 INFO ltx.runner: generate stage-2 denoise [1/1] 2/2 steps (0.06 step/s, 15.8s elapsed)
+2026-11-25 19:03:23,318 INFO ltx.pipeline: Job b795bf79-7d46-48ce-b41f-00866cd8a0b5 done in 175.7s peak_vram=8587MB -> completed
+2026-11-25 19:03:28,365 INFO ltx.pipeline: Job 03e47eb4-5969-4fc5-a993-772a6b90047f start mode=t2v 1536x896 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:03:30,102 INFO ltx.pipeline: Job 03e47eb4-5969-4fc5-a993-772a6b90047f outpaint canvas 1536x896 pads l/r/t/b=128/128/64/64 -> outpaint_canvas.mp4
+2026-11-25 19:03:30,102 INFO ltx.pipeline: Job 03e47eb4-5969-4fc5-a993-772a6b90047f base=LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf loras=in-outpainting(strength=1) prompt="A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement."
+2026-11-25 19:04:50,425 INFO ltx.runner: generate stage-1 denoise [1/1] started (8 steps)
+2026-11-25 19:04:57,050 INFO ltx.runner: generate stage-1 denoise [1/1] 2/8 steps (0.15 step/s, 6.6s elapsed)
+2026-11-25 19:05:03,710 INFO ltx.runner: generate stage-1 denoise [1/1] 3/8 steps (0.15 step/s, 13.3s elapsed)
+2026-11-25 19:05:10,332 INFO ltx.runner: generate stage-1 denoise [1/1] 4/8 steps (0.15 step/s, 19.9s elapsed)
+2026-11-25 19:05:16,967 INFO ltx.runner: generate stage-1 denoise [1/1] 5/8 steps (0.15 step/s, 26.5s elapsed)
+2026-11-25 19:05:23,608 INFO ltx.runner: generate stage-1 denoise [1/1] 6/8 steps (0.15 step/s, 33.2s elapsed)
+2026-11-25 19:05:30,251 INFO ltx.runner: generate stage-1 denoise [1/1] 7/8 steps (0.15 step/s, 39.8s elapsed)
+2026-11-25 19:05:36,899 INFO ltx.runner: generate stage-1 denoise [1/1] 8/8 steps (0.15 step/s, 46.5s elapsed)
+2026-11-25 19:06:24,261 INFO ltx.runner: generate stage-2 denoise [1/1] started (2 steps)
+2026-11-25 19:06:40,072 INFO ltx.runner: generate stage-2 denoise [1/1] 2/2 steps (0.06 step/s, 15.8s elapsed)
+2026-11-25 19:07:14,521 INFO ltx.pipeline: Job 03e47eb4-5969-4fc5-a993-772a6b90047f done in 226.2s peak_vram=8587MB -> completed
+2026-11-25 19:07:28,017 INFO ltx.pipeline: Job 8e214beb-6034-437f-9de3-1fd56505d3b1 start mode=t2v 1280x768 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:07:36,100 INFO ltx.pipeline: Job 8e214beb-6034-437f-9de3-1fd56505d3b1 inpaint window 0.000s +121f (start_frame=0, resampled=False) source 1280x768 -> canvas 1280x768 (libx264rgb, 121 frames)
+2026-11-25 19:07:36,100 INFO ltx.pipeline: Job 8e214beb-6034-437f-9de3-1fd56505d3b1 base=LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf loras=in-outpainting(strength=1) prompt="A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement."
+2026-11-25 19:08:51,590 INFO ltx.runner: generate stage-1 denoise [1/1] started (8 steps)
+2026-11-25 19:08:56,170 INFO ltx.runner: generate stage-1 denoise [1/1] 2/8 steps (0.22 step/s, 4.6s elapsed)
+2026-11-25 19:09:00,759 INFO ltx.runner: generate stage-1 denoise [1/1] 3/8 steps (0.22 step/s, 9.2s elapsed)
+2026-11-25 19:09:05,368 INFO ltx.runner: generate stage-1 denoise [1/1] 4/8 steps (0.22 step/s, 13.8s elapsed)
+2026-11-25 19:09:09,947 INFO ltx.runner: generate stage-1 denoise [1/1] 5/8 steps (0.22 step/s, 18.4s elapsed)
+2026-11-25 19:09:14,527 INFO ltx.runner: generate stage-1 denoise [1/1] 6/8 steps (0.22 step/s, 22.9s elapsed)
+2026-11-25 19:09:19,113 INFO ltx.runner: generate stage-1 denoise [1/1] 7/8 steps (0.22 step/s, 27.5s elapsed)
+2026-11-25 19:09:23,704 INFO ltx.runner: generate stage-1 denoise [1/1] 8/8 steps (0.22 step/s, 32.1s elapsed)
+2026-11-25 19:09:59,010 INFO ltx.runner: generate stage-2 denoise [1/1] started (2 steps)
+2026-11-25 19:10:09,232 INFO ltx.runner: generate stage-2 denoise [1/1] 2/2 steps (0.10 step/s, 10.2s elapsed)
+2026-11-25 19:10:37,649 INFO ltx.pipeline: Job 8e214beb-6034-437f-9de3-1fd56505d3b1 done in 189.6s peak_vram=8569MB -> completed
+2026-11-25 19:10:38,935 INFO ltx.pipeline: Job 7f8a0eb6-85ac-4316-935c-9a44f2e416a9 start mode=t2v 1280x768 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:10:47,002 INFO ltx.pipeline: Job 7f8a0eb6-85ac-4316-935c-9a44f2e416a9 inpaint window 0.000s +121f (start_frame=0, resampled=False) source 1280x768 -> canvas 1280x768 (libx264rgb, 121 frames)
+2026-11-25 19:10:47,003 INFO ltx.pipeline: Job 7f8a0eb6-85ac-4316-935c-9a44f2e416a9 base=LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf loras=in-outpainting(strength=1) prompt="A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement."
+2026-11-25 19:11:11,505 INFO ltx.runner: generate stage-1 denoise [1/1] started (8 steps)
+2026-11-25 19:11:16,087 INFO ltx.runner: generate stage-1 denoise [1/1] 2/8 steps (0.22 step/s, 4.6s elapsed)
+2026-11-25 19:11:20,668 INFO ltx.runner: generate stage-1 denoise [1/1] 3/8 steps (0.22 step/s, 9.2s elapsed)
+2026-11-25 19:11:25,249 INFO ltx.runner: generate stage-1 denoise [1/1] 4/8 steps (0.22 step/s, 13.8s elapsed)
+2026-11-25 19:11:29,830 INFO ltx.runner: generate stage-1 denoise [1/1] 5/8 steps (0.22 step/s, 18.3s elapsed)
+2026-11-25 19:11:34,410 INFO ltx.runner: generate stage-1 denoise [1/1] 6/8 steps (0.22 step/s, 22.9s elapsed)
+2026-11-25 19:11:38,992 INFO ltx.runner: generate stage-1 denoise [1/1] 7/8 steps (0.22 step/s, 27.5s elapsed)
+2026-11-25 19:11:43,575 INFO ltx.runner: generate stage-1 denoise [1/1] 8/8 steps (0.22 step/s, 32.1s elapsed)
+2026-11-25 19:12:23,035 INFO ltx.runner: generate stage-2 denoise [1/1] started (2 steps)
+2026-11-25 19:12:33,224 INFO ltx.runner: generate stage-2 denoise [1/1] 2/2 steps (0.10 step/s, 10.2s elapsed)
+2026-11-25 19:13:01,725 INFO ltx.pipeline: Job 7f8a0eb6-85ac-4316-935c-9a44f2e416a9 done in 142.8s peak_vram=8567MB -> completed
+2026-11-25 19:13:04,819 INFO ltx.pipeline: Job d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6 start mode=t2v 1280x768 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:13:12,872 INFO ltx.pipeline: Job d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6 inpaint window 0.000s +121f (start_frame=0, resampled=False) source 1280x768 -> canvas 1280x768 (libx264rgb, 121 frames)
+2026-11-25 19:13:12,872 INFO ltx.pipeline: Job d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6 base=LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf loras=in-outpainting(strength=1) prompt="A bright red umbrella stands on the wooden pier at dawn. Soft light, gentle camera movement."
+2026-11-25 19:14:29,899 INFO ltx.runner: generate stage-1 denoise [1/1] started (8 steps)
+2026-11-25 19:14:34,475 INFO ltx.runner: generate stage-1 denoise [1/1] 2/8 steps (0.22 step/s, 4.6s elapsed)
+2026-11-25 19:14:39,058 INFO ltx.runner: generate stage-1 denoise [1/1] 3/8 steps (0.22 step/s, 9.2s elapsed)
+2026-11-25 19:14:43,636 INFO ltx.runner: generate stage-1 denoise [1/1] 4/8 steps (0.22 step/s, 13.7s elapsed)
+2026-11-25 19:14:48,216 INFO ltx.runner: generate stage-1 denoise [1/1] 5/8 steps (0.22 step/s, 18.3s elapsed)
+2026-11-25 19:14:52,796 INFO ltx.runner: generate stage-1 denoise [1/1] 6/8 steps (0.22 step/s, 22.9s elapsed)
+2026-11-25 19:14:57,377 INFO ltx.runner: generate stage-1 denoise [1/1] 7/8 steps (0.22 step/s, 27.5s elapsed)
+2026-11-25 19:15:02,003 INFO ltx.runner: generate stage-1 denoise [1/1] 8/8 steps (0.22 step/s, 32.1s elapsed)
+2026-11-25 19:15:37,842 INFO ltx.runner: generate stage-2 denoise [1/1] started (2 steps)
+2026-11-25 19:15:48,029 INFO ltx.runner: generate stage-2 denoise [1/1] 2/2 steps (0.10 step/s, 10.2s elapsed)
+2026-11-25 19:16:17,373 INFO ltx.pipeline: Job d6eb0591-d8c4-4d09-b72b-78bab7b9d5c6 done in 192.6s peak_vram=8569MB -> completed
+2026-11-25 19:16:37,384 INFO ltx.runner: Unloading pipeline (REAL worker).
+2026-11-25 19:16:39,490 INFO ltx.pipeline: Engine family change: LTXRunner -> LTX25Runner (unloading the previous worker first)
+2026-11-25 19:16:39,490 INFO ltx.pipeline: Base model switched to 'LTX25'
+2026-11-25 19:16:39,494 INFO ltx.runner: Backend auto-selected: REAL.
+2026-11-25 19:16:39,496 INFO ltx25.runner: Loading pipeline (REAL engine25 worker). python=.venv-engine-ltx25\Scripts\python.exe engine_dir=engine25 blocks_on_gpu=8 cache_weights=True deterministic=True
+2026-11-25 19:16:39,496 INFO ltx.runner: Model-management overrides: {'transformer': 'models\\LTX25\\Weights\\LTX-2.5-22B-distilled-transformer.gguf', 'text_encoder': 'models\\LTX25\\TextEncoder\\LTX-2.5-gemma4-12b-text-encoder-Q4_K_M.gguf', 'video_vae': 'models\\LTX25\\VAE\\ltx-2.5-video-vae-conv-bf16.safetensors', 'audio': 'models\\LTX25\\VAE\\ltx-2.5-audio-vae-bf16.safetensors'}
+2026-11-25 19:16:47,728 INFO ltx.runner: LTX worker ready. sage_available=True
+2026-11-25 19:16:49,774 INFO ltx.pipeline: Job 46b5350f-fd80-4460-8d13-b1bc399c29aa start mode=t2v 1536x896 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:16:51,781 INFO ltx.pipeline: Job 46b5350f-fd80-4460-8d13-b1bc399c29aa outpaint canvas 1536x896 pads l/r/t/b=128/128/64/64 -> outpaint_canvas.mp4
+2026-11-25 19:16:51,781 INFO ltx.pipeline: Job 46b5350f-fd80-4460-8d13-b1bc399c29aa base=LTX-2.5-22B-distilled-transformer.gguf loras=in-outpainting(strength=1) prompt="A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement."
+2026-11-25 19:16:51,796 INFO ltx.runner: generate text encode started
+2026-11-25 19:17:10,762 INFO ltx.runner: generate text encode 2/1 steps (0.05 step/s, 19.0s elapsed)
+2026-11-25 19:17:41,838 INFO ltx.runner: generate stage-1 denoise started (8 steps)
+2026-11-25 19:17:47,920 INFO ltx.runner: generate stage-1 denoise 2/8 steps (0.16 step/s, 6.1s elapsed)
+2026-11-25 19:17:54,007 INFO ltx.runner: generate stage-1 denoise 3/8 steps (0.16 step/s, 12.2s elapsed)
+2026-11-25 19:18:00,095 INFO ltx.runner: generate stage-1 denoise 4/8 steps (0.16 step/s, 18.3s elapsed)
+2026-11-25 19:18:06,220 INFO ltx.runner: generate stage-1 denoise 5/8 steps (0.16 step/s, 24.4s elapsed)
+2026-11-25 19:18:12,320 INFO ltx.runner: generate stage-1 denoise 6/8 steps (0.16 step/s, 30.5s elapsed)
+2026-11-25 19:18:18,424 INFO ltx.runner: generate stage-1 denoise 7/8 steps (0.16 step/s, 36.6s elapsed)
+2026-11-25 19:18:24,524 INFO ltx.runner: generate stage-1 denoise 8/8 steps (0.16 step/s, 42.7s elapsed)
+2026-11-25 19:18:28,271 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-25 19:19:04,596 INFO ltx.runner: generate stage-2 denoise started (2 steps)
+2026-11-25 19:19:18,144 INFO ltx.runner: generate stage-2 denoise 2/2 steps (0.07 step/s, 13.5s elapsed)
+2026-11-25 19:19:30,781 INFO ltx.runner: generate VAE decode 1/3 steps (0.00 step/s, 62.5s elapsed)
+2026-11-25 19:19:40,369 INFO ltx.pipeline: Job 46b5350f-fd80-4460-8d13-b1bc399c29aa done in 170.6s peak_vram=7756MB -> completed
+2026-11-25 19:19:45,596 INFO ltx.pipeline: Job e5640d8f-42ad-44c6-b92d-3bd49190fa4f start mode=t2v 1536x896 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:19:47,291 INFO ltx.pipeline: Job e5640d8f-42ad-44c6-b92d-3bd49190fa4f outpaint canvas 1536x896 pads l/r/t/b=128/128/64/64 -> outpaint_canvas.mp4
+2026-11-25 19:19:47,291 INFO ltx.pipeline: Job e5640d8f-42ad-44c6-b92d-3bd49190fa4f base=LTX-2.5-22B-distilled-transformer.gguf loras=in-outpainting(strength=1) prompt="A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement."
+2026-11-25 19:19:47,393 INFO ltx.runner: generate text encode started
+2026-11-25 19:19:47,404 INFO ltx.runner: generate text encode 2/1 steps (0.00 step/s, 0.0s elapsed)
+2026-11-25 19:20:04,660 INFO ltx.runner: generate stage-1 denoise started (8 steps)
+2026-11-25 19:20:10,744 INFO ltx.runner: generate stage-1 denoise 2/8 steps (0.16 step/s, 6.1s elapsed)
+2026-11-25 19:20:16,837 INFO ltx.runner: generate stage-1 denoise 3/8 steps (0.16 step/s, 12.2s elapsed)
+2026-11-25 19:20:22,926 INFO ltx.runner: generate stage-1 denoise 4/8 steps (0.16 step/s, 18.3s elapsed)
+2026-11-25 19:20:29,016 INFO ltx.runner: generate stage-1 denoise 5/8 steps (0.16 step/s, 24.4s elapsed)
+2026-11-25 19:20:35,115 INFO ltx.runner: generate stage-1 denoise 6/8 steps (0.16 step/s, 30.5s elapsed)
+2026-11-25 19:20:41,211 INFO ltx.runner: generate stage-1 denoise 7/8 steps (0.16 step/s, 36.5s elapsed)
+2026-11-25 19:20:47,311 INFO ltx.runner: generate stage-1 denoise 8/8 steps (0.16 step/s, 42.6s elapsed)
+2026-11-25 19:20:50,656 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-25 19:21:25,260 INFO ltx.runner: generate stage-2 denoise started (2 steps)
+2026-11-25 19:21:38,812 INFO ltx.runner: generate stage-2 denoise 2/2 steps (0.07 step/s, 13.6s elapsed)
+2026-11-25 19:21:51,415 INFO ltx.runner: generate VAE decode 1/3 steps (0.00 step/s, 60.8s elapsed)
+2026-11-25 19:22:00,932 INFO ltx.pipeline: Job e5640d8f-42ad-44c6-b92d-3bd49190fa4f done in 135.3s peak_vram=7754MB -> completed
+2026-11-25 19:22:06,471 INFO ltx.pipeline: Job c3902ec2-98aa-4356-8361-c83d5a9d18cd start mode=t2v 1536x896 frames=121 steps=8 fps=24 seed=42
+2026-11-25 19:22:08,169 INFO ltx.pipeline: Job c3902ec2-98aa-4356-8361-c83d5a9d18cd outpaint canvas 1536x896 pads l/r/t/b=128/128/64/64 -> outpaint_canvas.mp4
+2026-11-25 19:22:08,170 INFO ltx.pipeline: Job c3902ec2-98aa-4356-8361-c83d5a9d18cd base=LTX-2.5-22B-distilled-transformer.gguf loras=in-outpainting(strength=1) prompt="A quiet harbor with wooden piers and soft morning mist stretches beyond the frame. Gentle camera movement."
+2026-11-25 19:22:08,274 INFO ltx.runner: generate text encode started
+2026-11-25 19:22:23,685 INFO ltx.runner: generate text encode 2/1 steps (0.06 step/s, 15.4s elapsed)
+2026-11-25 19:22:40,369 INFO ltx.runner: generate stage-1 denoise started (8 steps)
+2026-11-25 19:22:46,456 INFO ltx.runner: generate stage-1 denoise 2/8 steps (0.16 step/s, 6.1s elapsed)
+2026-11-25 19:22:52,544 INFO ltx.runner: generate stage-1 denoise 3/8 steps (0.16 step/s, 12.2s elapsed)
+2026-11-25 19:22:58,634 INFO ltx.runner: generate stage-1 denoise 4/8 steps (0.16 step/s, 18.3s elapsed)
+2026-11-25 19:23:04,752 INFO ltx.runner: generate stage-1 denoise 5/8 steps (0.16 step/s, 24.4s elapsed)
+2026-11-25 19:23:10,840 INFO ltx.runner: generate stage-1 denoise 6/8 steps (0.16 step/s, 30.5s elapsed)
+2026-11-25 19:23:16,929 INFO ltx.runner: generate stage-1 denoise 7/8 steps (0.16 step/s, 36.6s elapsed)
+2026-11-25 19:23:23,029 INFO ltx.runner: generate stage-1 denoise 8/8 steps (0.16 step/s, 42.7s elapsed)
+2026-11-25 19:23:26,366 INFO ltx.runner: generate VAE decode started (3 steps)
+2026-11-25 19:24:00,918 INFO ltx.runner: generate stage-2 denoise started (2 steps)
+2026-11-25 19:24:14,486 INFO ltx.runner: generate stage-2 denoise 2/2 steps (0.07 step/s, 13.6s elapsed)
+2026-11-25 19:24:27,093 INFO ltx.runner: generate VAE decode 1/3 steps (0.00 step/s, 60.7s elapsed)
+2026-11-25 19:24:36,608 INFO ltx.pipeline: Job c3902ec2-98aa-4356-8361-c83d5a9d18cd done in 150.1s peak_vram=7754MB -> completed
+2026-11-25 19:24:47,564 INFO ltx.runner: Unloading pipeline (REAL worker).
+2026-11-25 19:24:49,873 INFO ltx.pipeline: Engine family change: LTX25Runner -> H3Runner (unloading the previous worker first)
+2026-11-25 19:24:49,873 INFO ltx.pipeline: Base model switched to 'MiniMaxH3'
+2026-11-25 19:24:49,878 INFO ltx.runner: Backend auto-selected: REAL.
+2026-11-25 19:24:49,880 INFO h3.runner: Loading pipeline (REAL engine_h3 worker). python=.venv-engine-h3\Scripts\python.exe engine_dir=engine_h3 blocks_on_gpu=8 deterministic=True
+2026-11-25 19:24:49,880 INFO ltx.runner: Model-management overrides: {'transformer': 'models\\MiniMaxH3\\Weights\\minimax_h3_ref2va_pruned_int8_convrot.safetensors', 'text_encoder': 'models\\MiniMaxH3\\TextEncoder\\qwen3vl_32b_minimax_h3_int8_convrot.safetensors', 'video_vae': 'models\\MiniMaxH3\\VAE\\minimax_h3_video_vae_fp16.safetensors', 'audio': 'models\\MiniMaxH3\\VAE\\minimax_h3_audio_vae_fp32.safetensors'}
+2026-11-25 19:24:54,312 INFO ltx.runner: LTX worker ready. sage_available=True
+2026-11-25 19:24:54,326 INFO ltx.pipeline: Transformer weight role: ref2va (minimax_h3_ref2va_pruned_int8_convrot.safetensors)
+2026-11-25 19:24:55,924 INFO ltx.runner: Unloading pipeline (REAL worker).

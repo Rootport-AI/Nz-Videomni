@@ -1,0 +1,40 @@
+[
+  {
+    "tool": "upload_video",
+    "args": {
+      "file_path": "outputs\\43761f33-1030-48ec-babf-0fc0798c3aef\\output.mp4"
+    },
+    "is_error": false,
+    "seconds": 0.2,
+    "at": "2026-11-25T18:56:07",
+    "result": {
+      "video_id": "b57b1b67-bd78-4207-8417-d22b54e94371",
+      "original_filename": "output.mp4",
+      "stored_path": "uploads/videos/b57b1b67-bd78-4207-8417-d22b54e94371/input.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 1918364,
+      "trimmed": false,
+      "frame_count": null,
+      "fps": null
+    }
+  },
+  {
+    "tool": "upload_video",
+    "args": {
+      "file_path": "outputs\\inpaint_spike\\material_full\\mask.mp4"
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T18:56:07",
+    "result": {
+      "video_id": "2d77ab73-cf9d-4a09-b262-5886e0f18e4e",
+      "original_filename": "mask.mp4",
+      "stored_path": "uploads/videos/2d77ab73-cf9d-4a09-b262-5886e0f18e4e/input.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 8180,
+      "trimmed": false,
+      "frame_count": null,
+      "fps": null
+    }
+  }
+]

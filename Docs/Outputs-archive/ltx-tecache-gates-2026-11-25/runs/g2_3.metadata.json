@@ -1,0 +1,212 @@
+{
+  "job_id": "cddd5657-f8ce-4ee8-b5cd-29c0f57c62f6",
+  "created_at": "2026-11-25T08:56:41Z",
+  "started_at": "2026-11-25T08:56:41Z",
+  "completed_at": "2026-11-25T09:00:19Z",
+  "status": "completed",
+  "kind": "chain",
+  "request": {
+    "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": false,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": false,
+    "vram16_mode": null,
+    "pi_h3": "off",
+    "sol_vae": false,
+    "keep_reference_latents": false,
+    "keep_text_conditioning": true,
+    "width": 1280,
+    "height": 768,
+    "crop_output": null,
+    "frame_rate": 24.0,
+    "num_inference_steps": 8,
+    "shift_video": null,
+    "shift_audio": null,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "overlap_frames": 3,
+    "overlap_strength": 0.5,
+    "clips": [
+      {
+        "prompt": "Small boats rock gently beside the pier.",
+        "num_frames": 121,
+        "conditioning_images": [],
+        "references": [],
+        "source_audio": null
+      },
+      {
+        "prompt": "Mist drifts slowly over the calm water.",
+        "num_frames": 121,
+        "conditioning_images": [],
+        "references": [],
+        "source_audio": null
+      },
+      {
+        "prompt": "The first sunlight reaches the far shore.",
+        "num_frames": 121,
+        "conditioning_images": [],
+        "references": [],
+        "source_audio": null
+      }
+    ],
+    "source_video": null,
+    "source_audio": null,
+    "retake": null,
+    "end_source": null,
+    "loras": [],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "chunked_upsample": true,
+    "stage2_window": "standard"
+  },
+  "generation_mode": "chain",
+  "seed_used": 42,
+  "attention_used": "sdpa",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "off",
+  "keep_resident_embeddings_used": null,
+  "fused_gguf_dequant_kernel_used": "on",
+  "vae_mode_used": "off",
+  "vram16_mode_used": null,
+  "peak_vram_reserved_mb": 15824,
+  "generation_time_seconds": 218.3,
+  "backend": "ltx-distilled",
+  "chain": {
+    "num_clips": 3,
+    "architecture": "masked_av_latent_concat",
+    "overlap_frames": 3,
+    "overlap_strength": 0.5,
+    "total_frames": 329,
+    "clip_num_frames": [
+      121,
+      121,
+      121
+    ],
+    "segment_seam_junctions": [
+      120,
+      224
+    ],
+    "tile_seam_junctions": [
+      168,
+      312
+    ],
+    "all_junctions": [
+      119,
+      120,
+      121,
+      167,
+      168,
+      169,
+      223,
+      224,
+      225,
+      311,
+      312,
+      313
+    ],
+    "video_tiles": [
+      [
+        0,
+        22
+      ],
+      [
+        18,
+        22
+      ],
+      [
+        36,
+        6
+      ]
+    ],
+    "n_tiles": 3,
+    "stage2_window": "standard",
+    "v_tile": 22,
+    "kt_v": 4
+  },
+  "output": {
+    "path": "outputs/cddd5657-f8ce-4ee8-b5cd-29c0f57c62f6/output.mp4",
+    "resolution": "1280x768",
+    "duration_seconds": 13.708,
+    "frame_rate": 24.0,
+    "file_size_bytes": 3440290
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 9272
+  },
+  "models": {
+    "base_model": "LTX23",
+    "selection": {
+      "transformer": {
+        "name": "default",
+        "file": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "gemma-3-12b-it-Q4_K_M.gguf"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "LTX23_video_vae_bf16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "LTX23_audio_vae_bf16.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "ltx23": {
+    "te_cache": {
+      "clips": [
+        "hit",
+        "hit",
+        "hit"
+      ],
+      "stage2": "hit"
+    },
+    "conditioning_sha256": {
+      "clips": [
+        {
+          "video": "79bb9411c10139226303e0f18978ed95c295cf33091f2262351619ce9395e6e6",
+          "audio": "8ac86f8a94ba20084a843de684b22deae800fa106a303fc6a555d963ecb717bd"
+        },
+        {
+          "video": "a0fabcb424a5c052ed8c8f860d22c1a268eb9e26e42755c3a022667235725986",
+          "audio": "d513f5b3f335c0d55acdfb0669a0208127d7bf398f6ff82e6f6067e9c47bee91"
+        },
+        {
+          "video": "00000ac608383f2a91596c0ce354207b805d61fe03398736bbb17ed1594648b8",
+          "audio": "e4ed101612bac42d2e62602f0a6df939a166995054f2beacab03f45858f976df"
+        }
+      ],
+      "stage2": {
+        "video": "426e48390750cdeccdb230928c8ade7778d4fa7f12a83a2d985a5fa73b966026",
+        "audio": "06cd66779ce423965e98d8f7e663a225532c0c6c00af1bfa8c2c79ff3cdff48c"
+      }
+    }
+  }
+}

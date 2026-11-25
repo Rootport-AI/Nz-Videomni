@@ -1,0 +1,44 @@
+g1-1: job 4d27e238-a6a8-4acf-86d5-c5aef4aeb906 (ON, A, Na, nag)
+  4d27e238 running stage=None clip=None step=None/None t=45s
+  4d27e238 running stage=stage2_denoise clip=None step=1/3 t=95s
+g1-1: mp4 bb2c7628 te={'positive': 'miss', 'negative': 'miss'} gen=134.59 phases=None problems=[]
+g1-2: job 0d2fb735-9dca-4286-b951-5c2ce8a49075 (OFF, A, Na, nag)
+  0d2fb735 running stage=None clip=None step=None/None t=45s
+  0d2fb735 running stage=stage2_denoise clip=None step=1/3 t=90s
+g1-2: mp4 bb2c7628 te=None gen=127.55 phases=None problems=[]
+g1-3: job 16883ccc-2b31-40f8-ae32-d2fbdbf43841 (ON, A, Na, nag)
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:29:27
+  16883ccc running stage=None clip=None step=None/None t=60s
+  16883ccc running stage=stage2_denoise clip=None step=2/3 t=105s
+g1-3: mp4 bb2c7628 te={'positive': 'miss', 'negative': 'miss'} gen=132.12 phases=None problems=[]
+g1-4: job 3c3e2b60-3b06-4731-bb57-4d9e8b8927da (ON, A, Na, nag)
+  3c3e2b60 running stage=stage2_denoise clip=None step=1/3 t=45s
+g1-4: mp4 bb2c7628 te={'positive': 'hit', 'negative': 'hit'} gen=82.65 phases=None problems=[]
+g1-5: job e735c655-214a-4819-8577-e2ec53224182 (ON, A, Nb, nag)
+  e735c655 running stage=None clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:33:58
+  BACKEND_UNREACHABLE (2) 2026-11-25T17:34:48
+g1-5: mp4 4fcba203 te={'positive': 'hit', 'negative': 'miss'} gen=122.89 phases=None problems=[]
+g1-6: job aca2c432-3027-45d5-9699-1b40a516aecc (ON, B, Nb, nag)
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:35:58
+  BACKEND_UNREACHABLE (2) 2026-11-25T17:36:53
+g1-6: mp4 f408201e te={'positive': 'miss', 'negative': 'hit'} gen=126.49 phases=None problems=[]
+g1-7: job ed10b4f9-6c1f-4c02-b77d-8f130273d9ec (ON, B, Nb, vsf)
+  ed10b4f9 running stage=stage2_denoise clip=None step=1/3 t=45s
+g1-7: mp4 34b4abef te={'positive': 'hit', 'negative': 'hit'} gen=78.8 phases=None problems=[]
+g1-8: job a533fa9a-740a-48ee-8c13-b3da27153a27 (ON, B, Nb, vsf, keep_resident)
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:39:04
+g1-8: mp4 34b4abef te={'positive': 'hit', 'negative': 'hit'} gen=79.37 phases=None problems=[]
+g1-9: job 84584307-2ddc-4301-8ce6-1af77b3ef8f6 (OFF, A, Nb, nag)
+  84584307 running stage=None clip=None step=None/None t=50s
+  84584307 running stage=stage2_denoise clip=None step=2/3 t=100s
+g1-9: mp4 4fcba203 te=None gen=129.57 phases=None problems=[]
+g1-10: job 673ab960-9d75-4f35-9232-6b2a9f6fc871 (OFF, B, Nb, nag)
+  673ab960 running stage=None clip=None step=None/None t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T17:43:24
+g1-10: mp4 f408201e te=None gen=124.7 phases=None problems=[]
+g1-11: job e47257d6-41f6-464c-95ed-4a735cb52440 (OFF, B, Nb, vsf)
+  e47257d6 running stage=None clip=None step=None/None t=45s
+  e47257d6 running stage=stage2_denoise clip=None step=1/3 t=90s
+g1-11: mp4 34b4abef te=None gen=122.68 phases=None problems=[]
+GATE g1 PASS

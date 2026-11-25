@@ -1,0 +1,1773 @@
+[
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.16,
+    "at": "2026-11-25T09:20:45",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": false,
+        "pipeline_type": null,
+        "state": "unloaded",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.03,
+    "at": "2026-11-25T09:20:45"
+  },
+  {
+    "tool": "list_loras",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T09:20:45"
+  },
+  {
+    "tool": "load_pipeline",
+    "args": {
+      "wait_sec": 45
+    },
+    "is_error": false,
+    "seconds": 2.94,
+    "at": "2026-11-25T09:20:48",
+    "result": {
+      "pipeline_loaded": true,
+      "pipeline_type": "distilled",
+      "state": "ready",
+      "finished": true
+    }
+  },
+  {
+    "tool": "backend_status",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T09:20:48",
+    "result": {
+      "reachable": true,
+      "base_url": "http://127.0.0.1:18620",
+      "api_key_configured": false,
+      "pipeline_load_in_flight": false,
+      "status": {
+        "server": "running",
+        "version": "0.4.0",
+        "host": "127.0.0.1",
+        "port": 18620,
+        "pipeline_loaded": true,
+        "pipeline_type": "distilled",
+        "state": "ready",
+        "base_model": "MiniMaxH3",
+        "gpu": {
+          "available": false,
+          "name": null,
+          "vram_total_mb": 0,
+          "vram_used_mb": 0,
+          "vram_free_mb": 0
+        },
+        "vram_optimization": {
+          "low_vram_mode": true,
+          "low_vram_profile": "16gb_safe",
+          "fp8_transformer": true,
+          "cpu_offload_text_encoder": true,
+          "vae_tiling": true,
+          "attention_tiling": false,
+          "block_swap": true,
+          "low_vram_disabled_required": false
+        },
+        "acceleration": {
+          "attention_backends": [
+            "sdpa",
+            "sage"
+          ],
+          "sage_available": true,
+          "block_swap_prefetch_available": true
+        },
+        "tracking": {
+          "available": true
+        },
+        "queue": {
+          "mode": "single_job_in_memory",
+          "pending": 0,
+          "running": 0,
+          "completed": 0,
+          "failed": 0
+        }
+      }
+    }
+  },
+  {
+    "tool": "list_models",
+    "args": {},
+    "is_error": false,
+    "seconds": 0.03,
+    "at": "2026-11-25T09:20:48"
+  },
+  {
+    "tool": "upload_image",
+    "args": {
+      "file_path": "Docs\\Outputs-archive\\h3-gate2\\i2v_input_square.png"
+    },
+    "is_error": false,
+    "seconds": 0.05,
+    "at": "2026-11-25T09:20:48",
+    "result": {
+      "image_id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+      "original_filename": "i2v_input_square.png",
+      "stored_path": "uploads/330a814b-3499-497b-88a0-c3edfe89abf7/input.png",
+      "width": 384,
+      "height": 384,
+      "content_type": "image/png"
+    }
+  },
+  {
+    "tool": "upload_video",
+    "args": {
+      "file_path": "outputs\\comfort-calib-h3-ref-2026-11-03\\materials\\H3-Ref-1080p-3s.mp4"
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T09:20:48",
+    "result": {
+      "video_id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+      "original_filename": "H3-Ref-1080p-3s.mp4",
+      "stored_path": "uploads/videos/43986536-2da1-4e49-a509-c191be7ad8c6/input.mp4",
+      "content_type": "video/mp4",
+      "size_bytes": 2546645,
+      "trimmed": false,
+      "frame_count": null,
+      "fps": null
+    }
+  },
+  {
+    "tool": "upload_audio",
+    "args": {
+      "file_path": "outputs\\h3-ref2va-2026-10-28\\ref_audio_raincoat_speech.wav"
+    },
+    "is_error": false,
+    "seconds": 0.0,
+    "at": "2026-11-25T09:20:48",
+    "result": {
+      "audio_id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+      "original_filename": "ref_audio_raincoat_speech.wav",
+      "stored_path": "uploads/audios/413ea2b6-4a55-4b42-9d7b-8c402b796f2e/input.wav",
+      "content_type": "audio/wav",
+      "size_bytes": 663630
+    }
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.08,
+    "at": "2026-11-25T09:20:48",
+    "result": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "status": "running",
+      "created_at": "2026-11-25T00:20:48Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T09:21:33"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 35.03,
+    "at": "2026-11-25T09:22:08",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.02,
+    "at": "2026-11-25T09:22:28",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 35.03,
+    "at": "2026-11-25T09:23:13",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.01,
+    "at": "2026-11-25T09:24:08"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T09:24:53"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T09:25:38"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.02,
+    "at": "2026-11-25T09:25:48",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T09:26:43"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.0,
+    "at": "2026-11-25T09:26:53",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.03,
+    "at": "2026-11-25T09:27:13",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 35.05,
+    "at": "2026-11-25T09:27:59",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 10.0,
+    "at": "2026-11-25T09:28:19"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ]
+    },
+    "is_error": false,
+    "seconds": 0.09,
+    "at": "2026-11-25T09:28:19",
+    "result": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "status": "running",
+      "created_at": "2026-11-25T00:28:19Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 49.98,
+    "at": "2026-11-25T09:29:09"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T09:29:14",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T09:30:09"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T09:30:24",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.03,
+    "at": "2026-11-25T09:30:59",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:31:54"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 50.0,
+    "at": "2026-11-25T09:32:44"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.0,
+    "at": "2026-11-25T09:33:04",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T09:33:59"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 30.03,
+    "at": "2026-11-25T09:34:29",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T09:35:24"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 20.02,
+    "at": "2026-11-25T09:35:44"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.08,
+    "at": "2026-11-25T09:35:44",
+    "result": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "status": "running",
+      "created_at": "2026-11-25T00:35:44Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.01,
+    "at": "2026-11-25T09:36:29"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T09:36:34",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.03,
+    "at": "2026-11-25T09:37:09",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.0,
+    "at": "2026-11-25T09:37:25",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:38:20"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 30.03,
+    "at": "2026-11-25T09:38:50",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T09:39:05",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T09:40:00"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.06,
+    "at": "2026-11-25T09:40:45"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:41:30"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T09:42:15"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:43:00"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.0,
+    "at": "2026-11-25T09:43:05",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 0.02,
+    "at": "2026-11-25T09:43:15"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+      "negative_prompt": "blurry, low quality, distorted faces",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.09,
+    "at": "2026-11-25T09:43:15",
+    "result": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "status": "running",
+      "created_at": "2026-11-25T00:43:15Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:44:00"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.02,
+    "at": "2026-11-25T09:44:25",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 40.03,
+    "at": "2026-11-25T09:45:15",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.01,
+    "at": "2026-11-25T09:46:10"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 39.99,
+    "at": "2026-11-25T09:46:50",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:47:45"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T09:48:00",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 14.98,
+    "at": "2026-11-25T09:48:25",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.05,
+    "at": "2026-11-25T09:48:55",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T09:49:50"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 5.02,
+    "at": "2026-11-25T09:49:55"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.06,
+    "at": "2026-11-25T09:49:56",
+    "result": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "status": "running",
+      "created_at": "2026-11-25T00:49:56Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T09:50:41"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T09:51:26"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.0,
+    "at": "2026-11-25T09:51:51",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 40.01,
+    "at": "2026-11-25T09:52:41",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.03,
+    "at": "2026-11-25T09:53:06",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T09:53:31",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 14.98,
+    "at": "2026-11-25T09:53:56",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T09:54:51"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T09:55:36"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T09:56:21"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 35.0,
+    "at": "2026-11-25T09:56:56"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks softly with the voice from <Audio 1>.",
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ],
+      "keep_text_conditioning": true
+    },
+    "is_error": false,
+    "seconds": 0.08,
+    "at": "2026-11-25T09:56:56",
+    "result": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "status": "running",
+      "created_at": "2026-11-25T00:56:56Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 34.98,
+    "at": "2026-11-25T09:57:31",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T09:58:26"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T09:59:11"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T09:59:16",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.01,
+    "at": "2026-11-25T09:59:36",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.02,
+    "at": "2026-11-25T10:00:31"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T10:01:16"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T10:02:01"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T10:02:46"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.03,
+    "at": "2026-11-25T10:03:06",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 25.03,
+    "at": "2026-11-25T10:03:41",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 10.02,
+    "at": "2026-11-25T10:04:02"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ]
+    },
+    "is_error": false,
+    "seconds": 0.08,
+    "at": "2026-11-25T10:04:02",
+    "result": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "status": "running",
+      "created_at": "2026-11-25T01:04:02Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 49.98,
+    "at": "2026-11-25T10:04:52"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.02,
+    "at": "2026-11-25T10:05:12",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 49.98,
+    "at": "2026-11-25T10:06:12"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T10:06:27",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T10:06:42",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T10:07:37"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 40.02,
+    "at": "2026-11-25T10:08:17",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 35.03,
+    "at": "2026-11-25T10:09:02",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.08,
+    "at": "2026-11-25T10:09:57"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.0,
+    "at": "2026-11-25T10:10:42"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 44.98,
+    "at": "2026-11-25T10:11:27"
+  },
+  {
+    "tool": "submit_generate",
+    "args": {
+      "width": 1280,
+      "height": 768,
+      "frame_rate": 24.0,
+      "seed": 42,
+      "num_inference_steps": 4,
+      "shift_video": 12.0,
+      "shift_audio": 3.0,
+      "attention_backend": "sdpa",
+      "keep_resident": true,
+      "embed_mp4_metadata": false,
+      "loras": [
+        {
+          "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+          "strength": 0.8
+        }
+      ],
+      "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks softly with the voice from <Audio 1>.",
+      "negative_prompt": "flicker, jitter, watermark, text overlay",
+      "nag_enabled": true,
+      "neg_method": "vsf",
+      "num_frames": 73,
+      "references": [
+        {
+          "kind": "picture",
+          "id": "330a814b-3499-497b-88a0-c3edfe89abf7",
+          "slot": 1
+        },
+        {
+          "kind": "video",
+          "id": "43986536-2da1-4e49-a509-c191be7ad8c6",
+          "slot": 1
+        },
+        {
+          "kind": "audio",
+          "id": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e",
+          "slot": 1,
+          "max_sec": 12.0
+        }
+      ]
+    },
+    "is_error": false,
+    "seconds": 0.08,
+    "at": "2026-11-25T10:11:27",
+    "result": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "status": "running",
+      "created_at": "2026-11-25T01:11:27Z",
+      "next": "wait_for_job(job_id) を呼ぶ"
+    }
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.03,
+    "at": "2026-11-25T10:12:12"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 45.03,
+    "at": "2026-11-25T10:12:57",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.05,
+    "at": "2026-11-25T10:13:53"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.09,
+    "at": "2026-11-25T10:14:38"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.02,
+    "at": "2026-11-25T10:14:48",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.03,
+    "at": "2026-11-25T10:15:03",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 45.08,
+    "at": "2026-11-25T10:15:58"
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 15.02,
+    "at": "2026-11-25T10:16:13",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.03,
+    "at": "2026-11-25T10:16:33",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 24.98,
+    "at": "2026-11-25T10:17:08",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — Server disconnected without sending a response."
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 5.02,
+    "at": "2026-11-25T10:17:23",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.01,
+    "at": "2026-11-25T10:17:43",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 10.0,
+    "at": "2026-11-25T10:18:03",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": true,
+    "seconds": 20.02,
+    "at": "2026-11-25T10:18:33",
+    "error_text": "Error executing tool wait_for_job: BACKEND_UNREACHABLE: バックエンドに接続できません。run.bat でバックエンドを起動してください (base_url=http://127.0.0.1:18620) — "
+  },
+  {
+    "tool": "wait_for_job",
+    "args": {
+      "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+      "timeout_sec": 45,
+      "poll_interval_sec": 5
+    },
+    "is_error": false,
+    "seconds": 5.02,
+    "at": "2026-11-25T10:18:48"
+  }
+]

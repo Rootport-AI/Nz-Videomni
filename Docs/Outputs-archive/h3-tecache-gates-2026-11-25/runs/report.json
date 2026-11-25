@@ -1,0 +1,1431 @@
+{
+  "gates": {
+    "g1": {
+      "rows": [
+        {
+          "label": "1",
+          "cond": "ON, prompt A, negative Na",
+          "job_id": "73494daa-129e-45d8-9832-64093ca54b16",
+          "on": true,
+          "mp4_sha8": "589977c0",
+          "generation_time_seconds": 448.95,
+          "wall_seconds": 450.4,
+          "rss_peak_gib": 28.33,
+          "commit_peak_gib": 42.99,
+          "clips": [
+            {
+              "enc_seconds": 34.87,
+              "te_cache": {
+                "positive": "miss",
+                "negative": "miss"
+              },
+              "tokens": 4260,
+              "neg_tokens": 8,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {
+                "positive": "2d97f1ed",
+                "tags": "b6d7c228",
+                "negative": "ffa49610"
+              },
+              "rss_peak": 3.44,
+              "commit_peak": 9.28
+            }
+          ],
+          "cache_held": {
+            "entries": 2,
+            "bytes": 43738400
+          },
+          "problems": []
+        },
+        {
+          "label": "2",
+          "cond": "OFF, same input as 1",
+          "job_id": "952d6174-a146-4d33-b6bf-43417a0b64ab",
+          "on": false,
+          "mp4_sha8": "589977c0",
+          "generation_time_seconds": 443.49,
+          "wall_seconds": 445.3,
+          "rss_peak_gib": 29.54,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 45.95,
+              "te_cache": null,
+              "tokens": 4260,
+              "neg_tokens": 8,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {},
+              "rss_peak": 29.37,
+              "commit_peak": 42.99
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        },
+        {
+          "label": "3",
+          "cond": "ON, same input as 1",
+          "job_id": "27bfbe72-ea91-4c5c-9181-ecfcff3033a5",
+          "on": true,
+          "mp4_sha8": "589977c0",
+          "generation_time_seconds": 440.47,
+          "wall_seconds": 450.5,
+          "rss_peak_gib": 29.54,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 42.95,
+              "te_cache": {
+                "positive": "miss",
+                "negative": "miss"
+              },
+              "tokens": 4260,
+              "neg_tokens": 8,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {
+                "positive": "2d97f1ed",
+                "tags": "b6d7c228",
+                "negative": "ffa49610"
+              },
+              "rss_peak": 29.54,
+              "commit_peak": 44.04
+            }
+          ],
+          "cache_held": {
+            "entries": 2,
+            "bytes": 43738400
+          },
+          "problems": []
+        },
+        {
+          "label": "4",
+          "cond": "ON, same input as 1",
+          "job_id": "37955ed3-86d3-4eed-a118-6ec65eeaed8a",
+          "on": true,
+          "mp4_sha8": "589977c0",
+          "generation_time_seconds": 397.01,
+          "wall_seconds": 400.3,
+          "rss_peak_gib": 29.54,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 0.02,
+              "te_cache": {
+                "positive": "hit",
+                "negative": "hit"
+              },
+              "tokens": 4260,
+              "neg_tokens": 8,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {
+                "positive": "2d97f1ed",
+                "tags": "b6d7c228",
+                "negative": "ffa49610"
+              },
+              "rss_peak": 29.54,
+              "commit_peak": 44.04
+            }
+          ],
+          "cache_held": {
+            "entries": 2,
+            "bytes": 43738400
+          },
+          "problems": []
+        },
+        {
+          "label": "5",
+          "cond": "ON, prompt A, negative Nb",
+          "job_id": "a489d449-753b-4a85-a1b6-c755303f311f",
+          "on": true,
+          "mp4_sha8": "2ffd0c46",
+          "generation_time_seconds": 419.8,
+          "wall_seconds": 420.2,
+          "rss_peak_gib": 29.54,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 22.15,
+              "te_cache": {
+                "positive": "hit",
+                "negative": "miss"
+              },
+              "tokens": 4260,
+              "neg_tokens": 10,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {
+                "positive": "2d97f1ed",
+                "tags": "b6d7c228",
+                "negative": "c3905f7f"
+              },
+              "rss_peak": 29.54,
+              "commit_peak": 44.04
+            }
+          ],
+          "cache_held": {
+            "entries": 2,
+            "bytes": 43758880
+          },
+          "problems": []
+        },
+        {
+          "label": "6",
+          "cond": "ON, prompt B, negative Nb",
+          "job_id": "fe0417c8-ef19-477d-bc98-bf7a99aaed83",
+          "on": true,
+          "mp4_sha8": "b65ec0ca",
+          "generation_time_seconds": 420.51,
+          "wall_seconds": 425.3,
+          "rss_peak_gib": 29.54,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 23.18,
+              "te_cache": {
+                "positive": "miss",
+                "negative": "hit"
+              },
+              "tokens": 4261,
+              "neg_tokens": 10,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {
+                "positive": "a9ee5d3b",
+                "tags": "70335229",
+                "negative": "c3905f7f"
+              },
+              "rss_peak": 29.54,
+              "commit_peak": 44.04
+            }
+          ],
+          "cache_held": {
+            "entries": 2,
+            "bytes": 43769128
+          },
+          "problems": []
+        },
+        {
+          "label": "7",
+          "cond": "OFF, same input as 5",
+          "job_id": "e6ed8286-47b5-4658-9be5-c9ce28cce42a",
+          "on": false,
+          "mp4_sha8": "2ffd0c46",
+          "generation_time_seconds": 440.42,
+          "wall_seconds": 445.2,
+          "rss_peak_gib": 29.59,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 42.69,
+              "te_cache": null,
+              "tokens": 4260,
+              "neg_tokens": 10,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {},
+              "rss_peak": 29.54,
+              "commit_peak": 44.04
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        },
+        {
+          "label": "8",
+          "cond": "OFF, same input as 6",
+          "job_id": "20eebd93-2ead-4b78-aee0-2ae172433ef6",
+          "on": false,
+          "mp4_sha8": "b65ec0ca",
+          "generation_time_seconds": 440.38,
+          "wall_seconds": 440.5,
+          "rss_peak_gib": 29.59,
+          "commit_peak_gib": 44.04,
+          "clips": [
+            {
+              "enc_seconds": 42.92,
+              "te_cache": null,
+              "tokens": 4261,
+              "neg_tokens": 10,
+              "latent_cache": [
+                null,
+                null,
+                null
+              ],
+              "csha8": {},
+              "rss_peak": 29.59,
+              "commit_peak": 44.04
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        }
+      ],
+      "unreachable": {
+        "count": 49,
+        "at": [
+          "2026-11-25T09:22:08",
+          "2026-11-25T09:22:28",
+          "2026-11-25T09:23:13",
+          "2026-11-25T09:25:48",
+          "2026-11-25T09:26:53",
+          "2026-11-25T09:27:13",
+          "2026-11-25T09:27:59",
+          "2026-11-25T09:29:14",
+          "2026-11-25T09:30:24",
+          "2026-11-25T09:30:59",
+          "2026-11-25T09:33:04",
+          "2026-11-25T09:34:29",
+          "2026-11-25T09:36:34",
+          "2026-11-25T09:37:09",
+          "2026-11-25T09:37:25",
+          "2026-11-25T09:38:50",
+          "2026-11-25T09:39:05",
+          "2026-11-25T09:43:05",
+          "2026-11-25T09:44:25",
+          "2026-11-25T09:45:15",
+          "2026-11-25T09:46:50",
+          "2026-11-25T09:48:00",
+          "2026-11-25T09:48:25",
+          "2026-11-25T09:48:55",
+          "2026-11-25T09:51:51",
+          "2026-11-25T09:52:41",
+          "2026-11-25T09:53:06",
+          "2026-11-25T09:53:31",
+          "2026-11-25T09:53:56",
+          "2026-11-25T09:57:31",
+          "2026-11-25T09:59:16",
+          "2026-11-25T09:59:36",
+          "2026-11-25T10:03:06",
+          "2026-11-25T10:03:41",
+          "2026-11-25T10:05:12",
+          "2026-11-25T10:06:27",
+          "2026-11-25T10:06:42",
+          "2026-11-25T10:08:17",
+          "2026-11-25T10:09:02",
+          "2026-11-25T10:12:57",
+          "2026-11-25T10:14:48",
+          "2026-11-25T10:15:03",
+          "2026-11-25T10:16:13",
+          "2026-11-25T10:16:33",
+          "2026-11-25T10:17:08",
+          "2026-11-25T10:17:23",
+          "2026-11-25T10:17:43",
+          "2026-11-25T10:18:03",
+          "2026-11-25T10:18:33"
+        ]
+      },
+      "stopped": null,
+      "upload_ids": {
+        "picture": "330a814b-3499-497b-88a0-c3edfe89abf7",
+        "video_short": "43986536-2da1-4e49-a509-c191be7ad8c6",
+        "audio": "413ea2b6-4a55-4b42-9d7b-8c402b796f2e"
+      },
+      "loaded": "minimax_h3_ref2va_pruned_int8_convrot"
+    },
+    "g2": {
+      "rows": [
+        {
+          "label": "1",
+          "cond": "both OFF",
+          "job_id": "ef5e2b92-bf2a-4d5d-a455-37177dbad680",
+          "on": false,
+          "mp4_sha8": "793fe5c4",
+          "generation_time_seconds": 2164.15,
+          "wall_seconds": 2166.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.56,
+          "clips": [
+            {
+              "enc_seconds": 22.63,
+              "te_cache": null,
+              "tokens": 4098,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "b7093ad2",
+                "audio": "9c4c56b9"
+              },
+              "csha8": {},
+              "rss_peak": 29.59,
+              "commit_peak": 44.04
+            },
+            {
+              "enc_seconds": 29.41,
+              "te_cache": null,
+              "tokens": 6136,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "b17c9cf3",
+                "audio": "07747af4"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 44.04
+            },
+            {
+              "enc_seconds": 24.65,
+              "te_cache": null,
+              "tokens": 4102,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "1d75d82d",
+                "audio": "3ddbcf85"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.56
+            },
+            {
+              "enc_seconds": 25.07,
+              "te_cache": null,
+              "tokens": 4099,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "28520a53",
+                "audio": "a35a5fbd"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.56
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        },
+        {
+          "label": "2",
+          "cond": "both ON",
+          "job_id": "6f008c05-6578-4d02-8350-1fd9a1243f5a",
+          "on": true,
+          "mp4_sha8": "793fe5c4",
+          "generation_time_seconds": 2065.04,
+          "wall_seconds": 2066.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 23.19,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 4098,
+              "neg_tokens": null,
+              "latent_cache": [
+                "miss"
+              ],
+              "latents_sha8": {
+                "video": "b7093ad2",
+                "audio": "9c4c56b9"
+              },
+              "csha8": {
+                "positive": "eb9c351d",
+                "tags": "8f67dd0d"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.56
+            },
+            {
+              "enc_seconds": 29.58,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 6136,
+              "neg_tokens": null,
+              "latent_cache": [
+                "miss"
+              ],
+              "latents_sha8": {
+                "video": "b17c9cf3",
+                "audio": "07747af4"
+              },
+              "csha8": {
+                "positive": "1cab1323",
+                "tags": "d8fdae75"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.56
+            },
+            {
+              "enc_seconds": 23.18,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 4102,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "1d75d82d",
+                "audio": "3ddbcf85"
+              },
+              "csha8": {
+                "positive": "0c2a6c73",
+                "tags": "82560ba1"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 22.79,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 4099,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "28520a53",
+                "audio": "a35a5fbd"
+              },
+              "csha8": {
+                "positive": "5475749a",
+                "tags": "67df4a19"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 4,
+            "bytes": 188921880
+          },
+          "problems": []
+        },
+        {
+          "label": "3",
+          "cond": "both ON, same input as 2",
+          "job_id": "3be313d8-b5dc-481d-b8a0-5540b0c7648c",
+          "on": true,
+          "mp4_sha8": "793fe5c4",
+          "generation_time_seconds": 1840.09,
+          "wall_seconds": 1840.7,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 0.02,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 4098,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "b7093ad2",
+                "audio": "9c4c56b9"
+              },
+              "csha8": {
+                "positive": "eb9c351d",
+                "tags": "8f67dd0d"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.03,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 6136,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "b17c9cf3",
+                "audio": "07747af4"
+              },
+              "csha8": {
+                "positive": "1cab1323",
+                "tags": "d8fdae75"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.02,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 4102,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "1d75d82d",
+                "audio": "3ddbcf85"
+              },
+              "csha8": {
+                "positive": "0c2a6c73",
+                "tags": "82560ba1"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.02,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 4099,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "28520a53",
+                "audio": "a35a5fbd"
+              },
+              "csha8": {
+                "positive": "5475749a",
+                "tags": "67df4a19"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 4,
+            "bytes": 188921880
+          },
+          "problems": []
+        },
+        {
+          "label": "4",
+          "cond": "both ON, clip 3 prompt changed",
+          "job_id": "0ff167ed-7ce5-4e4e-b7d4-b4f35fe54d92",
+          "on": true,
+          "mp4_sha8": "e67c59d6",
+          "generation_time_seconds": 1863.67,
+          "wall_seconds": 1865.9,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 0.02,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 4098,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "b7093ad2",
+                "audio": "9c4c56b9"
+              },
+              "csha8": {
+                "positive": "eb9c351d",
+                "tags": "8f67dd0d"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.03,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 6136,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "b17c9cf3",
+                "audio": "07747af4"
+              },
+              "csha8": {
+                "positive": "1cab1323",
+                "tags": "d8fdae75"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 23.41,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 4101,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "8a653e41",
+                "audio": "8070d561"
+              },
+              "csha8": {
+                "positive": "f69d4274",
+                "tags": "3befebb7"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.02,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 4099,
+              "neg_tokens": null,
+              "latent_cache": [
+                "hit"
+              ],
+              "latents_sha8": {
+                "video": "7114c7cf",
+                "audio": "5ef0702a"
+              },
+              "csha8": {
+                "positive": "5475749a",
+                "tags": "67df4a19"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 4,
+            "bytes": 188911632
+          },
+          "problems": []
+        },
+        {
+          "label": "5",
+          "cond": "both OFF, same input as 4",
+          "job_id": "9d25755e-50fe-4076-a528-b347e466983c",
+          "on": false,
+          "mp4_sha8": "e67c59d6",
+          "generation_time_seconds": 2163.23,
+          "wall_seconds": 2166.3,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 23.18,
+              "te_cache": null,
+              "tokens": 4098,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "b7093ad2",
+                "audio": "9c4c56b9"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 30.55,
+              "te_cache": null,
+              "tokens": 6136,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "b17c9cf3",
+                "audio": "07747af4"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 23.09,
+              "te_cache": null,
+              "tokens": 4101,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "8a653e41",
+                "audio": "8070d561"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 22.83,
+              "te_cache": null,
+              "tokens": 4099,
+              "neg_tokens": null,
+              "latent_cache": [
+                null
+              ],
+              "latents_sha8": {
+                "video": "7114c7cf",
+                "audio": "5ef0702a"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        }
+      ],
+      "unreachable": {
+        "count": 135,
+        "at": [
+          "2026-11-25T10:23:11",
+          "2026-11-25T10:23:51",
+          "2026-11-25T10:24:26",
+          "2026-11-25T10:24:46",
+          "2026-11-25T10:26:11",
+          "2026-11-25T10:26:41",
+          "2026-11-25T10:27:46",
+          "2026-11-25T10:29:21",
+          "2026-11-25T10:30:26",
+          "2026-11-25T10:30:41",
+          "2026-11-25T10:36:31",
+          "2026-11-25T10:38:11",
+          "2026-11-25T10:38:56",
+          "2026-11-25T10:39:16",
+          "2026-11-25T10:41:31",
+          "2026-11-25T10:41:56",
+          "2026-11-25T10:47:56",
+          "2026-11-25T10:48:21",
+          "2026-11-25T10:49:01",
+          "2026-11-25T10:49:56",
+          "2026-11-25T10:51:36",
+          "2026-11-25T10:52:41",
+          "2026-11-25T10:53:27",
+          "2026-11-25T10:54:12",
+          "2026-11-25T10:55:02",
+          "2026-11-25T10:55:17",
+          "2026-11-25T10:55:32",
+          "2026-11-25T10:56:02",
+          "2026-11-25T10:57:27",
+          "2026-11-25T10:58:02",
+          "2026-11-25T10:59:38",
+          "2026-11-25T11:01:18",
+          "2026-11-25T11:01:43",
+          "2026-11-25T11:02:03",
+          "2026-11-25T11:03:33",
+          "2026-11-25T11:04:08",
+          "2026-11-25T11:05:48",
+          "2026-11-25T11:07:48",
+          "2026-11-25T11:09:33",
+          "2026-11-25T11:10:13",
+          "2026-11-25T11:11:38",
+          "2026-11-25T11:12:33",
+          "2026-11-25T11:12:48",
+          "2026-11-25T11:13:23",
+          "2026-11-25T11:14:28",
+          "2026-11-25T11:17:33",
+          "2026-11-25T11:20:03",
+          "2026-11-25T11:21:43",
+          "2026-11-25T11:22:33",
+          "2026-11-25T11:23:18",
+          "2026-11-25T11:23:38",
+          "2026-11-25T11:26:28",
+          "2026-11-25T11:26:43",
+          "2026-11-25T11:29:54",
+          "2026-11-25T11:30:09",
+          "2026-11-25T11:33:44",
+          "2026-11-25T11:37:24",
+          "2026-11-25T11:38:24",
+          "2026-11-25T11:42:14",
+          "2026-11-25T11:44:35",
+          "2026-11-25T11:46:00",
+          "2026-11-25T11:47:55",
+          "2026-11-25T11:48:10",
+          "2026-11-25T11:48:25",
+          "2026-11-25T11:49:30",
+          "2026-11-25T11:50:10",
+          "2026-11-25T11:52:10",
+          "2026-11-25T11:52:50",
+          "2026-11-25T11:53:15",
+          "2026-11-25T11:54:50",
+          "2026-11-25T11:56:15",
+          "2026-11-25T11:56:30",
+          "2026-11-25T11:56:45",
+          "2026-11-25T11:57:05",
+          "2026-11-25T11:57:40",
+          "2026-11-25T11:59:45",
+          "2026-11-25T12:00:25",
+          "2026-11-25T12:00:40",
+          "2026-11-25T12:04:51",
+          "2026-11-25T12:05:26",
+          "2026-11-25T12:05:46",
+          "2026-11-25T12:07:21",
+          "2026-11-25T12:09:01",
+          "2026-11-25T12:09:51",
+          "2026-11-25T12:10:21",
+          "2026-11-25T12:11:36",
+          "2026-11-25T12:12:36",
+          "2026-11-25T12:14:01",
+          "2026-11-25T12:18:21",
+          "2026-11-25T12:20:01",
+          "2026-11-25T12:20:26",
+          "2026-11-25T12:24:41",
+          "2026-11-25T12:25:11",
+          "2026-11-25T12:25:41",
+          "2026-11-25T12:27:12",
+          "2026-11-25T12:29:32",
+          "2026-11-25T12:31:07",
+          "2026-11-25T12:32:27",
+          "2026-11-25T12:34:48",
+          "2026-11-25T12:35:43",
+          "2026-11-25T12:37:28",
+          "2026-11-25T12:38:03",
+          "2026-11-25T12:38:33",
+          "2026-11-25T12:38:48",
+          "2026-11-25T12:39:58",
+          "2026-11-25T12:40:38",
+          "2026-11-25T12:41:43",
+          "2026-11-25T12:42:23",
+          "2026-11-25T12:42:53",
+          "2026-11-25T12:44:38",
+          "2026-11-25T12:45:28",
+          "2026-11-25T12:46:38",
+          "2026-11-25T12:47:28",
+          "2026-11-25T12:48:53",
+          "2026-11-25T12:49:38",
+          "2026-11-25T12:50:33",
+          "2026-11-25T12:51:08",
+          "2026-11-25T12:53:08",
+          "2026-11-25T12:55:08",
+          "2026-11-25T12:55:23",
+          "2026-11-25T12:55:48",
+          "2026-11-25T12:56:48",
+          "2026-11-25T12:58:03",
+          "2026-11-25T12:59:18",
+          "2026-11-25T12:59:53",
+          "2026-11-25T13:00:23",
+          "2026-11-25T13:03:09",
+          "2026-11-25T13:03:49",
+          "2026-11-25T13:04:54",
+          "2026-11-25T13:05:19",
+          "2026-11-25T13:05:34",
+          "2026-11-25T13:06:39",
+          "2026-11-25T13:07:14",
+          "2026-11-25T13:07:29",
+          "2026-11-25T13:09:29"
+        ]
+      },
+      "stopped": null,
+      "upload_ids": {
+        "video_15s": "6bc439a5-134b-4c84-80eb-179da1e17222"
+      },
+      "loaded": "minimax_h3_ref2va_pruned_int8_convrot"
+    },
+    "g3": {
+      "rows": [
+        {
+          "label": "1",
+          "cond": "ON, image X",
+          "job_id": "83c340b9-b3e7-43c5-9825-c6f575ea98e1",
+          "on": true,
+          "mp4_sha8": "bcf6e8bb",
+          "generation_time_seconds": 381.34,
+          "wall_seconds": 390.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 17.85,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 989,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "649fe704",
+                "audio": "290a63a1"
+              },
+              "csha8": {
+                "positive": "730222e5",
+                "tags": "5334a888"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 22.19,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 22,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "6e41f295",
+                "audio": "0892d71a"
+              },
+              "csha8": {
+                "positive": "d1a91899",
+                "tags": "8f37100b"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 21.99,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 21,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "33f01226",
+                "audio": "71ee60e2"
+              },
+              "csha8": {
+                "positive": "9e415102",
+                "tags": "7b0f2fad"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 3,
+            "bytes": 10575936
+          },
+          "problems": []
+        },
+        {
+          "label": "2",
+          "cond": "OFF, same input as 1",
+          "job_id": "ab3a17d8-9ff6-4e7f-b2e0-0cf8204c4d7c",
+          "on": false,
+          "mp4_sha8": "bcf6e8bb",
+          "generation_time_seconds": 380.92,
+          "wall_seconds": 385.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 17.45,
+              "te_cache": null,
+              "tokens": 989,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "649fe704",
+                "audio": "290a63a1"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 22.15,
+              "te_cache": null,
+              "tokens": 22,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "6e41f295",
+                "audio": "0892d71a"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 22.02,
+              "te_cache": null,
+              "tokens": 21,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "33f01226",
+                "audio": "71ee60e2"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        },
+        {
+          "label": "3",
+          "cond": "ON, same input as 1",
+          "job_id": "cca52412-ccb2-4283-8cfe-9bd6bf5373fb",
+          "on": true,
+          "mp4_sha8": "bcf6e8bb",
+          "generation_time_seconds": 381.47,
+          "wall_seconds": 395.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 18.23,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 989,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "649fe704",
+                "audio": "290a63a1"
+              },
+              "csha8": {
+                "positive": "730222e5",
+                "tags": "5334a888"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 21.94,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 22,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "6e41f295",
+                "audio": "0892d71a"
+              },
+              "csha8": {
+                "positive": "d1a91899",
+                "tags": "8f37100b"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 21.97,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 21,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "33f01226",
+                "audio": "71ee60e2"
+              },
+              "csha8": {
+                "positive": "9e415102",
+                "tags": "7b0f2fad"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 3,
+            "bytes": 10575936
+          },
+          "problems": []
+        },
+        {
+          "label": "4",
+          "cond": "ON, same input as 1",
+          "job_id": "e3cfd85e-83e7-4c3b-a037-f654fbb734cd",
+          "on": true,
+          "mp4_sha8": "bcf6e8bb",
+          "generation_time_seconds": 318.35,
+          "wall_seconds": 320.2,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 0.0,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 989,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "649fe704",
+                "audio": "290a63a1"
+              },
+              "csha8": {
+                "positive": "730222e5",
+                "tags": "5334a888"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.0,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 22,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "6e41f295",
+                "audio": "0892d71a"
+              },
+              "csha8": {
+                "positive": "d1a91899",
+                "tags": "8f37100b"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.0,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 21,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "33f01226",
+                "audio": "71ee60e2"
+              },
+              "csha8": {
+                "positive": "9e415102",
+                "tags": "7b0f2fad"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 3,
+            "bytes": 10575936
+          },
+          "problems": []
+        },
+        {
+          "label": "5",
+          "cond": "ON, image Y (rest same)",
+          "job_id": "8ffa507d-b708-495a-a9c4-6b020c46ac40",
+          "on": true,
+          "mp4_sha8": "741b00f0",
+          "generation_time_seconds": 337.5,
+          "wall_seconds": 340.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 19.17,
+              "te_cache": {
+                "positive": "miss"
+              },
+              "tokens": 989,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "41080a31",
+                "audio": "9c792cd3"
+              },
+              "csha8": {
+                "positive": "7b251f68",
+                "tags": "5334a888"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.0,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 22,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "267e074d",
+                "audio": "614682fd"
+              },
+              "csha8": {
+                "positive": "d1a91899",
+                "tags": "8f37100b"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 0.0,
+              "te_cache": {
+                "positive": "hit"
+              },
+              "tokens": 21,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "1e7b4ef6",
+                "audio": "b087449e"
+              },
+              "csha8": {
+                "positive": "9e415102",
+                "tags": "7b0f2fad"
+              },
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 3,
+            "bytes": 10575936
+          },
+          "problems": []
+        },
+        {
+          "label": "6",
+          "cond": "OFF, same input as 5",
+          "job_id": "39eaef40-6ed1-43f8-bc28-f8bd1f1b9151",
+          "on": false,
+          "mp4_sha8": "741b00f0",
+          "generation_time_seconds": 382.21,
+          "wall_seconds": 385.1,
+          "rss_peak_gib": 31.28,
+          "commit_peak_gib": 45.85,
+          "clips": [
+            {
+              "enc_seconds": 18.8,
+              "te_cache": null,
+              "tokens": 989,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "41080a31",
+                "audio": "9c792cd3"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 21.6,
+              "te_cache": null,
+              "tokens": 22,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "267e074d",
+                "audio": "614682fd"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            },
+            {
+              "enc_seconds": 22.16,
+              "te_cache": null,
+              "tokens": 21,
+              "neg_tokens": null,
+              "latent_cache": [],
+              "latents_sha8": {
+                "video": "1e7b4ef6",
+                "audio": "b087449e"
+              },
+              "csha8": {},
+              "rss_peak": 31.28,
+              "commit_peak": 45.85
+            }
+          ],
+          "cache_held": {
+            "entries": 0,
+            "bytes": 0
+          },
+          "problems": []
+        }
+      ],
+      "unreachable": {
+        "count": 17,
+        "at": [
+          "2026-11-25T13:18:37",
+          "2026-11-25T13:18:52",
+          "2026-11-25T13:20:17",
+          "2026-11-25T13:22:22",
+          "2026-11-25T13:22:37",
+          "2026-11-25T13:22:57",
+          "2026-11-25T13:28:42",
+          "2026-11-25T13:35:23",
+          "2026-11-25T13:39:19",
+          "2026-11-25T13:42:00",
+          "2026-11-25T13:42:30",
+          "2026-11-25T13:45:30",
+          "2026-11-25T13:46:15",
+          "2026-11-25T13:47:10",
+          "2026-11-25T13:47:45",
+          "2026-11-25T13:48:25",
+          "2026-11-25T13:50:10"
+        ]
+      },
+      "stopped": null,
+      "upload_ids": {
+        "image_x": "8059af6d-309a-484f-a1d7-2e8ce10fc102",
+        "image_y": "909e6474-c402-48f0-bc53-76a31142226c"
+      },
+      "loaded": "minimax_h3_ref2va_pruned_int8_convrot"
+    }
+  }
+}

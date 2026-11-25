@@ -1,0 +1,1 @@
+{"tokens": 6136, "shape": [6136, 5120], "dtype": "torch.bfloat16", "bytes": 62832640, "seconds_each": [0.0259, 0.0255, 0.0254, 0.0256, 0.0254]}

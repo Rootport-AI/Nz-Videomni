@@ -1,0 +1,66 @@
+  load: state=ready loaded=True t=0s
+g3-1: job 83c340b9-b3e7-43c5-9825-c6f575ea98e1 (ON, image X)
+  83c340b9 running stage=stage1_denoise clip=1 step=1/4 t=50s
+  83c340b9 running stage=stage1_denoise clip=1 step=3/4 t=95s
+  83c340b9 running stage=encode clip=1 step=None/None t=140s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:18:37
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:18:52
+  83c340b9 running stage=encode clip=2 step=None/None t=225s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:20:17
+  83c340b9 running stage=stage1_denoise clip=3 step=2/4 t=310s
+  83c340b9 running stage=decode clip=3 step=None/None t=355s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:22:22
+g3-1: mp4 bcf6e8bb te=[{'positive': 'miss'}, {'positive': 'miss'}, {'positive': 'miss'}] lat=[[], [], []] gen=381.34 problems=[]
+g3-2: job ab3a17d8-9ff6-4e7f-b2e0-0cf8204c4d7c (OFF, same input as 1)
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:22:37
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:22:57
+  ab3a17d8 running stage=stage1_denoise clip=1 step=2/4 t=80s
+  ab3a17d8 running stage=encode clip=1 step=None/None t=125s
+  ab3a17d8 running stage=stage1_denoise clip=2 step=1/4 t=170s
+  ab3a17d8 running stage=stage1_denoise clip=2 step=3/4 t=220s
+  ab3a17d8 running stage=stage1_denoise clip=3 step=0/4 t=265s
+  ab3a17d8 running stage=stage1_denoise clip=3 step=2/4 t=310s
+  ab3a17d8 running stage=decode clip=3 step=None/None t=355s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:28:42
+g3-2: mp4 bcf6e8bb te=[None, None, None] lat=[[], [], []] gen=380.92 problems=[]
+g3-3: job cca52412-ccb2-4283-8cfe-9bd6bf5373fb (ON, same input as 1)
+  cca52412 running stage=stage1_denoise clip=1 step=1/4 t=45s
+  cca52412 running stage=stage1_denoise clip=1 step=2/4 t=90s
+  cca52412 running stage=encode clip=1 step=None/None t=135s
+  cca52412 running stage=stage1_denoise clip=2 step=1/4 t=180s
+  cca52412 running stage=encode clip=2 step=None/None t=225s
+  cca52412 running stage=stage1_denoise clip=3 step=1/4 t=270s
+  cca52412 running stage=stage1_denoise clip=3 step=3/4 t=315s
+  cca52412 running stage=decode clip=3 step=None/None t=365s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:35:23
+g3-3: mp4 bcf6e8bb te=[{'positive': 'miss'}, {'positive': 'miss'}, {'positive': 'miss'}] lat=[[], [], []] gen=381.47 problems=[]
+g3-4: job e3cfd85e-83e7-4c3b-a037-f654fbb734cd (ON, same input as 1)
+  e3cfd85e running stage=stage1_denoise clip=1 step=1/4 t=45s
+  e3cfd85e running stage=stage1_denoise clip=1 step=3/4 t=90s
+  e3cfd85e running stage=stage1_denoise clip=2 step=1/4 t=135s
+  e3cfd85e running stage=stage1_denoise clip=2 step=3/4 t=180s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:39:19
+  e3cfd85e running stage=decode clip=3 step=None/None t=280s
+g3-4: mp4 bcf6e8bb te=[{'positive': 'hit'}, {'positive': 'hit'}, {'positive': 'hit'}] lat=[[], [], []] gen=318.35 problems=[]
+g3-5: job 8ffa507d-b708-495a-a9c4-6b020c46ac40 (ON, image Y (rest same))
+  8ffa507d running stage=stage1_denoise clip=1 step=0/4 t=45s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:42:00
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:42:30
+  8ffa507d running stage=stage1_denoise clip=2 step=1/4 t=150s
+  8ffa507d running stage=stage1_denoise clip=2 step=3/4 t=195s
+  8ffa507d running stage=stage1_denoise clip=3 step=1/4 t=240s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:45:30
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:46:15
+g3-5: mp4 741b00f0 te=[{'positive': 'miss'}, {'positive': 'hit'}, {'positive': 'hit'}] lat=[[], [], []] gen=337.5 problems=[]
+g3-6: job 39eaef40-6ed1-43f8-bc28-f8bd1f1b9151 (OFF, same input as 5)
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:47:10
+  BACKEND_UNREACHABLE (2) 2026-11-25T13:47:45
+  BACKEND_UNREACHABLE (3) 2026-11-25T13:48:25
+  39eaef40 running stage=stage1_denoise clip=2 step=1/4 t=165s
+  39eaef40 running stage=stage1_denoise clip=2 step=3/4 t=210s
+  BACKEND_UNREACHABLE (1) 2026-11-25T13:50:10
+  39eaef40 running stage=stage1_denoise clip=3 step=1/4 t=270s
+  39eaef40 running stage=stage1_denoise clip=3 step=3/4 t=315s
+  39eaef40 running stage=decode clip=3 step=None/None t=360s
+g3-6: mp4 741b00f0 te=[None, None, None] lat=[[], [], []] gen=382.21 problems=[]
+GATE g3 PASS

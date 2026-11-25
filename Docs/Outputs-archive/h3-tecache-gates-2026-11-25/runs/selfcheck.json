@@ -1,0 +1,1135 @@
+{
+  "at": "2026-11-25T09:20:36",
+  "materials": {
+    "picture": {
+      "path": "Docs/Outputs-archive/h3-gate2/i2v_input_square.png",
+      "exists": true,
+      "size_bytes": 203387,
+      "sha256": "f2ede05d3cb2a66ea6a2a11db6d3874ec341acd2ff892fdd77b1c8ff99071b80",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 384,
+          "height": 384,
+          "r_frame_rate": "25/1",
+          "nb_read_frames": "1"
+        }
+      ]
+    },
+    "video_short": {
+      "path": "outputs/comfort-calib-h3-ref-2026-11-03/materials/H3-Ref-1080p-3s.mp4",
+      "exists": true,
+      "size_bytes": 2546645,
+      "sha256": "8b15a3165c2ccf2eb301413261d30258b515459d1f18ec8887de9020a409a517",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "24/1",
+          "duration_ts": 37376,
+          "duration": "3.041667",
+          "nb_read_frames": "73"
+        },
+        {
+          "codec_type": "audio",
+          "sample_rate": "44100",
+          "r_frame_rate": "0/0",
+          "duration_ts": 133120,
+          "duration": "3.018594",
+          "nb_read_frames": "130"
+        }
+      ]
+    },
+    "audio": {
+      "path": "outputs/h3-ref2va-2026-10-28/ref_audio_raincoat_speech.wav",
+      "exists": true,
+      "size_bytes": 663630,
+      "sha256": "304d3f050bce9c450b998ac1eea6d4ed7e934b8e6fc013346cca7b63d6164282",
+      "streams": [
+        {
+          "codec_type": "audio",
+          "sample_rate": "32000",
+          "r_frame_rate": "0/0",
+          "duration_ts": 165888,
+          "duration": "5.184000",
+          "nb_read_frames": "81"
+        }
+      ]
+    },
+    "video_15s": {
+      "path": "outputs/comfort-calib-h3-ref-2026-11-03/materials/H3-Ref-1080p-15s.mp4",
+      "exists": true,
+      "size_bytes": 11858295,
+      "sha256": "3d136a1dafbff1a959b9dfdb52d54177d9b2538767a5056da573d05c3ed3a428",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "24/1",
+          "duration_ts": 184320,
+          "duration": "15.000000",
+          "nb_read_frames": "360"
+        },
+        {
+          "codec_type": "audio",
+          "sample_rate": "44100",
+          "r_frame_rate": "0/0",
+          "duration_ts": 660480,
+          "duration": "14.976871",
+          "nb_read_frames": "645"
+        }
+      ]
+    },
+    "image_x": {
+      "path": "images/aux2_001.jpg",
+      "exists": true,
+      "size_bytes": 107829,
+      "sha256": "f1992a48583189fcaf8ebbafbaf6569a638d2437170561f2e8d693be5ad42cb9",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 783,
+          "height": 428,
+          "r_frame_rate": "25/1",
+          "duration_ts": 1,
+          "duration": "0.040000",
+          "nb_read_frames": "1"
+        }
+      ]
+    },
+    "image_y": {
+      "path": "images/aux2_002.jpg",
+      "exists": true,
+      "size_bytes": 120929,
+      "sha256": "9fb9a08b1dac6259f1304e0cbc9fb8ecc83ecf319f77ab348808cabe24d4ebec",
+      "streams": [
+        {
+          "codec_type": "video",
+          "width": 969,
+          "height": 561,
+          "r_frame_rate": "25/1",
+          "duration_ts": 1,
+          "duration": "0.040000",
+          "nb_read_frames": "1"
+        }
+      ]
+    }
+  },
+  "bodies": {
+    "g1-1": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-2": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-3": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-4": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "blurry, low quality, distorted faces",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-5": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-6": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks softly with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-7": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g1-8": {
+      "path": "/api/v1/generate",
+      "body": {
+        "prompt": "<Picture 1> is the person in this scene. The scene moves like <Video 1>. The person speaks softly with the voice from <Audio 1>.",
+        "negative_prompt": "flicker, jitter, watermark, text overlay",
+        "width": 1280,
+        "height": 768,
+        "num_frames": 73,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "nag_enabled": true,
+        "nag_scale": 11.0,
+        "nag_tau": 2.5,
+        "nag_alpha": 0.25,
+        "neg_method": "vsf",
+        "vsf_scale": 1.5,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "references": [
+          {
+            "kind": "picture",
+            "id": "id-picture",
+            "slot": 1
+          },
+          {
+            "kind": "video",
+            "id": "id-video_short",
+            "slot": 1
+          },
+          {
+            "kind": "audio",
+            "id": "id-audio",
+            "slot": 1,
+            "max_sec": 12.0
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ]
+      }
+    },
+    "g2-1": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "She walks slowly along the wooden pier.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops at the end of the pier and looks at the sea.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "A gull glides low over the water beside her.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "She turns and smiles as the sun rises.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-2": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_reference_latents": true,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "She walks slowly along the wooden pier.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops at the end of the pier and looks at the sea.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "A gull glides low over the water beside her.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "She turns and smiles as the sun rises.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-3": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_reference_latents": true,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "She walks slowly along the wooden pier.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops at the end of the pier and looks at the sea.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "A gull glides low over the water beside her.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "She turns and smiles as the sun rises.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-4": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_reference_latents": true,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "She walks slowly along the wooden pier.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops at the end of the pier and looks at the sea.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "A gull circles high above the harbor behind her.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "She turns and smiles as the sun rises.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g2-5": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A calm cinematic scene in the look of <Video 1>. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "She walks slowly along the wooden pier.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 124,
+            "prompt": "She stops at the end of the pier and looks at the sea.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "A gull circles high above the harbor behind her.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "She turns and smiles as the sun rises.",
+            "references": [
+              {
+                "kind": "video",
+                "id": "id-video_15s",
+                "slot": 1
+              }
+            ]
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-1": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "id-image_x",
+                "frame_idx": 0,
+                "strength": null
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-2": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "id-image_x",
+                "frame_idx": 0,
+                "strength": null
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-3": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "id-image_x",
+                "frame_idx": 0,
+                "strength": null
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-4": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "id-image_x",
+                "frame_idx": 0,
+                "strength": null
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-5": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "keep_text_conditioning": true,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "id-image_y",
+                "frame_idx": 0,
+                "strength": null
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    },
+    "g3-6": {
+      "path": "/api/v1/generate/chain",
+      "body": {
+        "prompt": "A quiet harbor at dawn. Soft light, gentle camera movement.",
+        "width": 1280,
+        "height": 768,
+        "frame_rate": 24.0,
+        "seed": 42,
+        "num_inference_steps": 4,
+        "shift_video": 12.0,
+        "shift_audio": 3.0,
+        "keep_resident": true,
+        "embed_mp4_metadata": false,
+        "overlap_frames": 3,
+        "overlap_strength": 0.5,
+        "clips": [
+          {
+            "num_frames": 73,
+            "prompt": "Small boats rock gently beside the pier.",
+            "conditioning_images": [
+              {
+                "image_id": "id-image_y",
+                "frame_idx": 0,
+                "strength": null
+              }
+            ]
+          },
+          {
+            "num_frames": 73,
+            "prompt": "Mist drifts slowly over the calm water."
+          },
+          {
+            "num_frames": 73,
+            "prompt": "The first sunlight reaches the far shore."
+          }
+        ],
+        "loras": [
+          {
+            "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+            "strength": 0.8
+          }
+        ],
+        "chunked_upsample": true
+      }
+    }
+  },
+  "problems": [],
+  "ok": true
+}

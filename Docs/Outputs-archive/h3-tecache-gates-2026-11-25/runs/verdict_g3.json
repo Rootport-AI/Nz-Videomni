@@ -1,0 +1,66 @@
+{
+  "gate": "g3",
+  "pass": true,
+  "stopped": null,
+  "error": null,
+  "jobs": {
+    "1": {
+      "job_id": "83c340b9-b3e7-43c5-9825-c6f575ea98e1",
+      "cond": "ON, image X",
+      "checked_ok": true,
+      "problems": []
+    },
+    "2": {
+      "job_id": "ab3a17d8-9ff6-4e7f-b2e0-0cf8204c4d7c",
+      "cond": "OFF, same input as 1",
+      "checked_ok": true,
+      "problems": []
+    },
+    "3": {
+      "job_id": "cca52412-ccb2-4283-8cfe-9bd6bf5373fb",
+      "cond": "ON, same input as 1",
+      "checked_ok": true,
+      "problems": []
+    },
+    "4": {
+      "job_id": "e3cfd85e-83e7-4c3b-a037-f654fbb734cd",
+      "cond": "ON, same input as 1",
+      "checked_ok": true,
+      "problems": []
+    },
+    "5": {
+      "job_id": "8ffa507d-b708-495a-a9c4-6b020c46ac40",
+      "cond": "ON, image Y (rest same)",
+      "checked_ok": true,
+      "problems": []
+    },
+    "6": {
+      "job_id": "39eaef40-6ed1-43f8-bc28-f8bd1f1b9151",
+      "cond": "OFF, same input as 5",
+      "checked_ok": true,
+      "problems": []
+    }
+  },
+  "unreachable": {
+    "count": 17,
+    "at": [
+      "2026-11-25T13:18:37",
+      "2026-11-25T13:18:52",
+      "2026-11-25T13:20:17",
+      "2026-11-25T13:22:22",
+      "2026-11-25T13:22:37",
+      "2026-11-25T13:22:57",
+      "2026-11-25T13:28:42",
+      "2026-11-25T13:35:23",
+      "2026-11-25T13:39:19",
+      "2026-11-25T13:42:00",
+      "2026-11-25T13:42:30",
+      "2026-11-25T13:45:30",
+      "2026-11-25T13:46:15",
+      "2026-11-25T13:47:10",
+      "2026-11-25T13:47:45",
+      "2026-11-25T13:48:25",
+      "2026-11-25T13:50:10"
+    ]
+  }
+}

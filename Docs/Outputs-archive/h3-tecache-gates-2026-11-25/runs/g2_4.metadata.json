@@ -1,0 +1,929 @@
+{
+  "job_id": "0ff167ed-7ce5-4e4e-b7d4-b4f35fe54d92",
+  "created_at": "2026-11-25T03:03:01Z",
+  "started_at": "2026-11-25T03:03:01Z",
+  "completed_at": "2026-11-25T03:34:05Z",
+  "status": "completed",
+  "kind": "chain",
+  "request": {
+    "prompt": "A calm cinematic scene in the look of <Video 1>. Soft light, gentle camera movement.",
+    "negative_prompt": "",
+    "nag_enabled": false,
+    "nag_scale": 11.0,
+    "nag_tau": 2.5,
+    "nag_alpha": 0.25,
+    "neg_method": "nag",
+    "vsf_scale": 1.5,
+    "attention_backend": "sdpa",
+    "block_swap_prefetch": true,
+    "keep_resident": true,
+    "keep_resident_embeddings": false,
+    "fused_gguf_dequant_kernel": true,
+    "vae_mode": "default",
+    "embed_mp4_metadata": false,
+    "vram16_mode": true,
+    "pi_h3": "off",
+    "sol_vae": false,
+    "keep_reference_latents": true,
+    "keep_text_conditioning": true,
+    "width": 1280,
+    "height": 768,
+    "crop_output": null,
+    "frame_rate": 24.0,
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "guidance_scale": 1.0,
+    "seed": 42,
+    "pipeline": "distilled",
+    "overlap_frames": 3,
+    "overlap_strength": 0.5,
+    "clips": [
+      {
+        "prompt": "She walks slowly along the wooden pier.",
+        "num_frames": 73,
+        "conditioning_images": [],
+        "references": [
+          {
+            "kind": "video",
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "slot": 1,
+            "max_sec": null
+          }
+        ],
+        "source_audio": null
+      },
+      {
+        "prompt": "She stops at the end of the pier and looks at the sea.",
+        "num_frames": 124,
+        "conditioning_images": [],
+        "references": [
+          {
+            "kind": "video",
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "slot": 1,
+            "max_sec": null
+          }
+        ],
+        "source_audio": null
+      },
+      {
+        "prompt": "A gull circles high above the harbor behind her.",
+        "num_frames": 73,
+        "conditioning_images": [],
+        "references": [
+          {
+            "kind": "video",
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "slot": 1,
+            "max_sec": null
+          }
+        ],
+        "source_audio": null
+      },
+      {
+        "prompt": "She turns and smiles as the sun rises.",
+        "num_frames": 73,
+        "conditioning_images": [],
+        "references": [
+          {
+            "kind": "video",
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "slot": 1,
+            "max_sec": null
+          }
+        ],
+        "source_audio": null
+      }
+    ],
+    "source_video": null,
+    "source_audio": null,
+    "retake": null,
+    "end_source": null,
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16",
+        "strength": 0.8,
+        "audio_strength": null
+      }
+    ],
+    "reference_video_id": null,
+    "conditioning_attention_strength": null,
+    "reference_video_strength": null,
+    "chunked_upsample": true,
+    "stage2_window": "standard"
+  },
+  "generation_mode": "chain",
+  "seed_used": 42,
+  "attention_used": "sdpa",
+  "block_swap_prefetch_used": "on",
+  "keep_resident_used": "on",
+  "keep_resident_embeddings_used": null,
+  "fused_gguf_dequant_kernel_used": null,
+  "vae_mode_used": null,
+  "vram16_mode_used": "on",
+  "peak_vram_reserved_mb": 7920,
+  "generation_time_seconds": 1863.67,
+  "backend": "minimax-h3",
+  "chain": {
+    "num_clips": 4,
+    "architecture": "h3_masked_av_latent_carry",
+    "overlap_frames": 22,
+    "overlap_strength": 1.0,
+    "total_frames": 277,
+    "clip_num_frames": [
+      73,
+      124,
+      73,
+      73
+    ],
+    "segment_seam_junctions": [
+      72,
+      174,
+      225
+    ],
+    "tile_seam_junctions": [],
+    "all_junctions": [
+      71,
+      72,
+      73,
+      173,
+      174,
+      175,
+      224,
+      225,
+      226
+    ],
+    "video_tiles": [],
+    "n_tiles": 0,
+    "stage2_window": null,
+    "v_tile": null,
+    "kt_v": null
+  },
+  "output": {
+    "path": "outputs/0ff167ed-7ce5-4e4e-b7d4-b4f35fe54d92/output.mp4",
+    "resolution": "1280x768",
+    "duration_seconds": 11.542,
+    "frame_rate": 24.0,
+    "file_size_bytes": 5822846
+  },
+  "vram_optimization": {
+    "low_vram_mode": true,
+    "low_vram_profile": "16gb_safe",
+    "fp8_transformer": true,
+    "cpu_offload_text_encoder": true,
+    "vae_tiling": true,
+    "peak_vram_mb": 6515
+  },
+  "models": {
+    "base_model": "MiniMaxH3",
+    "selection": {
+      "transformer": {
+        "name": "minimax_h3_ref2va_pruned_int8_convrot",
+        "file": "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+      },
+      "text_encoder": {
+        "name": "default",
+        "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+      },
+      "video_vae": {
+        "name": "default",
+        "file": "minimax_h3_video_vae_fp16.safetensors"
+      },
+      "audio": {
+        "name": "default",
+        "file": "minimax_h3_audio_vae_fp32.safetensors"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.12.9",
+    "torch": null,
+    "cuda": null,
+    "gpu": null,
+    "platform": "win32"
+  },
+  "h3": {
+    "sampler": "euler",
+    "num_inference_steps": 4,
+    "shift_video": 12.0,
+    "shift_audio": 3.0,
+    "images_used": 0,
+    "rss_peak_gib": 31.28,
+    "commit_gib": 37.07,
+    "commit_peak_gib": 45.85,
+    "seconds": 1863.66,
+    "phases": {
+      "clips": [
+        {
+          "encode": {
+            "te_read": {
+              "tokens": 4098,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": [],
+              "references": [
+                {
+                  "kind": "video",
+                  "slot": 1,
+                  "pairs": 4,
+                  "vision_tokens": 4032
+                }
+              ]
+            },
+            "te_cache": {
+              "positive": "hit"
+            },
+            "conditioning_sha256": {
+              "positive": "eb9c351db35802e76d95e25226c6f417ae8b446472f456918a52b065acd72d3b",
+              "tags": "8f67dd0d883337ace51cb9cb84ae201da54b926acc1248c0eb05510e42d1acce"
+            },
+            "text_tokens": 4098,
+            "seconds": 0.02,
+            "rss_end_gib": 28.12,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.27,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 8,
+            "peak_vram_reserved_mb": 22
+          },
+          "reference_encode": {
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              }
+            ],
+            "seconds": 0.32,
+            "rss_end_gib": 28.34,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.75,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 757,
+            "peak_vram_reserved_mb": 1046
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 28.1,
+            "commit_after_load_gib": 36.51,
+            "rss_after_place_gib": 28.55,
+            "commit_after_place_gib": 40.67,
+            "sequence": {
+              "text": 4098,
+              "cond": 0,
+              "audio": 244,
+              "video": 21120,
+              "total": 47638,
+              "latent_frames": 22,
+              "audio_latents": 122,
+              "grid": [
+                24,
+                40
+              ],
+              "ref_video": 22176,
+              "ref_audio": 0
+            },
+            "m_per_step": [
+              2,
+              3,
+              3,
+              3
+            ],
+            "block_swap_prefetch_used": "on",
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 735
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.68,
+            "commit_after_release_gib": 38.29,
+            "seconds": 317.48,
+            "rss_end_gib": 29.66,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.27,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 5132,
+            "peak_vram_reserved_mb": 6194
+          }
+        },
+        {
+          "encode": {
+            "te_read": {
+              "tokens": 6136,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": [],
+              "references": [
+                {
+                  "kind": "video",
+                  "slot": 1,
+                  "pairs": 6,
+                  "vision_tokens": 6048
+                }
+              ]
+            },
+            "te_cache": {
+              "positive": "hit"
+            },
+            "conditioning_sha256": {
+              "positive": "1cab13233e3bf3ed8bd02cdac035d524d4d19791da7ab7232173c44b2a35e737",
+              "tags": "d8fdae759a88be9f3a26d586faee2aa2d50c1e90495579a4a0363b12fc16e567"
+            },
+            "text_tokens": 6136,
+            "seconds": 0.03,
+            "rss_end_gib": 30.05,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.32,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 8,
+            "peak_vram_reserved_mb": 22
+          },
+          "reference_encode": {
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 124,
+                "used_frames": 124,
+                "latent_t": 37,
+                "pairs": 6,
+                "rows": 37296,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              }
+            ],
+            "seconds": 0.33,
+            "rss_end_gib": 28.61,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.95,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 757,
+            "peak_vram_reserved_mb": 1046
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 28.21,
+            "commit_after_load_gib": 36.56,
+            "rss_after_place_gib": 29.02,
+            "commit_after_place_gib": 41.21,
+            "sequence": {
+              "text": 6136,
+              "cond": 0,
+              "audio": 414,
+              "video": 35520,
+              "total": 79366,
+              "latent_frames": 37,
+              "audio_latents": 207,
+              "grid": [
+                24,
+                40
+              ],
+              "ref_video": 37296,
+              "ref_audio": 0
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 414,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 35520,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 1253
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.66,
+            "commit_after_release_gib": 38.37,
+            "seconds": 796.05,
+            "rss_end_gib": 29.64,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.36,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 6515,
+            "peak_vram_reserved_mb": 7920
+          }
+        },
+        {
+          "encode": {
+            "te": {
+              "num_layers_file": 50,
+              "num_layers_built": 50,
+              "int8_linears": 350,
+              "tensors_planned": 901,
+              "vision_tensors_in_file": 351,
+              "rope": {
+                "rope_type": "default",
+                "rope_theta": 5000000.0,
+                "mrope_section": [
+                  24,
+                  20,
+                  20
+                ],
+                "mrope_interleaved": true,
+                "head_dim": 128,
+                "num_attention_heads": 64,
+                "num_key_value_heads": 8,
+                "num_hidden_layers": 50,
+                "attn_implementation": "nz_h3_blocked_math"
+              },
+              "extra_special_tokens": {
+                "ids": {
+                  "<d>": 151669,
+                  "</d>": 151670,
+                  "<|cutoff|>": 151671,
+                  "<|lyrics_start|>": 151672,
+                  "<|lyrics_end|>": 151673,
+                  "<|caption_start|>": 151674,
+                  "<|caption_end|>": 151675
+                },
+                "added_here": false
+              },
+              "seconds": 0.31
+            },
+            "rss_after_load_gib": 29.89,
+            "commit_after_load_gib": 38.18,
+            "te_read": {
+              "read_gib": 25.28,
+              "read_seconds": 21.16,
+              "layers_read": 50,
+              "encode_seconds": 22.6,
+              "tokens": 4101,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": [],
+              "references": [
+                {
+                  "kind": "video",
+                  "slot": 1,
+                  "pairs": 4,
+                  "vision_tokens": 4032
+                }
+              ]
+            },
+            "rss_after_release_gib": 28.17,
+            "commit_after_release_gib": 36.54,
+            "te_cache": {
+              "positive": "miss"
+            },
+            "conditioning_sha256": {
+              "positive": "f69d427424376b553641cc0371c92219ca19240cb5be4036f9f6592d2129ed60",
+              "tags": "3befebb7a433023e3c1b57a775f7538a424319e8a141cbde501ed9a8cee87042"
+            },
+            "text_tokens": 4101,
+            "seconds": 23.41,
+            "rss_end_gib": 28.17,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.54,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 2731,
+            "peak_vram_reserved_mb": 3806
+          },
+          "reference_encode": {
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              }
+            ],
+            "seconds": 0.3,
+            "rss_end_gib": 28.46,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.93,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 757,
+            "peak_vram_reserved_mb": 1046
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 28.23,
+            "commit_after_load_gib": 36.69,
+            "rss_after_place_gib": 28.71,
+            "commit_after_place_gib": 40.9,
+            "sequence": {
+              "text": 4101,
+              "cond": 0,
+              "audio": 244,
+              "video": 21120,
+              "total": 47641,
+              "latent_frames": 22,
+              "audio_latents": 122,
+              "grid": [
+                24,
+                40
+              ],
+              "ref_video": 22176,
+              "ref_audio": 0
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 244,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 21120,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 735
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.78,
+            "commit_after_release_gib": 38.4,
+            "seconds": 317.47,
+            "rss_end_gib": 29.77,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.39,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 5148,
+            "peak_vram_reserved_mb": 6194
+          }
+        },
+        {
+          "encode": {
+            "te_read": {
+              "tokens": 4099,
+              "vision_tokens": 0,
+              "vision_tokens_per_image": [],
+              "references": [
+                {
+                  "kind": "video",
+                  "slot": 1,
+                  "pairs": 4,
+                  "vision_tokens": 4032
+                }
+              ]
+            },
+            "te_cache": {
+              "positive": "hit"
+            },
+            "conditioning_sha256": {
+              "positive": "5475749ad2b7d9ab297c297afe703161973dcb0fa3fea018e4ab7c2cca58d0b9",
+              "tags": "67df4a19db45f9b8246137eb3356527848c91d6c442113ee3b8b91e4acd57136"
+            },
+            "text_tokens": 4099,
+            "seconds": 0.02,
+            "rss_end_gib": 28.24,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.37,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 8,
+            "peak_vram_reserved_mb": 22
+          },
+          "reference_encode": {
+            "references": [
+              {
+                "kind": "video",
+                "slot": 1,
+                "source_frames": 73,
+                "used_frames": 73,
+                "latent_t": 22,
+                "pairs": 4,
+                "rows": 22176,
+                "seconds": 0.0,
+                "latent_cache": "hit"
+              }
+            ],
+            "seconds": 0.24,
+            "rss_end_gib": 28.5,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 36.92,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 757,
+            "peak_vram_reserved_mb": 1046
+          },
+          "denoise": {
+            "dit_source": "resident",
+            "rss_after_load_gib": 28.27,
+            "commit_after_load_gib": 36.68,
+            "rss_after_place_gib": 28.72,
+            "commit_after_place_gib": 40.9,
+            "sequence": {
+              "text": 4099,
+              "cond": 0,
+              "audio": 244,
+              "video": 21120,
+              "total": 47639,
+              "latent_frames": 22,
+              "audio_latents": 122,
+              "grid": [
+                24,
+                40
+              ],
+              "ref_video": 22176,
+              "ref_audio": 0
+            },
+            "m_per_step": [
+              3,
+              4,
+              4,
+              4
+            ],
+            "block_swap_prefetch_used": "on",
+            "mask": {
+              "audio": {
+                "rows": 244,
+                "min": 0.0,
+                "max": 1.0
+              },
+              "video": {
+                "rows": 21120,
+                "min": 0.0,
+                "max": 1.0,
+                "inject_clean": 1.0
+              }
+            },
+            "vram16": {
+              "cap_fraction": 0.8549,
+              "cap_mib": 13999,
+              "blocks_on_gpu": 4,
+              "head_group": 8,
+              "row_chunk": 4096,
+              "qkv_quant_shared": true,
+              "text_modules": "cpu",
+              "num_alloc_retries": 0,
+              "num_ooms": 0,
+              "inactive_split_peak_mib": 735
+            },
+            "dit_parked_tensors": 13,
+            "rss_after_release_gib": 29.73,
+            "commit_after_release_gib": 38.35,
+            "seconds": 317.33,
+            "rss_end_gib": 29.72,
+            "rss_process_peak_gib": 31.28,
+            "commit_end_gib": 38.34,
+            "commit_process_peak_gib": 45.85,
+            "peak_vram_mb": 5147,
+            "peak_vram_reserved_mb": 6194
+          }
+        }
+      ],
+      "decode": {
+        "vae_source": "resident",
+        "audio_samples": 369333,
+        "audio_samples_decoded": 369600,
+        "frames": 277,
+        "seconds": 76.62,
+        "rss_end_gib": 28.7,
+        "rss_process_peak_gib": 31.28,
+        "commit_end_gib": 37.13,
+        "commit_process_peak_gib": 45.85,
+        "peak_vram_mb": 6378,
+        "peak_vram_reserved_mb": 7572
+      }
+    },
+    "quant_backends": {
+      "cuda": {
+        "available": true,
+        "disabled": false,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "triton": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "eager": {
+        "available": true,
+        "disabled": true,
+        "int8_linear": true,
+        "w4a8_int8_linear": true,
+        "quantize_per_tensor_fp8": true
+      },
+      "hip": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      },
+      "ascend": {
+        "available": false,
+        "disabled": false,
+        "int8_linear": false,
+        "w4a8_int8_linear": false,
+        "quantize_per_tensor_fp8": false
+      }
+    },
+    "loras": [
+      {
+        "name": "minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors",
+        "strength": 0.8,
+        "layout": "ab",
+        "dtype": "BF16",
+        "pairs_applied": 208,
+        "skipped": []
+      }
+    ],
+    "clips": [
+      {
+        "prompt_sha256": "9791ee3821b562c4f21b5c0f900eff44a72994352b3501376b69fa02103f2628",
+        "seconds": {
+          "encode": 0.02,
+          "reference_encode": 0.32,
+          "denoise": 317.48
+        },
+        "latents_sha256": {
+          "video": "b7093ad2e6ffd8f200d0a677f5a0e0ee670cd730efbe4098c7d6427fbd212919",
+          "audio": "9c4c56b9f26e7675fcffa55037abb79b36eeff47f6b768744853db3d6c07d66b"
+        },
+        "head_equals_prev_tail": null,
+        "references": {
+          "pictures": 0,
+          "videos": 1,
+          "audios": 0
+        }
+      },
+      {
+        "prompt_sha256": "03aa7cc5086516300dc639ae8c5c65229a0b2abc659ead118955c796a99050d6",
+        "seconds": {
+          "encode": 0.03,
+          "reference_encode": 0.33,
+          "denoise": 796.05
+        },
+        "latents_sha256": {
+          "video": "b17c9cf3ff4306cf2ac6c484c84cefb85ae2aacd6896fd4fcc9a16de6389442b",
+          "audio": "07747af436c49929402d410836d473c02aac55215299b09803fed8f746caea86"
+        },
+        "head_equals_prev_tail": true,
+        "references": {
+          "pictures": 0,
+          "videos": 1,
+          "audios": 0
+        }
+      },
+      {
+        "prompt_sha256": "0668b1bfa20c8cc07723919c02d50a931d1b541bfa8f8beb3abd32cb03edaa67",
+        "seconds": {
+          "encode": 23.41,
+          "reference_encode": 0.3,
+          "denoise": 317.47
+        },
+        "latents_sha256": {
+          "video": "8a653e4138de9a7b02cbd561c1359a28d8a70d062e48e78fac4b833efd6b1872",
+          "audio": "8070d561263ea163aab3916580f10bc87a4cf3ac4f095adacc1a93ae03b11ad5"
+        },
+        "head_equals_prev_tail": true,
+        "references": {
+          "pictures": 0,
+          "videos": 1,
+          "audios": 0
+        }
+      },
+      {
+        "prompt_sha256": "420f42155d3578d3a1fbd3091da3ddb1530ea214647750f562b3d49b986a563c",
+        "seconds": {
+          "encode": 0.02,
+          "reference_encode": 0.24,
+          "denoise": 317.33
+        },
+        "latents_sha256": {
+          "video": "7114c7cfc44b007636e083774b0b229fed343874f85b794fa1ec01aec5b049d4",
+          "audio": "5ef0702a16e8faf669376d8466b52831c18474a02f7b4614b7f05ad6c8015a1b"
+        },
+        "head_equals_prev_tail": true,
+        "references": {
+          "pictures": 0,
+          "videos": 1,
+          "audios": 0
+        }
+      }
+    ],
+    "seeds": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "audio_latent_excess": 0,
+    "audio_drift_flags": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "overlap_frames": 22,
+    "inject_clean": 1.0,
+    "decode": "once"
+  },
+  "references": {
+    "clips": [
+      {
+        "pictures": 0,
+        "videos": 1,
+        "audios": 0,
+        "inputs": [
+          {
+            "kind": "video",
+            "slot": 1,
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "max_sec": null
+          }
+        ]
+      },
+      {
+        "pictures": 0,
+        "videos": 1,
+        "audios": 0,
+        "inputs": [
+          {
+            "kind": "video",
+            "slot": 1,
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "max_sec": null
+          }
+        ]
+      },
+      {
+        "pictures": 0,
+        "videos": 1,
+        "audios": 0,
+        "inputs": [
+          {
+            "kind": "video",
+            "slot": 1,
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "max_sec": null
+          }
+        ]
+      },
+      {
+        "pictures": 0,
+        "videos": 1,
+        "audios": 0,
+        "inputs": [
+          {
+            "kind": "video",
+            "slot": 1,
+            "id": "6bc439a5-134b-4c84-80eb-179da1e17222",
+            "max_sec": null
+          }
+        ]
+      }
+    ]
+  }
+}

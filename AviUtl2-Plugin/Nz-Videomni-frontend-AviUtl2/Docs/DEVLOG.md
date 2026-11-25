@@ -7150,3 +7150,66 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 実機への配置（`scripts/deploy.ps1`）は済みました。案内のオーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §1-296 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296）。§181 のチェックそのもののオーナーの確認は合格しました（記録簿 §232.11）。
 
 > **更新（2026-11-25）**: 案内のオーナーの実機での確認も合格し、§181 の分とあわせて項目は [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-296 へ移りました（結果は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §232.13）。main へ取り込む前のアプリの試験の全件 1 回は通りました（同 §233.15）。main への取り込みは、そのあとに行います。
+
+## 184. MiniMax H3 の Settings の Acceleration に「テキストエンコーダーの条件付けのキャッシュ（MiniMax H3）」の行を足す — ON／OFF の 2 つのボタンと ON のときだけの注意書き・保存の欄 `keepTextConditioning`・共通の関数で全部の要求に載せる・LTX での隠し方・「参照素材の潜在の常駐」の行とは独立（設計正本 裁定 111。2026-11-25）
+
+### 184.1 結論
+
+- **Settings の「Acceleration: / 生成の高速化:」の欄のいちばん下（「参照素材の潜在の常駐（MiniMax H3）」の行の下）に、行「テキストエンコーダーの条件付けのキャッシュ（MiniMax H3）」（英語 `Text encoder conditioning cache (MiniMax H3)`）を、ほかの行と同じ ON／OFF の 2 つのボタンで置きました。** 既定は OFF で、ON のあいだだけ要求に `keep_text_conditioning: true` を載せ、行の下に注意書きを出します。
+- 動き（何がどうなるか）と注意書きの文の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 111・§6.10（「操作パネル」）で、本節には写しません。**本節は実装の形と、将来の改修者への注意（184.5）の正本です。**
+- 機械の確認の数値と配置の記録は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §235 にだけ、オーナーの実機での確認の項目はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-298 にだけ書きます。**実機への配置は済み、オーナーの実機での確認は未了です。**
+- 同じテーマで、エンジン（条件付けの使い回しそのもの）、API・アダプター、MCP も変えました（バックエンドの dev の `04162b29`・`495a92cd`）。プラグイン本体（C++）は変えていません。操作パネルはプラグインに埋め込まれるので、配布用の aux2 は作り直しました。
+
+### 184.2 進め方とコミット
+
+計画はオーナーが了承しました（2026-11-25）。操作パネルは、エンジンとアプリと一度に、別の担当が実装しました。実装のあと、別の担当が差分の全体を読み、指摘はありませんでした（残骸が無いことも確かめた）。コミットは dev です。
+
+| 中身 | コミット |
+|---|---|
+| 操作パネルのコードとテスト、配布用 `AviUtl2-Plugin/NzVideomni.aux2` の作り直し | `f9643c54` |
+
+本節を含む文書は、別のコミットで入れます。
+
+### 184.3 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは省きました（184.6）。§182.3 と同じ並びです。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts` | 設定 `keepTextConditioning`（既定 `false`。定数 `KEEP_TEXT_CONDITIONING_SERVER_DEFAULT`）。保存の欄と読み戻し（欄の無い保存値は既定で読む）。`withServerDefaults` の書き戻し。`effectiveAccelerationFields` の欄。`accelerationRequestFields` で、既定と違うとき（真のとき）だけ `keep_text_conditioning` を載せる |
+| `shell/useAccelerationSettings.ts` | 書き換えの関数 `setKeepTextConditioning` と保存 |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | 行・2 つのボタン・ON のときだけの注意書き。行を隠す条件 `keepTextConditioningUnsupported` |
+| `shell/featureScope.ts` | 機能の名前 `keep_text_conditioning` で行を隠し、保存値を既定に戻す（`FEATURE_UI` の行と `SettingsRowsHidden.keepTextConditioning`） |
+| `i18n/strings.ts` | 行の名前・ボタン・注意書き（英語と日本語） |
+| `api/types.ts` | 単発と連結の要求の型に `keep_text_conditioning` |
+| `bridge/mockBridge.ts` | 開発用の模擬に、LTX の `unsupported_features` の `keep_text_conditioning` と、LTX の拒否（単発と連結。文は本物のサーバーと同じ） |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 1 行（快適上限マーカーの計算は変えていない） |
+
+### 184.4 採った選択と理由
+
+- **§182 の行と同じ形**: ON／OFF の 2 つのボタン・注意書きは ON のときだけ・`/status` の能力の旗もほかの行への依存も無い・快適上限マーカーの計算に加えない、の 4 点は §182.4 と同じ理由です。
+- **「参照素材の潜在の常駐」の行とつながりを持たない**: 2 つは別の持ち物で、同時に ON にできます（オーナーの裁定 2026-11-25）。片方の ON／OFF でもう片方の表示や保存の値は変わりません。
+- **注意書きの目安の数**: 文の中の「プロンプトだけなら 1 件 1MB 未満。参照素材が多いと 1 件で数百 MB」の根拠（実測した値と見積もり）は記録簿 §235 です。
+
+### 184.5 将来の改修者への注意
+
+§182.5 の (a)・(b) は、この行にもそのまま当てはまります（正本は §182.5）。
+
+- **(a)** `keep_text_conditioning` も、共通の関数 `accelerationRequestFields` から、単発・連結・バッチ・Edit の全部の要求へ同じ規則で載ります。
+- **(b)** MiniMax H3 以外では行が隠れ、保存の値は既定（OFF）へ戻ります（`featureScope.ts` の表）。行の出し分けだけを変えて書き戻しを外すと、LTX の要求に `true` が載って 422 になります。
+- **(c) 2 つのキャッシュの行の独立を崩さない。** 「参照素材の潜在の常駐」の行と片方の ON でもう片方を連動させたくなったときは、バックエンドの 2 つの持ち物が独立であるという設計（設計正本 §6.10 の「ほかの持ち物との関係」）と一緒に見直すこと。
+
+### 184.6 テスト
+
+- `shell/accelerationSettings.test.ts`: 既定、保存と読み戻し（欄の無い保存値）、真のときだけ要求に載ること。
+- `shell/useAccelerationSettings.test.ts`: 書き換えの関数と保存。
+- `shell/keepTextConditioning.paths.test.ts`（新設）: ON なら単発・連結・バッチの i2v の要求の本文に `keep_text_conditioning: true` が載り、OFF ならどの本文にも鍵が無いこと。`keep_reference_latents` とは独立で、ON にした鍵だけが載ること。
+- `shell/SettingsPanel.test.tsx`: 行と 2 つのボタン、注意書きが ON のときだけ出ること、文言。
+- `shell/featureScope.test.ts`・`shell/AppShell.featureScope.test.tsx`: LTX で行が隠れ、保存値が OFF に戻ること。
+- `bridge/mockBridge.h3.test.ts`・`bridge/mockBridge.test.ts`: 模擬の `unsupported_features` と LTX の拒否。
+- ほかに、設定の型に欄が増えたことに合わせた既存の試験の期待値の更新（`useBaseModels.test.ts`・`comfortTable.test.ts`・`useGenerationForm.test.ts`・`prefillSeed.test.ts`）。
+- 機械の確認の結果（型検査・テストの件数・aux2 の大きさと SHA-256・配置）は記録簿 §235 です。
+
+### 184.7 実機の門
+
+- 実機への配置（`scripts/deploy.ps1`）は済みました。オーナーの実機での確認は未了で、項目の正本はバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-298 です（閉じたあとは [`PENDING_TASKS_CLOSED.md`](../../../Docs/PENDING_TASKS_CLOSED.md) 1-298）。

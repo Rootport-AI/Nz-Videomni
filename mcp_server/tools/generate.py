@@ -60,9 +60,9 @@ LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結
 ``keep_reference_latents``（MiniMax H3 の参照素材の符号化結果の保持。真偽値）は
 ``sol_vae`` の後ろに置き、``True`` のときだけ送る。LTX では ``True`` が 422。
 
-``keep_text_conditioning``（MiniMax H3 のテキストエンコーダーの条件付けの保持。真偽値）は
-引数の並びのいちばん後ろに置き、``True`` のときだけ送る。送る前の検査はしない。LTX では
-``True`` が 422。
+``keep_text_conditioning``（テキストエンコーダーの条件付けの保持。真偽値）は
+引数の並びのいちばん後ろに置き、``True`` のときだけ送る。送る前の検査はしない。MiniMax H3・
+LTX 2.3・LTX 2.5 で使える。
 
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
@@ -277,7 +277,7 @@ async def submit_generate(
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
     ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True``・
-    ``keep_reference_latents=True``・``keep_text_conditioning=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
+    ``keep_reference_latents=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -726,17 +726,17 @@ async def submit_generate(
             **MiniMax H3 専用**で、LTX では 422 FEATURE_UNSUPPORTED。省略または
             空ならキーごと送りません（``max_sec`` も省略するとキーごと送りません）。
             使い方は上の「参照素材からの生成」の節。
-        keep_text_conditioning: MiniMax H3 のテキストエンコーダーの出力（条件付け）の
-            保持。既定の ``False`` ならキーは送られません。``True`` にすると、条件付けを
+        keep_text_conditioning: テキストエンコーダーの出力（条件付け）の
+            保持。MiniMax H3・LTX 2.3・LTX 2.5 で使えます。既定の ``False`` ならキーは送られません。``True`` にすると、条件付けを
             ワーカーのメインメモリに保持し、入力が同じ次の生成と連結のクリップで、
             テキストエンコーダーの段を省きます。省くのは、入力（プロンプトの文字列と、
             テキストエンコーダーが読む素材）が同じときだけです。違えば通し直します。
-            Positive と Negative は別々に持ち、片方だけが変わったら、もう片方は使い回します。
+            Positive と Negative は別々に持ち、片方だけが変わったら、もう片方は使い回します
+            （MiniMax H3 と LTX 2.3 の場合。LTX 2.5 は、そのジョブが渡す文字列の並びの
+            全体が同じときだけ使い回します）。
             生成結果は変わりません。メインメモリを使います。この引数が ``False`` の
-            ジョブが来ると、保持した分は消えます。``keep_reference_latents`` とは別の
-            機能で、同時に使えます。
-            **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
-            FEATURE_UNSUPPORTED になります。**
+            ジョブが来ると、保持した分は消えます。MiniMax H3 の ``keep_reference_latents``
+            とは別の機能で、同時に使えます。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -1099,7 +1099,7 @@ async def submit_chain(
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
     ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です
-    （``sol_vae=True``・``keep_reference_latents=True``・``keep_text_conditioning=True`` も同じです）。
+    （``sol_vae=True``・``keep_reference_latents=True`` も同じです）。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -1471,16 +1471,15 @@ async def submit_chain(
         shift_audio: 音声のノイズスケジュールの shift（MiniMax H3 用。省略で
             送らない＝既定値。H3 は既定 3・範囲 1〜20。LTX では無視）。連結の
             全クリップに 1 つの値が効きます。
-        keep_text_conditioning: submit_generate と同じ意味（MiniMax H3 のテキスト
-            エンコーダーの条件付けの保持。既定の ``False`` ならキーは送りません）。
+        keep_text_conditioning: submit_generate と同じ意味（テキスト
+            エンコーダーの条件付けの保持。MiniMax H3・LTX 2.3・LTX 2.5 で使えます。既定の ``False`` ならキーは送りません）。
             条件付けをワーカーのメインメモリに保持し、入力が同じ次の生成と連結の
             クリップで、テキストエンコーダーの段を省きます。省くのは、入力（プロンプトの
             文字列と、テキストエンコーダーが読む素材）が同じときだけです。Positive と
             Negative は別々に持ちます。生成結果は変わりません。メインメモリを使います。
             この引数が ``False`` のジョブが来ると、保持した分は消えます。
-            ``keep_reference_latents`` とは別の機能で、同時に使えます。
-            **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
-            FEATURE_UNSUPPORTED になります。**
+            MiniMax H3 の ``keep_reference_latents`` とは別の機能で、同時に使えます。
+            LTX 2.5 は、そのジョブが渡す文字列の並びの全体が同じときだけ使い回します。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。

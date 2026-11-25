@@ -153,9 +153,6 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
-    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
-    # default is False.
-    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: The 422 message for a feature that belongs to neither LTX: the generic one
@@ -168,7 +165,6 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "pi_h3": "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
     "sol_vae": "Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。",
     "keep_reference_latents": "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
-    "keep_text_conditioning": "テキストエンコーダーの条件付けの保持（keep_text_conditioning）は MiniMax H3 専用です。LTX では使えません。",
 }
 
 #: The chain twin of :data:`H3_ONLY_REFUSALS`, read by both LTX families'
@@ -233,6 +229,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "attention_backend",
         "block_swap_prefetch",
         "keep_resident",
+        # Keeping the text encoder's conditioning between jobs; rides the payload
+        # only when true (an absent key = off).
+        "keep_text_conditioning",
         "fused_gguf_dequant_kernel",
         "vae_mode",
         "outpaint",
@@ -285,9 +284,6 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False. LAST, for the same reason.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
-    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
-    # default is False.
-    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.
@@ -774,6 +770,13 @@ class GenerationOutcome:
     # ``metadata["h3"]``, the same route ``ltx25`` takes. None on LTX and on
     # the mock.
     h3: dict | None = None
+    # LTX 2.3 only, ``keep_text_conditioning`` jobs only: the worker's own record
+    # (``te_cache`` hit/miss per prompt, ``conditioning_sha256``) — relayed
+    # verbatim from the ``done`` event's top level (a chain carries it inside
+    # ``chain_metadata["ltx23"]`` instead) into metadata.json as
+    # ``metadata["ltx23"]``. None for every other job, and then metadata.json
+    # carries no ``ltx23`` key at all.
+    ltx23: dict | None = None
 
 
 class LTXRunner:
@@ -2458,6 +2461,10 @@ class _RealBackend:
         # by the same test as block_swap_prefetch above.
         if request.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # keep_text_conditioning: sent only when True (an absent key = off, and
+        # the explicit trigger that FREES the worker's kept conditioning).
+        if request.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
         # vae_mode: same additive contract, default "default" — so the key rides
         # ONLY on a job that explicitly asks for the pruned decoder, and a
         # default job's payload carries no vae_mode key. An environment without
@@ -2588,6 +2595,9 @@ class _RealBackend:
             # every other job, so ``None`` there — the same shape as every relay
             # above.
             inpaint=event.get("inpaint"),
+            # keep_text_conditioning: the engine's own record, relayed verbatim.
+            # Present only on a job that asked for it, so ``None`` otherwise.
+            ltx23=event.get("ltx23"),
         )
 
     def generate_chain(
@@ -2807,6 +2817,11 @@ class _RealBackend:
         # api/models.py).
         if chain.fused_gguf_dequant_kernel:
             payload["fused_gguf_dequant_kernel"] = True
+        # keep_text_conditioning: mirrors the single-generate block (sent only
+        # when True; an absent key = off). The worker's record of it rides back
+        # inside the ``done`` event's ``chain`` dict as ``ltx23``.
+        if chain.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
         # vae_mode: mirrors the single-generate block (default "default", so the
         # key is sent only when the pruned decoder is explicitly asked for). One
         # value covers every clip and every stage of the chain.

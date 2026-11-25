@@ -158,9 +158,6 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
-    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
-    # default is False.
-    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -277,6 +274,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         "fused_gguf_dequant_kernel",
         "keep_resident",
         "keep_resident_embeddings",
+        # Keeping the text encoder's conditioning between jobs; rides the payload
+        # only when true (an absent key = off).
+        "keep_text_conditioning",
         "attention_backend",
         "outpaint",
         # Listed next to ``outpaint`` because the two are one mechanism seen
@@ -367,9 +367,6 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False. LAST, for the same reason.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
-    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
-    # default is False.
-    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: The ignore-and-log half. Field-for-field the same as
@@ -490,6 +487,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         "fused_gguf_dequant_kernel",
         "keep_resident",
         "keep_resident_embeddings",
+        # Keeping the text encoder's conditioning between jobs; rides the payload
+        # only when true (an absent key = off).
+        "keep_text_conditioning",
         "attention_backend",
         # The non-CFG negative prompt (NAG / VSF): the single path's seven, on
         # the chain schema, carrying the identical payload block.
@@ -1118,6 +1118,11 @@ class _RealBackend25(_RealBackend):
         # same as the blocks above.
         if request.keep_resident_embeddings:
             payload["keep_resident_embeddings"] = True
+        # keep_text_conditioning: appended last, rides only when True (an absent
+        # key = off, and the worker's release request). The worker's record of
+        # it joins the ``ltx25`` dict it already reports.
+        if request.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
 
         with self._lock:
             try:
@@ -1478,6 +1483,9 @@ class _RealBackend25(_RealBackend):
         # tests/test_ltx25_adapter.py.
         if chain.keep_resident_embeddings:
             payload["keep_resident_embeddings"] = True
+        # keep_text_conditioning: the single path's block, key for key.
+        if chain.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
 
         with self._lock:
             try:

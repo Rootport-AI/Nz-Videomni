@@ -257,6 +257,7 @@ def generate_alpha(
             block_swap_prefetch=request.block_swap_prefetch,
             keep_resident=request.keep_resident,
             keep_resident_embeddings=request.keep_resident_embeddings,
+            keep_text_conditioning=request.keep_text_conditioning,
             fused_gguf_dequant_kernel=request.fused_gguf_dequant_kernel,
             alpha_gen=AlphaGenSpec(
                 window_start_sec=request.window_start_sec,

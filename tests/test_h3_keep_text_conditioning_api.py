@@ -1,25 +1,20 @@
 """MiniMax H3 ``keep_text_conditioning`` on the app side: the request fields, the
 clip copy, the worker payloads (the key rides only when true), the field
-classification and the LTX refusals. The engine's cache is not touched here.
+classification. The engine's cache is not touched here.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from api.errors import APIError
 from api.models import GenerateChainRequest, GenerateRequest
 from services import engines
 from services.engines.h3 import adapter as h3
-from services.engines.ltx import adapter as ltx23
-from services.engines.ltx25 import adapter as ltx25
 from test_engine_h3_adapter import (
     CHAIN_DONE_EVENT,
     DONE_EVENT,
     GOLDEN_CHAIN_KEYS_H3,
     GOLDEN_GENERATE_KEYS_H3,
-    PROMPT,
-    _activate,
     _capturing_backend,
     _chain,
     _request,
@@ -28,10 +23,6 @@ from test_engine_h3_adapter import (
 )
 
 FIELD = "keep_text_conditioning"
-H3_ONLY_DETAIL = (
-    "テキストエンコーダーの条件付けの保持（keep_text_conditioning）は MiniMax H3 専用です。"
-    "LTX では使えません。"
-)
 
 
 # --------------------------------------------------------------------------- #
@@ -55,6 +46,7 @@ def test_to_clip_request_keeps_it(value):
 def test_h3_honours_it_and_does_not_publish_it():
     assert FIELD in h3.HONOURED_FIELDS and FIELD in h3.CHAIN_HONOURED_FIELDS
     assert FIELD not in h3.UNSUPPORTED_FEATURES
+    assert FIELD not in engines.unsupported_features("h3")
     h3.reject_unsupported(_request(keep_text_conditioning=True))  # no raise
     h3.reject_chain(_chain(keep_text_conditioning=True))  # no raise
 
@@ -106,54 +98,6 @@ def test_chain_payload_carries_true(tmp_path):
     )
     assert captured[-1][FIELD] is True
     assert list(captured[-1]) == GOLDEN_CHAIN_KEYS_H3 + [FIELD, "keep_resident"]
-
-
-# --------------------------------------------------------------------------- #
-# LTX refuses it
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize("adapter", [ltx23, ltx25], ids=["ltx23", "ltx25"])
-def test_ltx_refuses_with_the_h3_only_sentence(adapter):
-    for reject, request, off in (
-        (
-            adapter.reject_unsupported,
-            GenerateRequest(prompt=PROMPT, keep_text_conditioning=True),
-            GenerateRequest(prompt=PROMPT),
-        ),
-        (adapter.reject_chain, _chain(keep_text_conditioning=True), _chain()),
-    ):
-        with pytest.raises(APIError) as ei:
-            reject(request)
-        assert ei.value.code == "FEATURE_UNSUPPORTED" and ei.value.status_code == 422
-        assert ei.value.detail == H3_ONLY_DETAIL
-        reject(off)  # no raise
-    assert FIELD in adapter.UNSUPPORTED_FEATURES
-    assert adapter.REJECT_TABLE[-1][1] == FIELD
-    assert adapter.CHAIN_REJECT_TABLE[-1][1] == FIELD
-
-
-@pytest.mark.parametrize("base_model", ["LTX23", "LTX25"])
-def test_ltx_refuses_over_http(three_family_client, base_model):
-    _activate(three_family_client, base_model)
-    for path, body in (
-        ("/api/v1/generate", {"prompt": PROMPT, "num_frames": 25}),
-        ("/api/v1/generate/chain", {"prompt": PROMPT, "clips": [{"num_frames": 25}, {"num_frames": 25}]}),
-    ):
-        r = three_family_client.post(path, json={**body, FIELD: True})
-        assert r.status_code == 422, r.text
-        error = r.json()["error"]
-        assert error["code"] == "FEATURE_UNSUPPORTED"
-        assert error["detail"] == H3_ONLY_DETAIL
-
-
-def test_models_publishes_it_for_ltx_only(three_family_client):
-    listing = three_family_client.get("/api/v1/models").json()
-    by_id = {b["id"]: b for b in listing["base_models"]}
-    assert FIELD not in by_id["MiniMaxH3"]["unsupported_features"]
-    assert FIELD in by_id["LTX23"]["unsupported_features"]
-    assert FIELD in by_id["LTX25"]["unsupported_features"]
-    assert FIELD not in engines.unsupported_features("h3")
 
 
 # --------------------------------------------------------------------------- #

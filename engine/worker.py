@@ -69,6 +69,15 @@ Protocol (one JSON object per line; parent -> worker):
    # scale, tau, alpha, method, vsf_scale} with method "nag" | "vsf". Present
    # on BOTH generate ops — see _resolve_nag:
    nag,
+   # keep_text_conditioning (optional; absent / null / false -> off): keeps the
+   # text encoder's conditioning (one entry per distinct string, positive and
+   # negative alike) in this worker's main memory, so a later job with the same
+   # string skips that encode, and a job whose every string is held skips
+   # building the text encoder (台帳 §1-299). Present on BOTH generate ops. An
+   # off job drops everything held. Only a true value is passed on to the
+   # pipeline, and only such a job's ``done`` carries ``ltx23`` (top level;
+   # inside ``chain`` on generate_chain):
+   keep_text_conditioning,
    # IC-LoRA: loras always present (may be []), reference_video null unless a
    # reference is supplied. preprocess: "none" -> raw reference used as-is;
    # "canny"/... -> converted to a control-signal video via engine/preprocess/,
@@ -142,7 +151,10 @@ other logging goes to STDERR.
           "block_swap_prefetch_used":...,"keep_resident_used":...,
           "fused_gguf_dequant_kernel_used":...,"vae_mode_used":...,
           "peak_vram_reserved_mb":...}
-          (+ "outpaint" or "inpaint" on those jobs, "chain" on generate_chain)
+          (+ "outpaint" or "inpaint" on those jobs, "chain" on generate_chain;
+           + "ltx23" on a keep_text_conditioning job — inside "chain" there:
+           {"te_cache": {...}, "conditioning_sha256": {...}}, see
+           LTXFastVideoPipeline.ltx23_record)
   @@LTX@@{"event":"error","detail":...}
           (also the reply to an unknown op after load; before load it is ignored)
 
@@ -957,6 +969,8 @@ def _do_generate(msg: dict) -> None:
     # this one CHANGES THE PIXELS (the pruned decoder is not bit-identical to
     # the stock one by design).
     vae_mode = _resolve_vae_mode(msg)
+    # Text encoder conditioning cache (台帳 §1-299): absent / null / false -> off.
+    keep_te = bool(msg.get("keep_text_conditioning") or False)
 
     outpaint = msg.get("outpaint")
     # Inpainting: the same additive contract outpaint uses — absent on every
@@ -977,7 +991,8 @@ def _do_generate(msg: dict) -> None:
         f"outpaint={'yes' if outpaint else 'no'} "
         f"inpaint={'yes' if inpaint else 'no'} "
         f"neg={_neg_label(nag)} attn={attention} bsprefetch={bs_prefetch} "
-        f"keepresident={keep_res} fuseddequant={fused_dequant} vae={vae_mode}"
+        f"keepresident={keep_res} fuseddequant={fused_dequant} vae={vae_mode} "
+        f"keep_text_conditioning={keep_te}"
     )
 
     # Every knob the three entry points share, built ONCE. Splatting the same
@@ -1004,6 +1019,8 @@ def _do_generate(msg: dict) -> None:
         keep_resident=keep_res,
         fused_gguf_dequant_kernel=fused_dequant,
         vae_mode=vae_mode,
+        # Only an ON job passes the knob, so an OFF job's call is today's.
+        **({"keep_text_conditioning": True} if keep_te else {}),
     )
 
     meta = None
@@ -1120,6 +1137,8 @@ def _do_generate(msg: dict) -> None:
         # (``meta_key`` is "outpaint" unless an inpaint block routed the call
         # above).
         **({} if meta is None else {meta_key: meta[meta_key]}),
+        # The conditioning cache's record (台帳 §1-299), on an ON job only.
+        **({"ltx23": _PIPE.ltx23_record()} if keep_te else {}),
     )
 
     # Resident-reuse: free the just-finished job's transient allocations before
@@ -1294,6 +1313,9 @@ def _do_generate_chain(msg: dict) -> None:
     # fail-loud-on-unknown regime) as the single-generate path. One setting
     # covers every clip and every stage of the chain.
     vae_mode = _resolve_vae_mode(msg)
+    # Text encoder conditioning cache (台帳 §1-299): absent / null / false -> off.
+    # The whole chain is one job of the cache.
+    keep_te = bool(msg.get("keep_text_conditioning") or False)
 
     _log(
         f"generate_chain {msg['width']}x{msg['height']} clips={len(clips)} "
@@ -1306,7 +1328,8 @@ def _do_generate_chain(msg: dict) -> None:
         f"ic_loras={len(ic_loras)} neg={_neg_label(nag)} attn={attention} "
         f"bsprefetch={bs_prefetch} keepresident={keep_res} "
         f"fuseddequant={fused_dequant} vae={vae_mode} "
-        f"stage2win={stage2_v_tile}/{stage2_v_adv}"
+        f"stage2win={stage2_v_tile}/{stage2_v_adv} "
+        f"keep_text_conditioning={keep_te}"
     )
 
     def _progress(stage: str, index: int, total: int) -> None:
@@ -1340,7 +1363,13 @@ def _do_generate_chain(msg: dict) -> None:
         keep_resident=keep_res,
         fused_gguf_dequant_kernel=fused_dequant,
         vae_mode=vae_mode,
+        # Only an ON chain passes the knob, so an OFF chain's call is today's.
+        **({"keep_text_conditioning": True} if keep_te else {}),
     )
+    # The conditioning cache's record (台帳 §1-299) rides inside ``chain``, on
+    # an ON chain only.
+    if keep_te:
+        meta = {**meta, "ltx23": _PIPE.ltx23_record()}
 
     peak = _peak_vram_allocated_mb()
     if not os.path.exists(output_path) or os.path.getsize(output_path) <= 0:

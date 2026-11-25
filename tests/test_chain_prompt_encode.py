@@ -176,6 +176,8 @@ def _drive_encode(monkeypatch, clip_prompts, stage2_prompt):
         _vae_spatial_tile_size = 0
         _vae_temporal_tile_size = 0
         _nag = FakeNag()
+        # An OFF job of the conditioning cache (台帳 §1-299): today's encode.
+        _keep_text_conditioning_job = False
 
         def _set_nag_job(self, nag):
             events.append("set_nag_job")

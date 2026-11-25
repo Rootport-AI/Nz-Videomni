@@ -384,18 +384,26 @@ def run_outpaint(
     pipe._set_nag_job(nag)
     if progress:
         progress("encode", 0, 1)
-    text_encoder = ledger.text_encoder()
-    video_ctx, audio_ctx = encode_text(text_encoder, prompts=[prompt])[0]
-    if pipe._nag.requested:
-        nvc, nac = encode_negative(
-            text_encoder,
-            pipe._nag.params.negative_prompt,
-            slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+    if pipe._keep_text_conditioning_job:
+        # keep_text_conditioning (台帳 §1-299): the pipeline's conditioning cache
+        # encodes what is not held (the negative into NagState too) and frees a
+        # text encoder it built, in the order below.
+        [(video_ctx, audio_ctx)] = pipe._encode_conditioning(
+            [prompt], ledger.text_encoder, release=True
         )
-        pipe._nag.set_contexts(nvc, nac)
-    torch.cuda.synchronize()
-    del text_encoder
-    cleanup_memory()
+    else:
+        text_encoder = ledger.text_encoder()
+        video_ctx, audio_ctx = encode_text(text_encoder, prompts=[prompt])[0]
+        if pipe._nag.requested:
+            nvc, nac = encode_negative(
+                text_encoder,
+                pipe._nag.params.negative_prompt,
+                slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+            )
+            pipe._nag.set_contexts(nvc, nac)
+        torch.cuda.synchronize()
+        del text_encoder
+        cleanup_memory()
 
     # ── Freeze the source video's audio. ─────────────────────────────────────
     # ``_freeze_source_audio`` is shared with ``run_inpaint``, so both drivers

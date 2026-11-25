@@ -178,18 +178,25 @@ def run_inpaint(
     pipe._set_nag_job(nag)
     if progress:
         progress("encode", 0, 1)
-    text_encoder = ledger.text_encoder()
-    video_ctx, audio_ctx = encode_text(text_encoder, prompts=[prompt])[0]
-    if pipe._nag.requested:
-        nvc, nac = encode_negative(
-            text_encoder,
-            pipe._nag.params.negative_prompt,
-            slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+    if pipe._keep_text_conditioning_job:
+        # keep_text_conditioning (台帳 §1-299): the same cache path as
+        # run_outpaint's.
+        [(video_ctx, audio_ctx)] = pipe._encode_conditioning(
+            [prompt], ledger.text_encoder, release=True
         )
-        pipe._nag.set_contexts(nvc, nac)
-    torch.cuda.synchronize()
-    del text_encoder
-    cleanup_memory()
+    else:
+        text_encoder = ledger.text_encoder()
+        video_ctx, audio_ctx = encode_text(text_encoder, prompts=[prompt])[0]
+        if pipe._nag.requested:
+            nvc, nac = encode_negative(
+                text_encoder,
+                pipe._nag.params.negative_prompt,
+                slice_to_real_tokens=isinstance(pipe._nag.params, VsfParams),
+            )
+            pipe._nag.set_contexts(nvc, nac)
+        torch.cuda.synchronize()
+        del text_encoder
+        cleanup_memory()
 
     # ── Freeze the source window's audio (shared with run_outpaint). ─────────
     audio = _freeze_source_audio(

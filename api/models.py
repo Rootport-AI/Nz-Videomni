@@ -775,6 +775,19 @@ class GenerateRequest(BaseModel):
     # （sol_vae と同じ規律）。
     keep_reference_latents: bool = False
 
+    # keep_text_conditioning: MiniMax H3 のテキストエンコーダーの出力（条件付け）
+    # を、ワーカーのメインメモリに保持する。既定の false は今日の生成と一切変わら
+    # ない。true のときは、入力（プロンプトの文字列と、テキストエンコーダーが読む
+    # 素材）が同じ次の生成と連結のクリップで、テキストエンコーダーの段を省く
+    # （Positive と Negative は別々に持つ。生成結果は変わらない）。メインメモリを
+    # 使う。false のジョブが来ると保持した分は消える。keep_reference_latents とは
+    # 別の機能で、同時に使える。
+    # true のときだけワーカーへ送る加算的コントラクト。【エンジン差】H3 専用で、
+    # LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る（各アダプタの
+    # REJECT_TABLE）。連結スキーマにも同じ形で置く。GET /status には載せない
+    # （keep_reference_latents と同じ規律）。
+    keep_text_conditioning: bool = False
+
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1505,6 +1518,11 @@ class GenerateChainRequest(BaseModel):
     # 一切変わらない）。LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る
     # （各アダプタの CHAIN_REJECT_TABLE）。
     keep_reference_latents: bool = False
+    # keep_text_conditioning: 詳細は GenerateRequest の同名フィールドを参照
+    # （MiniMax H3 のテキストエンコーダーの条件付けの保持。既定 false は今日の
+    # 連結と一切変わらない）。LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で
+    # 断る（各アダプタの CHAIN_REJECT_TABLE）。
+    keep_text_conditioning: bool = False
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1962,8 +1980,9 @@ class GenerateChainRequest(BaseModel):
         ``embed_mp4_metadata`` is transcribed for the same reason (the stored
         record would otherwise claim the default), and so are ``vram16_mode``,
         ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX) and
-        ``pi_h3`` / ``sol_vae`` / ``keep_reference_latents`` (MiniMax H3's;
-        ``"off"`` / ``False`` on LTX, which refuses any other).
+        ``pi_h3`` / ``sol_vae`` / ``keep_reference_latents`` /
+        ``keep_text_conditioning`` (MiniMax H3's; ``"off"`` / ``False`` on LTX,
+        which refuses any other).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -2013,6 +2032,7 @@ class GenerateChainRequest(BaseModel):
             pi_h3=self.pi_h3,
             sol_vae=self.sol_vae,
             keep_reference_latents=self.keep_reference_latents,
+            keep_text_conditioning=self.keep_text_conditioning,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

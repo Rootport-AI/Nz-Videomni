@@ -57,6 +57,14 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   ときだけ。違えば符号化し直します。生成結果は変わりません。
   メインメモリ 64GB 以上を推奨。参照の無いジョブや false のジョブが来ると、
   保持した分は消えます）。
+  H3 ではテキストエンコーダーの条件付けの保持（submit_generate と submit_chain の
+  keep_text_conditioning。既定 false）も選べ、テキストエンコーダーの出力を
+  ワーカーのメインメモリに保持して、入力が同じ次の生成と、連結のクリップで
+  テキストエンコーダーの段を省きます（入力は、プロンプトの文字列と、テキスト
+  エンコーダーが読む素材。違えば通し直します。Positive と Negative は別々に
+  持ち、片方だけが変わったら、もう片方は使い回します。生成結果は変わりません。
+  メインメモリを使います。false のジョブが来ると、保持した分は消えます。
+  keep_reference_latents とは別の機能で、同時に使えます）。
   H3 では VRAM 16GB mode（submit_generate の vram16_mode。省略で
   既定 on。切るときだけ false）も選べ、収まらないときはジョブが failed になり、
   job_status の error が「GPU_OOM: …」で始まって案内（解像度かフレーム数を
@@ -90,7 +98,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   全クリップで同じ素材を使うときは、各クリップに同じ id を書きます。
   LTX 2.5 で submit_generate が使えないのは vae_mode（既定値以外）と、
   MiniMax H3 専用の vram16_mode=true・source_audio_id・pi_h3（"off" 以外）・
-  sol_vae=true・keep_reference_latents=true・references（1 件以上）だけです（422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
+  sol_vae=true・keep_reference_latents=true・keep_text_conditioning=true・references（1 件以上）だけです（422 FEATURE_UNSUPPORTED）。nag_enabled（ネガティブプロンプト。NAG と VSF）
   は LTX 2.5 でも使えます（negative_prompt / nag_scale / nag_tau / nag_alpha /
   neg_method / vsf_scale も効きます）。
   ただし nag_alpha=0 にしても「NAG なし」とビット単位で同じ絵にはならないので、
@@ -119,7 +127,7 @@ Nz-Videomni バックエンド（LTX 2.3 / LTX 2.5 / MiniMax H3 動画生成）�
   長尺IC-LoRAも含みます）が使えます。submit_chain のモードは、撮り直し
   （Retake）と end_source_video_id / end_source_image_id（素材（末尾））を
   含めて LTX 2.5 でもすべて使えます。submit_chain で LTX 2.5 では使えないのは
-  vae_mode（既定値以外）と、MiniMax H3 専用の pi_h3（"off" 以外）・sol_vae=true・keep_reference_latents=true だけです（keep_resident・attention_backend・
+  vae_mode（既定値以外）と、MiniMax H3 専用の pi_h3（"off" 以外）・sol_vae=true・keep_reference_latents=true・keep_text_conditioning=true だけです（keep_resident・attention_backend・
   nag_enabled は submit_chain でも使えます）。keep_resident_embeddings は
   submit_chain でも LTX 2.5 専用で、LTX 2.3 では 422 になります。
   撮り直し（Retake）は submit_chain の引数（retake_* の 6 引数）、画角拡張

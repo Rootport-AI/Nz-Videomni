@@ -1063,10 +1063,10 @@ def test_no_chain_mode_is_refused_any_more():
     }
     # vram16_mode は MiniMax H3 専用(台帳 §1-106)で、両方の LTX が断る。
     # clips の行(クリップごとの references。台帳 §1-109)も同じ。pi_h3 も
-    # sol_vae も keep_reference_latents も同じ。
+    # sol_vae も keep_reference_latents も keep_text_conditioning も同じ。
     assert refused == {
         "pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3", "sol_vae",
-        "keep_reference_latents",
+        "keep_reference_latents", "keep_text_conditioning",
     }
 
 
@@ -1645,6 +1645,7 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
         "pi_h3",
         "sol_vae",
         "keep_reference_latents",
+        "keep_text_conditioning",
     ]
     features = by_id["LTX25"]["unsupported_features"]
     # Retake段で ``retake`` が外れた——残っていればEditタブの「撮り直し」
@@ -1687,7 +1688,8 @@ def test_models_publishes_unsupported_features_per_base_model(two_family_client)
     assert "pi_h3" in features  # pi-H3（MiniMax H3 専用）
     assert "sol_vae" in features  # Sol-H3-VAE（MiniMax H3 専用）
     assert "keep_reference_latents" in features  # 参照素材の符号化結果の保持（MiniMax H3 専用）
-    assert len(features) == 8
+    assert "keep_text_conditioning" in features  # テキストエンコーダーの条件付けの保持（MiniMax H3 専用）
+    assert len(features) == 9
     assert set(features) == set(ltx25.UNSUPPORTED_FEATURES)
     assert isinstance(features, list), "JSONの配列であること(順序が保たれる)"
 

@@ -3019,3 +3019,48 @@ def test_keep_reference_latents_sent_only_when_true():
     assert "keep_reference_latents" not in captured["body"]
     anyio.run(functools.partial(generate.submit_chain, "p", clips, keep_reference_latents=True))
     assert captured["body"]["keep_reference_latents"] is True
+
+
+def test_both_tools_expose_keep_text_conditioning_as_an_optional_bool_defaulting_to_the_server():
+    from api.models import GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        schema = tools[name].inputSchema
+        prop = schema["properties"]["keep_text_conditioning"]
+        assert prop["type"] == "boolean" and prop["default"] is False, name
+        assert "keep_text_conditioning" not in set(schema.get("required", [])), name
+        # the LAST argument, so no earlier call's positional order moves.
+        assert list(schema["properties"])[-1] == "keep_text_conditioning", name
+    assert GenerateRequest.model_fields["keep_text_conditioning"].default is False
+    assert GenerateChainRequest.model_fields["keep_text_conditioning"].default is False
+
+
+def test_keep_text_conditioning_sent_only_when_true():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+
+    set_client(_client_for_handler(handler))
+    anyio.run(functools.partial(generate.submit_generate, "p"))
+    assert "keep_text_conditioning" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", keep_text_conditioning=False))
+    assert "keep_text_conditioning" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_generate, "p", keep_text_conditioning=True))
+    assert captured["body"]["keep_text_conditioning"] is True
+    assert "keep_reference_latents" not in captured["body"]
+    clips = [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+    anyio.run(generate.submit_chain, "p", clips)
+    assert "keep_text_conditioning" not in captured["body"]
+    anyio.run(functools.partial(generate.submit_chain, "p", clips, keep_text_conditioning=True))
+    assert captured["body"]["keep_text_conditioning"] is True
+    anyio.run(functools.partial(
+        generate.submit_chain, "p", clips, keep_text_conditioning=True, keep_reference_latents=True))
+    assert captured["body"]["keep_text_conditioning"] is True
+    assert captured["body"]["keep_reference_latents"] is True

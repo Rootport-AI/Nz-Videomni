@@ -158,6 +158,9 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
+    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
+    # default is False.
+    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: The ignore-and-log half: fields this engine cannot act on but that must NOT
@@ -364,6 +367,9 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False. LAST, for the same reason.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
+    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
+    # default is False.
+    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: The ignore-and-log half. Field-for-field the same as

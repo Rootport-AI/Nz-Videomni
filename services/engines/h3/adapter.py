@@ -41,7 +41,8 @@ absent key is "no references"), ``nag`` (``{negative_prompt, method,
 vsf_scale}``; VSF only), ``pi_h3`` (``{steps, path}``; a pi-H3 job only —
 an absent key is off), ``sol_vae`` (``{path}``; a Sol-H3-VAE job only — an
 absent key is off), ``keep_reference_latents`` (the bool ``True``; only
-when asked for — an absent key is off) and ``keep_resident`` (only when asked for — an
+when asked for — an absent key is off), ``keep_text_conditioning`` (the bool
+``True``; only when asked for — an absent key is off) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
 ones (``encode`` / ``stage1_denoise`` / ``decode``), read with
 ``one_stage=True``; the A2V audio encode is a step of ``encode`` (its own name,
@@ -391,6 +392,9 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # keep_reference_latents: the worker's ``keep_reference_latents`` payload
         # key (the bool ``True``), only when it is true.
         "keep_reference_latents",
+        # keep_text_conditioning: the worker's ``keep_text_conditioning`` payload
+        # key (the bool ``True``), only when it is true.
+        "keep_text_conditioning",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -509,6 +513,9 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         # keep_reference_latents: the single path's payload key (``True``),
         # only when it is true.
         "keep_reference_latents",
+        # keep_text_conditioning: the worker's ``keep_text_conditioning`` payload
+        # key (the bool ``True``), only when it is true.
+        "keep_text_conditioning",
         "crop_output",
         "embed_mp4_metadata",
     }
@@ -1349,6 +1356,9 @@ class _RealBackendH3(_RealBackend):
         # keep_reference_latents: only when true (an absent key = off).
         if request.keep_reference_latents:
             payload["keep_reference_latents"] = True
+        # keep_text_conditioning: only when true (an absent key = off).
+        if request.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
         payload["output_path"] = str(target)
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
@@ -1582,6 +1592,9 @@ class _RealBackendH3(_RealBackend):
         # keep_reference_latents: only when true (an absent key = off).
         if chain.keep_reference_latents:
             payload["keep_reference_latents"] = True
+        # keep_text_conditioning: only when true (an absent key = off).
+        if chain.keep_text_conditioning:
+            payload["keep_text_conditioning"] = True
         # keep_resident: the LTX contract — the key rides only when True, and
         # an absent key IS the release request.
         if chain.keep_resident:

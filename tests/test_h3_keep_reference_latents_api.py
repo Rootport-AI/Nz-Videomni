@@ -130,8 +130,9 @@ def test_ltx_refuses_with_the_h3_only_sentence(adapter):
         assert ei.value.detail == H3_ONLY_DETAIL
         reject(off)  # no raise
     assert FIELD in adapter.UNSUPPORTED_FEATURES
-    assert adapter.REJECT_TABLE[-1][1] == FIELD
-    assert adapter.CHAIN_REJECT_TABLE[-1][1] == FIELD
+    # keep_text_conditioning's row came after this one.
+    assert adapter.REJECT_TABLE[-2][1] == FIELD
+    assert adapter.CHAIN_REJECT_TABLE[-2][1] == FIELD
 
 
 @pytest.mark.parametrize("base_model", ["LTX23", "LTX25"])

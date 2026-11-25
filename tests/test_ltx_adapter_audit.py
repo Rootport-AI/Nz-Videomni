@@ -52,6 +52,7 @@ REQUEST_OVERRIDES_23: dict[str, dict] = {
     "pi_h3": {"pi_h3": "4steps"},
     "sol_vae": {"sol_vae": True},
     "keep_reference_latents": {"keep_reference_latents": True},
+    "keep_text_conditioning": {"keep_text_conditioning": True},
 }
 
 #: The refusals whose 422 does NOT point at LTX 2.5 (the feature is MiniMax H3's).
@@ -164,7 +165,7 @@ def test_a_default_request_is_accepted():
 def test_unsupported_features_publishes_both_refusals_in_table_order():
     assert ltx23.UNSUPPORTED_FEATURES == (
         "keep_resident_embeddings", "alpha_gen", "vram16_mode", "source_audio", "references",
-        "pi_h3", "sol_vae", "keep_reference_latents",
+        "pi_h3", "sol_vae", "keep_reference_latents", "keep_text_conditioning",
     )
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
 

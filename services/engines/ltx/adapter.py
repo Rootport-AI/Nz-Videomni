@@ -153,6 +153,9 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
+    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
+    # default is False.
+    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: The 422 message for a feature that belongs to neither LTX: the generic one
@@ -165,6 +168,7 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "pi_h3": "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
     "sol_vae": "Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。",
     "keep_reference_latents": "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
+    "keep_text_conditioning": "テキストエンコーダーの条件付けの保持（keep_text_conditioning）は MiniMax H3 専用です。LTX では使えません。",
 }
 
 #: The chain twin of :data:`H3_ONLY_REFUSALS`, read by both LTX families'
@@ -281,6 +285,9 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False. LAST, for the same reason.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
+    # MiniMax H3 only (keeping the text encoder's conditioning). The field's
+    # default is False.
+    ("keep_text_conditioning", "keep_text_conditioning", lambda r: r.keep_text_conditioning),
 )
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.

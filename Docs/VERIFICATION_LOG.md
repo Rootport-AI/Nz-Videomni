@@ -27901,5 +27901,5 @@ LTX 2.3 の記録には段の秒数が無いので、ワーカーのログの、
   - 構成ごとの `runs/<構成>/`: 動画（`output.mp4`）、対照と並べた動画（`sbs_vs_<対照>.mp4`）、要所のフレームの比較画像（`frames_vs_<対照>.png`）、`result.json`（生成の条件と計測）、`run.log`・`events.json`、共有 GPU メモリと電力の採取の記録（`wddm.csv`・`smi.csv`）。
   - 照合の `runs/attn_check_route1/`・`runs/attn_check_route2/` の `result.json`。
   - まとめ（`runs/summary.md`・`runs/summary.json`）、`README.md`・`conditions_table.md`、台本（`scripts/`）、仮想環境の確認の記録（`env/`。道 2 の部品のライセンスの記録を含む）。
-- **消すもの**: 実験専用の仮想環境 2 つ、ダウンロードと組み立てのキャッシュ、一時ファイル、照合のために保存した注意の入力（`runs/SAVE/attn_inputs/`）は、この記載のあとに消します。
+- **消したもの**: 実験専用の仮想環境 2 つ、ダウンロードと組み立てのキャッシュ、一時ファイル、照合のために保存した注意の入力（`runs/SAVE/attn_inputs/`）は、この記載のあとに消しました（2026-11-26）。取得した配布物（`downloads/`）と、そこから写した作者のコード（`vendor/`）は残しています。
 - **コミット**: 製品のコードの変更はありません。本節を含む文書は、監督がコミットします。

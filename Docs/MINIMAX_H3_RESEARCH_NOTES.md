@@ -732,6 +732,7 @@ GGUF 13本・safetensors 7本のヘッダをHTTP Rangeリクエストで取得�
 - **Sol-Attn**: 学習済みの gate〔どこを間引くかを決める小さな網〕が要らない。MiniMax H3 の INT8 ConvRot での外部実測があり、RTX 5080 16GB・8 ステップで 58.2 秒→45.1 秒。ただしこの改善には、メモリ転送との競合が和らいだことも寄与している。
 - **VSA（Video Sparse Attention）**: 学習済みの gate で Attention を疎にする。FastVideo に実装があり、Turbo と併用した例もある。ファインチューンしたモデルで gate が使えるか（互換性）が課題である。
 - **SpargeAttn／Cube／SubBlock Sparse**: その他の疎化の方式。H3・VRAM 16GB mode・現行のヘッド分割に合うかと、実装の費用は確かめていない。
+- **Spark-H3（採って実装した方式）**: 本製品は、この節の方式ではなく Spark-H3（作者の ComfyUI 版のカーネル）を採って実装した。仕組みの正本は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11、実験の数値の正本は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238。
 
 参考資料:
 

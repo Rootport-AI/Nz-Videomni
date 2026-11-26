@@ -45,6 +45,73 @@
 - [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
 - 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
 
+### 1-301. MiniMax H3 の Spark-H3（注意の計算を間引く高速化）の実機での確認（起票：2026-11-26）
+
+- **概要**: Spark-H3 を、エンジン・サーバー・インストーラー・操作パネル・Gradio・MCP に足した（dev）。開発機の GPU での確認は済み（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §239）。操作パネルは、開発機の AviUtl2 に配置済み。
+- **これからすること**: 下の確認を行う。合格したら、本項と §3-247 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、main への取り込みを伺う。検証用の別の機械（RTX 30 シリーズ）の確認に合格したら、README の Spark-H3 の対応 GPU の RTX 30 シリーズを「確認済み」に直す。
+- **出典**: 作りは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11、裁定は同 裁定 113、実験の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238。本節が実機確認の項目の正本。
+- 結果の見方: 「mp4 info」は、できた mp4 を Toolbox の mp4 info に落としたときの表示。
+
+#### インストーラー（開発機）
+
+- [ ] `install-MiniMaxH3.bat` を実行する → Spark-H3 の段で「GPU の系統: 8.9（sm89）」の行と、「Spark-H3 の部品を入れました（…）」か「Spark-H3 の部品は入っています（spark-h3-kitchen 0.2.37+spark.h3.sm89.cu130.1）」の行が出る。「入れました」の回は、その前に「SHA-256 が一致しました: ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm89-cu130.zip」の行も出る。
+- [ ] （続き）もう一度実行する → Spark-H3 の段は「Spark-H3 の部品は入っています（…）」で終わり、最後のまとめに Spark-H3 の注意文が出ない。
+
+#### Settings（開発機・操作パネル）
+
+- [ ] ベースモデルに MiniMax H3 を選び、Settings を開く → 「生成の高速化」の「Attention機構の実装」の欄で、「sdpa / sage attention」の行のすぐ下に「off / Spark-H3」の行がある。「Spark-H3」のボタンは押せる。
+- [ ] 「Spark-H3」を押す → その下にスライダーが 2 本出る。「フルで演算する割合」は 20% で、10% と 20% の位置に白い印があり、印にマウスを乗せると「推奨の範囲（10〜20%）」と出る。「フル演算するステップ数」は 2 で、下に「総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）」と出る。
+- [ ] （続き）割合のスライダーを左端と右端まで動かす → 1% と 50% になる。ステップ数のスライダーを左端と右端まで動かす → 0 と 10 になる。
+- [ ] 割合を 15%、ステップ数を 1 にしてから「off」を押す → スライダーが消える。もう一度「Spark-H3」を押す → 15% と 1 のまま出る。
+- [ ] （続き）「Spark-H3」を選んだまま、ベースモデルを LTX 2.3 に切り替える → 「off / Spark-H3」の行とスライダーが消える。MiniMax H3 に戻す → 行は「off」になっている。「Spark-H3」を押す → 15% と 1 のまま出る。
+- [ ] （続き）AviUtl2 を起動し直し、Settings を開く → 「Spark-H3」が選ばれていて、15% と 1 のまま。
+
+#### 生成（開発機・操作パネル）
+
+ここでの「ふだんの条件」は、Turbo LoRA の 4 ステップ（Steps 4）・Attention は sage attention・VRAM 16GB mode は on・Fast VAE は off。Spark-H3 は「Spark-H3」・割合 20%・フル演算するステップ数 1。動画の大きさを変えた最初の 1 本は、部品の組み立ての時間が余分にかかる（README の Spark-H3 の節）ので、時間を比べるのは 2 本目以降にする。
+
+- [ ] Single で、ふだんの条件で生成する → 完走する。生成ボタンの下に Spark-H3 の注意文は出ない。mp4 info に `"spark_h3_used": "on"` がある。
+- [ ] （続き）同じシード・同じ条件で、Spark-H3 だけを off にして生成する → Spark-H3 のほうが短い時間で終わる。2 本を見比べて、Spark-H3 のほうの絵と音が実用の範囲か見る。
+- [ ] Single で、フル演算するステップ数を 2 にし、Steps を 2 にする → 生成ボタンの下に黄色で「Stepsが少ないため、Spark-H3が効きません。Settings画面で「フル演算するステップ数」を下げてください。」と出て、生成ボタンは押せる。生成する → 完走し、mp4 info に `"spark_h3_used": "on->off"` と `"reason": "few_steps"` がある。
+- [ ] （続き）Steps を 3 にする → 注意文が消える。
+- [ ] （続き）フル演算するステップ数は 2 のまま、Fast VAE を pi-H3_2s にする → 同じ注意文が出る。pi-H3_4s にする → 注意文が消える。pi-H3_4s のまま生成する → 完走し、絵と音が崩れていない。
+- [ ] Single をふだんの条件に戻し（Fast VAE は off・Steps 4・フル演算するステップ数 1）、大きさを 1280×768・フレーム数を 39 にし、キーフレームと Reference のカードを付けない → 生成ボタンの下に黄色で「短い動画ではSpark-H3が効きません。」と出て、生成ボタンは押せる。生成する → 完走し、mp4 info に `"spark_h3_used": "on->off"` と `"reason": "short_sequence"` がある。
+- [ ] （続き）フレーム数を 56 にする → 注意文が消える。
+- [ ] Chained で、大きさを 1280×768 にし、冒頭の画像を置かず、Reference をオフにして、クリップを 2 本（39 フレームと 124 フレーム）にする → 「短い動画ではSpark-H3が効きません。」と出る。39 フレームのクリップを 124 フレームにする → 注意文が消える。
+- [ ] Edit の Retake・Inpainting・Outpainting のそれぞれで、Steps を 1 にする（フル演算するステップ数は 1）→ 3 つの画面とも「Stepsが少ないため…」の注意文が出て、生成ボタンは押せる。
+- [ ] Edit の Retake で、区間を最短の 73 フレームにし、生成の大きさを 640×384 にする → 「短い動画ではSpark-H3が効きません。」と出る。生成の大きさを 1280×768 にする → 注意文が消える。
+- [ ] VRAM 16GB mode を off にし、Single の大きさを 832×480・フレーム数を 124 にして、ほかはふだんの条件で、Spark-H3 ありで 1 本生成する → 完走し、mp4 info に `"spark_h3_used": "on"` がある。絵と音が崩れていない。確かめたら、VRAM 16GB mode を on に戻す。
+- 補足: 大きさを 832×480 にするのは、VRAM 溢れが起きない条件で確かめるため。1280×768・124 フレームで VRAM 16GB mode を off にすると、開発機では Spark-H3 が無くても VRAM 溢れが起き、Spark-H3 ありでは 1 本に 30 分近くかかる（記録簿 §239.6）。この大きさでは Spark-H3 のありとなしの時間の差が数秒しかないので、時間は比べない。
+- [ ] Chained で、ふだんの条件で 4〜5 本のクリップをつないで生成する → 完走し、mp4 info に `"spark_h3_used": "on"` がある。つなぎ目を見る。
+- [ ] ふだんの条件で、次の 4 本を 1 本ずつ生成する: 先頭のフレームに画像を置いた Single／音声を付けた Single（A2V）／Ref2VA の重みを読み込んで Reference のカードを付けた Single／Edit の Inpainting → 4 本とも完走し、mp4 info に `"spark_h3_used": "on"` があり、絵と音が崩れていない（実験で試していない組み合わせ）。
+
+#### Gradio と MCP（開発機）
+
+- [ ] Gradio の Settings タブで MiniMax H3 を読み込む → 「生成の高速化」の区画の Attention のすぐ下に、「Spark-H3」のチェックボックスと、2 本のスライダー（20 と 2）が出る。LTX 2.3 を読み込む → 3 つとも消える。
+- [ ] （続き）MiniMax H3 に戻し、チェックを入れて、Generate タブで単発を 1 本生成する → 完走し、mp4 info に `"spark_h3_used": "on"` がある。
+- [ ] MCP の `submit_generate` に `spark_h3=True` を付けて、MiniMax H3 で 1 本生成し、出力の mp4 を `get_mp4_info` で読む → 完走し、`spark_h3_used` が `"on"`。
+
+#### 使えない環境の動き（開発機で、部品を一時的に外す）
+
+前提: `run.bat` のサーバーを止め、`.venv-engine-h3\Lib\site-packages\spark_h3_kitchen` のフォルダーを `.venv-engine-h3` の外へ移す。
+
+- [ ] `run.bat` でサーバーを起動し、操作パネルで MiniMax H3 を選んで Settings を開く → 「Spark-H3」のボタンが灰色で押せず、マウスを乗せると「この環境では Spark-H3 を使えません。」と出る。
+- [ ] （続き）MCP の `submit_generate` に `spark_h3=True` を付けて、MiniMax H3 で 1 本生成し、出力の mp4 を `get_mp4_info` で読む → 完走し、`spark_h3_used` が `"on->off"`、`h3.spark_h3.reason` が `"unavailable"`。
+- [ ] （続き）サーバーを止め、移したフォルダーを元の場所へ戻して、サーバーを起動し直す → 「Spark-H3」のボタンが押せる。
+- 補足: 移したフォルダーは、`install-MiniMaxH3.bat` では戻らない（部品の版の記録が残っているので、「入っています」と判定する）。必ず手で元の場所へ戻す。
+
+#### 検証用の別の機械（RTX 30 シリーズ）
+
+前提: その機械で、この変更（dev）を取り込み（`git pull`）、`setup.bat` を済ませておく。
+
+- [ ] `install-MiniMaxH3.bat` を実行する → Spark-H3 の段で「GPU の系統: 8.6（sm86）」・「SHA-256 が一致しました: ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm86-cu130.zip」・「Spark-H3 の部品を入れました（spark_h3_kitchen-0.2.37+spark.h3.sm86.cu130.1-cp312-abi3-win_amd64.whl）」の行が出る。
+- [ ] 操作パネルで MiniMax H3 を選んで Settings を開く → 「Spark-H3」のボタンが押せる。
+- [ ] 開発機の「生成」の最初の 2 項目と同じく、ふだんの条件で Spark-H3 のありとなしを 1 本ずつ生成する → どちらも完走し、Spark-H3 のほうの mp4 info に `"spark_h3_used": "on"` がある。かかった時間を比べる。
+
+#### オーナー判断待ち
+
+- [ ] Settings で「sage attention」と「Spark-H3」を両方選ぶ → Sage の注意書き「同じシードでも生成結果の細部が変わります（…）」が、Spark-H3 の 2 本のスライダーと説明文の下に出る。Attention の行から離れたこの位置で読みやすいか、判断する（設計正本 §6.11 の「既知の限界」）。
+
 ## 3. 将来の研究課題
 
 調査・検討段階の大きめのテーマ。着手時期は未定。欠番の対応は[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)冒頭を参照。
@@ -368,10 +435,10 @@
 
 #### 3-247. MiniMax H3 の Sparse Attention（注意の疎化）の導入調査（起票：2026-10-21）
 
-- **概要**: Attention を間引いて 1 ステップを速くする方式（Sol-Attn・VSA・SpargeAttn・Cube／SubBlock Sparse）。Turbo と原理的に併用できる。
-- **判断材料**: 各方式の特徴・外部の実測・未確認の点は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。H3・VRAM 16GB mode・現行のヘッド分割に合うかと、実装の費用は確かめていない。外部のベンチマークは本製品の実測値として扱わない（同 §14.6）。
+- **概要**: Attention を間引いて 1 ステップを速くする方式（Sol-Attn・VSA・SpargeAttn・Cube／SubBlock Sparse・Spark-H3）。Turbo と原理的に併用できる。
+- **判断材料**: 採った方式は Spark-H3（作者の ComfyUI 版のカーネル）で、仕組みは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11・裁定 113、実験の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238。ほかの方式の特徴・外部の実測・未確認の点は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。外部のベンチマークは本製品の実測値として扱わない（同 §14.6）。
 - **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。
-- **状態**: 将来の研究課題（着手時期未定）。
+- **状態**: Spark-H3 を dev に実装済み。§2 の 1-301 の確認に合格したら、本項を閉じる（設計正本 裁定 113 ⑧）。
 
 #### 3-248. MiniMax H3 の Cross-step Cache（ステップ間の再利用）の研究（低優先度）（起票：2026-10-21）
 

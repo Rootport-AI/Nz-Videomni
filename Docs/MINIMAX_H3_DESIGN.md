@@ -7,7 +7,7 @@
 - マルチエンジン機構（ベースモデルの切り替え、記述子、エンジン系統ごとのワーカーと仮想環境）の土台は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) である。本書はその上に載る H3 固有の取り決めだけを書く。
 - 調査の記録は [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) である（**参考資料**。設計の正本ではない）。本書と記述が食い違った場合は本書を採る。
 - 次の作業の入口は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) の MiniMax H3 の項目である。
-- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査（DiT の量子化は int8 ConvRot・fp8・w4a8。ConvRot なしの int8 と、一部のブロックを BF16 のまま残したファイルも受ける。§5・§7。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211・§221）・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
+- **現在の実装範囲**: T2V と I2V（キーフレーム最大 10 枚。0〜F−1 の任意のフレームに置ける。§3）・常駐・アダプタ・系統登録・記述子・事前検査（DiT の量子化は int8 ConvRot・fp8・w4a8。ConvRot なしの int8 と、一部のブロックを BF16 のまま残したファイルも受ける。§5・§7。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §210・§211・§221）・API の系統別制約・操作パネル・Gradio・MCP・VRAM 16GB mode（§6.5）・LoRA（§6.6）・単発の A2V（音声から映像。§3.1）・Ref2VA（参照素材からの生成。§3.2）・連結（Chained。T2V のクリップの連結・入力動画からの続き〔V2V〕・クリップ 0 の冒頭画像〔i2v〕。クリップごとの Ref2VA の参照とクリップごとの A2V を付けられる。§3.3）・Retake（入力動画の区間の描き直し。§3.4）・ネガティブプロンプト（VSF。§3.5）・Outpainting（キャンバスの拡張。§3.6。門はすべて合格して完結し、操作パネルは配布済み。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §205）・Inpainting（マスクによる部分の描き直し。§3.7。門と実機確認はすべて合格して完結。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §208）・インストーラ `install-MiniMaxH3.bat`（仮想環境の構築と重みの取得を 1 回で行う。§10）・Spark-H3（疎な注意。§6.11。実装済みで、開発機の GPU での確認は済み〔記録簿 §239〕。オーナーの実機での確認はこれから）。範囲の全体は §11。実測と検証の記録は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md)・[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md)（節と番号の対応は §11）。
 
 本書のうち **【オーナー裁定】** と書いた規則は、オーナーの承認なしに変えない設計上の約束である。
 
@@ -19,7 +19,7 @@
 | [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) | 土台。記述子（§4）・エンジンアダプタ（§5.2）・仮想環境（§5.3）・推論モード（§5.8）・写像表（§9） |
 | [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) | 調査の記録（参考資料）。**進め方の裁定**は同ノート §10。配布ファイルの実測は同 §13.2 |
 | [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) | 実測と検証の正本（第 1 弾の門の結果は §165、第 2 弾は §166、第 3 弾は §167、VRAM 16GB mode の計測は §168・実装と門は §169、キーフレームは §170、LoRA は §176、A2V は §178、Ref2VA は §180、テキストエンコーダーの VRAM は §181〜§182、連結は §183〜§184、参照付きの連結は §185〜§186、連結の V2V と冒頭画像は §193、Retake は §200、ネガティブプロンプト（VSF）は §201〜§203、クリップごとの A2V とバッチ A2V は §204、Outpainting は §205、参照とキーフレームの併用は §214、Chained の後続クリップへの参照素材の使い回しと MCP の参照素材は §232、参照素材の潜在の常駐は §233、テキストエンコーダーの条件付けのキャッシュは §235、同じキャッシュの LTX 2.3・2.5 への展開〔裁定 112〕は §236） |
-| `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない |
+| `engine_h3/venv-engine-h3.freeze.txt` | 仮想環境の**版の正本**。本書は版の数字を書かない（例外は、freeze に載せない Spark-H3 の部品の版。§6.11 の「インストーラー」） |
 | `engine_h3/engine_h3-venv-pyproject.toml` | 仮想環境を手で作り直すときの依存の仕様（なぜその版かの説明つき） |
 
 ---
@@ -498,6 +498,17 @@
   - **⑦ 行を隠す仕掛けは残す（監督裁定。オーナー承認の計画）**: 操作パネルの、サーバーが `unsupported_features` に名前を載せているあいだだけ行を隠す仕掛けは、消しません。汎用の仕掛けで、消さなくても LTX で行が出ます。残しておけば、新しい操作パネルが古いサーバーと組んだときに、ON のせいで LTX の生成が断られることも防げます。
   - **⑧ 実装の設計（監督裁定。オーナー承認の計画）**: LTX 2.3 は文字列ごとに持ち、Positive と Negative で同じ鍵を使います。管理役は裁定 110 の `RefLatentCache` を、エンジンごとにもう 1 個ずつ使い、新しいクラスは作りません。管理役と値のハッシュの関数は `engine/` の下へ移し、3 つのエンジンが同じ部品を読みます。捨てる規則は裁定 110・111 と同じ 2 回です。Gradio には足しません。中身は [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §5.9 です。
   - **状態**: 操作パネル（dev の `dc8b2b06`）、API・MCP（`79316f87`）、エンジンの共用の部品（`8b6ed38a`）、LTX 2.5 のエンジン（`916024c8`）、LTX 2.3 のエンジン（`4f4c3fa6`）、配布用のプラグイン（`2fe5c235`）を実装し、実機に配置しました（2026-11-25）。GPU での確認は、計画のすべての門が見込みどおりでした（Outpainting・Inpainting の門は、オーナーの了承で元動画を差し替えて流した。記録簿 §236）。オーナーの実機での確認も合格しました（2026-11-25。記録簿 §237）。アプリの試験の全件も通り（2026-11-26。記録簿 §237.6）、main へ取り込みました（2026-11-26。1-298 とまとめて）。台帳の項はクローズ済みです（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-299）。
+
+- **裁定 113 【オーナー裁定・監督裁定】**: MiniMax H3 の注意の計算を間引いて速くする Spark-H3（以下 Spark）を、製品に入れるときの裁定です（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §3-247。2026-11-25〜26）。実験のあとのオーナーの裁定と、オーナーが了承した計画（監督の計画ファイル `typed-marinating-plum-of-125541ff-d8d4-4114-8cdf-db24fbc2fc44.md`）の要点をまとめます。仕組みの正本は §6.11 です。実験の条件・数値・オーナーの目視の判定は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238 にだけ書きます（本書には写しません）。
+  - **① 採る実装（オーナー裁定）**: ComfyUI 版のカーネル（記録簿 §238 の「道 1」）を採ります。diffusers 版（同「道 2」）は採りません（記録簿 §238.10）。
+  - **② Settings の形（オーナー裁定）**: Attention の行（sdpa／sage）のすぐ下に「off / Spark-H3」の行を置き、Spark-H3 を選んでいるときだけ、スライダー「フルで演算する割合」（1〜50%・既定 20%。10% と 20% に白いマーカー）と「フル演算するステップ数」（0〜10・既定 2。目安の説明文つき）を出します。範囲と既定は記録簿 §238.10 のとおりです。
+  - **③ 効かないときの注意文（オーナー裁定。2026-11-26 にお伺いして決めた点）**: 総ステップ数が「フル演算するステップ数」**以下**のときと、系列が 12,288 トークンに届かない短い動画のときに、生成ボタンの下に注意文を出します。出す画面は生成の画面すべてで、生成は止めません。エンジンは ComfyUI 版と同じ関門（系列が短ければフル演算）を持ちます。
+  - **④ 入口と配布（オーナー裁定）**: Gradio と MCP にも足します。インストーラーに入れ、版は作者の GitHub の Releases の `comfyui-v0.2.0` に固定します。部品は利用者の機械が Releases から直接取り、再ホストしません。
+  - **⑤ 数値の忠実さ（監督裁定。オーナー承認の計画）**: ComfyUI 版と同じ関数・同じ手順・同じ設定の値で動かします。割合を独自に丸めず、作者の Python のファイルは変えずに写します。Spark を指定しないジョブは、今と 1 ビットも変わりません。
+  - **⑥ 既存の仕組みに載せる（監督裁定。オーナー承認の計画）**: H3 だけに行を出すことと LTX で断ることは pi-H3・Sol と同じ表、使えない環境は Sage と同じ流れ（指定されても断らず、Spark なしで完走して記録に `"on->off"`）、記録の形は Sol と同じにします。新しい汎用の枠組みは作りません。
+  - **⑦ 作らないもの（監督裁定。オーナー承認の計画）**: カーネルのエラーのときのフル演算への切り替え（ジョブを失敗にする）、総ステップ数による既定の自動の変更、数の範囲のサーバーからの配信、快適上限マーカーへの算入、キャッシュの置き場所の変更、Gradio の注意文。理由は §6.11 の「採らなかった案」です。
+  - **⑧ 閉じ方（オーナー裁定）**: オーナーの実機での確認に合格したら、台帳 §3-247 を閉じます。main への取り込みは、その確認のあとに改めて伺います。
+  - **状態**: エンジン・サーバー・インストーラー・操作パネル・Gradio・MCP・試験・文書を dev に実装しました（2026-11-26）。開発機の GPU での確認は済みました（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §239）。オーナーの実機での確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-301）は、これからです。
 
 ### 裁定ではなく設計として決めたこと（裁定 17 の論点）
 
@@ -2260,6 +2271,238 @@ diffusers／PEFT の分離 QKV の LoRA・量子化 LoRA・LoHa／LoKr／DoRA・
 - **件数や大きさの上限を置く**: 裁定 111 ⑤のとおり置きません。
 - **鍵に、条件付けに効かないもの（seed・LoRA・ステップ数など）も入れる**: 無駄な作り直しが増えます。
 
+## 6.11 Spark-H3（疎な注意。注意の計算を間引いて速くする）
+
+**結論**: Spark-H3（以下 Spark）は、要求の欄 `spark_h3`（真か偽。既定は偽）で、ジョブごとに選ぶ高速化です。選んだジョブだけ、ノイズ除去の本体（DiT）の 50 層の注意の計算を、作者の ComfyUI 版のカーネルで間引いて計算します。最初の何ステップか（「フル演算するステップ数」）と、系列が短いジョブは、間引かずに今と同じ計算（フル演算）をします。使えない環境で指定されても断らず、Spark なしで完走します（記録は `"on->off"`）。Spark を指定しないジョブは、ワーカーへの送り物もエンジンの計算も今と同じです。裁定は裁定 113、実験の記録は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238 です。
+
+**実装の状態**: 本節の内容は dev に実装済みです（2026-11-26）。開発機の GPU での確認は済みました（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §239）。オーナーの実機での確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-301）は、これからです。前半（「既知の限界」まで）は今の作りで、後半（「経緯」と「採らなかった案」）は、同じ案を再び出さないための記録です。
+
+### 何をする機能か
+
+- **仕組み**: 映像の行どうしの組み合わせのうち、効きの大きい一部（「フルで演算する割合」。既定 20%）だけを正確に計算し、残りはまとめて近似します。学習は要らず、重みも変えません。出どころは GitHub の `zechengtang/Spark-H3` です（記録簿 §238.2）。
+- **重ね方**: Spark は Attention の sdpa／Sage に重ねて使います。フル演算のステップは、そのジョブで選んでいる sdpa／Sage で計算します。
+- **触る範囲**: 本体の 50 層の注意だけです。テキストエンコーダーの注意には触れません。
+- **効く場面**: ノイズ除去を通るジョブすべてです（単発・連結・V2V・Retake・Inpainting・Outpainting。どれも `engine_h3/pipeline_h3.py` の `_denoise` を通る）。
+- **速さの目安**: ふだんの使い方（Turbo LoRA の 4 ステップ・5 クリップの連結・Sage）を含む各条件の数値は、記録簿 §238.6 です（本書には写しません）。
+
+### 操作パネルの Settings
+
+操作パネルのソースは `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/` です。
+
+- **行（裁定 113 ②）**: 「Attention機構の実装」の欄の中、「sdpa / sage attention」のボタンの行のすぐ下に、2 行目のボタンの行「off / Spark-H3」を置きます。行に見出しはありません。ボタンの名前は技術名なので訳しません（`shell/SettingsPanel.tsx` の `SPARK_H3_OPTIONS`）。ベースモデルが MiniMax H3 のときだけ出します（下の「LTX 2.3・2.5」）。行の ID は `settingsRow.sparkH3` です。
+- **スライダー**: 「Spark-H3」を選んでいるときだけ、Attention の欄の下に 2 本と説明文を出します。off にすると隠れますが、値は保存されたままです。
+
+| スライダー | 範囲 | 既定 | 添えるもの |
+|---|---|---|---|
+| フルで演算する割合 | 1〜50%（1% 刻み） | 20% | 10% と 20% の位置に白いマーカー |
+| フル演算するステップ数 | 0〜10 | 2 | 説明文 |
+
+- **マーカー**: 快適上限マーカーと同じ見た目です（`size-marker size-marker-comfort` のクラスで、色は `--marker-comfort`）。描き方は、幅・高さのスライダーのマーカー（`modes/single/CommonGenerationFields.tsx` の `SizeSlider`）と同じです。`modes/single/FloatSliderField.tsx` に任意の `markers` を足しました。渡さない画面の DOM は変わりません。マーカーにマウスを乗せると「推奨の範囲（10〜20%）」と出ます。
+- **説明文（ステップ数のスライダーの下）**: 「総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）」の 1 文だけです。ほかの注意書きは足しません。
+- **使えないときのボタン**: 「Spark-H3」のボタンは押せず、ツールチップ「この環境では Spark-H3 を使えません。」が出ます（下の「使えない環境」）。
+- **保存**: 既存の保存のキーの中に `sparkH3`（真か偽）・`sparkH3TopkPercent`（1〜50 の整数）・`sparkH3FullSteps`（0〜10 の整数）を足しました。範囲の外・整数でない・型の違う値は、読み戻すときに既定に戻します（`shell/accelerationSettings.ts` の `StoredAcceleration`・`STORED_DEFAULTS`・`readStoredAcceleration`）。欄ごとの書き換えの関数（`shell/useAccelerationSettings.ts`）は、2 つの数を整数に丸めて範囲に収めてから保存します（小数を保存すると、次の起動で既定に戻ってしまうため）。保存の `useEffect` の依存の配列にも 3 つを足しています。依存の配列に足し忘れると保存されません。
+- **送る欄**: `sparkH3` が真のときだけ、3 つの欄（`spark_h3: true`・`spark_h3_topk_ratio`・`spark_h3_full_steps`）をまとめて載せ、偽のときは 1 つも載せません。割合は `sparkH3TopkPercent / 100` で送ります。送り出しは共通の関数 `accelerationRequestFields` の 1 か所で、単発・連結・バッチ・Edit の送信の経路で同じです。Alpha Gen（LTX 2.5 専用）の送信には載せません。
+- **快適上限の照合**: `effectiveAccelerationFields` には `spark_h3` の鍵だけを型のために置き、照合には加えません（快適上限マーカーに算入しない。「採らなかった案」）。
+- **連結**: クリップごとに、ステップ数を 0 から数え直します（実験と同じ）。
+
+### 生成ボタンの下の注意文
+
+Spark がオンのとき、次の 2 つの注意文を、生成ボタンの下に黄色で出します（裁定 113 ③）。どちらも出すだけで、生成ボタンは押せるままです（生成ボタンを止める理由の一覧には入れない）。
+
+| 注意文 | 出す条件 |
+|---|---|
+| 「Stepsが少ないため、Spark-H3が効きません。Settings画面で「フル演算するステップ数」を下げてください。」 | 総ステップ数が「フル演算するステップ数」以下 |
+| 「短い動画ではSpark-H3が効きません。」 | 系列が 12,288 トークンに届かない |
+
+- **出す画面**: 生成の画面すべて（Single・Chained・Edit の Retake／Inpainting／Outpainting）です。部品は `shell/SparkH3Notes.tsx` で、LoRA の注意文と同じ `warning-banner warning-banner-mild` の段落を 1 文に 1 つ描きます。置き場所は、Single と Chained では LoRA と参照素材の注意文の下、Edit の各画面では生成ボタンを止める理由の一覧の下です。
+- **ベースモデルの条件**: 規則の関数は `sparkH3` だけを見ます。LTX では行が隠れて `sparkH3` が偽へ書き戻される（下の「LTX 2.3・2.5」）ので、LTX では注意文は出ません。
+- **総ステップ数**: 画面が見せているステップ数です。Fast VAE で pi-H3 を選んでいるときは、pi-H3 が決めるステップ数（4 か 2。`piH3FixedSampling` の値）で判定します。同じ値のときも出すのは、そのとき Spark が 1 度も働かないためです。Chained は連結全体に 1 つのステップ数で判定します。
+- **短い動画の判定**: 快適上限マーカーのために系列のトークン数を計算する既存の関数（`shell/h3SequenceRows.ts` の `h3SequenceRows(...)`）をそのまま使い、`total < 12288` で出します。
+  - Single は、快適上限マーカーと同じ入力（`values.width`・`height`・`numFrames` と、キーフレームと参照素材のカードの構成）です。
+  - Inpainting と Outpainting は、快適上限マーカーの見積もり（既存の `h3Rows`）そのものです。
+  - Chained は、クリップごとに計算し、1 本でも届かないクリップがあれば出します。クリップごとの入力は `ChainedScreen.tsx` の `clipSequenceInputs` の 1 か所で作り、快適上限マーカーと注意文の両方がそれを読みます（2 つがクリップを違って数えることはない）。
+  - Retake は、要求が送る生成の大きさ（`width`・`height`。初期値は素材の実寸から作る）と窓のフレーム数（`windowFrames`）で、キーフレームと参照素材なしとして計算します（`useRetakeForm.ts` の `sequenceRows`）。素材の実寸ではなく生成の大きさを使うのは、エンジンが窓を要求の大きさで読むためです（`engine_h3/chain_h3.py` の `_read_retake_window`）。
+  - 関数が `null`（計算できない大きさ）を返したときは出しません。
+- **規則は純粋な関数 2 つ**（`sparkH3StepsTooFew`・`sparkH3VideoTooShort`）で、`shell/accelerationSettings.ts` にあります。境目の 12,288 は同じファイルの `SPARK_H3_MIN_TOKENS` です。
+- **使えない環境かどうかでは変えません**。注意文の条件は上の表の 2 つだけです（規則を増やさないため）。
+- エンジンの側は、実際の系列の長さで判定します（下の「エンジンの配線」）。操作パネルの判定との差は「既知の限界」に書きます。
+
+### 使えない環境
+
+Sage と同じ扱いです（裁定 113 ⑥）。Sage の判定の流れの正本は仕様書 [`Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.5b です。
+
+1. **確かめる時点**: ワーカーがモデルを読み込んだとき（`pipeline.load()` のあと、`ready` を送る直前。検査が CUDA に触れて部品を読み込むので、CUDA の初期化の順序を今と変えないため）に、`engine_h3/spark_h3.py` の `probe()` で確かめ、`ready` に `spark_h3_available` を載せます。「already loaded」で `ready` を送り直す道にも、同じ値を載せます。ジョブの最初の判定（下の「エンジンの配線」の `spark_start`）も同じ `probe()` を呼びます。結果はプロセスの中で覚えるので、検査が走るのはワーカー 1 つにつき 1 回です。
+2. **`probe()` が調べること**（この順。最初に当たった事実を理由の文にします）:
+   - 部品 `spark-h3-kitchen` が入っているか（入っている版を、部品を読み込まずに配布の情報から読む）。
+   - 版の前半が `0.2.37` か。版の後半に GPU の系統の札（`spark.h3.sm89.` など）があるか。
+   - CUDA が使えるか。`torch.cuda.get_device_capability()` が (8,6)・(8,9)・(12,0) のどれかと完全に一致し、その系統が部品の札と同じか。
+   - 部品のカーネルを読み込めて、`spark_attn` が呼べるか。
+   - 写した作者のモジュール（`VENDORED_MODULES`）を、パッケージの中の名前で読み込めるか。
+   - 例外は `BaseException` で受けて外へ出しません（`probe_sage` の流儀）。理由の文には判定した事実だけを書き、ワーカーのログ（STDERR）にも 1 度出します。
+3. **`/status` の値**: `acceleration.spark_h3_available` を、Sage と同じ 4 段の表で決めます。
+
+| サーバーの状態 | `spark_h3_available` の由来 |
+|---|---|
+| 偽物のバックエンド | 常に偽 |
+| ワーカーが動いていない | 部品のフォルダーの有無 |
+| ワーカーが読み込み済み | ワーカーの `probe()` の結果 |
+| 読み込みの失敗・解放のあと | 部品のフォルダーの有無 |
+
+   - **ワーカーが動く前は、部品のフォルダーの有無だけで判定します**。調べるのは、そのベースモデルのエンジンの仮想環境の `Lib\site-packages\spark_h3_kitchen` がフォルダーとしてあるかだけで、何も読み込まず、GPU の系統も見ません（`services/engines/ltx/adapter.py` の `LTXRunner.spark_h3_available`。結果はサーバーのプロセスの中で覚える）。LTX の仮想環境には部品が無く、LTX のワーカーはこの鍵を送らないので、LTX では偽です。
+4. **操作パネル**: `spark_h3_available` が明示的に偽のときだけ、「Spark-H3」のボタンは押せず、ツールチップが出ます（`shell/accelerationSettings.ts` の `sparkH3Availability`。値が無いときは押せる。Sage と同じ規則）。
+5. **それでも指定されたとき**（MCP・Gradio・保存済みの設定）: エラーにせず Spark なしで生成し、記録に `spark_h3_used: "on->off"` と理由を残します。Gradio は、使えるかどうかで部品を締め出しません（Sage の先例）。
+
+### Gradio と MCP
+
+- **Gradio**（`gradio_ui/ui.py`・`handlers.py`・`feature_scope.py`・`i18n.py`）: Settings タブの Acceleration の区画の、Attention のラジオのすぐ下に、チェックボックス「Spark-H3」（`accel_spark_h3`）と 2 本のスライダー「フルで演算する割合」（`accel_spark_h3_ratio`。1〜50 の百分率）・「フル演算するステップ数」（`accel_spark_h3_full_steps`。0〜10）を置きました。H3 のときだけ出します（`feature_scope.py` の表。LTX では隠し、チェックを外し、2 本のスライダーも既定の 20 と 2 へ戻す）。
+  - スライダーは、H3 のときはチェックの有無によらず、いつも出します（チェックでの出し分けはしない。再描画との衝突を避けるため）。
+  - Gradio のスライダーには印を付けられないので、推奨の範囲は割合のスライダーの説明文に「推奨の範囲は10〜20%です。」と書きます。チェックボックスの説明文は「総ステップ数が「フル演算するステップ数」以下のときと、短い動画では効きません。」、ステップ数のスライダーの説明文は操作パネルと同じ 1 文です。生成ボタンの下の 2 つの注意文は出しません（Gradio には系列のトークン数を計算する仕組みが無いため）。
+  - 送る範囲は、注意の方式（`attention_backend`）を送っている生成すべて（Generate タブの単発・A2V・バッチ・Clip Chain タブ）で、送り物の組み立ては `handlers.py` の `spark_h3_payload` の 1 か所です（チェックが入っているときだけ 3 つの欄。割合は百分率を 100 で割る）。ただし Gradio の Clip Chain タブ・A2V・バッチは、もともと LTX 向けの作りです（§6.7 の「Gradio と MCP（段 4）」）。
+  - 選択は保存しません（ページを開き直すと既定に戻る。pi-H3 と同じ）。
+- **MCP**（`mcp_server/tools/generate.py`）: `submit_generate` と `submit_chain` の引数の並びのいちばん後ろに、`spark_h3: bool = False`・`spark_h3_topk_ratio: float = 0.2`・`spark_h3_full_steps: int = 2` を足しました。`spark_h3` が `True` のときだけ 3 つをまとめて送ります。範囲の検査はサーバーの 422 に任せます。`backend_status` の説明文（`mcp_server/tools/system.py`）に `spark_h3_available` を、サーバーの案内文（`mcp_server/server.py`）にも Spark を足しました。設計の判断は [`MCP_SERVER_DESIGN.md`](MCP_SERVER_DESIGN.md) の D44 です。
+
+### インストーラー
+
+`install-MiniMaxH3.bat` が呼ぶ `scripts/install_ltx.ps1` の関数 `Install-SparkH3Kitchen` が、部品を入れます。H3 の仮想環境を整えた直後（`Ensure-EngineVenv` のすぐあと）に呼び、仮想環境が揃っていて飛ばした回にも毎回呼びます。**どこで失敗しても、H3 の導入そのものは止めません**（H3 は Spark なしで動き、使えない理由はエンジンの検査が記録する）。
+
+1. **GPU の系統を調べる**: H3 の仮想環境の torch で `torch.cuda.get_device_capability(0)` を調べ、作者のインストーラーと同じく、系統の番号の完全一致で表を引きます（RTX 30 系＝8.6、40 系＝8.9、50 系＝12.0）。合えば、系統の番号と札（`sm89` など）を 1 行出します。表に無い系統のときは「この GPU 向けの配布物は無い」という趣旨の 1 行、CUDA が使えないときや値を調べられなかったときは、その事実の注意文を出して、入れずに先へ進みます。
+2. **「済み」の判定**: 入っている部品の版（配布の情報から読む）が `0.2.37+spark.h3.sm<今の GPU の系統>.cu130.` で始まれば、「入っている」と版を 1 行出して終わります。系統まで見るので、GPU を入れ替えたあとにもう一度実行すると、入れ替える旨を出して、合う部品に入れ替えます。
+3. **取得**: 系統の表（ZIP の名前と SHA-256。作者の `SHA256SUMS.txt` の値）を引き、作者の GitHub の Releases（`comfyui-v0.2.0`）から、取得する URL を出して直接取ります。再ホストはしません。置き場所は一時フォルダーの下の作業用のフォルダーで、最後に消します。取得の書き方は `scripts/setup.ps1` の先例に合わせています。
+4. **照合**: `Get-FileHash` で SHA-256 を照合します。一致すれば一致した旨を出します。違っていたら、ZIP の名前と期待の値と実際の値を書いた注意文を出して、導入は進めます。この注意文は、最後のまとめ（検証の表のあと）にも、重みのファイルの注意文と一緒にもう一度出します（重みのファイルの照合と同じ扱い。終了コードは変えない）。
+5. **導入**: ZIP を展開し、`spark_h3_kitchen-0.2.37+spark.h3.sm<系統>.cu130.` で始まる wheel をちょうど 1 本選びます。RTX 30 系・50 系向けの ZIP には 0.2.37 と 0.2.39 の 2 本が、40 系向けには 0.2.37 の 1 本が入っていて（2026-11-26 に 3 つの ZIP の中身を確かめた）、どの系統でも 0.2.37 の 1 本に決まります。0.2.37 は作者のインストーラーの既定の版で、エンジンの `KITCHEN_VERSION` と同じです。`uv pip install --python <H3 の python> --no-deps` で入れ（部品は依存を持たない）、入れた wheel の名前を出します。
+- **途中の失敗**: 取得・展開・wheel の選択（1 本でないとき）・`uv` のどれかが失敗したときは、何が起きたかの注意文を出し、部品を入れずに先へ進みます。
+- **既存の環境**: すでに H3 を入れている環境は、`install-MiniMaxH3.bat` をもう一度実行すると、Spark の部品だけが足されます（仮想環境と重みは、揃っていれば飛ばす）。
+- **導入の前の案内**: `scripts/install_model.ps1` は、MiniMax H3 の導入の最初の案内に、GPU の系統に合う Spark の部品を作者の GitHub の Releases から取得して入れる旨の 1 行を足しています。
+- **仮想環境の版の記録に入れない**: `.nz-engine-state` の鍵にも、`engine_h3/venv-engine-h3.freeze.txt` にも入れません（freeze には、意図して載せない旨の注釈だけがある）。配布の索引に無い版のためです（`uv pip install -r` は、後から足した wheel を消さない）。
+- **作者の Python のファイルは 3 つの ZIP で同じ**です。製品が写したファイル（下の「作者のコードの置き場所と扱い」）は、RTX 30 系・50 系向けの ZIP の同じファイルとも SHA-256 が一致します（`engine_h3/third_party/spark_h3/README.md`）。
+- `install_ltx.ps1` の「GPU は調べない」という注釈は、「GPU を調べるのはこの部品だけ」という今の動きに合わせて直してあります。
+
+### 要求の欄・送り物・`/status`・記録
+
+| 場所 | 名前と値 |
+|---|---|
+| API の欄（単発・連結） | `spark_h3: bool = False`／`spark_h3_topk_ratio: float`（0.01〜0.5・既定 0.2）／`spark_h3_full_steps: int`（0〜10・既定 2） |
+| ワーカーへの送り物 | `spark_h3: {"topk_ratio", "full_steps"}`（オンのときだけ） |
+| エンジンの型 | `H3SparkInput`（`H3PiH3Input` の流儀）・`H3GenerateRequest.spark_h3` |
+| ワーカーの `ready`・`/status` | `spark_h3_available`・`acceleration.spark_h3_available` |
+| `unsupported_features` | `spark_h3`（LTX 2.3・2.5 が載せる） |
+
+- **欄**（`api/models.py`）: 単発と連結の要求に 3 つの欄が、範囲つきであります（範囲の外は 422 `VALIDATION_ERROR`）。連結の要求をクリップごとの要求に写す処理にも足してあります。連結・V2V・Retake では、1 つの指定が全部のクリップに効きます。受付では、使えるかどうかを見ません。オフのジョブでも、`metadata.json` の `request`（要求の写し）には 3 つの欄が既定の値で載ります（「既知の限界」）。
+- **送り物**（`services/engines/h3/adapter.py`）: `spark_h3` が真のときだけ、`generate` と `generate_chain` に `spark_h3: {"topk_ratio": …, "full_steps": …}` を足します（割合は丸めずにそのまま）。キーが無いことがオフで、オフの送り物は、2 つの数の欄の値によらず今と同じです。ワーカー（`engine_h3/worker.py` の `_spark_h3`。`_pi_h3` の流儀）は受ける鍵の表に足してあり、`topk_ratio` が数でない・`full_steps` が整数でない（真偽値も含む）ときは日本語の理由でジョブを止め、知らない内側のキーは記録して無視します（ほかの欄と同じ扱い）。
+- **`/status`**: 上の「使えない環境」の 4 段の表です。ファイルの検査（`spark_h3_available`）とワーカーの値（`worker_spark_h3_available`）は、`services/engines/ltx/adapter.py` の `LTXRunner` に、Sage のもの（`_probe_sage_files`）の隣に同じ形で置き、`services/pipeline_manager.py` の `acceleration_status_block` が読みます。ワーカーの値は `ready` から取り、ワーカーを解放すると忘れます（ファイルの検査に戻る）。
+- **記録**（Sol と同じ形。作るのは `engine_h3/pipeline_h3.py` の `spark_record` の 1 つの関数で、単発と連結〔`engine_h3/chain_h3.py`〕の両方が呼ぶ）:
+  - `metadata.json` の最上位の `spark_h3_used` は、Spark を指定したジョブだけに入ります。値は、1 クリップでも間引いた評価があれば `"on"`、1 度も無ければ `"on->off"` です。ほかのジョブには鍵ごとありません。
+  - エンジンの記録は `metadata.json` の `h3.spark_h3` に入ります。
+
+| 欄 | 中身 |
+|---|---|
+| `used` | `"on"`／`"on->off"`（最上位の `spark_h3_used` と同じ） |
+| `topk_ratio`・`full_steps` | 要求の値 |
+| `min_tokens` | 12288 |
+| `kitchen_version` | 入っている部品の版（無ければ `null`） |
+| `steps`・`sequence_tokens`・`video_tokens`・`grid`・`backend` | クリップの大きさと実行の事実（単発とクリップごとの記録だけ） |
+| `sparse_evaluations` | 間引いて計算した評価の数（連結の全体はクリップの合計） |
+| `kernel_calls` | カーネルを呼んだ回数（同上。記録を取れなかったクリップがあれば `null`） |
+| `reason` | `"on->off"` のときだけ。下の 3 つの値 |
+| `detail` | `reason` が `"unavailable"` のときだけ。`probe()` の理由の文 |
+
+  - `reason` が `"unavailable"` の記録は、`used`・`topk_ratio`・`full_steps`・`min_tokens`・`kitchen_version`・`reason`・`detail` だけです（クリップの事実と数は載らない）。
+
+  - `reason` の値は、`"unavailable"`（このワーカーでは Spark を使えない）・`"few_steps"`（総ステップ数が「フル演算するステップ数」以下）・`"short_sequence"`（系列が 12,288 行未満）の 3 つです。2 つの条件に同時に当たるときは `"few_steps"` を採ります。連結の全体の `reason` は、最初のクリップのものです。
+  - 連結は、`h3.spark_h3` が連結の全体（1 クリップでも間引けば `"on"`。クリップごとに違う大きさと実行の事実は載せない）で、クリップごとの記録を `chain.clips[i].spark_h3` に置きます（単発の `h3.spark_h3` と同じ形。pi-H3 の `chain.clips[i].pi_h3` と同じ置き方）。`h3.phases` の下には置きません。
+  - **後片付けに失敗したとき**: クリップの記録の取得（`SparkClip.record()`）と片付け（`close()`）のどちらかが例外を出しても、ジョブは失敗にせず、ログに残して先へ進みます（`pipeline_h3.py` の `_spark_clip_teardown`）。記録を取れなかったクリップは、クリップの事実の代わりに `record_error`（例外の文）を残し、`sparse_evaluations` と `reason` はクリップの状態から埋め、`kernel_calls` は `null` になります（回数は片付ける前の制御の役しか知らないため）。
+  - 偽物のバックエンドは、いつも `spark_h3_used: "on->off"` を返します（カーネルを持たず、`/status` も `spark_h3_available` を偽と答えるため）。
+
+### エンジンの配線
+
+- **`engine_h3/spark_h3.py`**（製品の側の糊。部品と写したモジュールは、`probe()` と `SparkClip` の中でだけ読み込み、このモジュールを読み込んだだけでは読み込まない）:
+  - `probe() -> str | None`: 使えない理由の文を返します（使えるなら `None`）。調べることは上の「使えない環境」の 2 です。
+  - `class SparkClip`: クリップ 1 本の状態です。作るときに、ComfyUI 版のノードと同じ値で制御の役（コントローラー）を作り（下の「ComfyUI 版との対応」）、映像の行を先頭に並べ替える添字と、その逆の添字を DiT の置き場所に作ります。
+  - `for_evaluation(i)`: `i < min(steps, full_steps)` なら `None`（フル演算）、区画表の全体の行数 `layout.total` が `MIN_TOKENS`（12,288）未満でも `None` を返します。そうでなければ `controller.evaluation_index = i` を設定し、間引いた評価の数を 1 つ数えて、自分を返します。CFG を使わないので、1 ステップに評価は 1 回です。
+  - `attention(q, k, v, layer)`: 並べ替え（このとき連続した並びにもなる） → `comfy_kitchen_spark_attention` → カーネルが元の順で書かなかったときだけ逆の並べ替え、の順に呼びます。
+  - `record()`: クリップの事実の記録です（上の「記録」）。`close()` の前に取ります。
+  - `close()`: `controller.reset()`（ComfyUI 版のノードの後片付けと同じ）と、区画表と添字の手放しです。2 回呼んでも安全です。
+- **注意の入口の分岐**（`engine_h3/dit.py`）: `H3Attention` に、class の属性 `spark = None`・`spark_layer = -1` を置きました（既存の `vsf = None` と同じ形）。共通の関数 `attend(attn, q, k, v)` は、`spark` が `None` なら今と同じ `_attention(q, k, v, attn.attention_backend)` を呼び、そうでなければ `spark.attention(q, k, v, attn.spark_layer)` を呼びます。本体の注意の呼び出しは、この関数に替えてあります。`H3DiT.forward` の引数 `spark=None` を、50 のブロックへ毎回、ブロックの番号と一緒に設定します（`None` も設定する。保持した DiT に前のジョブの値を持ち越さないため。既存の `vsf` を設定する書き方と同じ）。テキストの前処理の注意（token refiner）は `None` のままです。
+- **VRAM 16GB mode**（`engine_h3/lowvram.py`）: 注意の呼び出しを同じ `_dit.attend(...)` に替えてあります。ヘッド 8 本ずつ 7 回に分けて呼び、層の番号は同じです。ヘッドを分けても出力が変わらないことは、実験の照合で確かめてあります（記録簿 §238.5）。
+- **生成の最初の判定**（`pipeline_h3.py` の `spark_start`。Sol の `sol_start` の流儀）: 要求の検査のあと、テキストエンコーダーの前に 1 回だけ行います。Spark を指定しないジョブでは `None` を返し、`engine_h3.spark_h3` を読み込みもしません。指定したジョブでは、割合・ステップ数と `probe()` の結果を持ちます。使えなければ、ログに 1 行出し、どのクリップも `SparkClip` を作らずに今と同じ注意で計算して、`reason` が `"unavailable"` の記録を残します。
+- **クリップごとに作って捨てる**（`pipeline_h3.py` の `_denoise`）: 使えるときは、区画表と座標ができたあとに `SparkClip` を作り（格子は潜在の `(T', H/32, W/32)`）、評価ごとに `for_evaluation(i)` を `dit(...)` の `spark=` へ渡します。`finally` の先頭で、記録を取ってから `close()` します（途中で失敗しても捨てる。上の「記録」の後片付け）。残すと、復号の段の VRAM に上乗せされるためです。作ったときと終わったときに、ログに設定と間引いた評価の数を 1 行ずつ出します。
+- **検査**: `validate_request` には `full_steps` の検査（0 以上の整数）だけを足しました。割合の範囲は作者の `ComfySparkConfig` に任せます（範囲の外は、`SparkClip` を作るときの `ValueError`。API の欄は 0.01〜0.5 で受けるので、API からは届かない）。
+- **系列が短いときの関門**: ComfyUI 版と同じく、実際の系列の長さ（プロンプトなども含む）が 12,288 未満なら、間引かずにフル演算し、記録に理由を残します。比べるのは系列の全体の行数で、「未満」です。
+- **連結**: 連結の本体は、クリップごとに単発と同じ `_denoise` を呼ぶので、クリップごとに `SparkClip` を作って捨て、ステップ数も数え直します。
+- **カーネルが実行中にエラーを出したとき**: ComfyUI 版の既定と同じく、ジョブを失敗にします。
+
+### ComfyUI 版との対応
+
+- **合わせる経路**: ComfyUI 版には経路が 2 つあります。製品が合わせるのは、外で作った注意の入力（Q・K・V）を受け取って、Spark のカーネルに渡す経路です（ComfyUI 版の KJNodes Low VRAM の経路。`comfyui_nodes.py:872-924`。渡された q・k・v を並べ替えて呼ぶ）。実験もこの形で、オーナーの目視の判定はこの形の出力に対するものです。もう 1 つの経路（Spark が入力を自分で作り直す経路）は、ComfyUI を読み込むファイルの中にあり、製品には持ち込みません。
+- **制御の役の作り方**: ComfyUI 版のノードの `_RunState.create`（`comfyui_nodes.py:402-501`）を、ノードの既定の値（`ablation_mode="full"`）で写した値です（`engine_h3/spark_h3.py` の `CONFIG`・`CONTROLLER`）。
+
+| 対象 | 値 |
+|---|---|
+| `ComfySparkConfig` | `topk_ratio`（要求の値）・`topk_mode="topk_ratio"`・`topk_blocks=228`・`video_tail_mode="dense"`・`global_anchor_dtype="float32"`・`tail_granularity="query"`・`landmark_tree_v2_midpoint_direction_mode="legacy"`・`landmark_tree_v2_layout_reuse="q_from_k"`（ノードの `reblock_layout="q_reuse_k"` の写し）。ほかは作者の既定のまま |
+| 制御の役 | `reblock_enabled=True`・`reweight_enabled=True`・`reblock_reuse_layers=1`・`reblock_reuse_start_layer=1`・`direct_output=True` |
+
+- **`direct_output=True` は固定**です。制御の役の既定は偽で、ComfyUI 版は環境変数（`H3_SPARK_DIRECT_OUTPUT`。既定は真）から真にしています。製品は環境変数を読まず、ComfyUI 版の既定（実験と同じ）に固定します（隠れたつまみを増やさないため）。
+- **フル演算の判定**: 最初のステップをフル演算にするのは、ノードの `warmup_mode="warmup_steps"` と同じ数え方です。系列の関門の 12,288 は、ノードの `min_tokens` の既定です。
+- **区画表**: 映像の行を先に、その前のすべての行を後ろに並べ替え、格子を `(T', H/32, W/32)` とします。製品の系列では映像の行が末尾にあるので、`comfyui_nodes.py:220-253` の `_make_target_spark_layout` と同じ結果になります（実験の台本 `outputs/h3-spark-spike-2026-11-26/scripts/spk_hooks.py` の `SharedLayout` と同じ作り。台本は git の追跡の対象外）。映像が系列の末尾にない、または格子の積が映像の行数と合わないときは `RuntimeError` にします。
+- **割合を丸めない**: 要求の `topk_ratio` を、そのまま `ComfySparkConfig` に渡します。
+- **数え方のわずかな違い**: `layout.total` には、ネガティブプロンプト（VSF。§3.5）の負の行も入ります。ComfyUI 版と系列の長さの数え方が、この分だけ違います。
+- **忠実さの確かめ方**: 開発機で、割合 20%・フル演算 1 で生成し、実験の動画（記録簿 §238.3 の記号 A20）と、映像と音声の中身（ストリーム）の MD5 が一致することを確かめます。5 クリップの連結（同 A20_chain）でも同じです。結果は記録簿 §239.5 です。
+
+### 作者のコードの置き場所と扱い
+
+- **置き場所**: `engine_h3/third_party/spark_h3/` に、作者の `comfyui_backend.py`・`comfyui_reblock_plan.py`・`h3_sparse_attention/`・`LICENSE` を、**変えずに**写しました。写した元は、RTX 40 系向けの ZIP の中の `ComfyUI-Spark-H3/` です。RTX 30 系・50 系向けの ZIP の同じファイルも、SHA-256 が一致します（3 つの ZIP で同じ）。ComfyUI を読み込む `comfyui_nodes.py` などは持ち込みません。持ち込んだファイルと持ち込まなかったファイルの一覧は、同じフォルダーの `README.md` が正本です。
+- **製品が足したもの**: 説明文だけの `__init__.py`（このフォルダーと、1 つ上の `engine_h3/third_party/`）と `README.md`（出どころ・タグ・ZIP の名前と SHA-256・ファイルごとの大きさと SHA-256・変えていないこと）です。
+- **読み込み方**: パッケージの中に置くので、作者のファイルどうしの相対の読み込みは、そのまま解けます。`sys.path` は触らず、最上位の `h3_sparse_attention` という名前も作りません。作者の `comfyui_reblock_plan.py` は、相対の読み込みに失敗すると自分のフォルダーを `sys.path` に足して読み直す作りなので、`probe()` が計画の使うモジュール（`VENDORED_MODULES`）をパッケージの中の名前で先に読み込み、その道に入らないようにしています。
+- **作者のモジュールが読む環境変数**: `h3_sparse_attention/` のいくつかのモジュールは、読み込んだ時点で `H3_LMV2_…` などの環境変数を読みます。製品はこれらを設定しません（作者の既定のまま動く）。
+- **改行**: `.gitattributes` に `engine_h3/third_party/spark_h3/** -text` を足し、改行の変換で SHA-256 が変わらないようにしています。写したファイルの SHA-256 が README に記した値と一致することは、自動テスト `tests/test_spark_h3_vendored.py` が確かめます。
+- **試験の対象**: `tests/test_h3_engine.py` は `engine_h3` の下の `*.py` を全部読むので、写した作者のファイルも対象に入ります。
+- **ComfyUI 本体のコードではない**: 写すのは Spark の作者のコード（Apache-2.0）で、ComfyUI（GPL-3.0）のコードではありません。§8 の「ComfyUI のコードは写さない」（裁定 17）は、そのままです。
+
+### オフのジョブは今と 1 ビットも変わらない
+
+- **作り**: 注意の入口に小さな分岐を 1 つ足すだけで、オフのときは今と同じ関数を同じ引数で呼びます（上の「注意の入口の分岐」）。ワーカーへの送り物にも、オフでは `spark_h3` のキーが入りません。
+- **自動テスト**（GPU を使わない）: オフのとき、注意の関数の呼ばれ方と出力が今と同じであることを、通常の経路と VRAM 16GB mode の両方で確かめます。あわせて、フル演算のステップでは Spark が呼ばれず、間引くステップでは全部の層で呼ばれること、テキストエンコーダーからは呼ばれないこと、クリップごとに作って捨てること（途中で失敗しても捨てること）、設定の値が丸められずに届くことを確かめます。
+- **開発機での実物の比較**（GPU を使う）: 実験の対照と同じ条件（VRAM 16GB mode・Sage・シードなど。記録簿 §238.3）をオフで生成し、実験の動画と、映像と音声の中身（ストリーム）の MD5 が一致することを確かめます。Spark の部品を入れて、使えるかの検査が働いている状態で確かめます。動画ファイルの全体は比べません（製品は生成の条件を動画ファイルに書き込むので、ファイルの全体は変わるため）。結果は記録簿 §239.5 です。
+- テストの前に、オーナーのサーバーが動いていないことと、偽物のバックエンドを選んでいることを確かめます（GPU の実ワーカーを誤って起こさないため）。エンジンの自動テストは、`.venv-engine-h3` の中で `scripts/run_h3_pytest.py` を使って動かします。
+
+### LTX 2.3・2.5
+
+- 単発でも連結でも、`spark_h3` が真の要求を 422 `FEATURE_UNSUPPORTED` で断り、`unsupported_features` に `spark_h3` を載せます（`services/engines/ltx/adapter.py`・`services/engines/ltx25/adapter.py` の `REJECT_TABLE`。連結は各アダプタの `CHAIN_REJECT_TABLE`。どちらも `sol_vae` の次の行）。断る文は H3 専用の断りの表（`H3_ONLY_REFUSALS`）の「Spark-H3 は MiniMax H3 専用です。LTX では使えません。」です（pi-H3・Sol と同じ扱い）。
+- 2 つの数の欄（`spark_h3_topk_ratio`・`spark_h3_full_steps`）は、「`spark_h3` が決める欄」（`GOVERNED_FIELDS`。LTX 2.5 の連結は `CHAIN_GOVERNED_FIELDS` も）として扱い、単独で既定と違う値が来ても断りません。
+- **操作パネル**: `shell/featureScope.ts` の `FEATURE_UI` の `spark_h3` が行ごと隠し（`SettingsRowsHidden.sparkH3`）、`sparkH3` だけを偽へ書き戻します（2 つの数は残す）。
+- **Gradio**: 既存の出し分け（`feature_scope.py`）で、チェックボックスと 2 本のスライダーを隠します（上の「Gradio と MCP」）。
+
+### 既知の限界
+
+- **初回の組み立ての待ち時間**: 動画の大きさ（解像度とフレーム数の組）が変わった最初の 1 回だけ、部品の組み立てに時間がかかります（秒数は記録簿 §238.8）。結果はディスクのキャッシュに残り、割合を変えても組み立て直しは起きません。キャッシュの置き場所は変えず（Sage と同じ既定の場所）、画面にも出しません。利用者向けには README の「生成の高速化」の Spark-H3 の節に書いてあります。
+- **対応する GPU**: 配布物があるのは RTX 30 系・40 系・50 系だけです（系統の番号 8.6・8.9・12.0 の完全一致）。それ以外の GPU では使えません（上の「使えない環境」）。README の書き方は「RTX 40 系は確認済み。RTX 50 系はこちらでは未確認（作者は確認済みと記載）。RTX 30 系は配布物があり、確認はこれから」です。RTX 30 系は、検証用の別の機械での確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-301）に合格してから、確認済みと書きます。
+- **実験で確かめていない組み合わせ**: 実験の条件は記録簿 §238.3 の表のものだけです。pi-H3・A2V・参照素材・Inpainting・先頭の画像つきなど、それ以外の機能と組み合わせた生成と、VRAM 16GB mode をオフにした生成は、実験で確かめていません（オーナーの実機での確認の項目は台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-301）。VRAM 16GB mode をオフにした生成は、製品に組み込んだあとの開発機での確認で試しました（記録簿 §239.6。次の項）。
+- **VRAM 溢れが起きている条件では、かえって大幅に遅くなることがある**: 快適上限を超えて VRAM 溢れが起きている条件で Spark を使うと、間引いたステップが極端に遅くなることがあります（開発機で 1 例。VRAM 16GB mode オフの 1280×768・124 フレーム。この条件は Spark が無くても VRAM 溢れが起きていた。数値と、確かめていないことは記録簿 §239.6）。VRAM 16GB mode がオンで、快適上限の内側なら、Spark の VRAM の上乗せは小さい（記録簿 §238.7）。利用者向けには README の Spark-H3 の節に、快適上限マーカーの内側で使うよう書いてあります。
+- **操作パネルの短い動画の判定の誤差**: 操作パネルの関数はプロンプトの長さを数えないので、実際の系列より数十トークン少なく出ます。境目のごく近くでは、注意文が出ても実際には Spark が働くことがあります。エンジンは実際の長さで判定します。
+- **作者のモジュールの中に残る小さなキャッシュ**: クリップを閉じると、制御の役と区画表と添字は手放しますが、作者のモジュールが自分の中に持つキャッシュ（格子ごとの添字の表など）は、クリップを閉じたあとも小さく残ります。ComfyUI 版でも同じです。
+- **オフのジョブの「要求」の写し**: Spark を指定しないジョブでも、`metadata.json` の `request`（要求の写し）には 3 つの欄が既定の値（`"spark_h3": false` と 2 つの数）で載ります。変わるのはそれだけで、`spark_h3_used` と `h3.spark_h3` は載りません。
+- **Sage の注意書きの位置**: Settings で Sage と Spark-H3 を両方選ぶと、Sage の注意書き（同じシードでも細部が変わる旨）は、Spark の 2 本のスライダーと説明文の下に出ます（Attention の欄から少し離れる）。
+- **品質**: 出力は、Spark を使わないときと同じにはなりません。オーナーの目視の判定（記録簿 §238.9）は、構図や人物の崩れを中心に見たもので、動きや演技での品質は実用の中で確かめます。
+
+### 経緯
+
+- 2026-11-25 に、オーナーの直接の指示で始めたテーマです（台帳 §3-247）。2026-11-26 に、製品のコードを変えずに台本の中だけで 2 通りの実装を測る実験を行いました（記録簿 §238）。
+- 比べたのは、ComfyUI 版のカーネル（記録簿の「道 1」）と、diffusers 版（同「道 2」）です。道 1 は速くなり、道 2 は速くなりませんでした。オーナーは道 1 を採り、範囲と既定を決めました（記録簿 §238.10。裁定 113 ①・②）。
+- 実装の計画（監督の計画ファイル `typed-marinating-plum-of-125541ff-d8d4-4114-8cdf-db24fbc2fc44.md`）は、下書きを別の担当が独立にコードと作者の配布物を読んで確かめ、指摘を採ってからオーナーの了承を得ました（2026-11-26）。
+
+### 採らなかった案
+
+- **diffusers 版（道 2）を組み込む**: 実験で、Sage と比べて速くならず、割合 20% ではかえって遅くなりました。VRAM の上乗せも、道 1 より大きく出ました。計画の打ち切りの基準に当たっています（記録簿 §238.6・§238.7）。配布元に Windows で動くという記述もありません。オーナーは道 1 を採りました（裁定 113 ①）。
+- **実験の「実行中の差し替え」をそのまま製品に持ち込む**: 実験の台本は、本体の注意の計算の 1 か所を実行中に差し替えていました。製品では、注意の入口の正規の分岐と、クリップのノイズ除去の始めに作って終わりに捨てる素直な配線に置き換えます（pi-H3 の §6.7 の「部品の置き場所」と同じ考え）。
+- **ComfyUI 版の、Spark が入力を自分で作り直す経路を持ち込む**: ComfyUI を読み込むファイルの中にあり、実験と目視の判定もこの経路ではないので、持ち込みません（上の「ComfyUI 版との対応」）。
+- **総ステップ数に応じて「フル演算するステップ数」の既定を自動で変える**: 作りません。既定は裁定で 2 に決まっていて（記録簿 §238.10）、目安は Settings の説明文で示します。
+- **カーネルのエラーのときに、フル演算へ自動で切り替える**: 作りません。ComfyUI 版の既定と同じく、ジョブを失敗にします。
+- **数の範囲（1〜50%・0〜10）をサーバーから配る**: 裁定で決まった固定の値で、モデルによって変わらないので、Settings のほかの選択肢と同じく、各画面が持ちます（計画の独立の確認で見送った指摘）。
+- **快適上限マーカーの計算に入れる**: VRAM の上乗せが小さい（記録簿 §238.7）ので、入れません。
+- **キャッシュの置き場所を変える・初回の待ち時間を画面に出す**: 変えません（Sage と同じ既定の場所）。待ち時間は README に 1 行書くだけにします。
+- **ComfyUI 版の環境変数を読む**: 出力の書き戻し方を切り替える環境変数は読まず、ComfyUI 版の既定に固定します（隠れたつまみを増やさないため）。
+- **Gradio に、生成ボタンの下の注意文を出す**: Gradio には系列のトークン数を計算する仕組みが無いので、説明文に書くだけにします。
+
 ---
 
 ## 7. ヘッダの判定と吸収する揺れ
@@ -2311,13 +2554,15 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 | `engine_h3/quant_linear.py` | 量子化層の土台 `H3QuantLinear`・`H3Int8Linear`（出力の行の範囲だけを計算する `forward_rows` を含む）・CUDA 経路の検査と固定（`require_cuda_quant`）・fp8 の経路の選択（`fp8_mode_for`）・w4a8 の世代の検査（`require_w4a8_capability`）・形式ごとの量子化層の差し替え（`swap_in_int8_linears`。§5）・VRAM 16GB mode の qkv の量子化の共有（`shares_input`・`quantize_input`・`forward_rows_q`・起動時の検査。§5 の例外） |
 | `engine_h3/fp8_linear.py` | fp8 の量子化層 `H3Fp8Linear`（`scaled`／`dequant` の 2 経路・`input_scale` の無い層の倍率 1.0・bf16 に戻した重みの使い回し `dequant_cache`。§5） |
 | `engine_h3/w4a8_linear.py` | w4a8 の量子化層 `H3W4A8Linear`（`w4a8_int8_linear` を ComfyUI と同じ引数で呼ぶ。入力の共有はしない。§5） |
-| `engine_h3/dit.py` | DiT 本体・枝刈り版の AdaLN・attention（SDPA／SageAttention）・行の並べ替え。VRAM 16GB mode の分岐（`vram16`）と `tokens_box` を持つ（§6.5） |
+| `engine_h3/dit.py` | DiT 本体・枝刈り版の AdaLN・attention（SDPA／SageAttention）・行の並べ替え。VRAM 16GB mode の分岐（`vram16`）と `tokens_box` を持つ（§6.5）。注意の入口 `attend`（Spark-H3 の分岐。§6.11） |
 | `h3_chain_math.py`（リポジトリ直下・torch 非依存。サーバー側が `engine_h3` を import しない境界のため直下に置く） | 連結の幾何（クリップ長の列から、潜在の長さ・重なり・音声の固定行の数・音声の余りと継ぎ目ごとの旗・合計の上限と最小長の検査を求める）。アプリ側の事前検査・mock・エンジンが同じ関数を import する（§3.3） |
 | `h3_lora_format.py`（リポジトリ直下・torch 非依存） | LoRA の鍵の写像と「対応・非対応」の判定。アプリとワーカーが同じ関数を import する（§6.6） |
 | `engine_h3/lora.py` | LoRA の読み込み・付け外し（hook と buffer）・FP32 の加算（§6.6） |
 | `h3_pih3_format.py`（リポジトリ直下・torch 非依存。アプリとエンジンの両方が読み込むため直下に置く） | pi-H3 のファイルの照合（§6.7）。アプリ側の受付の検査とエンジンが同じ関数を import する |
 | `engine_h3/pi_h3.py`・`engine_h3/dwd.py` | pi-H3 の差分の適用と最初のノイズ・DWD のヘッドと分割（§6.7） |
 | `engine_h3/sol_vae.py` | Sol-H3-VAE の復号器・ファイルの照合・通常の VAE への切り替えの判定（§6.8） |
+| `engine_h3/spark_h3.py` | Spark-H3 の使えるかの検査 `probe`・クリップ 1 本の状態 `SparkClip`（作って捨てる・フル演算の判定・カーネルの呼び出し）（§6.11） |
+| `engine_h3/third_party/spark_h3/` | Spark-H3 の作者のコード（Apache-2.0。変えずに写す。ComfyUI 本体のコードではない）。製品が足すのは説明文だけの `__init__.py` と、出どころとファイルごとの SHA-256 を記した `README.md`（§6.11） |
 | `engine_h3/lowvram.py` | VRAM 16GB mode の経路（§6.5）。`dit.py` の既存関数をヘッド群・行の塊ごとに呼ぶだけで、新しい計算は持たない |
 | `engine_h3/vsf.py` | ネガティブプロンプトの VSF（torch だけに依存）。負の行の V の反転 `flip_values`（`dit.py` と `lowvram.py` の両方の注意が同じ関数を呼ぶ）と、計測 m の `H3VsfProbe`（§3.5） |
 | `engine_h3/rope.py` | 3 軸 RoPE・キーフレームの時間座標 `keyframe_t`（§3）・参照の行の座標と時刻の積み上げ（`RefShape`・`build_coords` の `refs`。§3.2） |
@@ -2360,7 +2605,7 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
   - `vram16_mode`: 真のときだけ VRAM 16GB mode の経路で回す（§6.5）。無ければ偽（ワーカーの既定は off。H3 の既定 on はアプリ側の規則表が書き戻す）。アダプタは毎回送る。
   - `source_audio`: `{path, strength}`。無いか `null` なら T2V／I2V（今までどおり）。あれば A2V（§3.1）。`strength` は 0〜1 で、省略は 0.5。中の知らないキーはログに 1 回出して無視する。アダプタは A2V のときだけ、`output_path` の前に置いて送る（アプリ側の既定を書き戻した値なので、`strength` は毎回入る）。
   - `references`: `[{kind, path, slot, max_sec?}]`（`kind` は `picture`／`video`／`audio`、`slot` はカードの番号で 1 以上・種類ごとに重複なし、`max_sec` は省略か正の有限の秒数）。無いか空なら参照なし（今までどおり）。並び順は問わない（ワーカーが §3.2 の順に並べ直す）。種類・番号・パスの存在・秒数を確かめ、外れればテキストエンコーダを読む前に日本語の理由でジョブを止める。要素の知らないキーはログに 1 回出して無視する。アダプタは参照があるときだけ送る。
-- **イベント**: `ready`（`sage_available`）／`progress`（`stage`・`index`・`total`）／`done`／`error`（`detail`）
+- **イベント**: `ready`（`sage_available`・`spark_h3_available`〔Spark-H3 を使えるか。§6.11〕）／`progress`（`stage`・`index`・`total`）／`done`／`error`（`detail`）
 - **進捗の段階名**: LTX の語彙を借りる。`encode`／`stage1_denoise`（単段のノイズ除去。H3 は 1 段なのでこの名前だけを使う）／`decode`。アダプタは進捗の割合計算に `_read_worker_events(one_stage=True)` を使う。`encode` の総数は、3 に、キーフレームが 1 枚以上あれば 1（画像の符号化）、参照が 1 件以上あれば 1（参照の符号化）、元の音声を符号化するなら 1（音声の符号化。Strength 0 では符号化しないので足さない）を足した数である（`pipeline_h3.py` の `encode_steps` の 1 か所で決める。進む順もこの順）。画像読み取り部に入る画像の有無では決めない（中間だけのジョブも 4 になり、3 と数えたあとに 4/4 が出ることはない）。`audio_encode` と `reference_encode` は `done` の `h3.phases` の段の名前で、進捗の段ではない。アダプタは `encode` を常に同じ割合に写すので、A2V でないジョブの進捗は変わらない。
 - **`done` のキー**: `seed_used`・`sampler`・`num_inference_steps`・`shift_video`・`shift_audio`・`peak_vram_mb`・`peak_vram_reserved_mb`・`rss_peak_gib`・`seconds`・`num_frames`・`frame_rate`・`width`・`height`・`size_bytes`・`attention_used`（ジョブごとの値）・`block_swap_prefetch_used`・`keep_resident_used`（`"on"`／`"off"`。このジョブの終わりに保持したか）・`vram16_mode_used`（`"on"`／`"off"`。VRAM 16GB mode で回したか）・`images_used`（要求のキーフレームの枚数。名前は変えない）・`commit_gib`・`commit_peak_gib`（コミット量）・`h3`（段ごとの秒数と RSS を `phases` に、使われた量子化経路を `quant_backends` に持つ。`phases.decode` には `audio_samples`〔切り揃え後〕と `audio_samples_decoded`〔復号した全量〕が入る〔`engine_h3/pipeline_h3.py` の `_decode`〕。I2V のときは `phases` に `image_encode` が入る〔`source_size` は画像ごとの元の大きさ `[w, h]` を昇順に並べたリスト、`vision_tokens` は画像読み取り部に入ったトークンの合計〕。`phases` の `denoise` には `dit_source`、`decode` には `vae_source` がいつも入る〔`"file"`／`"resident"`〕。VRAM 16GB mode のジョブは `phases.denoise.vram16` に上限・常駐数・分割の単位・割り当て器の再試行と OOM の回数の差分・`inactive_split` のピーク・退避の行き先〔`text_modules`〕が入る〔§6.5〕。A2V のジョブだけ、`phases` に `audio_encode`〔符号化した本数・サンプル数・潜在の形〕と `denoise.mask`、`decode` に `audio_output`〔`"original"`／`"decoded"`〕が入り、`h3` に `a2v`〔A2V の記録。アプリが `metadata.json` の最上位の `a2v` へ移す。キーの正本は仕様書 §6.6〕が加わる。A2V でないジョブの記録は変わらない。Ref2VA のジョブだけ、`phases` に `reference_encode`〔参照ごとに `kind`・`slot`・`rows`・`seconds`、画像は `source_size`・`size`・`vision_tokens`、動画は `source_frames`・`used_frames`・`latent_t`・`pairs`、音声は `samples`・`latent_t`〕が入り、`denoise.sequence` に `ref_video`・`ref_audio` の区間が、`h3` に `references`〔`pictures`・`videos`・`audios` の件数。アプリが `metadata.json` の最上位の `references` へ移す。キーの正本は仕様書 §6.6〕が加わる。`image_encode` の `vision_tokens` はキーフレームの分だけで、参照の分は `reference_encode` に入る。参照の無いジョブの記録は変わらない）
 - **`generate_chain`**（§3.3）: `generate` のキーから `num_frames`・`images`・`source_audio`・最上位の `references` を除き、`clips`（`[{prompt, num_frames, [references]}]`。`references` は参照のあるクリップだけ、形は `generate` と同じ）を足したもの。各クリップの種は `seed + i`。`prompt` は使わない（各クリップの `prompt` が、共通と個別を合成した全文）。`done` は `generate` のキーに `chain` を足したもの（`done.chain` の欄名は実装の `H3ChainLayout.to_dict()` が正、`metadata.json` の欄は仕様書 §6.2b (h) が正）。`progress` はクリップの `encode` と `stage1_denoise` にだけ `outer_index`・`outer_total` を付ける。知らないキーはログに出して無視する。
@@ -2407,9 +2652,10 @@ DiffSynth-Studio の H3 部品を**移植**する（Apache-2.0。移植したフ
 - **利用者側の条件**: NVIDIA ドライバ **R580 以上**（CUDA 13 系の下限）。GPU は **Turing（RTX 20 系）以降**（CUDA 13 で Pascal 以前が削除された）。動作を確かめたのは Ada（RTX 4070 Ti SUPER）と Ampere（RTX 3080 Laptop 16GB）で、Blackwell（RTX 50 系）は未確認、Turing は int8 が遅い経路になり SageAttention も使えず、動作も未確認である（裁定 38・43）。DiT の量子化の形式による世代の違い（fp8 は RTX 40 系以降が fp8 の行列積、それ未満が bf16 に戻す経路。w4a8 は RTX 30 系以降で、RTX 20 系では読み込みを断る）は §5。主メモリの推奨は 64GB で、32GB 機はページファイル（「システム管理」）を前提に短い生成を確認している。コミット量の山が 32GB を超えるのでページファイルに頼り、遅くなる場合がある（裁定 26・43。実測は [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §167）。利用者向けの書き方（確かめた世代と未確認の世代の区別、主メモリと容量）は README の「ハードウェア要件の詳細」「対応する GPU 世代」と §7.6 にある。
 - **作るのは導入バッチ**: `setup.bat` はこの仮想環境を作らない。`install-MiniMaxH3.bat` が `install_ltx.ps1` の `Ensure-EngineVenv`（H3 用の呼び出し）で作り（`-SkipVenv` を越える。物体追尾の `.venv-utils` と同じ形）、そのあと重みを取る。導入バッチの位置づけは MULTI_ENGINE_DESIGN §6.2。`setup.bat` の再実行では当て直されないので、freeze が変わったときは `install-MiniMaxH3.bat` を再実行する。
 - **ライセンスの注意【オーナー裁定：裁定 36・41】**: `install_model.ps1` は、記述子の `id` が `MiniMaxH3` のときだけ、取得の前にライセンスの注意文（名称・利用できる地域・取得者の自己責任）と本文の URL を表示する。表示するだけで、同意の入力は求めない。記述子は `MiniMaxAI/MiniMax-H3` の `LICENSE` も取得して `models/MiniMaxH3/LICENSE` に置く（検査の行の鍵は `h3_license`。サーバーは読まないが、写しを手元に置くための行なので消さない）。NOTICE は作らない。利用者向けの文面は README の「ライセンス」節である。
+- **Spark-H3 の部品とコードの出典とライセンス（裁定 113 ④）**: 作者のコード（Apache-2.0）は、`engine_h3/third_party/spark_h3/` に作者の `LICENSE` と一緒に、変えずに写す（§6.11）。組み立て済みの部品 `spark-h3-kitchen`（Apache-2.0）は、導入のときに `install_ltx.ps1` の `Install-SparkH3Kitchen` が作者の GitHub の Releases（`comfyui-v0.2.0`）から直接取り、本製品は再ホストしない。部品には作者の LICENSE と NOTICE が付いていて、仮想環境の中（`spark_h3_kitchen` の `.dist-info`）に一緒に入る。上の「NOTICE は作らない」（裁定 41）はそのままである。部品は配布の索引に無い版なので、版の正本の `engine_h3/venv-engine-h3.freeze.txt` には書かない（§6.11 の「インストーラー」）。
 - **容量が増える**: torch の版が既存の仮想環境と違うため、uv のハードリンク共有（MULTI_ENGINE_DESIGN §5.3「容量は心配しなくてよい」）が効かず、この仮想環境ぶんの数 GB がそのまま増える。実測値は freeze と記録簿を見る。必要空き容量の正本は README のハードウェア要件表である。
 - **入れないもの**: torchaudio（CUDA 13 の Windows 版が torch の新しい版と組めず、H3 の経路は使わない）、diffsynth（部品は移植した）。
-- **版の正本は `engine_h3/venv-engine-h3.freeze.txt`** である。手で作り直すときの仕様と、各版を選んだ理由は `engine_h3/engine_h3-venv-pyproject.toml` に書く。
+- **版の正本は `engine_h3/venv-engine-h3.freeze.txt`** である。手で作り直すときの仕様と、各版を選んだ理由は `engine_h3/engine_h3-venv-pyproject.toml` に書く。例外は Spark-H3 の部品 `spark-h3-kitchen` で、freeze には載せず（意図して載せない旨の注釈だけがある）、版は `Install-SparkH3Kitchen` と `engine_h3/spark_h3.py` の `KITCHEN_VERSION` が持つ（§6.11 の「インストーラー」）。
 
 ---
 

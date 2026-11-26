@@ -261,6 +261,11 @@ git clone https://github.com/Rootport-AI/Nz-Videomni.git
   - 動作を確かめたのは RTX 40 シリーズ（Ada Lovelace 世代。RTX 4070 Ti SUPER）と RTX 30 シリーズ（Ampere 世代。RTX 3080 Laptop 16GB）です。RTX 50 シリーズ（Blackwell 世代）は、まだ確かめていません。
   - RTX 20 シリーズは、int8（8 ビットの整数）の計算が遅い経路になり、SageAttention も使えません（標準の SDPA で動きます）。動くかどうかも未確認です。w4a8 の重み（下の「MiniMax H3 の重みの形式」）は、RTX 20 シリーズでは読み込みの時点で断ります（Settings には定型文が出ます。理由はアプリのフォルダの `logs\h3_worker.log` に残ります）。
   - fp8 の重みは、RTX 40 シリーズ以降では fp8 のまま行列の計算をし、RTX 30 シリーズ以前では毎回 bf16（16 ビットの浮動小数点）に戻して計算します。戻すぶん、RTX 30 シリーズでは RTX 40 シリーズより遅くなります。w4a8 の重みは RTX 30 シリーズ以降で動きます。仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §5 です。
+  - **高速化の Spark-H3**（§5 の「[Spark-H3](#spark-h3)」）は、作者が GPU の世代ごとに配っている部品を使うので、使える GPU が限られます。
+    - RTX 40 シリーズ: 確認済みです。
+    - RTX 50 シリーズ: 配布物があります。こちらでは確かめていません（作者は確認済みと書いています）。
+    - RTX 30 シリーズ: 配布物があります。確認はこれからです。
+    - それ以外（RTX 20 シリーズなど）: 配布物が無いので、使えません（MiniMax H3 そのものは使えます）。
 
 attention は全世代で PyTorch の SDPA を既定にしており、xformers や flash-attn はインストールもしなければコードからも呼びません（16GB 環境で速度を決めているのは attention ではなく重みの転送であるため。仕様書 §5.4）。SageAttention に必要なパッケージは `setup.bat` が標準で入れるため、追加の作業は要りません（`sageattention` 2.2.0 と `triton-windows` 3.5.1.post24。後者は必要なコンパイラを同梱しているため、**Visual Studio の導入は不要**です）。MiniMax H3 の仮想環境に入れる SageAttention は、CUDA 13 系の torch に合わせたものを `install-MiniMaxH3.bat` が入れます。
 
@@ -483,6 +488,11 @@ models/
 - **DiT（FL2VA 版と Ref2VA 版）は、取得の直後に SHA-256（ファイルの指紋）を確かめます**（1 本あたり数分かかることがあります。pi-H3 の 2 本と Sol-H3-VAE の 1 本は大きさだけを確かめ、SHA-256 は確かめません）。「SHA-256 が記述子の値と一致しません」という警告が出ても、インストールは失敗ではなく、生成もできます。取得元のファイルが更新されたなどの理由で指紋が変わったという意味で、その重みを読み込んだときに、操作パネルの FL2VA／Ref2VA の注意（§7.6 の「参照素材からの生成（Ref2VA）」）が出なくなるだけです。警告は最後にもう一度まとめて表示されます。
 - 検証の表で MISSING と出て終わったときは、**MISSING と出た行のファイルを 1 つだけ消して**（tokenizer の行なら、そのフォルダの中身を消して）もう一度実行してください。`models\MiniMaxH3` をフォルダごと消さないでください。**MISSING の表が出ないまま止まったとき**（Python 環境の構築やダウンロードの途中で止まったとき）は、**何も消さずに**もう一度実行してください。
 - **`git pull` と `setup.bat` による更新では、MiniMax H3 の仮想環境は当て直されません。** 更新で H3 の依存が変わったときは、このバッチをもう一度実行してください（§1「更新のしかた」）。
+- **高速化の Spark-H3 の部品も、このバッチが入れます**（§5 の「[Spark-H3](#spark-h3)」）。仮想環境を整えたあとに GPU の世代を調べ、合う部品を 1 つ、作者の GitHub の Releases から直接取得して入れます（ZIP 1 つで約 9〜18MB。本プロジェクトは再ホストしていません）。
+  - **すでに MiniMax H3 を入れている場合は、`install-MiniMaxH3.bat` をもう一度実行してください。** 揃っている仮想環境と重みは飛ばし、Spark-H3 の部品だけが足されます。
+  - 取得した ZIP の SHA-256 が記録の値と違うときは、注意文が出ますが、導入はそのまま進みます（注意文は最後にもう一度まとめて表示されます）。
+  - 部品が無い世代の GPU、CUDA が使えないとき、取得に失敗したときは、その旨を表示して、部品を入れずに先へ進みます。MiniMax H3 そのものは、そのまま使えます。
+  - GPU を別の世代のものに入れ替えたときは、もう一度実行すると、合う部品に入れ替わります。
 
 **MiniMax H3 のために取得して検証するファイルは下表のとおりです**（記述子 `scripts/manifests/40-minimaxh3.json` に載っているファイル。すべて `models/` からの相対パスです）。**下表はバッチが置く場所の内訳で、手で置きたい場合の対応表も兼ねています**——ただし公開元のリポジトリ内のフォルダ名（`diffusion_models/`・`text_encoders/`・`vae/`・`FL2VA/text_encoder/`）は下表のフォルダ名と違うので、置く場所は下表に合わせてください。**仮想環境はバッチでしか作れないので、重みを手で置いた場合も `install-MiniMaxH3.bat` を一度実行してください**（揃っている重みは取り直しません）。バッチが取得する DiT は int8 ConvRot です。fp8 や w4a8 の DiT は自分で用意して `MiniMaxH3/Weights/` に置けば、一覧に並んで選べます（§1 の「[MiniMax H3 の重みの形式](#h3-weight-formats)」）。
 
@@ -736,6 +746,8 @@ $env:PYTHONPATH = (Get-Location).Path
 
 **pi-H3 と Sol-H3-VAE（MiniMax H3）**: Settings タブの「生成の高速化」の区画の最後に「Fast VAE」の切り替え（Off・pi-H3_4s・pi-H3_2s・Sol）があります。効くのは **Generate タブの単発だけ**で、Clip Chain タブ・A2V・バッチには効きません。**選択は保存されず**、ページを開き直すと Off に戻ります（中身は §5 の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。
 
+**Spark-H3（MiniMax H3）**: Settings タブの「生成の高速化」の区画の Attention のすぐ下に、「Spark-H3」のチェックボックスと 2 本のスライダーがあります（中身は §5 の「[Spark-H3](#spark-h3)」）。**選択は保存されず**、ページを開き直すと既定に戻ります。
+
 **A2V（音声から動画生成）**: Generate タブの「A2V（音声から動画生成）」アコーディオンに音声ファイルを添付します。`.wav` 推奨で、添付すると音声長に収まる最大フレーム数が自動で Frames に入ります（他形式は自動調整の対象外でサーバー側チェックに委ねます）。画像でキャラクター等を固定したい場合は「キーフレーム画像」アコーディオン（10スロットとも A2V と併用可）を使います。**スタイル LoRA とも、参照動画を必要とする control 系 IC-LoRA とも併用できます。** Clip Chain タブでの連結生成では、**長い参照動画を1本だけ添付すると各クリップが担当する区間をサーバーが自動で切り出して stage-1 にのみ注入する「長尺 IC-LoRA」**として働きます（参照が生成の尺より短ければ、足りない分は参照なしで生成されます）。ただし `depth-control` だけは前処理（Video-Depth-Anything）が全編一括設計でメモリに載らないため、2クリップ以上のチェーンでは `422 LORA_DEPTH_CHAIN_UNSUPPORTED` で断ります（クリップ1本のチェーンと単発生成は使えます）。
 
 **Batch A2V（就寝中の一括生成）**: A2V の下にある「Batch A2V」アコーディオンの Enable をオンにすると、ゆっくり実況・VOICEROID実況（音声合成ソフトによるキャラクター実況動画）向けに、音声フォルダの中身をまとめて一括生成できます。音声フォルダ・画像フォルダ・出力先を入力して「Set audios」を押すと音声ファイルごとの行を持つ表ができ、行ごとにプロンプトや使用画像を編集して「Start a2v batch」で開始します。Generate タブの現在の設定がその時点のスナップショットとして全行に適用され、1件ずつ順番に生成されます。アコーディオンには「Chunked upsample mode (for VRAM 16GB)」のチェックボックスもあり、既定は on です（Clip Chain タブにあるものと同じ切替で、バッチはこの値を毎回そのまま送ります）。行ごとのプロンプトには `<lora:名:強度>` のタグを書けます——共有プロンプトと合成してから解釈するので、AviUtl2 の操作パネルのバッチと同じ規則です。実処理は**サーバー側のバックグラウンドスレッド**で回るので、ブラウザを閉じても止まりません。進行は音声フォルダ直下の CSV マニフェスト（`batch_a2v_manifest.csv`）へ逐次記録され、電源断やアプリ再起動のあとも「Set audios」→「Start a2v batch」で続きから再開できます（Done/Skip 済みの行は再実行されません）。開始前には入力忘れの検査が走り、問題があれば理由を表示してバッチ自体を開始しません。詳しい仕様・設計上の決定事項は [`Docs/BATCH_A2V_WORKORDER.md`](Docs/BATCH_A2V_WORKORDER.md)、CSV の列定義・文字コードなど相互運用の共通仕様は [`Docs/BATCH_A2V_CSV_SPEC.md`](Docs/BATCH_A2V_CSV_SPEC.md) が正本です。
@@ -759,7 +771,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 生成の高速化（Acceleration）
 
-生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。さらに、MiniMax H3 専用の **参照素材の潜在の常駐** と、3 つのベースモデルで使える **テキストエンコーダーの条件付けのキャッシュ** の 2 つの行が、AviUtl2 の操作パネルの Settings にだけあります（Gradio UI にはありません。下の「[参照素材の潜在の常駐](#keep-reference-latents)」と「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
+生成そのものを速くするための切替を、設定画面の「Acceleration（生成の高速化）」という区画にまとめてあります（AviUtl2 の操作パネルなら Settings、Gradio UI なら Settings タブ）。**項目は7つで、これは両方の UI で共通です。** このほかに、MiniMax H3 専用の **Fast VAE** の行があり、**pi-H3** と **Sol-H3-VAE** のどちらか 1 つを選べます（AviUtl2 の操作パネルの Settings と、Gradio UI の Settings タブ。Gradio UI では Generate タブの単発だけに効きます。下の「[pi-H3](#pi-h3)」と「[Sol-H3-VAE](#sol-h3-vae)」）。同じく MiniMax H3 専用の **Spark-H3** が、Attention の行のすぐ下にあります（両方の UI。下の「[Spark-H3](#spark-h3)」）。さらに、MiniMax H3 専用の **参照素材の潜在の常駐** と、3 つのベースモデルで使える **テキストエンコーダーの条件付けのキャッシュ** の 2 つの行が、AviUtl2 の操作パネルの Settings にだけあります（Gradio UI にはありません。下の「[参照素材の潜在の常駐](#keep-reference-latents)」と「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」）。 **「どのモデルでも使えない項目」はありませんが、「そのモデルでは使えない項目」はモデルごとにあります**——LTX 2.5 では PrunaVAED が、LTX 2.3 では埋め込み処理器の常駐が、MiniMax H3 ではこの 2 つがどちらも使えません。逆に VRAM 16GB mode は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では使えません。**どちらの UI でも、使えない行は単に表示されません。**
 
 | 項目 | 選択肢 | LTX 2.3 での状態 | LTX 2.5 での扱い | MiniMax H3 での扱い |
 |------|--------|------------------|------------------|---------------------|
@@ -772,6 +784,7 @@ $env:PYTHONPATH = (Get-Location).Path
 | VRAM 16GB mode（ノイズ除去の計算の分割） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は on（中身は §7.6） |
 | pi-H3（少ないステップの生成。Gradio UI では Generate タブの単発だけ） | off / 4steps / 2steps（両方の UI とも「Fast VAE」の行の pi-H3_4s・pi-H3_2s） | **この項目はありません**。行は見えません。API へ off 以外を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ off 以外を指定すると **422** | **実装済み**。既定は off（中身は下の「[pi-H3](#pi-h3)」） |
 | Sol-H3-VAE（軽量化した映像の復元処理。Gradio UI では Generate タブの単発だけ） | off / on（両方の UI とも「Fast VAE」の行の Sol） | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[Sol-H3-VAE](#sol-h3-vae)」） |
+| Spark-H3（注意の計算を間引く） | off / Spark-H3（操作パネル）・チェックボックス（Gradio UI）。オンのときだけスライダー 2 本が効く | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[Spark-H3](#spark-h3)」） |
 | 参照素材の潜在の常駐（keep_reference_latents。AviUtl2 の操作パネルだけ） | On / Off | **この項目はありません**。行は見えません。API へ `true` を指定すると **422** | LTX 2.3 と同じく**この項目はなく**、行は見えません。API へ `true` を指定すると **422** | **実装済み**。既定は off（中身は下の「[参照素材の潜在の常駐](#keep-reference-latents)」） |
 | テキストエンコーダーの条件付けのキャッシュ（keep_text_conditioning。AviUtl2 の操作パネルだけ） | On / Off | **実装済み**。既定は off。プロンプトの文字列ごとに使い回す | **実装済み**。既定は off。そのジョブのプロンプトの全部（ネガティブプロンプトと Chained の全クリップを含む）が前回と同じときだけ使い回す | **実装済み**。既定は off（中身は下の「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」） |
 
@@ -920,6 +933,31 @@ MiniMax H3 の生成の最後に、内部表現から映像のフレームを作
 > - **128 画素ごとの格子状の線が出ることがあります**（肌や平坦な領域で出ると報告されています）。Sol-H3-VAE で報告されている現象で、配布元でも解決していません。気になるときは off にしてください。
 >
 > 設計の判断の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) の裁定 108 と §6.8 です。
+
+### <a id="spark-h3"></a>Spark-H3（MiniMax H3 の注意の計算を間引く高速化・`spark_h3`）
+
+MiniMax H3 のノイズ除去の本体の注意の計算（映像と音声の各部分が、互いをどれだけ参照するかの計算）を、効きの大きい一部だけ正確に計算し、残りをまとめて近似することで速くする高速化です。作者（GitHub の [`zechengtang/Spark-H3`](https://github.com/zechengtang/Spark-H3)）の ComfyUI 版と同じ計算を使います。Attention の `sdpa` / `sage attention` に重ねて使い、間引かないステップは、選んでいる `sdpa` / `sage attention` で計算します。**既定は off です。**
+
+- **どれくらい速いか**: 開発機（RTX 4070 Ti SUPER 16GB）で、Turbo LoRA の 4 ステップ・5 クリップの Chained・`sage attention` の生成が、全体で 769 秒から 685 秒になりました（割合 20%・フル演算するステップ数 1）。ほかの条件の数値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §238 です。
+- **AviUtl2 の操作パネル**: Settings の「生成の高速化」の Attention の欄で、「sdpa / sage attention」の行のすぐ下にある「off / Spark-H3」の行で選びます。「Spark-H3」を選んでいるあいだだけ、その下にスライダーが 2 本出ます（off にすると隠れますが、値は保存されたままです）。選んだ内容は保存され、AviUtl2 を起動し直しても保たれます。LTX 2.3・LTX 2.5 を選んでいるあいだは、この行が見えません（選択は off に戻ります。2 本のスライダーの値は残ります）。
+  - **フルで演算する割合**（1〜50%。既定 20%）: 正確に計算する部分の割合です。10% と 20% の位置に白い印があり、この間が推奨の範囲です。
+  - **フル演算するステップ数**（0〜10。既定 2）: 最初のこの数のステップは、間引かずに計算します。総ステップ数の 2 割が目安です（4 ステップなら 1、8 ステップなら 2、20 ステップなら 4）。
+- **効かないとき**: 次の 2 つのときは、Spark-H3 は働かず、間引かない計算で最後まで生成します。生成ボタンの下に黄色い注意文が出ます（注意文が出ても、生成ボタンは押せます）。Single・Chained・Edit（Retake・Inpainting・Outpainting）のどれでも同じです。
+  - **総ステップ数が「フル演算するステップ数」以下のとき**: 「Stepsが少ないため、Spark-H3が効きません。Settings画面で「フル演算するステップ数」を下げてください。」と出ます。Fast VAE で pi-H3 を選んでいるときは、pi-H3 が決めるステップ数（4 か 2）で判定します。
+  - **短い動画のとき**（解像度とフレーム数が小さく、計算する量が一定より少ないとき）: 「短い動画ではSpark-H3が効きません。」と出ます。Chained では、1 本でも短いクリップがあると出ます。この判定はプロンプトの長さを数えない見積もりなので、境目のごく近くでは、注意文が出ても実際には Spark-H3 が働くことがあります。
+- **使えない環境ではどうなるか**: 部品が入っていない、または GPU が対応していない（§1 の「[対応する GPU 世代](#対応する-gpu-世代)」）ときは、「Spark-H3」のボタンが押せず、マウスを乗せると「この環境では Spark-H3 を使えません。」と出ます。MCP や Gradio UI から指定した場合も、エラーにはならず、Spark-H3 なしで最後まで生成します。
+- **実際に効いたか**: メタデータの `spark_h3_used` で分かります（`"on"` が間引いて計算した、`"on->off"` が一度も間引かなかった。Spark-H3 を選んだジョブにだけ入ります）。効かなかった理由は `h3.spark_h3.reason` に入ります。
+- **Gradio UI**: Settings タブの「生成の高速化」の区画で、Attention のすぐ下にある「Spark-H3」のチェックボックスと、2 本のスライダー（意味は上と同じ）で選びます。MiniMax H3 を選んでいるあいだは、チェックの有無によらず 2 本のスライダーが見えます。推奨の範囲と効かない条件は、説明文に書いてあります。生成ボタンの下の注意文は出ません。**選択は保存されません**（ページを開き直すと既定に戻ります）。
+- **MCP**: `submit_generate` と `submit_chain` の引数 `spark_h3`（`True` / `False`〔既定〕）・`spark_h3_topk_ratio`（0.01〜0.5。既定 0.2）・`spark_h3_full_steps`（0〜10。既定 2）で選びます。使えるかどうかは `backend_status` の `status.acceleration.spark_h3_available` で分かります。
+- **API**: `POST /generate` と `POST /generate/chain` の `spark_h3`・`spark_h3_topk_ratio`・`spark_h3_full_steps` です（正本は [`Videomni_Backend_Specification.md`](Videomni_Backend_Specification.md) §6.2・§6.2b (m)）。連結・V2V・Retake では 1 つの指定が全部のクリップに効き、「フル演算するステップ数」はクリップごとに数え直します。
+- **部品**: `install-MiniMaxH3.bat` が入れます（§1 の「MiniMax H3 を追加する」）。
+
+> **⚠ 使う前に知っておいてほしいこと**
+> - **出力が変わります。** 計算の一部を近似するので、同じシードでも Spark-H3 を使わないときと同じ動画にはなりません。以前つくった動画とまったく同じものを作り直したいときは、off にしてください。
+> - **動画の大きさを変えた最初の 1 回だけ、遅く感じることがあります。** 動画の大きさ（解像度とフレーム数の組）が変わった最初の 1 回だけ、部品の組み立てに 30〜45 秒かかるためです。2 回目以降は組み立て直しません（割合を変えても組み立て直しません）。
+> - **快適上限マーカーの内側で使ってください。** 快適上限を超えて、VRAM に収まらずにメインメモリへ溢れる大きさでは、Spark-H3 を使うと、かえって大幅に遅くなることがあります（開発機では、VRAM 16GB mode を off にして快適上限を超えた生成で、1 本に 30 分近くかかりました）。数値は [`Docs/VERIFICATION_LOG.md`](Docs/VERIFICATION_LOG.md) §239.6 です。
+>
+> 設計の判断の正本は [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) の裁定 113 と §6.11 です。
 
 ### <a id="keep-reference-latents"></a>参照素材の潜在の常駐（MiniMax H3 の参照素材の使い回し・`keep_reference_latents`）
 
@@ -1084,7 +1122,7 @@ pytest は **アプリ venv（`./.venv`, torch 無し）** で動きます。`te
 - **フレームレートは 24fps 固定**です。**フレーム数は 17n+5 の形**（22・39・56 … と 17 ずつ）で、22 以上 481 以下です。**縦横は 32 の倍数**です。操作パネルでは、フレーム数がこの規則に合う値へ自動でそろいます。
 - **ステップ数と shift（映像・音声）の 3 本のスライダー**で、ノイズ除去の工程数と、工程のどこにノイズの減らし方の重みを置くかを変えられます。操作パネルと Gradio UI の両方にあり、LTX を選んでいるときは表示されません。既定はステップ数 20・shift（映像）12・shift（音声）3 で、範囲はステップ数が 1〜50、shift が 1〜20 です（値の正本はサーバーが `GET /models` の `base_models[].constraints` で配るもので、ここはその写しです）。
 - **ネガティブプロンプト（VSF 方式だけ）**。ネガティブプロンプトのアコーディオンのチェックを入れると、VSF 方式で Single と Chained に効きます（Retake の画面は、LTX と同じくネガティブプロンプトを送りません。NAG のラジオは灰色です。LTX で NAG を選んだまま MiniMax H3 に切り替えると、自動で VSF に変わります）。VSF scale の既定と範囲は LTX と同じです（H3 でも較正済み）。API と MCP では `neg_method: "vsf"` を指定してください。仕組みは [`Docs/MINIMAX_H3_DESIGN.md`](Docs/MINIMAX_H3_DESIGN.md) §3.5、NAG と VSF の違いは [`Docs/VSF_README_NOTES.md`](Docs/VSF_README_NOTES.md) です。
-- **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode・pi-H3・Sol-H3-VAE**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」、pi-H3 は §5 の「[pi-H3](#pi-h3)」、Sol-H3-VAE は §5 の「[Sol-H3-VAE](#sol-h3-vae)」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
+- **生成の高速化のうち、`sage attention`・先読み block swap・モデル骨格の常駐・VRAM 16GB mode・pi-H3・Sol-H3-VAE・Spark-H3**（§5 の表。VRAM 16GB mode は下の「快適上限と速さ」、pi-H3 は §5 の「[pi-H3](#pi-h3)」、Sol-H3-VAE は §5 の「[Sol-H3-VAE](#sol-h3-vae)」、Spark-H3 は §5 の「[Spark-H3](#spark-h3)」）。`sage attention` で絵の細部が変わる注意（§5 の[注意書き](#sage-seed-note)）は MiniMax H3 でも同じです。
 
 **できないこと**——下記は要求すると **422 `FEATURE_UNSUPPORTED`** で断られます。操作パネルでは、これらの入口は灰色になるか、表示されません（Edit タブは開きますが、使えるのは Retake・Outpainting・Inpainting で、Alpha Gen のサブタブだけが灰色になります。Chained タブも開きますが、下の表の連結の入口は灰色になるか、表示されません）。
 
@@ -1235,8 +1273,8 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 | `upload_image` | ローカルの画像ファイルをアップロードする（I2V・キーフレーム用） |
 | `upload_video` | ローカルの動画ファイルをアップロードする（V2V・参照動画用）。`max_frames` を渡すと**尺（フレーム数）とフレームレートを実測して返す**ので、撮り直しの窓の開始秒を決める下調べに使える（先頭Nフレームだけ残す切り詰めも兼ねる引数なので、測るだけのときは元の尺より確実に大きい値を渡してください） |
 | `upload_audio` | ローカルの音声ファイル（動画ファイルの音声トラックも可）をアップロードする（A2V用） |
-| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents`、3 つのベースモデルで使える `keep_text_conditioning` に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない）。MiniMax H3 では参照素材からの生成（Ref2VA）の `references`（`upload_image`・`upload_video`・`upload_audio` で上げた ID と、プロンプトの札 `<Picture 1>` などの番号）も指定できる |
-| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（`submit_chain` には `vram16_mode` の引数を置いていないため。MiniMax H3 の連結は既定の on で動く）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`keep_reference_latents`、3 つのベースモデルで使える `keep_text_conditioning`、MiniMax H3 のステップ数と shift（`num_inference_steps`・`shift_video`・`shift_audio`。連結全体に 1 つの値で、省略すると既定値）に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる。MiniMax H3 では各クリップの参照素材（`clips[i].references`。形は `submit_generate` と同じ）も指定できる |
+| `submit_generate` | 単発の動画生成ジョブを登録する（T2V/I2V、`POST /generate`。MiniMax H3 では単発の A2V も〔`source_audio_id`・`source_audio_strength`〕）。`attention_backend` ほか生成の高速化7項目（`vram16_mode` は MiniMax H3 専用）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`spark_h3`（と 2 つの数 `spark_h3_topk_ratio`・`spark_h3_full_steps`）・`keep_reference_latents`、3 つのベースモデルで使える `keep_text_conditioning` に加え、**画角拡張（Outpainting）の7引数**も指定できる（送り方は選択中のベースモデルに合わせて自動で切り替わる。MiniMax H3 では元の動画を `outpaint.source_video_id` で送り、`in-outpainting` の LoRA を足さない。音声は `outpaint_audio_strength` で、`outpaint_freeze_source_audio` は H3 では指定しない）。MiniMax H3 では参照素材からの生成（Ref2VA）の `references`（`upload_image`・`upload_video`・`upload_audio` で上げた ID と、プロンプトの札 `<Picture 1>` などの番号）も指定できる |
+| `submit_chain` | クリップチェーン生成ジョブを登録する（V2V/A2V/連結、`POST /generate/chain`）。生成の高速化のうち `vram16_mode` を除く6項目（`submit_chain` には `vram16_mode` の引数を置いていないため。MiniMax H3 の連結は既定の on で動く）と MiniMax H3 専用の `pi_h3`・`sol_vae`・`spark_h3`（と 2 つの数）・`keep_reference_latents`、3 つのベースモデルで使える `keep_text_conditioning`、MiniMax H3 のステップ数と shift（`num_inference_steps`・`shift_video`・`shift_audio`。連結全体に 1 つの値で、省略すると既定値）に加え、**撮り直し（Retake）の6引数**（`retake_audio_strength` は MiniMax H3 専用）と、**Stage-2 の窓（`stage2_window`。16 名から選ぶ。既定 `standard`）**も指定できる。MiniMax H3 では各クリップの参照素材（`clips[i].references`。形は `submit_generate` と同じ）も指定できる |
 | `submit_alpha_gen` | Alpha Gen（動画から白黒のマット動画を作る）のジョブを登録する（`POST /generate/alpha`）。**LTX 2.5 専用**。1 段原寸モードが既定で、`light_mode` で軽量モード（既存の 2 段の経路）になる |
 | `job_status` | 1件のジョブの詳細を取得する（全文） |
 | `list_jobs` | 全ジョブの一覧を要約付きで取得する |
@@ -1283,7 +1321,7 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 - **`wait_for_job` は最大45秒でタイムアウト**します。エラーにはならず `timed_out: true` とその時点の進捗を返すので、終端状態になるまで繰り返し呼んでください。
 - **`config.yaml` を変更した場合は MCPサーバーの再起動が必要**です（設定は起動時に1回だけ読み込みます）。MCPサーバーは Claude Code のプロセス内で管理されるサブプロセスなので、**Claude Code 自体を再起動**すれば再読み込みされます。
 - 生成された動画は base64 等で埋め込まれず、**常にローカルの絶対パス**で返されます（`save_job_video` で任意のフォルダへコピーも可能）。パスは MCP サーバーを動かしているマシン上のものです。
-- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。**MiniMax H3 専用の `pi_h3`（`submit_generate` と `submit_chain` の両方）は、`"off"` 以外を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使われたかはメタデータの `pi_h3_used` に記録されます。**MiniMax H3 専用の `sol_vae`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 実際に使われたか、通常の VAE に切り替わったかは、メタデータの `sol_vae_used`（`"on"` / `"on->off"`）に記録されます。**MiniMax H3 専用の `keep_reference_latents`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使い回したかは、メタデータの参照ごとの `latent_cache` に記録されます（§5「[参照素材の潜在の常駐](#keep-reference-latents)」）。**`keep_text_conditioning`（`submit_generate` と `submit_chain` の両方）は、MiniMax H3・LTX 2.3・LTX 2.5 のどれでも使えます。** 使い回したかは、メタデータの `h3.phases.encode.te_cache`（MiniMax H3。Chained はクリップごと）、`ltx23.te_cache`（LTX 2.3）、`ltx25.te_cache`（LTX 2.5）に記録されます（§5「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」）。
+- **「生成の高速化（Acceleration）」の7項目は、すべて MCP のツールに公開しています**（`attention_backend` / `block_swap_prefetch` / `keep_resident` / `fused_gguf_dequant_kernel` / `vae_mode` / `keep_resident_embeddings` / `vram16_mode`。`vram16_mode` は `submit_generate` だけ）。**`vram16_mode=True` は MiniMax H3 専用で、LTX 2.3・LTX 2.5 では 422 になります。** それを除くと、**LTX 2.5 で 422 になるのは `vae_mode`（PrunaVAED）の1つだけ**、**LTX 2.3 で 422 になるのは `keep_resident_embeddings`（LTX 2.5 専用）の1つだけ**、**MiniMax H3 ではこの 2 つがどちらも 422 になり、`fused_gguf_dequant_kernel` は一覧に載りますが 422 にはならず、無視されます**（§7.1・§7.6。ツール側からは `list_models` の `base_models[].unsupported_features` でも確認できます）。`attention_backend="sage"` は選ぶと絵の細部が変わり（[注意書き](#sage-seed-note)）、`vae_mode="prune_vaed"` も同様です（[注意書き](#prunavaed-quality-note)）。実際に使われた方式はメタデータの `attention_used` / `vae_mode_used` に記録されます。**MiniMax H3 専用の `pi_h3`（`submit_generate` と `submit_chain` の両方）は、`"off"` 以外を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使われたかはメタデータの `pi_h3_used` に記録されます。**MiniMax H3 専用の `sol_vae`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 実際に使われたか、通常の VAE に切り替わったかは、メタデータの `sol_vae_used`（`"on"` / `"on->off"`）に記録されます。**MiniMax H3 専用の `spark_h3`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 間引いて計算したか、一度も間引かなかったかは、メタデータの `spark_h3_used`（`"on"` / `"on->off"`）に記録されます（§5「[Spark-H3](#spark-h3)」）。**MiniMax H3 専用の `keep_reference_latents`（`submit_generate` と `submit_chain` の両方）も、`True` を指定すると LTX 2.3・LTX 2.5 では 422 になります。** 使い回したかは、メタデータの参照ごとの `latent_cache` に記録されます（§5「[参照素材の潜在の常駐](#keep-reference-latents)」）。**`keep_text_conditioning`（`submit_generate` と `submit_chain` の両方）は、MiniMax H3・LTX 2.3・LTX 2.5 のどれでも使えます。** 使い回したかは、メタデータの `h3.phases.encode.te_cache`（MiniMax H3。Chained はクリップごと）、`ltx23.te_cache`（LTX 2.3）、`ltx25.te_cache`（LTX 2.5）に記録されます（§5「[テキストエンコーダーの条件付けのキャッシュ](#keep-text-conditioning)」）。
 - **`submit_generate` / `submit_chain` には引数 `embed_mp4_metadata`（既定 `True`）があります。** `False` にすると、完成した mp4 に生成条件を書き込みません（§5「[生成条件を mp4 に記録する](#mp4-recipe)」）。
 
 ---
@@ -1293,3 +1331,5 @@ Claude Code 以外の MCP クライアントでは、`.mcp.json` と同じ内容
 本リポジトリは **Apache-2.0** です（[LICENSE](LICENSE) を参照してください）。`engine/` は LTX-2 / LTX-Desktop 由来の派生コードを含むため、再配布時は上流の帰属表示を保持してください（[`engine/VENDOR_NOTICE.md`](engine/VENDOR_NOTICE.md)）。モデルウェイトは LTX-2 Community License に従ってください。
 
 **MiniMax H3 を導入する場合は、そのモデルに別のライセンスが適用されます。** ライセンスの名称は **MiniMax H3 COMMUNITY LICENSE AGREEMENT** で、本文は [`https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE`](https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE) にあります（`install-MiniMaxH3.bat` が同じ本文の写しを `models/MiniMaxH3/LICENSE` に置きます）。**このモデルを利用できる地域は、EU・英国・韓国・米国を除く全世界です。** 本プロジェクトは MiniMax H3 の重みを再ホストしておらず、`install-MiniMaxH3.bat` は公開元のリポジトリからお使いのパソコンへ直接ダウンロードするだけです。高速化の Sol-H3-VAE の重み（`Comfy-Org/MiniMax-H3` の配布物）にも、このライセンスが適用されます（Sol-H3-VAE の復元処理のコードは、NVIDIA が Apache-2.0 で公開した実装を読んで本プロジェクトが書いたものです）。**ライセンスの条件を確かめ、守るのは、モデルを取得して使う方ご自身の責任です。** 使う前に必ず本文を読んでください。
+
+**MiniMax H3 の高速化 Spark-H3** は、作者（GitHub の [`zechengtang/Spark-H3`](https://github.com/zechengtang/Spark-H3)）が **Apache-2.0** で公開しているものです。本プロジェクトは、作者の配布物のうち製品が使う Python のファイルを、作者の `LICENSE` と一緒に、1 バイトも変えずに [`engine_h3/third_party/spark_h3/`](engine_h3/third_party/spark_h3/) に置いています（出どころとファイルごとの SHA-256 は、同じフォルダの `README.md`）。組み立て済みの部品（`spark-h3-kitchen`。作者の `LICENSE` と `NOTICE` が付いています）は、`install-MiniMaxH3.bat` が導入のときに作者の GitHub の Releases から直接取得するもので、本プロジェクトは再ホストしていません。

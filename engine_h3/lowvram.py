@@ -4,7 +4,7 @@ The off path (``H3DiTBlock.forward`` / ``H3DiT.final_rows``) is untouched; a
 block whose ``vram16`` attribute holds a :class:`Vram16Plan` comes here
 instead (``engine_h3/dit.py`` branches at the top of the two methods). Nothing
 here is new maths: every number is produced by the SAME functions the off path
-calls (``_modulate``, ``_gate``, ``block.mlp``, ``_attention``, ``apply_rope``,
+calls (``_modulate``, ``_gate``, ``block.mlp``, ``attend``, ``apply_rope``,
 ``_linear_f32``, the norms, and the negative prompt's ``vsf.flip_values``),
 only over a range of rows or a group of heads at a time, written into
 preallocated outputs. The one exception is how the qkv input reaches the
@@ -183,7 +183,7 @@ def block_forward(
             k = _dit.apply_rope(k, rope_cos, rope_sin)
         if attn.vsf_probe is not None:
             attn.vsf_probe.observe(q, k, head0=h0)
-        out = _dit._attention(q, k, v, attn.attention_backend)
+        out = _dit.attend(attn, q, k, v)   # Spark-H3: the head group at the block's index
         del q, k, v
         o[:, h0 * d:h1 * d].view(s, g, d).copy_(out)
         del out

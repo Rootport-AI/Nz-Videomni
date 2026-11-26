@@ -44,7 +44,7 @@ Protocol (one JSON object per line; parent -> worker):
    [num_inference_steps], [shift_video], [shift_audio], output_path,
    [images], [keep_resident], [attention_backend], [block_swap_prefetch],
    [vram16_mode], [loras], [source_audio], [references], [nag], [outpaint], [inpaint], [pi_h3], [sol_vae],
-   [keep_reference_latents], [keep_text_conditioning]}
+   [keep_reference_latents], [keep_text_conditioning], [spark_h3]}
       One T2V, I2V, A2V, Outpainting or Inpainting job. Omitted steps / shifts take the engine defaults
       (``engine_h3.constants``). ``images``: [] (T2V) or ``{"path", "frame_idx"}``
       key frames on distinct frames 0 .. num_frames-1 (any order); anything
@@ -116,11 +116,22 @@ Protocol (one JSON object per line; parent -> worker):
       ``te_cache`` ({[positive], [negative]} "hit" / "miss"; a side only when it
       was looked up, so no positive when a file could not be stat'ed) and
       ``conditioning_sha256`` ({positive, tags, [negative]}). A chain takes it too.
+      ``spark_h3`` (Docs/MINIMAX_H3_DESIGN.md §6.11): absent / null = not a
+      Spark-H3 job (the attention as before), else ``{"topk_ratio",
+      "full_steps"}`` (``topk_ratio`` a number, handed to the author's
+      ``ComfySparkConfig`` as given, whose range it checks; ``full_steps`` an
+      integer of 0 or more: each clip's first steps computed densely;
+      ``engine_h3.pipeline_h3.H3SparkInput``). A process that cannot run it
+      (``ready``'s ``spark_h3_available`` false) runs the job without it, and
+      so does a clip whose steps or sequence are too few
+      (``spark_h3_used`` "on->off"). Unknown inner keys are logged once and
+      ignored. A chain takes it too (every clip, its steps counted from 0).
       A failure is reported with ``error`` and the process stays alive.
   {"op": "generate_chain", seed, width, height, frame_rate, clips,
    [prompt], [num_inference_steps], [shift_video], [shift_audio], output_path,
    [keep_resident], [attention_backend], [block_swap_prefetch], [vram16_mode],
-   [loras], [source], [retake], [nag], [keep_reference_latents], [keep_text_conditioning]}
+   [loras], [source], [retake], [nag], [keep_reference_latents], [keep_text_conditioning], [pi_h3], [sol_vae],
+   [spark_h3]}
       One chain (台帳 §1-106; ``engine_h3.chain_h3``): ``clips`` is a list
       of ``{"prompt", "num_frames", [references], [images], [source_audio]}`` (2..24 clips, 1..24
       with a ``source``, exactly 1 with a ``retake``; each prompt is the clip's whole text, the top-level
@@ -152,7 +163,9 @@ Protocol (one JSON object per line; parent -> worker):
   as the reply to the next ``load``); after load it is answered with ``error``.
 
 Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
-  ready     {sampler, sage_available}
+  ready     {sampler, sage_available, spark_h3_available}
+            (``spark_h3_available``: ``engine_h3.spark_h3.probe()`` is None, checked
+            after the load; also on the "already loaded" re-answer)
   progress  {stage, index, total[, outer_index, outer_total]}
             stage: encode / stage1_denoise / decode
             (``outer_index`` / ``outer_total``: a chain's clip, 0-based, and
@@ -170,11 +183,14 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
              commit_peak_gib, seconds,
              num_frames, frame_rate, width, height, size_bytes, attention_used,
              block_swap_prefetch_used, keep_resident_used, vram16_mode_used,
-             images_used, [pi_h3_used], [sol_vae_used], h3: {phases, quant_backends, [loras], [a2v], [references],
-             [vsf], [outpaint], [inpaint], [pi_h3], [sol_vae]}}
+             images_used, [pi_h3_used], [sol_vae_used], [spark_h3_used], h3: {phases, quant_backends, [loras],
+             [a2v], [references], [vsf], [outpaint], [inpaint], [pi_h3], [sol_vae], [spark_h3]}}
             (``pi_h3_used`` "4steps" / "2steps" and ``h3.pi_h3`` only for a pi-H3 job)
             (``sol_vae_used`` "on" / "on->off" and ``h3.sol_vae`` only for a Sol-H3-VAE job:
             ``pipeline_h3.sol_record``)
+            (``spark_h3_used`` "on" (some evaluation was sparse) / "on->off" and
+            ``h3.spark_h3`` only for a Spark-H3 job: ``pipeline_h3.spark_record``;
+            ``reason`` "unavailable" (with ``detail``) / "few_steps" / "short_sequence")
             (``h3.outpaint`` only for an Outpainting job, 台帳 §1-125: canvas
             [W_c, H_c], pads, source [W_s, H_s], aligned [x0, y0, x1, y1],
             fixed_tokens, generated_tokens, feather_px, audio_strength,
@@ -202,7 +218,9 @@ Events (worker -> parent; STDOUT, ``@@LTX@@`` + compact JSON):
             ({pictures, videos, audios} counts) and ``seconds.reference_encode``,
             plus, for a clip with its own audio only, ``a2v`` (and
             ``seconds.audio_encode`` when it was encoded), plus, for a chain with a negative prompt only, ``vsf`` (the
-            clip's ``h3.vsf``), and ``h3``: overlap_frames / inject_clean / decode; with a
+            clip's ``h3.vsf``), plus, for a Spark-H3 chain only, ``spark_h3`` (the clip's own
+            ``pipeline_h3.spark_record``; ``h3.spark_h3`` is the chain's: "on" when any clip was
+            sparse), and ``h3``: overlap_frames / inject_clean / decode; with a
             ``source``, also ``v2v``: the LTX chain's sixteen keys, whose
             ``audio_handle_filename`` names the ``<stem>_audio_handle.wav``
             written next to the mp4; with a ``retake``, also ``retake``: the
@@ -318,7 +336,7 @@ _GENERATE_FIELDS = frozenset({
     "num_inference_steps", "shift_video", "shift_audio", "output_path",
     "images", "keep_resident", "attention_backend", "block_swap_prefetch",
     "vram16_mode", "loras", "source_audio", "references", "nag", "outpaint", "inpaint", "pi_h3", "sol_vae",
-    "keep_reference_latents", "keep_text_conditioning",
+    "keep_reference_latents", "keep_text_conditioning", "spark_h3",
 })
 #: The keys of one ``images`` entry this engine reads (``strength`` is an LTX notion).
 _IMAGE_FIELDS = frozenset({"path", "frame_idx"})
@@ -357,6 +375,8 @@ _INPAINT_FIELDS = frozenset({"source_path", "mask_path", "audio_strength", "feat
 _PI_H3_FIELDS = frozenset({"steps", "path"})
 #: The keys of ``sol_vae`` this engine reads (``engine_h3.sol_vae``).
 _SOL_VAE_FIELDS = frozenset({"path"})
+#: The keys of ``spark_h3`` this engine reads (Docs/MINIMAX_H3_DESIGN.md §6.11).
+_SPARK_H3_FIELDS = frozenset({"topk_ratio", "full_steps"})
 
 #: The one loaded pipeline (one model per process, as in the LTX workers).
 _PIPE = None
@@ -399,6 +419,14 @@ def _resolve_attention(msg: dict) -> tuple[str, bool]:
     return backend, False
 
 
+def _spark_h3_available() -> bool:
+    """``ready``'s ``spark_h3_available``: ``spark_h3.probe()`` found nothing missing. Called
+    after ``pipeline.load()`` only, so the CUDA initialisation order of the load is unchanged."""
+    from engine_h3 import spark_h3  # noqa: PLC0415
+
+    return spark_h3.probe() is None
+
+
 def _do_load(msg: dict) -> None:
     """Check the handed-down paths and headers, pin the int8 path, answer ``ready``."""
     global _PIPE, _ATTENTION
@@ -406,7 +434,8 @@ def _do_load(msg: dict) -> None:
         from engine.transformer.sage_attention_service import probe_sage  # noqa: PLC0415
 
         _log("load: already loaded -- re-answering ready")
-        _emit("ready", sampler=_PIPE.sampler, sage_available=probe_sage())
+        _emit("ready", sampler=_PIPE.sampler, sage_available=probe_sage(),
+              spark_h3_available=_spark_h3_available())
         return
 
     import h3_format  # noqa: PLC0415 -- torch-free; the one path check (the pipeline repeats it)
@@ -450,7 +479,10 @@ def _do_load(msg: dict) -> None:
     # ensure_ascii: STDERR is cp932 on a Japanese Windows and the parent reads
     # the log as UTF-8, so a non-ASCII path would land garbled.
     _log(f"LOAD_OK {json.dumps(report, ensure_ascii=True, default=str)}")
-    _emit("ready", sampler=pipeline.sampler, sage_available=sage_available)
+    # After the load: the probe may touch CUDA (the GPU's capability) and import the kernel.
+    spark_h3_available = _spark_h3_available()
+    _log(f"spark_h3_available={spark_h3_available}")
+    _emit("ready", sampler=pipeline.sampler, sage_available=sage_available, spark_h3_available=spark_h3_available)
 
 
 def _images(msg: dict) -> tuple[tuple, list[str]]:
@@ -725,6 +757,34 @@ def _sol_vae(msg: dict) -> tuple:
     return H3SolVaeInput(path=path), sorted(k for k in raw if k not in _SOL_VAE_FIELDS)
 
 
+def _spark_h3(msg: dict) -> tuple:
+    """``spark_h3`` -> ``(H3SparkInput | None, ignored inner keys)``.
+
+    Absent / null = not a Spark-H3 job. Else ``{"topk_ratio", "full_steps"}``:
+    ``topk_ratio`` a number (its range is the author's ``ComfySparkConfig``'s),
+    ``full_steps`` an integer (0 or more is the pipeline's ``validate_request``);
+    neither a bool.
+    """
+    from engine_h3.pipeline_h3 import H3SparkInput  # noqa: PLC0415
+
+    raw = msg.get("spark_h3")
+    if raw is None:
+        return None, []
+    if not isinstance(raw, dict):
+        raise ValueError(f"spark_h3 は topk_ratio と full_steps を持つオブジェクトで渡してください（{type(raw).__name__}）")
+    ratio, full = raw.get("topk_ratio"), raw.get("full_steps")
+    if isinstance(ratio, bool) or not isinstance(ratio, (int, float)):
+        raise ValueError(f"spark_h3 の topk_ratio は数値で渡してください（{ratio!r}）")
+    if isinstance(full, bool) or not isinstance(full, int):
+        raise ValueError(f"spark_h3 の full_steps は整数で渡してください（{full!r}）")
+    return H3SparkInput(topk_ratio=float(ratio), full_steps=full), sorted(k for k in raw if k not in _SPARK_H3_FIELDS)
+
+
+def _spark_h3_summary(spark) -> str:
+    """The log's ``spark_h3=``."""
+    return f"(topk_ratio={spark.topk_ratio}, full_steps={spark.full_steps})"
+
+
 def _sol_vae_summary(sol) -> str:
     """The log's ``sol_vae=``: the file name, or ``(no path)``."""
     return Path(sol.path).name if sol.path.strip() else "(no path)"
@@ -733,7 +793,7 @@ def _sol_vae_summary(sol) -> str:
 def _generate_request(
     msg: dict, images: tuple | None = None, loras: tuple | None = None, source_audio=None,
     references: tuple | None = None, *, negative_prompt: str = "", vsf_scale: float = 1.5, outpaint=None,
-    inpaint=None, pi_h3=None, sol_vae=None,
+    inpaint=None, pi_h3=None, sol_vae=None, spark_h3=None,
 ):
     """``generate`` payload -> ``H3GenerateRequest`` (steps / shifts default when absent).
 
@@ -753,7 +813,7 @@ def _generate_request(
     ``inpaint`` in one job are refused (``ValueError``).
     ``pi_h3``: the already parsed ``H3PiH3Input``; ``None`` falls back to
     parsing the message (a message without the key is not a pi-H3 job).
-    ``sol_vae``: the same for ``H3SolVaeInput``.
+    ``sol_vae``: the same for ``H3SolVaeInput``. ``spark_h3``: the same for ``H3SparkInput``.
     """
     from engine_h3.pipeline_h3 import H3GenerateRequest  # noqa: PLC0415
 
@@ -778,6 +838,8 @@ def _generate_request(
         pi_h3, _ignored = _pi_h3(msg)
     if sol_vae is None:
         sol_vae, _ignored = _sol_vae(msg)
+    if spark_h3 is None:
+        spark_h3, _ignored = _spark_h3(msg)
     return H3GenerateRequest(
         prompt=str(msg["prompt"]),
         seed=int(msg["seed"]),
@@ -805,6 +867,7 @@ def _generate_request(
         sol_vae=sol_vae,
         keep_reference_latents=_or("keep_reference_latents", False, bool),
         keep_text_conditioning=_or("keep_text_conditioning", False, bool),
+        spark_h3=spark_h3,
     )
 
 
@@ -821,6 +884,7 @@ def _do_generate(msg: dict) -> None:
     inpaint, inpaint_ignored = _inpaint(msg)
     pi_h3, pi_h3_ignored = _pi_h3(msg)
     sol_vae, sol_vae_ignored = _sol_vae(msg)
+    spark_h3, spark_h3_ignored = _spark_h3(msg)
     ignored = sorted(k for k in msg if k not in _GENERATE_FIELDS)
     ignored += [f"images[].{k}" for k in inner_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
@@ -831,10 +895,11 @@ def _do_generate(msg: dict) -> None:
     ignored += [f"inpaint.{k}" for k in inpaint_ignored]
     ignored += [f"pi_h3.{k}" for k in pi_h3_ignored]
     ignored += [f"sol_vae.{k}" for k in sol_vae_ignored]
+    ignored += [f"spark_h3.{k}" for k in spark_h3_ignored]
     req = _generate_request(
         msg, images=images, loras=loras, source_audio=source_audio, references=references,
         negative_prompt=negative_prompt, vsf_scale=vsf_scale, outpaint=outpaint, inpaint=inpaint,
-        pi_h3=pi_h3, sol_vae=sol_vae,
+        pi_h3=pi_h3, sol_vae=sol_vae, spark_h3=spark_h3,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -868,6 +933,7 @@ def _do_generate(msg: dict) -> None:
             if req.pi_h3 is not None else ""
         )
         + (f"sol_vae={_sol_vae_summary(req.sol_vae)} " if req.sol_vae is not None else "")
+        + (f"spark_h3={_spark_h3_summary(req.spark_h3)} " if req.spark_h3 is not None else "")
         + (f"neg=vsf(scale={req.vsf_scale}) " if req.negative_prompt else "neg=off ")
         + f"-> {req.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")
@@ -1005,6 +1071,7 @@ def _do_generate_chain(msg: dict) -> None:
     retake, retake_ignored = _chain_retake(msg)
     pi_h3, pi_h3_ignored = _pi_h3(msg)
     sol_vae, sol_vae_ignored = _sol_vae(msg)
+    spark_h3, spark_h3_ignored = _spark_h3(msg)
     ignored = sorted(k for k in msg if k not in _CHAIN_FIELDS)
     ignored += [f"clips[].{k}" for k in clip_ignored]
     ignored += [f"loras[].{k}" for k in lora_ignored]
@@ -1012,6 +1079,7 @@ def _do_generate_chain(msg: dict) -> None:
     ignored += [f"retake.{k}" for k in retake_ignored]
     ignored += [f"pi_h3.{k}" for k in pi_h3_ignored]
     ignored += [f"sol_vae.{k}" for k in sol_vae_ignored]
+    ignored += [f"spark_h3.{k}" for k in spark_h3_ignored]
     # The shared settings, read by the single job's rules. The prompt and the
     # frame count are each clip's; ``clips[0]``'s stand in for them here.
     base_msg = {k: v for k, v in msg.items() if k in _CHAIN_FIELDS}
@@ -1023,7 +1091,7 @@ def _do_generate_chain(msg: dict) -> None:
     ignored += [f"nag.{k}" for k in nag_ignored]
     base = _generate_request(
         base_msg, images=(), loras=loras, source_audio=None, references=(),
-        negative_prompt=negative_prompt, vsf_scale=vsf_scale, pi_h3=pi_h3, sol_vae=sol_vae,
+        negative_prompt=negative_prompt, vsf_scale=vsf_scale, pi_h3=pi_h3, sol_vae=sol_vae, spark_h3=spark_h3,
     )
     # Per job: the job's own backend when it sends one, else the load value.
     effective, degraded = _resolve_attention(msg) if msg.get("attention_backend") is not None else _ATTENTION
@@ -1043,6 +1111,7 @@ def _do_generate_chain(msg: dict) -> None:
         + (f"retake={(Path(retake.path).name, retake.audio_strength)} " if retake is not None else "")
         + (f"pi_h3=({base.pi_h3.steps}, {Path(base.pi_h3.path).name}) " if base.pi_h3 is not None else "")
         + (f"sol_vae={_sol_vae_summary(base.sol_vae)} " if base.sol_vae is not None else "")
+        + (f"spark_h3={_spark_h3_summary(base.spark_h3)} " if base.spark_h3 is not None else "")
         + (f"neg=vsf(scale={base.vsf_scale}) " if base.negative_prompt else "neg=off ")
         + f"-> {base.output_path}"
         + (f" (ignored keys: {', '.join(ignored)})" if ignored else "")

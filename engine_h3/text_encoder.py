@@ -41,6 +41,12 @@ way does not change the hidden state (VERIFICATION_LOG §166, 2a-G2). The CPU
 side never holds more than one tensor of a layer, of the embedding table or of
 the vision tower at a time.
 
+The reads go past the OS file cache through one reused staging buffer
+(``engine_h3.unbuffered_read``, 台帳 1-303): ``load`` makes the reader,
+``release`` lets it go, and when it cannot be used here ``load`` records why
+(``unbuffered_read: "on->off"``) and the buffered read (a fresh CPU buffer per
+tensor) is used. Either way the same bytes reach the same device.
+
 What H3 reads from the encoder (R2 D, R2 (3) item 10):
 
 * the hidden state AFTER decoder layer 50, BEFORE the final RMSNorm -- the
@@ -75,6 +81,7 @@ import h3_format
 from engine_h3.constants import MODALITY_TEXT, MODALITY_VIDEO, REFERENCE_KINDS
 from engine_h3.quant_linear import swap_in_int8_linears
 from engine_h3.sft_load import drop_to_meta, load_mapped_to, move_module_tree
+from engine_h3.unbuffered_read import UnbufferedReadUnavailable, UnbufferedReader
 
 logger = logging.getLogger(__name__)
 
@@ -540,20 +547,22 @@ def mm_token_type_ids(ids: list[int]) -> list[int]:
     return [1 if i == IMAGE_TOKEN_ID else 0 for i in ids]
 
 
-def install_layer_read_hooks(layers, plans, path: str, header, device, stats: dict) -> list:
+def install_layer_read_hooks(layers, plans, path: str, header, device, stats: dict, *, reader=None) -> list:
     """Hooks on each (meta) decoder layer: read it from ``path`` onto ``device`` right
     before its forward, drop it back to meta right after; returns the hook handles.
 
     The model's own ``forward`` (and its layer loop) is left untouched -- the
     hooks fire from ``Module.__call__``. ``stats`` accumulates ``bytes``,
-    ``read_seconds`` and ``layers`` (how many layers were read).
+    ``read_seconds`` and ``layers`` (how many layers were read). ``reader``
+    (``engine_h3.unbuffered_read.UnbufferedReader``, or None for the buffered
+    read) is handed to ``load_mapped_to``.
     """
     handles = []
     for layer, plan in zip(layers, plans):
 
         def pre(module, args, kwargs, _plan=plan):
             t0 = time.perf_counter()
-            stats["bytes"] += load_mapped_to(module, path, header, _plan, device)
+            stats["bytes"] += load_mapped_to(module, path, header, _plan, device, reader=reader)
             stats["read_seconds"] += time.perf_counter() - t0
             stats["layers"] += 1
 
@@ -592,6 +601,9 @@ class H3TextEncoder:
         self._embed_plan: dict[str, str] = {}
         self._layer_plans: list[dict[str, str]] = []
         self._visual_plan: dict[str, str] = {}
+        #: The unbuffered reader of the stage (``load`` makes it, ``release`` lets it go);
+        #: None = the buffered read (it could not be used here).
+        self._reader: UnbufferedReader | None = None
         #: What the last ``encode`` read (bytes / seconds / vision tokens), for the job's phases.
         self.read_report: dict = {}
         #: The token ids of the last ``encode`` (the gate compares them with the reference).
@@ -654,6 +666,15 @@ class H3TextEncoder:
         self._model = model
         self._header = header
         self._embed_plan, self._layer_plans, self._visual_plan = embed_plan, layer_plans, visual_plan
+        # The unbuffered read (台帳 1-303): decided here, once per stage; when it cannot
+        # be used, the buffered read is used and what failed is recorded.
+        self._close_reader()
+        read_mode: dict = {"unbuffered_read": "on"}
+        try:
+            self._reader = UnbufferedReader(self.te_path, self.device)
+        except UnbufferedReadUnavailable as exc:
+            read_mode = {"unbuffered_read": "on->off", "unbuffered_read_reason": str(exc)}
+            logger.warning("H3 TE: unbuffered read not used, reading through the OS cache: %s", exc)
         info = {
             "num_layers_file": te_cfg.num_layers,
             "num_layers_built": len(lm.layers),
@@ -662,6 +683,7 @@ class H3TextEncoder:
             "vision_tensors_in_file": len(visual_plan),
             "rope": rope,
             "extra_special_tokens": special,
+            **read_mode,
             "seconds": round(time.perf_counter() - started, 2),
         }
         logger.info("H3 TE built (weights are read during encode): %s", info)
@@ -808,18 +830,18 @@ class H3TextEncoder:
             # come in one by one through the hooks.
             t0 = time.perf_counter()
             stats["bytes"] += load_mapped_to(
-                lm.embed_tokens, self.te_path, self._header, self._embed_plan, self.device,
+                lm.embed_tokens, self.te_path, self._header, self._embed_plan, self.device, reader=self._reader,
             )
             if vision:
                 stats["bytes"] += load_mapped_to(
-                    model.visual, self.te_path, self._header, self._visual_plan, self.device,
+                    model.visual, self.te_path, self._header, self._visual_plan, self.device, reader=self._reader,
                 )
                 move_module_tree(model.visual.rotary_pos_emb, self.device, skip=set())
             stats["read_seconds"] += time.perf_counter() - t0
             move_module_tree(lm.rotary_emb, self.device, skip=set())
             handles = install_drop_after_forward_hooks([lm.embed_tokens] + ([model.visual] if vision else []))
             handles += install_layer_read_hooks(
-                lm.layers, self._layer_plans, self.te_path, self._header, self.device, stats,
+                lm.layers, self._layer_plans, self.te_path, self._header, self.device, stats, reader=self._reader,
             )
             input_ids = torch.tensor([ids], dtype=torch.long, device=self.device)
             kwargs = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids), "use_cache": False}
@@ -871,8 +893,15 @@ class H3TextEncoder:
 
     # -- release ---------------------------------------------------------------
 
+    def _close_reader(self) -> None:
+        reader, self._reader = self._reader, None
+        if reader is not None:
+            reader.close()
+
     def release(self) -> None:
-        """Drop the skeleton and the tokenizer (``encode`` already dropped every weight)."""
+        """Drop the skeleton, the tokenizer and the unbuffered reader's staging buffer
+        (``encode`` already dropped every weight)."""
+        self._close_reader()
         self._model = None
         self._tokenizer = None
         self._header = None

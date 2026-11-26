@@ -7407,4 +7407,4 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 
 ### 188.5 実機の門
 
-- オーナーの実機での確認の項目は、バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-301 の「文言」です。まだ行っていません。
+- オーナーの実機での確認（台帳 1-301 の「文言」）は合格しました（2026-11-26）。Settings で sage attention と Spark-H3 を選ぶと、説明文が「フル演算するステップ数は、…」、注意文が「sage attentionでは、…」で始まっていました。結果の正本は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §239.11 です。

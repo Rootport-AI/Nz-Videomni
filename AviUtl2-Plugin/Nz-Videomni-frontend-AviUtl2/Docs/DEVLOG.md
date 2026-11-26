@@ -7403,7 +7403,7 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 - 型検査（`npm run typecheck`）は、エラーがありませんでした。
 - 操作パネルの試験の全件（`npx vitest run --exclude "**/backend.integration.test.ts"`）は、212 ファイル・4,211 件がすべて合格しました。
 - Gradio の試験（`tests/test_gradio_ui.py`・`tests/test_gradio_handlers.py`）は、352 件が合格しました。
-- `build.ps1` で作り直し、配布用の写し（`AviUtl2-Plugin/NzVideomni.aux2`）を更新しました。開発機の AviUtl2 への配置は、AviUtl2 が開いていたので、まだ行っていません（閉じたときに `deploy.ps1` で行う）。
+- `build.ps1` で作り直し、配布用の写し（`AviUtl2-Plugin/NzVideomni.aux2`）を更新しました。開発機の AviUtl2 への配置は、AviUtl2 が閉じたあとに `deploy.ps1` で行いました（2026-11-26）。
 
 ### 188.5 実機の門
 

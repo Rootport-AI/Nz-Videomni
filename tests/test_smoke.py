@@ -81,6 +81,76 @@ def test_acceleration_status_truth_table(client):
     assert pm.acceleration_status_block()["sage_available"] is False
 
 
+def test_status_reports_spark_h3_available_false_on_mock(client):
+    # MiniMax H3's Spark-H3 (Docs/MINIMAX_H3_DESIGN.md §6.11): the mock has no
+    # engine, so /status says it cannot run, as for sage.
+    accel = client.get("/api/v1/status").json()["acceleration"]
+    assert accel["spark_h3_available"] is False
+
+
+def test_spark_h3_available_truth_table(client):
+    # The same four rows as sage's (acceleration_status_block).
+    import types
+
+    pm = client.app_context.pipeline_manager
+    runner = pm.runner
+    runner._spark_h3_probe_cache = True  # pretend the engine venv HAS the kit
+
+    # (1) mock backend -> False, and the file probe cannot override it.
+    assert pm.acceleration_status_block()["spark_h3_available"] is False
+
+    runner.config.model.backend = "real"
+
+    # (2) not loaded -> the file probe answers.
+    assert pm.acceleration_status_block()["spark_h3_available"] is True
+    runner._spark_h3_probe_cache = False
+    assert pm.acceleration_status_block()["spark_h3_available"] is False
+
+    # (3) loaded -> the WORKER's own probe wins over the file probe (both ways).
+    runner._backend = types.SimpleNamespace(loaded=True, spark_h3_available=True)
+    assert pm.acceleration_status_block()["spark_h3_available"] is True
+    runner._spark_h3_probe_cache = True
+    runner._backend = types.SimpleNamespace(loaded=True, spark_h3_available=False)
+    assert pm.acceleration_status_block()["spark_h3_available"] is False
+
+    # A loaded worker that sends no spark_h3_available (every LTX worker)
+    # -> the file probe.
+    runner._backend = types.SimpleNamespace(loaded=True, spark_h3_available=None)
+    assert pm.acceleration_status_block()["spark_h3_available"] is True
+
+    # (4) load failed / unloaded (no live worker) -> back to the file probe.
+    runner._spark_h3_probe_cache = False
+    runner._backend = types.SimpleNamespace(loaded=False, spark_h3_available=True)
+    assert pm.acceleration_status_block()["spark_h3_available"] is False
+
+
+def test_spark_h3_file_probe_reads_the_engine_venv(tmp_path):
+    # The file probe: <venv>/Lib/site-packages/spark_h3_kitchen, the venv being
+    # the grandparent of this runner's engine interpreter (Sage's layout).
+    from config import AppConfig
+    from services.engines.h3.adapter import H3Runner
+    from services.low_vram import build_low_vram_settings
+
+    venv = tmp_path / ".venv-engine-h3"
+    (venv / "Scripts").mkdir(parents=True)
+
+    def _runner(engine_python_h3: str | None) -> H3Runner:
+        cfg = AppConfig()
+        cfg.model.engine_python_h3 = engine_python_h3
+        return H3Runner(cfg, build_low_vram_settings(cfg))
+
+    h3_python = (venv / "Scripts" / "python.exe").as_posix()
+    assert _runner(h3_python).spark_h3_available is False  # no kit
+    (venv / "Lib" / "site-packages" / "spark_h3_kitchen").mkdir(parents=True)
+    r = _runner(h3_python)
+    assert r.spark_h3_available is True
+    # Cached after the first read, as sage's.
+    (venv / "Lib" / "site-packages" / "spark_h3_kitchen").rmdir()
+    assert r.spark_h3_available is True
+    # No H3 interpreter configured -> False.
+    assert _runner(None).spark_h3_available is False
+
+
 def test_block_swap_prefetch_available_truth_table(client):
     # PipelineManager._block_swap_prefetch_available (backend §44; spec §6.5b)
     # is computed from the SETTING low_vram.block_swap_blocks_on_gpu with the

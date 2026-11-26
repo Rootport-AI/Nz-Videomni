@@ -222,7 +222,7 @@ def test_unsupported_features_per_family():
     # VRAM 16GB mode で 3 件目 ``vram16_mode`` が加わった（MiniMax H3 専用。
     # 2.5 も同じく断る）。単発の A2V の ``source_audio``、Ref2VA の
     # ``references``、pi-H3 の ``pi_h3``、Sol-H3-VAE の ``sol_vae``（どれも
-    # MiniMax H3 専用）が続く。参照素材の符号化結果の保持の
+    # MiniMax H3 専用）と Spark-H3 の ``spark_h3`` が続く。参照素材の符号化結果の保持の
     # ``keep_reference_latents`` が最後（これも MiniMax H3 専用）。
     assert engines.unsupported_features("ltx") == (
         "keep_resident_embeddings",
@@ -232,6 +232,7 @@ def test_unsupported_features_per_family():
         "references",
         "pi_h3",
         "sol_vae",
+        "spark_h3",
         "keep_reference_latents",
     )
     features = engines.unsupported_features("ltx25")

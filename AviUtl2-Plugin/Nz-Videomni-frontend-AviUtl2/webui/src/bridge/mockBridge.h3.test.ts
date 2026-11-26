@@ -560,6 +560,45 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await chain(chained, { keep_reference_latents: true })).status).toBe(202);
   });
 
+  // 裁定 113: Spark-H3.
+  it("publishes `spark_h3` in both LTX engines' unsupported_features (right after sol_vae), not MiniMax H3's", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    expect(blocksFeature(blocks, "MiniMaxH3")).not.toContain("spark_h3");
+    for (const id of ["LTX23", "LTX25"]) {
+      const features = blocksFeature(blocks, id);
+      expect(features[features.indexOf("sol_vae") + 1]).toBe("spark_h3");
+    }
+  });
+
+  it("refuses spark_h3: true on LTX (single and chain) with 422 FEATURE_UNSUPPORTED; false passes", async () => {
+    for (const id of ["LTX23", "LTX25"]) {
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const single = await generate(bridge, {
+        ...BODY,
+        num_frames: 121,
+        width: 1280,
+        height: 704,
+        spark_h3: true,
+        spark_h3_topk_ratio: 0.2,
+        spark_h3_full_steps: 2,
+      });
+      expect(single.status).toBe(422);
+      const error = (single.body as { error: { code: string; message: string; detail?: string } }).error;
+      expect(error.code).toBe("FEATURE_UNSUPPORTED");
+      expect(error.detail).toBe("Spark-H3 は MiniMax H3 専用です。LTX では使えません。");
+      const chained = await chain(
+        bridge,
+        { spark_h3: true, spark_h3_topk_ratio: 0.2, spark_h3_full_steps: 2 },
+        [{ num_frames: 121 }],
+      );
+      expect(chained.status).toBe(422);
+      expect((chained.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const offChain = await chain(bridge, { spark_h3: false }, [{ num_frames: 121 }]);
+      expect(offChain.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+    }
+  });
+
   // 台帳 §1-298: keep the text encoder's conditioning cached.
   it("does NOT publish `keep_text_conditioning` in any engine's unsupported_features (台帳 §1-299)", async () => {
     const blocks = await listModels(createMockBridge({ delayMs: 0 }));

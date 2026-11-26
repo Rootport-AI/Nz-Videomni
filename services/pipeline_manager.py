@@ -328,10 +328,17 @@ class PipelineManager:
         a DLL/ABI failure the file probe cannot see). ``pipeline_loaded`` in the
         same /status payload already tells a client which route produced the
         value, so no extra ``sage_source`` field is exposed.
+
+        ``spark_h3_available`` (MiniMax H3's Spark-H3, Docs/MINIMAX_H3_DESIGN.md
+        §6.11) follows the SAME four-row table: the file probe is
+        ``<the engine venv>/Lib/site-packages/spark_h3_kitchen``, the worker's
+        is its ``ready`` event's ``spark_h3_available``. An LTX runner's venv
+        has no kit and its worker sends no such key, so it reads False there.
         """
         return {
             "attention_backends": list(self.ATTENTION_BACKENDS),
             "sage_available": self._sage_available(),
+            "spark_h3_available": self._spark_h3_available(),
             # Block-swap prefetch (VERIFICATION_LOG §44). Judged by the same
             # ``block_swap_blocks_on_gpu`` expression the load payload uses (see
             # _block_swap_prefetch_available), NOT the display-only
@@ -347,6 +354,14 @@ class PipelineManager:
         if worker_value is not None:
             return worker_value
         return self.runner.sage_available
+
+    def _spark_h3_available(self) -> bool:
+        if self.runner.is_mock:
+            return False
+        worker_value = self.runner.worker_spark_h3_available
+        if worker_value is not None:
+            return worker_value
+        return self.runner.spark_h3_available
 
     def _block_swap_prefetch_available(self) -> bool:
         """True when the load payload asks the worker to keep a positive
@@ -2001,6 +2016,7 @@ class PipelineManager:
                     peak_vram_reserved_mb=outcome.peak_vram_reserved_mb,
                     pi_h3_used=getattr(outcome, "pi_h3_used", None),
                     sol_vae_used=getattr(outcome, "sol_vae_used", None),
+                    spark_h3_used=getattr(outcome, "spark_h3_used", None),
                 )
 
             result = JobResult(
@@ -2069,6 +2085,7 @@ class PipelineManager:
         clip_a2v_provenance=None,
         pi_h3_used=None,
         sol_vae_used=None,
+        spark_h3_used=None,
     ) -> None:
         cm = chain_meta or {}
         # The overlap and the stage-2 window as the ENGINE ran them: the chain
@@ -2156,6 +2173,9 @@ class PipelineManager:
         # The same for Sol-H3-VAE: present on a sol_vae chain only.
         if sol_vae_used is not None:
             metadata["sol_vae_used"] = sol_vae_used
+        # The same for Spark-H3: present on a spark_h3 chain only.
+        if spark_h3_used is not None:
+            metadata["spark_h3_used"] = spark_h3_used
         # V2V continuation (additive): only present when a source_video was used,
         # so a chain without one carries no ``v2v`` key. The engine's (or mock's)
         # chain.v2v sub-dict + the app-side provenance (source_video_id,
@@ -2466,6 +2486,14 @@ class PipelineManager:
         sol_vae_used = getattr(outcome, "sol_vae_used", None)
         if sol_vae_used is not None:
             metadata["sol_vae_used"] = sol_vae_used
+        # Acceleration, MiniMax H3 only: whether Spark-H3 thinned any evaluation
+        # ("on") or none ("on->off": the kit unusable, the full steps covering
+        # every step, or a short sequence), the worker's ``done`` (the mock's is
+        # always "on->off"). Present on a spark_h3 job only, as ``sol_vae_used``;
+        # the engine's own record rides ``metadata["h3"]["spark_h3"]``.
+        spark_h3_used = getattr(outcome, "spark_h3_used", None)
+        if spark_h3_used is not None:
+            metadata["spark_h3_used"] = spark_h3_used
         # IC-LoRA: additive block, only present for lora jobs, so non-lora
         # metadata carries no ``ic_lora`` key. (``loras``/``reference_video_id``
         # also appear inside the frozen-additive ``request`` dump.)

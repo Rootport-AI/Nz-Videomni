@@ -57,6 +57,8 @@ from .handlers import (
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+    SPARK_H3_FULL_STEPS_DEFAULT,
+    SPARK_H3_RATIO_PERCENT_DEFAULT,
     _LORA_TOKEN_RE,
     _combine_generate_loras,
     build_a2v_chain_payload,
@@ -215,6 +217,11 @@ class BatchSnapshot:
                      base model that lists it in ``unsupported_features`` the
                      checkbox is hidden and written back to that default, so
                      the snapshot can only ever carry the default there.
+        spark_h3, spark_h3_ratio_percent, spark_h3_full_steps  Snapshotted
+                     from the Settings-tab Spark-H3 toggle and its two sliders
+                     (MiniMax H3; hidden, off and at the defaults on LTX), same
+                     reasoning again. The three keys reach the payload only
+                     when ``spark_h3`` is on (``spark_h3_payload``).
 
     Output
         embed_mp4_metadata  Snapshotted from the Settings-tab Output checkbox
@@ -264,6 +271,9 @@ class BatchSnapshot:
     keep_resident_embeddings: bool = KEEP_RESIDENT_EMBEDDINGS_DEFAULT
     embed_mp4_metadata: bool = EMBED_MP4_METADATA_DEFAULT
     num_frames: int = MAX_FRAMES
+    spark_h3: bool = False
+    spark_h3_ratio_percent: float = SPARK_H3_RATIO_PERCENT_DEFAULT
+    spark_h3_full_steps: int = SPARK_H3_FULL_STEPS_DEFAULT
 
 
 # --------------------------------------------------------------------------- #
@@ -623,6 +633,9 @@ class BatchRunner:
                 keep_resident_embeddings=snap.keep_resident_embeddings,
                 chunked_upsample=snap.chunked_upsample,
                 embed_mp4_metadata=snap.embed_mp4_metadata,
+                spark_h3=snap.spark_h3,
+                spark_h3_ratio_percent=snap.spark_h3_ratio_percent,
+                spark_h3_full_steps=snap.spark_h3_full_steps,
             )
             job_id = self._submit_with_retry(payload)
             if job_id is None:

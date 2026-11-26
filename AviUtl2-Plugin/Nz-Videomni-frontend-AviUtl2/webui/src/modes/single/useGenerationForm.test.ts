@@ -597,6 +597,9 @@ describe("useGenerationForm", () => {
       solVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
+      sparkH3TopkPercent: 20,
+      sparkH3FullSteps: 2,
       embedMp4Metadata: true,
     };
 

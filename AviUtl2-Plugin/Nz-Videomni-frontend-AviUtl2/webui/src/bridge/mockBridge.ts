@@ -534,7 +534,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // Sol-H3-VAE (2026-11-24): `sol_vae` likewise — last, after `pi_h3` as in
     // the server's REJECT_TABLE. Hides the same Settings row ("Fast VAE").
     "sol_vae",
-    // 台帳 §1-297: `keep_reference_latents` likewise — last, after `sol_vae` as
+    // 裁定 113: `spark_h3` (MiniMax H3's Spark-H3) likewise — right after
+    // `sol_vae`, as in the server's REJECT_TABLE. Hides the Settings row; the
+    // chain refusal has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
+    "spark_h3",
+    // 台帳 §1-297: `keep_reference_latents` likewise — last, after `spark_h3` as
     // in the server's REJECT_TABLE. Hides the Settings row; the chain refusal
     // has its `MOCK_CHAIN_FEATURE_FIELDS` row below.
     "keep_reference_latents",
@@ -617,6 +621,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "pi_h3",
     // Sol-H3-VAE: `sol_vae` — see the LTX23 entry above.
     "sol_vae",
+    // 裁定 113: `spark_h3` — see the LTX23 entry above.
+    "spark_h3",
     // 台帳 §1-297: `keep_reference_latents` — see the LTX23 entry above.
     "keep_reference_latents",
     // 台帳 §1-299: `keep_text_conditioning` is NOT listed — LTX takes it.
@@ -772,6 +778,10 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
   // Sol-H3-VAE (MiniMax H3 only — both LTX engines declare `sol_vae`). Last,
   // like the real LTX `CHAIN_REJECT_TABLE` row; refused only when `true`.
   { field: "sol_vae", feature: "sol_vae", isSet: (v) => v === true },
+  // 裁定 113: Spark-H3 (MiniMax H3 only — both LTX engines declare
+  // `spark_h3`). Right after `sol_vae`, as in the real LTX
+  // `CHAIN_REJECT_TABLE`; refused only when `true`.
+  { field: "spark_h3", feature: "spark_h3", isSet: (v) => v === true },
   // 台帳 §1-297: keep reference latents resident (MiniMax H3 only — both LTX
   // engines declare `keep_reference_latents`). Last, like the real LTX
   // `CHAIN_REJECT_TABLE` row; refused only when `true`.
@@ -1584,6 +1594,10 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
         acceleration: {
           attention_backends: ["sdpa", "sage"],
           sage_available: true,
+          // 裁定 113: reported AVAILABLE for `sage_available`'s reason — the
+          // Settings panel's Spark-H3 button is selectable. Tests that need the
+          // unavailable state construct their own /status body.
+          spark_h3_available: true,
         },
         // Object-tracking capability block (§3-54, 2026-09-11). Reported as
         // AVAILABLE for the same reason `sage_available` is: that is the state
@@ -2098,6 +2112,20 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
           },
         };
       }
+    }
+
+    // 裁定 113: LTX engines refuse a `true` (the server's REJECT_TABLE row).
+    if (req.spark_h3 === true && (MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("spark_h3")) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "FEATURE_UNSUPPORTED",
+            message: "'spark_h3' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            detail: "Spark-H3 は MiniMax H3 専用です。LTX では使えません。",
+          },
+        },
+      };
     }
 
     // 台帳 §1-297: LTX engines refuse a `true` (the server's REJECT_TABLE row).

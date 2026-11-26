@@ -15,6 +15,7 @@ import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { comfortFramesForBudget, resolveSequenceRowsBudget } from "../../shell/comfortTable";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
+import type { H3SequenceRows } from "../../shell/h3SequenceRows";
 import { resolveOutpaintComfortBudget } from "../../shell/outpaintBudget";
 import {
   clearInpaintSlots,
@@ -230,6 +231,11 @@ export interface UseInpaintFormResult {
    * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
   fixedSampling: SamplingValues | null;
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
+  /** 裁定 113: MiniMax H3's sequence estimate of this job
+   * (`shell/h3SequenceRows.ts`'s `h3SequenceRows`) — what Spark-H3's "short
+   * video" note reads. `null` on LTX, or while the size or frame count cannot be
+   * read. */
+  sequenceRows: H3SequenceRows | null;
 
   /** 確定した窓（毎描画導出。置けなければ `null`）。 */
   window: InpaintWindow | null;
@@ -834,6 +840,7 @@ export function useInpaintForm(deps: UseInpaintFormDeps = {}): UseInpaintFormRes
     samplingConstraints,
     fixedSampling,
     setSamplingValue,
+    sequenceRows: h3Rows,
     window: placedWindow,
     mapping,
     isOverComfortBudget: overComfort,

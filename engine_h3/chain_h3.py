@@ -41,6 +41,12 @@ pi-H3 the chain is unchanged.
 Sol-H3-VAE (``base.sol_vae``): decided once at the start
 (``pipeline_h3.sol_start``) and handed to the single job's ``_decode`` with
 the joined latents, which judges their size; without it the chain is unchanged.
+
+Spark-H3 (``base.spark_h3``, Docs/MINIMAX_H3_DESIGN.md §6.11): decided once at
+the start (``pipeline_h3.spark_start``); every clip's ``_denoise`` makes and
+closes its own ``SparkClip`` (its dense steps counted from 0). The records come
+from ``pipeline_h3.spark_record``: ``chain.clips[i].spark_h3`` per clip and
+``h3.spark_h3`` for the chain. Without it the chain is unchanged.
 """
 
 from __future__ import annotations
@@ -502,6 +508,12 @@ def run_chain_h3(
         pipe._te_conditioning.begin(P.text_conditioning_heads(requests, keep_te))
         # Sol-H3-VAE: decided once for the chain's one decode (None without sol_vae).
         sol = P.sol_start(base, pipe.device)
+        # Spark-H3: decided once for the chain; each clip's _denoise makes and closes its own state.
+        spark = P.spark_start(base)
+        if spark is not None and spark["unavailable"] is not None:
+            log("chain: spark_h3 not available in this process, the chain runs without it "
+                "(the reason is in h3.spark_h3.detail)")
+        spark_clip_records: list[dict] = []
         pi_feats: list = []         # pi-H3: each clip's last-evaluation rows (CPU)
         pi_drop: list[int] = []     # pi-H3: how many of each clip's first latents are dropped
         pi_clip_records: list[dict] = []
@@ -712,6 +724,9 @@ def run_chain_h3(
                     pi_capture: dict = {}
                     pi_record: dict = {}
                     pi_den_kw = {"pi_capture": pi_capture, "pi_record": pi_record} if pi is not None else {}
+                    # Only a Spark-H3 chain passes the keys (the same way).
+                    spark_rec: dict = {}
+                    spark_den_kw = {"spark": spark, "spark_clip_record": spark_rec} if spark is not None else {}
                     with phases.phase("denoise") as entry:
                         video, audio, prefetch_used = pipe._denoise(
                             req, hidden, tags, phases, entry,
@@ -720,8 +735,10 @@ def run_chain_h3(
                             video_fix=video_fix, audio_fix=audio_fix, refs=ref_rows,
                             video_inject_clean=CHAIN_INJECT_CLEAN,
                             negative_hidden=negative_hidden if has_neg else None,
-                            vsf_scale=float(req.vsf_scale), vsf_report=clip_vsf, **pi_den_kw,
+                            vsf_scale=float(req.vsf_scale), vsf_report=clip_vsf, **pi_den_kw, **spark_den_kw,
                         )
+                    if spark is not None:
+                        spark_clip_records.append(spark_rec)
                     video, audio = video.cpu(), audio.cpu()
                     if pi is not None:
                         pi_feats.append(pi_capture.pop("features"))
@@ -782,6 +799,9 @@ def run_chain_h3(
                     "hidden_rows": int(pi_feats[i].hidden.shape[0]),
                     "dropped_head_latents": int(pi_drop[i]),
                 }
+            if spark is not None:
+                # Only for a Spark-H3 chain: the clip's own h3.spark_h3 (the single job's function).
+                record["spark_h3"] = P.spark_record(spark, [spark_clip_records[i]])[1]
             clip_records.append(record)
             if i == 0:
                 video_cat, audio_cat = video, audio   # with a source: its head is already in it
@@ -871,6 +891,10 @@ def run_chain_h3(
     if base.sol_vae is not None:
         # Only for a sol_vae chain: the one decode's record, as a single job's.
         extra["sol_vae_used"], h3["sol_vae"] = P.sol_record(decode_phases.data.get("decode", {}))
+    if base.spark_h3 is not None:
+        # Only for a Spark-H3 chain: "on" when any clip ran a sparse evaluation; each clip's
+        # own value is in chain.clips[i].spark_h3.
+        extra["spark_h3_used"], h3["spark_h3"] = P.spark_record(spark, spark_clip_records, whole_chain=True)
     chain = layout.to_dict()
     v2v_layout = chain.pop("v2v", None)
     retake_layout = chain.pop("retake", None)

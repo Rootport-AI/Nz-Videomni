@@ -1,0 +1,452 @@
+"""ComfyUI-owned Landmark-v2 Q/K permutation planning.
+
+This is intentionally separate from the Diffusers Spark dispatcher and its
+controller.  It shares only low-level mathematical primitives.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import torch
+
+
+BLOCK_SIZE = 64
+
+
+def _enable_local_imports() -> None:
+    """ComfyUI 0.38 can load a node without adding its directory to sys.path."""
+    node_dir = str(Path(__file__).resolve().parent)
+    if node_dir not in sys.path:
+        sys.path.insert(0, node_dir)
+
+
+@torch.no_grad()
+def build_comfy_reblock_permutations(
+    controller, query_bthd, key_bthd, layout, *, query_sample_indices=None,
+    consume_key=False,
+):
+    try:
+        from .h3_sparse_attention.landmark_direction import (
+            landmark_direction_factors,
+            landmark_single_direction_factor,
+        )
+        from .h3_sparse_attention.landmark_tree_v2 import (
+            PreparedLandmarkTreeV2Permutation,
+        )
+        from .h3_sparse_attention.mahalanobis_kmeans import (
+            hilbert_midpoint_sample_indices,
+        )
+    except ImportError:  # Direct source-tree imports used by tests and development.
+        _enable_local_imports()
+        from h3_sparse_attention.landmark_direction import (
+            landmark_direction_factors,
+            landmark_single_direction_factor,
+        )
+        from h3_sparse_attention.landmark_tree_v2 import (
+            PreparedLandmarkTreeV2Permutation,
+        )
+        from h3_sparse_attention.mahalanobis_kmeans import (
+            hilbert_midpoint_sample_indices,
+        )
+
+    sampled_query = query_sample_indices is not None
+    if query_bthd.ndim != 4 or key_bthd.ndim != 4:
+        raise ValueError("ComfyUI reblock requires BTHD Q/K")
+    if sampled_query:
+        if (query_bthd.shape[0] != key_bthd.shape[0] or
+                query_bthd.shape[2:] != key_bthd.shape[2:] or
+                query_bthd.shape[1] != query_sample_indices.numel()):
+            raise ValueError("sampled ComfyUI reblock requires matching Q samples and K")
+    elif query_bthd.shape != key_bthd.shape:
+        raise ValueError("paired ComfyUI reblock requires equal BTHD Q/K")
+    cfg = controller.config
+    batch, _, heads, dim = query_bthd.shape
+    video_tokens = int(layout.video_tokens)
+    flat_batch = batch * heads
+    clusters = video_tokens // BLOCK_SIZE
+    layout_reuse = cfg.landmark_tree_v2_layout_reuse
+    shared_layout = layout_reuse == "q_from_k"
+    if sampled_query and not shared_layout:
+        raise ValueError("sampled Q planning requires q_from_k layout reuse")
+    fused_root_scores = (
+        cfg.landmark_tree_v2_initial_order == "flat"
+        and cfg.landmark_tree_v2_landmark_mode == "midpoint"
+        and cfg.landmark_tree_v2_landmark_count == 32
+        and cfg.landmark_tree_v2_aggregation == "linear"
+        and cfg.landmark_tree_v2_distance == "cosine"
+        and cfg.landmark_tree_v2_mean_mode == "raw"
+        and cfg.landmark_tree_v2_group_size == 1
+        and dim == 128
+        and video_tokens % BLOCK_SIZE == 0
+    )
+
+    metric_key = (
+        "metric_indices",
+        key_bthd.device.type,
+        key_bthd.device.index,
+        layout.grid,
+        fused_root_scores,
+        clusters,
+    )
+    metric_indices = controller.rope_sol_key_clustering_static.get(metric_key)
+    if metric_indices is None:
+        metric_indices = hilbert_midpoint_sample_indices(
+            layout.grid, clusters, device=key_bthd.device
+        )
+        controller.rope_sol_key_clustering_static[metric_key] = metric_indices
+
+    if sampled_query:
+        if not torch.equal(query_sample_indices.to(metric_indices.device), metric_indices):
+            raise ValueError("sampled Q indices must match the planner's metric indices")
+        query = query_bthd.permute(0, 2, 1, 3).reshape(
+            flat_batch, metric_indices.numel(), dim,
+        )
+        query_metric_indices = torch.arange(metric_indices.numel(), device=key_bthd.device)
+    else:
+        query = (
+            query_bthd[:, :video_tokens]
+            .permute(0, 2, 1, 3)
+            .reshape(flat_batch, video_tokens, dim)
+        )
+        query_metric_indices = metric_indices
+    key = (
+        key_bthd[:, :video_tokens]
+        .permute(0, 2, 1, 3)
+        .reshape(flat_batch, video_tokens, dim)
+    )
+    # Only the chunk producer's private, compact head-major K may be consumed.
+    # Each projection CTA reads all 128 channels before overwriting its rows.
+    inplace_key = (
+        consume_key and shared_layout and key.is_contiguous()
+        and key.dtype == torch.bfloat16 and key.is_cuda and dim == 128
+        and cfg.landmark_tree_v2_mean_mode == "raw"
+    )
+    if shared_layout:
+        # q_reuse_k builds the K ordering only. K clustering features consume
+        # the opposite (Q) second moment; the resulting permutation is then
+        # aliased for Q so no query-side M2, transform, plan, or index batch is
+        # constructed.
+        query_metric = landmark_single_direction_factor(
+            query,
+            key,
+            query_metric_indices,
+            "key",
+            ridge=cfg.rope_sol_key_ridge_epsilon,
+            moment=cfg.landmark_tree_v2_moment_mode,
+        )
+        key_metric = None
+    else:
+        query_metric, key_metric = landmark_direction_factors(
+            query,
+            key,
+            metric_indices,
+            ridge=cfg.rope_sol_key_ridge_epsilon,
+            moment=cfg.landmark_tree_v2_moment_mode,
+        )
+
+    def get_plan(role, plan_batch):
+        plan_key = (
+            "prepared_qk", role,
+            cfg.landmark_tree_v2_initial_order,
+            cfg.landmark_tree_v2_children,
+            cfg.landmark_tree_v2_fanout_mode,
+            cfg.landmark_tree_v2_final_fanout,
+            cfg.landmark_tree_v2_root_fanout,
+            cfg.landmark_tree_v2_landmark_mode,
+            cfg.landmark_tree_v2_landmark_count,
+            cfg.landmark_tree_v2_midpoint_direction_mode,
+            cfg.landmark_tree_v2_aggregation,
+            cfg.landmark_tree_v2_distance,
+            cfg.landmark_tree_v2_mean_mode,
+            cfg.landmark_tree_v2_moment_mode,
+            cfg.landmark_tree_v2_order_mode,
+            cfg.landmark_tree_v2_group_size,
+            layout_reuse,
+            query.device.type,
+            query.device.index,
+            plan_batch,
+            video_tokens,
+            dim,
+            layout.grid,
+        )
+        plan = controller.rope_sol_key_clustering_static.get(plan_key)
+        if plan is not None:
+            return plan
+        plan = PreparedLandmarkTreeV2Permutation(
+            distance=cfg.landmark_tree_v2_distance,
+            max_children=cfg.landmark_tree_v2_children,
+            fanout_mode=cfg.landmark_tree_v2_fanout_mode,
+            final_fanout=cfg.landmark_tree_v2_final_fanout,
+            root_fanout=cfg.landmark_tree_v2_root_fanout,
+            landmark_mode=cfg.landmark_tree_v2_landmark_mode,
+            landmark_count=cfg.landmark_tree_v2_landmark_count,
+            midpoint_direction_mode=cfg.landmark_tree_v2_midpoint_direction_mode,
+            aggregation=cfg.landmark_tree_v2_aggregation,
+            input_unit_means=cfg.landmark_tree_v2_mean_mode == "input_unit",
+            metric_unit_means=cfg.landmark_tree_v2_mean_mode == "metric_unit",
+            order_mode=cfg.landmark_tree_v2_order_mode,
+            group_size=cfg.landmark_tree_v2_group_size,
+            batch=plan_batch,
+            tokens=video_tokens,
+            dim=dim,
+            grid_shape=layout.grid,
+            initial_order=cfg.landmark_tree_v2_initial_order,
+            device=query.device,
+            # The fused spark-h3-kitchen path scatters exact output directly
+            # through query_permutation, so no inverse permutation is needed.
+            return_inverse=False,
+            # Keep this exact route scheduling optimization ComfyUI-local;
+            # Diffusers plans retain their independent default execution.
+            compact_direct_route=True,
+        )
+        controller.rope_sol_key_clustering_static[plan_key] = plan
+        return plan
+
+    if fused_root_scores:
+        key_plan = get_plan("key_fused_root", flat_batch)
+        query_plan = (
+            key_plan if shared_layout else get_plan("query_fused_root", flat_batch)
+        )
+        plan = None
+    else:
+        plan = get_plan(
+            "shared_key" if shared_layout else "combined",
+            flat_batch if shared_layout else 2 * flat_batch,
+        )
+        key_plan = query_plan = None
+
+    if fused_root_scores:
+        key_transformed = key if inplace_key else key_plan.graph_input
+        if key_transformed is None:
+            key_transformed = torch.empty(
+                (flat_batch, video_tokens, dim),
+                device=query.device, dtype=torch.bfloat16,
+            )
+        if shared_layout:
+            query_transformed = None
+        else:
+            query_transformed = query_plan.graph_input
+            if query_transformed is None:
+                query_transformed = torch.empty_like(key_transformed)
+    else:
+        transformed = key if inplace_key else plan.graph_input
+        if transformed is None:
+            transformed = torch.empty(
+                (
+                    flat_batch if shared_layout else 2 * flat_batch,
+                    video_tokens,
+                    dim,
+                ),
+                device=query.device,
+                dtype=torch.bfloat16,
+            )
+    if fused_root_scores:
+        try:
+            from .h3_sparse_attention.landmark_projection import project_bthd
+            from .h3_sparse_attention.landmark_v2_fused_node import (
+                fused_proxy_directions,
+            )
+            from .h3_sparse_attention.reblock_hierarchy import build_reblock_hierarchy
+        except ImportError:  # Direct source-tree imports used by tests and development.
+            _enable_local_imports()
+            from h3_sparse_attention.landmark_projection import project_bthd
+            from h3_sparse_attention.landmark_v2_fused_node import (
+                fused_proxy_directions,
+            )
+            from h3_sparse_attention.reblock_hierarchy import build_reblock_hierarchy
+
+        # Cholesky returns a column-major view.  Materializing these tiny
+        # 128x128 factors in row-major order lets the fused full-token kernel
+        # use coalesced loads while preserving X @ L (not X @ L.T).
+        query_factor = query_metric.to(torch.bfloat16).contiguous()
+        key_factor = (
+            None if shared_layout else key_metric.to(torch.bfloat16).contiguous()
+        )
+        root_key = (
+            "fused_root_static", query.device.type, query.device.index,
+            video_tokens, flat_batch, layout.grid,
+            cfg.landmark_tree_v2_children,
+            cfg.landmark_tree_v2_fanout_mode,
+            cfg.landmark_tree_v2_final_fanout,
+            cfg.landmark_tree_v2_root_fanout,
+        )
+        root_static = controller.rope_sol_key_clustering_static.get(root_key)
+        if root_static is None:
+            landmark = torch.arange(32, device=query.device)
+            starts = landmark * video_tokens // 32
+            ends = (landmark + 1) * video_tokens // 32
+            midpoint_indices = starts + (ends - starts) // 2
+            weights = (ends - starts).to(torch.int32)
+            hierarchy = build_reblock_hierarchy(
+                video_tokens,
+                (cfg.landmark_tree_v2_children,),
+                grid_shape=tuple(layout.grid),
+                final_fanout=cfg.landmark_tree_v2_final_fanout,
+                root_fanout=cfg.landmark_tree_v2_root_fanout,
+                fanout_mode=cfg.landmark_tree_v2_fanout_mode,
+            )
+            root_capacities = tuple(
+                BLOCK_SIZE * value for value in hierarchy.budgets(0, clusters)
+            )
+            root_static = (midpoint_indices, weights, root_capacities)
+            controller.rope_sol_key_clustering_static[root_key] = root_static
+        midpoint_indices, root_weights, root_capacities = root_static
+        center_batch = flat_batch if shared_layout else 2 * flat_batch
+        centers = torch.empty(
+            (center_batch, 32, dim), device=query.device, dtype=torch.bfloat16
+        )
+        torch.bmm(
+            key.index_select(1, midpoint_indices), query_factor,
+            out=centers[:flat_batch],
+        )
+        if not shared_layout:
+            torch.bmm(
+                query.index_select(1, midpoint_indices), key_factor,
+                out=centers[flat_batch:],
+            )
+        directions = fused_proxy_directions(
+            centers,
+            root_weights[None, :].expand(center_batch, -1),
+            root_capacities,
+        )
+        key_root_scores = key_plan.graph_root_scores
+        if key_root_scores is None:
+            key_root_scores = torch.empty(
+                (flat_batch, video_tokens, len(root_capacities) - 1),
+                device=query.device, dtype=torch.float32,
+            )
+        if shared_layout:
+            query_root_scores = None
+        else:
+            query_root_scores = query_plan.graph_root_scores
+            if query_root_scores is None:
+                query_root_scores = torch.empty_like(key_root_scores)
+
+        def project_key():
+            project_bthd(
+                key_bthd[:, :video_tokens], query_factor, out=key_transformed,
+                block_m=128,
+                score_directions=directions[:flat_batch],
+                score_out=key_root_scores,
+            )
+
+        def project_query():
+            if shared_layout:
+                raise AssertionError("q_reuse_k must not build a query projection")
+            project_bthd(
+                query_bthd[:, :video_tokens], key_factor, out=query_transformed,
+                block_m=128,
+                score_directions=directions[flat_batch:],
+                score_out=query_root_scores,
+            )
+
+        if shared_layout:
+            project_key()
+            # ComfyUI 0.38/0.39 defaults to cudaMallocAsync. Capturing this
+            # allocation-heavy planner in a private torch CUDA graph can free
+            # captured temporaries through the async allocator and abort the
+            # process. Keep ComfyUI's allocator and execute only the planner
+            # eagerly; the Spark attention kernel itself remains unchanged.
+            key_permutation, key_inverse = key_plan.run(
+                key_transformed,
+                root_scores=key_root_scores,
+                allow_cuda_graph=False,
+            )
+            query_permutation = key_permutation
+            query_inverse = key_inverse
+        else:
+            project_key()
+            project_query()
+            key_permutation, key_inverse = key_plan.run(
+                key_transformed,
+                root_scores=key_root_scores,
+                allow_cuda_graph=False,
+            )
+            query_permutation, query_inverse = query_plan.run(
+                query_transformed,
+                root_scores=query_root_scores,
+                allow_cuda_graph=False,
+            )
+    else:
+        if inplace_key:
+            try:
+                from .h3_sparse_attention.landmark_projection import project_bthd
+            except ImportError:
+                from h3_sparse_attention.landmark_projection import project_bthd
+            project_bthd(
+                key_bthd[:, :video_tokens], query_metric.to(torch.bfloat16),
+                out=transformed, block_m=128,
+            )
+        else:
+            torch.bmm(
+                key.to(torch.bfloat16),
+                query_metric.to(torch.bfloat16),
+                out=transformed[:flat_batch],
+            )
+        if not shared_layout:
+            torch.bmm(
+                query.to(torch.bfloat16),
+                key_metric.to(torch.bfloat16),
+                out=transformed[flat_batch:],
+            )
+
+    inverse_norms = None
+    if not fused_root_scores and cfg.landmark_tree_v2_mean_mode == "input_unit":
+        inverse_norms = plan.graph_inverse_norms
+        if inverse_norms is None:
+            inverse_norms = torch.empty(
+                (
+                    flat_batch if shared_layout else 2 * flat_batch,
+                    video_tokens,
+                    1,
+                ),
+                device=query.device,
+                dtype=torch.float32,
+            )
+        inverse_norms[:flat_batch].copy_(
+            key.float().norm(dim=-1, keepdim=True).clamp_min(1e-12).reciprocal()
+        )
+        if not shared_layout:
+            inverse_norms[flat_batch:].copy_(
+                query.float().norm(dim=-1, keepdim=True).clamp_min(1e-12).reciprocal()
+            )
+
+    if not fused_root_scores:
+        combined_permutation, combined_inverse = plan.run(
+            transformed,
+            inverse_norms=inverse_norms,
+            allow_cuda_graph=False,
+        )
+        key_permutation = combined_permutation[:flat_batch]
+        key_inverse = (
+            combined_inverse[:flat_batch] if combined_inverse is not None else None
+        )
+        if shared_layout:
+            query_permutation = key_permutation
+            query_inverse = key_inverse
+        else:
+            query_permutation = combined_permutation[flat_batch:]
+            query_inverse = (
+                combined_inverse[flat_batch:]
+                if combined_inverse is not None else None
+            )
+        hierarchy = plan.hierarchy
+    else:
+        hierarchy = key_plan.hierarchy if shared_layout else query_plan.hierarchy
+    controller.landmark_reblock_hierarchy = hierarchy
+    controller.counts["reblock_plan_calls"] += 1
+    if inplace_key:
+        controller.counts["reblock_plan_inplace_key"] += 1
+
+    def unflatten(value):
+        if value is None:
+            return None
+        return value.reshape(batch, heads, video_tokens)
+
+    return (
+        unflatten(query_permutation),
+        unflatten(query_inverse),
+        unflatten(key_permutation),
+        hierarchy,
+    )

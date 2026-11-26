@@ -277,6 +277,7 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     "references": {"references": [{"kind": "picture", "id": "img-123", "slot": 1}]},
     "pi_h3": {"pi_h3": "4steps"},
     "sol_vae": {"sol_vae": True},
+    "spark_h3": {"spark_h3": True},
     "keep_reference_latents": {"keep_reference_latents": True},
 }
 
@@ -631,7 +632,8 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # ``keep_reference_latents`` (keeping the encoded reference latents, H3 only).
     # ``keep_text_conditioning`` (台帳 §1-299) was a ninth name for a day, until
     # the engine learned it: it is honoured now, so the count is EIGHT again.
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 8
+    # NINE with ``spark_h3`` (Spark-H3, H3 only).
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 9
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -702,16 +704,15 @@ def test_the_negative_prompt_fields_are_honoured_not_merely_unlisted():
     assert not neg_fields & set(ltx25.GOVERNED_FIELDS)
 
 
-def test_the_governed_table_is_empty_and_still_exists():
-    """``GOVERNED_FIELDS`` lost its last three rows to the NAG/VSF increment.
-
-    EMPTY IS A STATE, NOT AN ABSENCE. The name is still read by the
-    classification audit and by ``test_every_governor_is_itself_refused``, whose
-    loop is now honestly empty; deleting the table would make the audit
-    incomplete rather than smaller, and would leave the next sub-parameter
-    behind the next 422 with nowhere obvious to go."""
-    assert ltx25.GOVERNED_FIELDS == {}
-    assert ltx25.CHAIN_GOVERNED_FIELDS == {}
+def test_the_governed_table_holds_only_the_spark_h3_numbers():
+    """``GOVERNED_FIELDS`` lost its last three rows to the NAG/VSF increment,
+    and was KEPT while empty (the classification audit and
+    ``test_every_governor_is_itself_refused`` read it by name). The next
+    sub-parameters behind a 422 then went there: MiniMax H3's two Spark-H3
+    numbers, inert without ``spark_h3`` (Docs/MINIMAX_H3_DESIGN.md §6.11)."""
+    spark = {"spark_h3_topk_ratio": "spark_h3", "spark_h3_full_steps": "spark_h3"}
+    assert ltx25.GOVERNED_FIELDS == spark
+    assert ltx25.CHAIN_GOVERNED_FIELDS == spark
 
 
 def test_nag_no_longer_names_a_published_limitation():
@@ -766,6 +767,7 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
         "references",
         "pi_h3",
         "sol_vae",
+        "spark_h3",
         "keep_reference_latents",
     }
 
@@ -792,7 +794,7 @@ def test_alpha_gen_is_honoured_and_says_so_in_every_table():
     assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
     assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 8
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 9
     # The needle the generic honoured-read audit below also relies on, named
     # here so a reader of this feature's tests sees it.
     assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)
@@ -930,6 +932,8 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     "pi_h3": {"pi_h3": "4steps"},
     # MiniMax H3 only (Sol-H3-VAE), on the chain schema too.
     "sol_vae": {"sol_vae": True},
+    # MiniMax H3 only (Spark-H3), on the chain schema too.
+    "spark_h3": {"spark_h3": True},
     "keep_reference_latents": {"keep_reference_latents": True},
 }
 
@@ -1238,10 +1242,11 @@ def test_no_chain_mode_is_refused_any_more():
     # acceptance test below rather than only by this set shrinking.
     # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX, and
     # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109), and so is
-    # ``pi_h3`` (MiniMax H3's pi-H3), and so is ``sol_vae`` (its Sol-H3-VAE), and so is ``keep_reference_latents``.
+    # ``pi_h3`` (MiniMax H3's pi-H3), and so is ``sol_vae`` (its Sol-H3-VAE), and so is
+    # ``spark_h3`` (its Spark-H3), and so is ``keep_reference_latents``.
     assert refused == {
         "pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3", "sol_vae",
-        "keep_reference_latents",
+        "spark_h3", "keep_reference_latents",
     }
 
 

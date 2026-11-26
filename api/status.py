@@ -37,7 +37,8 @@ def get_status(context: AppContext = Depends(get_context)) -> dict:
         # Acceleration capability (ADDITIVE, top level — the FROZEN
         # vram_optimization block above is deliberately left untouched):
         # which attention backends this build understands, and whether the
-        # non-default one can actually run here. See
+        # non-default one can actually run here, and whether MiniMax H3's
+        # Spark-H3 can (spark_h3_available, the same four-row rule). See
         # PipelineManager.acceleration_status_block for the truth table.
         "acceleration": pm.acceleration_status_block(),
         # Object tracking, ADDITIVE and deliberately its own block:

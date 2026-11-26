@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import dataclass
 
 import torch
@@ -156,12 +157,18 @@ def load_mapped_to(
     header,
     mapping: dict[str, str],
     device: torch.device,
+    *,
+    reader=None,
 ) -> int:
     """Read ``mapping``'s file tensors straight onto ``device`` into a meta ``module``; returns bytes.
 
     The direct read of the text encoder: one decoder layer (or the embedding
-    table, or the I2V vision tower) at a time, file -> CPU buffer -> ``device``,
-    so the CPU never holds more than one tensor of it. ``mapping`` is file name ->
+    table, or the I2V vision tower) at a time, so the CPU never holds more than
+    one tensor of it. Without ``reader``: file -> a fresh CPU buffer per tensor
+    (``read_tensors``) -> ``device``. With ``reader`` (an
+    ``engine_h3.unbuffered_read.UnbufferedReader`` for ``path``): the reader
+    reads past the OS cache through its one reused staging buffer and hands
+    over tensors already on ``device`` (台帳 1-303). ``mapping`` is file name ->
     the module's own state-dict key (relative to ``module``). The tensors keep
     the file's dtype (``assign=True``), exactly as :func:`load_streaming` does,
     so a layer read this way computes bit for bit what a streamed-in layer
@@ -170,10 +177,18 @@ def load_mapped_to(
     """
     state: dict[str, torch.Tensor] = {}
     nbytes = 0
-    for key, tensor in read_tensors(path, list(mapping), header):
-        state[mapping[key]] = tensor.to(device)
-        nbytes += tensor.numel() * tensor.element_size()
-        del tensor
+    if reader is None:
+        for key, tensor in read_tensors(path, list(mapping), header):
+            state[mapping[key]] = tensor.to(device)
+            nbytes += tensor.numel() * tensor.element_size()
+            del tensor
+    else:
+        # closing(): the reader's file is closed even when this loop stops early.
+        with closing(reader.read_tensors(path, list(mapping), header, device)) as tensors:
+            for key, tensor in tensors:
+                state[mapping[key]] = tensor
+                nbytes += tensor.numel() * tensor.element_size()
+                del tensor
     result = module.load_state_dict(state, strict=False, assign=True)
     del state
     if result.unexpected_keys:

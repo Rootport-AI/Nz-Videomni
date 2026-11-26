@@ -7303,3 +7303,108 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 186.6 実機の門
 
 - オーナーの実機での確認は、全部済みました。差し替えたあとの注意書き（ON を押すと新しい文が出て、文の中に「メモリ64GB以上推奨」がある）は、2026-11-25 にオーナーが新しい版のプラグインで確かめて合格しています。結果の正本は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §237 です。
+
+## 187. MiniMax H3 の疎な注意 Spark-H3 を操作パネルに足す — Attention の欄の 2 行目「off / Spark-H3」・スライダー 2 本と 10%／20% のマーカー・保存の欄 3 つ・オンのときだけ 3 つの欄を送る・生成ボタンの下の黄色い注意文 2 種類（設計正本 裁定 113・§6.11。2026-11-26）
+
+### 187.1 結論
+
+- **Settings の「Attention機構の実装」の欄の中、「sdpa / sage attention」の行のすぐ下に、2 行目のボタンの行「off / Spark-H3」を置きました。** ベースモデルが MiniMax H3 のときだけ出ます。「Spark-H3」を選んでいるあいだだけ、その下にスライダー「フルで演算する割合」（1〜50%・既定 20%・10% と 20% に快適上限マーカーと同じ見た目の印）と「フル演算するステップ数」（0〜10・既定 2・説明文つき）が出ます。
+- **オンのときだけ、要求に `spark_h3: true`・`spark_h3_topk_ratio`（割合÷100）・`spark_h3_full_steps` の 3 つを載せます。** オフのときは 1 つも載せず、要求の本体は今までと同じです。
+- **Single・Chained・Edit（Retake・Inpainting・Outpainting）の生成ボタンの下に、黄色い注意文を 2 種類出します**（ステップ数が足りないとき・短い動画のとき）。出すだけで、生成ボタンは押せるままです。
+- 動き・文言・条件の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 113・§6.11 で、本節には写しません。**本節は実装の形と、将来の改修者への注意（187.4）の正本です。**
+- 同じテーマで、エンジン・サーバー・インストーラー・Gradio・MCP は別の担当が並行で変えています。本節は操作パネル（段 4）だけです。**実機への配置とオーナーの実機での確認は未了です。**
+
+### 187.2 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは 187.5 に書きます。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts` | 設定 `sparkH3`・`sparkH3TopkPercent`・`sparkH3FullSteps`（範囲と既定の定数、系列の関門の定数 `SPARK_H3_MIN_TOKENS`）。保存と読み戻し（欄が無い・範囲の外・整数でない値は既定）。`withServerDefaults`。`effectiveAccelerationFields` には `spark_h3` の鍵だけ（照合には加わらない）。`accelerationRequestFields` の 3 つの欄。`sparkH3Availability`。注意文の規則の純粋な関数 `sparkH3StepsTooFew`・`sparkH3VideoTooShort` |
+| `shell/useAccelerationSettings.ts` | 書き換えの関数 3 つ（2 つの数は丸めて範囲に収める）と、保存の `useEffect` の依存の配列 |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | 2 行目のボタンの行・スライダー 2 本・説明文。行を隠す条件 `sparkH3Unsupported`。「Spark-H3」のボタンは `spark_h3_available` が明示的に偽のときだけ押せなくし、ツールチップを出す |
+| `shell/featureScope.ts` | `FEATURE_UI` の `spark_h3`（書き戻すのは `sparkH3` だけ）、`SettingsRowsHidden.sparkH3` |
+| `modes/single/FloatSliderField.tsx` | 任意の `markers`。描き方は `SizeSlider` と同じクラス（`size-marker size-marker-comfort`）。渡さない画面の DOM は変わらない |
+| `shell/SparkH3Notes.tsx`（新設） | 2 つの注意文を描くだけの部品（LoRA の注意文と同じ `warning-banner warning-banner-mild`） |
+| `modes/single/SingleScreen.tsx`・`modes/chained/ChainedScreen.tsx`・`modes/edit/EditScreen.tsx` | 注意文の置き場所。Single と Chained は参照素材の注意文の下、Edit の各サブタブは理由の一覧の下（Single と同じ並び） |
+| `modes/chained/ChainedScreen.tsx` | クリップごとの系列の入力を 1 か所（`clipSequenceInputs`）で作り、快適上限マーカーと短い動画の注意文の両方がそれを読むようにした（マーカーの結果は変わらない） |
+| `modes/edit/useInpaintForm.ts`・`useOutpaintForm.ts` | 既にある系列の見積もり（`h3Rows`）を `sequenceRows` として返す |
+| `modes/edit/useRetakeForm.ts` | 系列の見積もり `sequenceRows` を新しく計算して返す（H3 のときだけ。下の 187.3 (c)） |
+| `i18n/strings.ts` | Settings の文言と、2 つの注意文（`sparkH3Notes`。英語と日本語） |
+| `api/types.ts` | `/status` の `acceleration.spark_h3_available`、単発と連結の要求の 3 つの欄 |
+| `bridge/mockBridge.ts` | 開発用の模擬に、LTX の `unsupported_features` の `spark_h3`、LTX の拒否（単発と連結）、`/status` の `spark_h3_available: true`（Sage と同じく、押せる状態を見せるため） |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 3 行（快適上限マーカーの計算は変えていない） |
+
+### 187.3 採った選択と理由
+
+- **(a) 注意文の「ベースモデルが H3」の条件は、保存値の書き戻しに任せました。** LTX では `featureScope.ts` の表が `sparkH3` を `false` に書き戻すので、2 つの規則の関数は `sparkH3` を見るだけで足ります（pi-H3 の `piH3FixedSampling` と同じ扱い）。画面ごとに「行が隠れているか」を渡す口は作っていません。
+- **(b) Single の短い動画の判定は、快適上限マーカーと同じ入力（大きさ・フレーム数と、キーフレーム・参照素材のカードの構成）です。** Chained もマーカーと同じクリップごとの入力、Inpainting と Outpainting はマーカーの見積もりそのものです。
+- **(c) Retake の系列の見積もりは、要求が送る生成の大きさ（`width`・`height`。初期値は素材の実寸から作る）と窓のフレーム数で計算しています。** 計画の付録 A-5 は「`snapshot.mediaWidth`・`mediaHeight`」と書いていましたが、エンジンは窓を要求の大きさで読む（`engine_h3/chain_h3.py` の `_read_retake_window`）ので、生成の大きさに合わせました。設計正本 §6.11 の「短い動画の判定」も、生成の大きさと窓のフレーム数で計算すると書いています（実物に合わせて直してあります）。素材が上限より大きいときや、利用者が大きさを変えたときに、2 つは食い違います。
+- **(d) 「総ステップ数」は、pi-H3 の固定の値（`fixedSampling`）があればそれ、無ければスライダーの値です。** どちらも無い画面（ステップ数のスライダーが無いエンジン）では注意文 A は出ません。
+- **(e) 2 つの数は、書き換えの関数で丸めて範囲に収めます。** 数値の欄に小数を打っても、保存されるのは整数です（読み戻しが小数を既定に戻すため、そのまま保存すると次の起動で値が消える）。
+
+### 187.4 将来の改修者への注意
+
+- **(a)** 3 つの欄は、共通の関数 `accelerationRequestFields` から、単発・連結・バッチ・Edit の全部の要求へ同じ規則で載ります。Alpha Gen の送信（`useAlphaGenForm.ts`）は欄を 1 つずつ書き出す作りで、Spark-H3 は載せていません（Alpha Gen は LTX 2.5 専用）。
+- **(b)** LTX では行が隠れ、`sparkH3` は `false` へ戻ります。行の出し分けだけを変えて書き戻しを外すと、LTX の要求に `spark_h3: true` が載って 422 になり、注意文も LTX で出るようになります（187.3 (a)）。
+- **(c)** 注意文の条件に「使える環境かどうか」（`spark_h3_available`）を足さないこと（設計正本 §6.11。規則を増やさない）。生成ボタンを止める理由の一覧にも入れないこと。
+- **(d)** `effectiveAccelerationFields` の戻り値の型は、Spark-H3 の 2 つの数の鍵を除いています。快適上限の表の `requires` の値は文字列か真偽で、数を入れると照合の型が合わないためです。
+
+### 187.5 テスト
+
+- `shell/sparkH3.test.ts`（新設）: 保存と読み戻し（無い欄・範囲の外・小数・型違いは既定）、書き換えの関数の丸め、オフでは 0 個・オンでは 3 個の欄（割合は÷100）、単発・連結・バッチの本文、オフの本文が既定の本文と同じこと、`featureScope`（行が隠れ、書き戻すのは `sparkH3` だけ）、`sparkH3Availability` の 3 値、2 つの注意文の関数の真偽の表（<・=・>、オフ、フル 0、pi-H3、12287／12288、`null`、Chained の 1 本だけ短い場合）。
+- `shell/SettingsPanel.test.tsx`: 行の出し分け、使えないときのボタンとツールチップ、不明のときは押せること、スライダーの範囲と既定、マーカーが 10 と 20 にあること、オフでスライダーが消えて値は残ること、説明文、日本語の文言。
+- `modes/single/FloatSliderField.test.tsx`: `markers` を渡さないときの DOM、マーカーの位置と範囲の外の印を落とすこと。
+- `shell/AppShell.sparkH3.test.tsx`（新設）: 模擬のサーバー越しに、LTX で書き戻されて注意文が出ないこと、Single（pi-H3 の 2 steps／4 steps、22 フレーム）と Chained（39 フレームのクリップ）で注意文が出て生成ボタンが押せること、Edit の 3 つのサブタブで注意文が出ること。
+- `modes/edit/EditScreen.retake.test.tsx`・`OutpaintingPanel.h3.test.tsx`・`EditScreen.inpaint.test.tsx`: Edit の各サブタブで、注意文が出ても生成ボタンが押せて、3 つの欄が送られること（Retake はオフのとき欄が無いことも。3 つとも、ステップ数の注意文と短い動画の注意文の両方）。
+- `bridge/mockBridge.h3.test.ts`: 模擬の LTX の `unsupported_features` で `spark_h3` が `sol_vae` のすぐ後ろにあること（本物のサーバーの拒否の表の順）と、LTX が単発と連結の `spark_h3: true` を断ること。
+- `shell/sparkH3.test.ts` には、`spark_h3_available` が偽でも、保存の `sparkH3` が真なら要求に 3 つの欄がそのまま載ること（Sage と同じ扱い）も入れました。
+- ほかに、設定の型と模擬の一覧に欄が増えたことに合わせた既存の試験の期待値の更新（`accelerationSettings.test.ts`・`useAccelerationSettings.test.ts`・`featureScope.test.ts`・`mockBridge.test.ts`・`useBaseModels.test.ts`・`comfortTable.test.ts`・`useGenerationForm.test.ts`・`prefillSeed.test.ts`）。
+
+### 187.6 実機の門
+
+- 実機への配置と、オーナーの実機での確認は未了です。確認の項目の正本は、起票されたあとのバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 です。
+
+## 188. Settings の文言 2 か所に主語を足す — Spark-H3 の「フル演算するステップ数」の説明文と、sage attention の注意文・Gradio も同じ文にそろえる・注意文の位置は変えない（設計正本 §6.11。2026-11-26）
+
+### 188.1 結論
+
+- **オーナーの指示（2026-11-26）で、Settings の 2 つの文の頭に主語を足しました。** 英語と日本語の両方です。動きと、文の出る位置は変えていません。
+  - 「フル演算するステップ数」のスライダーの下の説明文: 頭に「フル演算するステップ数は、」を足しました。
+  - sage attention の注意文: 頭に「sage attentionでは、」を足しました。sage attention と Spark-H3 を両方選ぶと、この注意文は Spark-H3 のスライダーと説明文の下に出て、Attention の行から離れます。主語を付けて、どの選択の注意かが分かるようにしました（位置は変えない。設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.11 の「既知の限界」）。
+- **Gradio の同じ 2 つの文も、同じ文にそろえました**（バックエンドの `gradio_ui/i18n.py`）。Gradio では sage の文が Attention の欄の説明として、sdpa を選んでいるときも出ているので、主語が付くと意味がはっきりします。
+- 日本語の文は `i18n/strings.ts` が正本です（ステップ数の説明文は、設計正本 §6.11 にも引用があり、合わせて直しました）。MCP の説明文と README は、主語のある別の言い回しで書いているので、変えていません。
+- 本節より前の記録（§55 の sage の注意文など）は、当時の文のまま残します。
+
+### 188.2 英語の文
+
+| キー | 新しい英語の文 |
+|---|---|
+| `accelSparkH3FullStepsNote` | `For "Full-attention steps", about 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).` |
+| `accelSageNote` | `With sage attention, fine details of the output change even with the same seed (the numeric precision differs). Speed is about 1.2-1.6x.` |
+
+- ステップ数の文の主語は、英語のスライダーの表示名 `Full-attention steps` を、既存の文と同じく引用符で囲んで使いました。
+- Gradio の `accel_info_attention` も、`accelSageNote` と同じ英語の文です。
+
+### 188.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | `accelSparkH3FullStepsNote` と `accelSageNote` の英語と日本語 |
+| `shell/SettingsPanel.test.tsx` | 文を期待値にしている 4 か所（sage の英語の書き出しの正規表現 2 か所、ステップ数の英語の定数、日本語の全文） |
+
+- `shell/SettingsPanel.tsx` の並びと、注意文の位置は変えていません。
+- バックエンドの側は、`gradio_ui/i18n.py`（`accel_info_attention`・`accel_info_spark_h3_full_steps` の英語と日本語を、操作パネルと同じ文に）と、`tests/test_gradio_ui.py`・`tests/test_gradio_handlers.py`（期待値と、sage の文の主語を確かめる 2 行）です。
+
+### 188.4 機械の門と配置
+
+- 型検査（`npm run typecheck`）は、エラーがありませんでした。
+- 操作パネルの試験の全件（`npx vitest run --exclude "**/backend.integration.test.ts"`）は、212 ファイル・4,211 件がすべて合格しました。
+- Gradio の試験（`tests/test_gradio_ui.py`・`tests/test_gradio_handlers.py`）は、352 件が合格しました。
+- `build.ps1` で作り直し、配布用の写し（`AviUtl2-Plugin/NzVideomni.aux2`）を更新しました。開発機の AviUtl2 への配置は、AviUtl2 が閉じたあとに `deploy.ps1` で行いました（2026-11-26）。
+
+### 188.5 実機の門
+
+- オーナーの実機での確認（台帳 1-301 の「文言」）は合格しました（2026-11-26）。Settings で sage attention と Spark-H3 を選ぶと、説明文が「フル演算するステップ数は、…」、注意文が「sage attentionでは、…」で始まっていました。結果の正本は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §239.11 です。

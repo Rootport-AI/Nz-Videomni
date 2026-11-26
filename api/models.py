@@ -767,6 +767,29 @@ class GenerateRequest(BaseModel):
     # 連結スキーマにも同じ形で置く。GET /status には載せない（pi_h3 と同じ規律）。
     sol_vae: bool = False
 
+    # spark_h3: MiniMax H3 の高速化 Spark-H3（本体の注意の計算を間引く疎な注意。
+    # 設計正本は Docs/MINIMAX_H3_DESIGN.md §6.11）。既定の false は今日の生成と
+    # 一切変わらない（エンジンへの送り物も計算も同じ）。【重要】true のときは
+    # 出力が変わる。attention_backend（sdpa／sage）に重ねて使い、最初の
+    # spark_h3_full_steps ステップと、系列が短いジョブは間引かずに計算する。
+    # 使えない環境（部品が無い・GPU の系統が合わない）で指定されても受付では
+    # 断らず、Spark なしで完走し、metadata.json の spark_h3_used が "on->off"
+    # になる。使えるかどうかは GET /status の acceleration.spark_h3_available。
+    # true のときだけワーカーへ送る加算的コントラクトで、spark_h3_used は
+    # true のジョブだけに入る（"on"＝間引いた評価があった）。
+    # 【エンジン差】H3 専用の機能で、LTX 2.3／2.5 は true を 422
+    # FEATURE_UNSUPPORTED で断る（各アダプタの REJECT_TABLE）。
+    # 連結スキーマにも同じ形で置く。
+    spark_h3: bool = False
+    # spark_h3_topk_ratio: Spark-H3 の「フルで演算する割合」（0.01〜0.5）。
+    # 丸めずにそのままエンジンへ渡す。spark_h3 が false のときは使わない
+    # （LTX 2.3／2.5 でも、この欄だけでは断らない）。
+    spark_h3_topk_ratio: float = Field(0.2, ge=0.01, le=0.5)
+    # spark_h3_full_steps: Spark-H3 の「フル演算するステップ数」（0〜10）。
+    # 最初のこの数のステップは間引かずに計算する（連結はクリップごとに数え直す）。
+    # spark_h3 が false のときは使わない（spark_h3_topk_ratio と同じ扱い）。
+    spark_h3_full_steps: int = Field(2, ge=0, le=10)
+
     # keep_reference_latents: MiniMax H3 の参照素材（Ref2VA の参照画像・参照動画・
     # 参照音声）を符号化した結果を、ワーカーのメインメモリに保持する。既定の
     # false は今日の生成と一切変わらない。true のときは、同じアップロードの
@@ -1519,6 +1542,16 @@ class GenerateChainRequest(BaseModel):
     # true を 422 FEATURE_UNSUPPORTED で断る（各アダプタの CHAIN_REJECT_TABLE）。
     # 実際に使えたかどうかは metadata.json の sol_vae_used（true のジョブだけ）。
     sol_vae: bool = False
+    # spark_h3 / spark_h3_topk_ratio / spark_h3_full_steps: 詳細は
+    # GenerateRequest の同名フィールドを参照（MiniMax H3 の高速化 Spark-H3。
+    # 既定 false は今日の連結と一切変わらない）。連結・V2V・Retake の全クリップに
+    # 1 つの指定が効き、フル演算のステップはクリップごとに数え直す。LTX 2.3／2.5
+    # は spark_h3 の true を 422 FEATURE_UNSUPPORTED で断る（各アダプタの
+    # CHAIN_REJECT_TABLE）。実際に効いたかどうかは metadata.json の
+    # spark_h3_used（true のジョブだけ）。
+    spark_h3: bool = False
+    spark_h3_topk_ratio: float = Field(0.2, ge=0.01, le=0.5)
+    spark_h3_full_steps: int = Field(2, ge=0, le=10)
     # keep_reference_latents: 詳細は GenerateRequest の同名フィールドを参照
     # （MiniMax H3 の参照素材の符号化結果の保持。既定 false は今日の連結と
     # 一切変わらない）。LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る
@@ -1985,7 +2018,8 @@ class GenerateChainRequest(BaseModel):
         ``embed_mp4_metadata`` is transcribed for the same reason (the stored
         record would otherwise claim the default), and so are ``vram16_mode``,
         ``shift_video`` and ``shift_audio`` (MiniMax H3's; ``None`` on LTX) and
-        ``pi_h3`` / ``sol_vae`` / ``keep_reference_latents`` (MiniMax H3's;
+        ``pi_h3`` / ``sol_vae`` / ``spark_h3`` (with its two numbers) /
+        ``keep_reference_latents`` (MiniMax H3's;
         ``"off"`` / ``False`` on LTX, which refuses any other) and
         ``keep_text_conditioning`` (every engine's; an LTX chain forwards it
         to the worker as the single path does).
@@ -2037,6 +2071,9 @@ class GenerateChainRequest(BaseModel):
             vram16_mode=self.vram16_mode,
             pi_h3=self.pi_h3,
             sol_vae=self.sol_vae,
+            spark_h3=self.spark_h3,
+            spark_h3_topk_ratio=self.spark_h3_topk_ratio,
+            spark_h3_full_steps=self.spark_h3_full_steps,
             keep_reference_latents=self.keep_reference_latents,
             keep_text_conditioning=self.keep_text_conditioning,
             width=self.width,

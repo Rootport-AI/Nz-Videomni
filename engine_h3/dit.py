@@ -70,7 +70,8 @@ unchanged. ``H3DiT.forward`` additionally takes ``tokens_box`` so that the
 caller holds no reference to the token embedding (Docs/MINIMAX_H3_DESIGN.md
 §6.5). The negative prompt's V sign flip (``H3Attention.vsf``, 台帳 §1-127) is
 the same function (``engine_h3.vsf.flip_values``) on the off path and in VRAM
-16GB mode.
+16GB mode, and so is the attention's one entry, :func:`attend` (Spark-H3's
+branch, ``H3Attention.spark``; Docs/MINIMAX_H3_DESIGN.md §6.11).
 
 The model is built under ``with torch.device("meta"):``; ``swap_in_int8_linears``
 (``engine_h3.quant_linear``) then replaces the four quantized Linears of each
@@ -239,6 +240,17 @@ def _attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, backend: str) 
     return out.squeeze(0).transpose(0, 1)
 
 
+def attend(attn: "H3Attention", q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    """The attention of one block (or one head group of VRAM 16GB mode's), q, k, v [S, H, D]
+    -> [S, H, D]. ``attn.spark`` None (every job without Spark-H3, every dense evaluation, the
+    token refiner): :func:`_attention` with the block's backend, as before. Else Spark-H3's
+    sparse attention of this evaluation (``engine_h3.spark_h3.SparkClip``) at the block's
+    index ``attn.spark_layer`` (Docs/MINIMAX_H3_DESIGN.md §6.11)."""
+    if attn.spark is None:
+        return _attention(q, k, v, attn.attention_backend)
+    return attn.spark.attention(q, k, v, attn.spark_layer)
+
+
 # --------------------------------------------------------------------------- #
 # modules (names = Comfy-Org tensor names)
 # --------------------------------------------------------------------------- #
@@ -253,6 +265,10 @@ class H3Attention(nn.Module):
     vsf = None
     #: VSF's measurement: a ``vsf.H3VsfProbe`` on block 0 of one forward, else None.
     vsf_probe = None
+    #: Spark-H3: an ``engine_h3.spark_h3.SparkClip`` set by ``H3DiT.forward`` for a sparse
+    #: evaluation (None = :func:`_attention`; the token refiner's stay None), and the block's index.
+    spark = None
+    spark_layer = -1
 
     def __init__(self, hidden: int, heads: int, head_dim: int) -> None:
         super().__init__()
@@ -281,7 +297,7 @@ class H3Attention(nn.Module):
             k = apply_rope(k, rope_cos, rope_sin)
         if self.vsf_probe is not None:
             self.vsf_probe.observe(q, k, head0=0)
-        out = _attention(q, k, v, self.attention_backend)
+        out = attend(self, q, k, v)
         return self.out_proj(out.reshape(s, self.heads * self.head_dim))
 
 
@@ -635,6 +651,7 @@ class H3DiT(nn.Module):
         vsf=None,
         vsf_probe=None,
         capture: dict | None = None,
+        spark=None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """One model evaluation. Returns (v_video [Nv, 96], v_audio [Na, 32]) float32,
         the data-direction velocity (x0 = x + sigma * v).
@@ -652,6 +669,10 @@ class H3DiT(nn.Module):
         ``hidden`` (the video rows of the hidden state, its dtype), ``t_emb``
         (``[M, rank]`` float32) and ``time_index`` (the video rows'). None (the
         default) adds nothing to the evaluation.
+        ``spark`` (Spark-H3, ``engine_h3.spark_h3``): the clip's ``SparkClip`` for a sparse
+        evaluation (``SparkClip.for_evaluation``), whose ``attention`` every one of the 50
+        blocks then calls with its index; None (the default, and every dense evaluation)
+        = :func:`_attention`, as before. The token refiner is not touched.
         """
         if tokens is None:
             tokens = tokens_box.pop()
@@ -677,6 +698,8 @@ class H3DiT(nn.Module):
             block.vram16 = vram16  # every forward, None too: a kept DiT must not carry it over
             block.attn.vsf = vsf  # None too, for the same reason
             block.attn.vsf_probe = vsf_probe if i == 0 else None
+            block.attn.spark = spark  # None too, for the same reason
+            block.attn.spark_layer = i
 
         t_emb = self.adaln_embed(t_unique)
         time_index = time_index.to(device=t_emb.device, dtype=torch.long)

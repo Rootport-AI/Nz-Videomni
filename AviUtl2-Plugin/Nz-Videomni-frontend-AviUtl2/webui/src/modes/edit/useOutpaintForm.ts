@@ -21,6 +21,7 @@ import {
 } from "../../shell/generationConstraints";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
+import type { H3SequenceRows } from "../../shell/h3SequenceRows";
 import { resolveOutpaintComfortBudget } from "../../shell/outpaintBudget";
 import { OUTPAINT_LORA_NAME } from "../../lora/controlLoras";
 import type { GenerationPrefill } from "../../timeline/generationPrefill";
@@ -224,6 +225,11 @@ export interface UseOutpaintFormResult {
    * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
   fixedSampling: SamplingValues | null;
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
+  /** 裁定 113: MiniMax H3's sequence estimate of this job
+   * (`shell/h3SequenceRows.ts`'s `h3SequenceRows`) — what Spark-H3's "short
+   * video" note reads. `null` on LTX, or while the size or frame count cannot be
+   * read. */
+  sequenceRows: H3SequenceRows | null;
 
   /** The `num_frames` that will actually be sent: the stored value capped by
    * {@link numFramesCeiling}. DERIVED every render, never stored (§4-4). */
@@ -723,6 +729,7 @@ export function useOutpaintForm(deps: UseOutpaintFormDeps = {}): UseOutpaintForm
     samplingConstraints,
     fixedSampling,
     setSamplingValue,
+    sequenceRows: h3Rows,
     numFrames,
     numFramesCeiling,
     setNumFrames,

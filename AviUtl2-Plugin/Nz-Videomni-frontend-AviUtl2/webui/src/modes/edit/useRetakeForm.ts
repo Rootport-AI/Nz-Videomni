@@ -32,6 +32,8 @@ import {
   stage2WindowOptionLabel,
 } from "../../shell/tokenBudget";
 import { resolveComfortRow } from "../../shell/comfortTable";
+import { H3_NO_CONDITIONING, h3SequenceRows } from "../../shell/h3SequenceRows";
+import type { H3SequenceRows } from "../../shell/h3SequenceRows";
 import type { Stage2Window } from "../../shell/tokenBudget";
 import { FALLBACK_APP_CONFIG, MIN_HEIGHT, MIN_WIDTH } from "../single/defaultConfig";
 import { fileNameFromPath } from "../single/keyframeUtils";
@@ -240,6 +242,12 @@ export interface UseRetakeFormResult {
    * at (`piH3FixedSampling`), or `null` — handed to `SamplingFields`. */
   fixedSampling: SamplingValues | null;
   setSamplingValue: (key: keyof SamplingValues, value: number) => void;
+  /** 裁定 113: MiniMax H3's sequence estimate of the window
+   * (`shell/h3SequenceRows.ts`'s `h3SequenceRows`, at the generation size and
+   * {@link windowFrames}, with no keyframes or Reference cards — a Retake
+   * sends none) — what Spark-H3's "short video" note reads. `null` on LTX, or
+   * while the size or frame count cannot be read. */
+  sequenceRows: H3SequenceRows | null;
 
   /** Stage-2（アップスケール工程）のクリップ長。Chain と同じ選択肢（§3-165 で
    * 15 段）で、既定は `standard`。既定のときは**リクエストに載せない**（サーバ
@@ -551,6 +559,10 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
   );
   const width = widthOverride ?? derived.width;
   const height = heightOverride ?? derived.height;
+  // 裁定 113: the window's sequence estimate on MiniMax H3, at the size the
+  // request sends (the engine reads the window at that size) — the same
+  // function Inpainting / Outpainting call for their comfort marker.
+  const sequenceRows = h3 ? h3SequenceRows({ width, height, ...H3_NO_CONDITIONING }, windowFrames) : null;
 
   // `snap` の意味は Create/Chain の `setWidth`/`setHeight` と一字一句同じ:
   // スライダー（と数値欄のステッパー）は丸めてクランプ、手打ちは素通し。
@@ -834,6 +846,7 @@ export function useRetakeForm(deps: UseRetakeFormDeps = {}): UseRetakeFormResult
     samplingConstraints,
     fixedSampling,
     setSamplingValue,
+    sequenceRows,
     stage2Window,
     setStage2Window,
     stage2WindowLabel,

@@ -35,6 +35,8 @@ from .handlers import (
     FUSED_GGUF_DEQUANT_KERNEL_DEFAULT,
     KEEP_RESIDENT_DEFAULT,
     KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
+    SPARK_H3_FULL_STEPS_DEFAULT,
+    SPARK_H3_RATIO_PERCENT_DEFAULT,
     VRAM16_MODE_DEFAULT_H3,
     a2v_audio_change_handler,
     delete_finished_jobs,
@@ -1250,6 +1252,41 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     info=L("accel_info_attention"),
                 ), "accel_lbl_attention")
                 reg(attention_backend, "accel_info_attention", "info")
+                # Spark-H3 (MiniMax H3 only; Docs/MINIMAX_H3_DESIGN.md §6.11):
+                # right under the attention radio, as on the operation panel.
+                # Gated like VRAM 16GB mode below -- built INVISIBLE, shown by
+                # refresh_model_dropdowns when the ACTIVE base model does not
+                # name ``spark_h3`` (both LTX families do), hidden + reset
+                # otherwise (feature_scope.py). The two sliders are shown
+                # whenever the toggle is, on or off (no show/hide by the
+                # toggle). Availability (/status spark_h3_available) is NOT
+                # gated here, for the attention radio's reason: the server
+                # runs the job without Spark-H3 and records "on->off".
+                # Wired into every flow that sends attention_backend (single,
+                # A2V, batch and chain): see dispatch() / chain_dispatch().
+                accel_spark_h3 = reg(gr.Checkbox(
+                    value=False,
+                    label=L("accel_lbl_spark_h3"),
+                    info=L("accel_info_spark_h3"),
+                    visible=False,
+                ), "accel_lbl_spark_h3")
+                reg(accel_spark_h3, "accel_info_spark_h3", "info")
+                accel_spark_h3_ratio = reg(gr.Slider(
+                    minimum=1, maximum=50, step=1,
+                    value=SPARK_H3_RATIO_PERCENT_DEFAULT,
+                    label=L("accel_lbl_spark_h3_ratio"),
+                    info=L("accel_info_spark_h3_ratio"),
+                    visible=False,
+                ), "accel_lbl_spark_h3_ratio")
+                reg(accel_spark_h3_ratio, "accel_info_spark_h3_ratio", "info")
+                accel_spark_h3_full_steps = reg(gr.Slider(
+                    minimum=0, maximum=10, step=1,
+                    value=SPARK_H3_FULL_STEPS_DEFAULT,
+                    label=L("accel_lbl_spark_h3_full_steps"),
+                    info=L("accel_info_spark_h3_full_steps"),
+                    visible=False,
+                ), "accel_lbl_spark_h3_full_steps")
+                reg(accel_spark_h3_full_steps, "accel_info_spark_h3_full_steps", "info")
                 # 利用可否は API 側が黙って no-op にするのでクライアント側で
                 # ゲートしない（attention と同じ理由。すぐ上の attention_backend
                 # の注釈を参照）。
@@ -1614,6 +1651,8 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                      batch_img_dir_v, batch_chunked_upsample_v,
                      gen_scope_v, steps_v, shift_video_v, shift_audio_v,
                      accel_vram16_v, accel_pi_h3_v,
+                     accel_spark_h3_v, accel_spark_h3_ratio_v,
+                     accel_spark_h3_full_steps_v,
                      nag_enabled_v, nag_scale_v, nag_tau_v, nag_alpha_v,
                      nag_method_v, vsf_scale_v, attention_backend_v, accel_prefetch_v,
                      accel_keep_resident_v, accel_fused_dequant_v, accel_vae_v,
@@ -1653,7 +1692,10 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     num_inference_steps=steps_v, shift_video=shift_video_v,
                     shift_audio=shift_audio_v,
                     vram16_mode=bool(accel_vram16_v),
-                    pi_h3=pi_h3_v, sol_vae=sol_vae_v)
+                    pi_h3=pi_h3_v, sol_vae=sol_vae_v,
+                    spark_h3=bool(accel_spark_h3_v),
+                    spark_h3_ratio_percent=accel_spark_h3_ratio_v,
+                    spark_h3_full_steps=accel_spark_h3_full_steps_v)
                 return
 
             rows = batch_rows_v or []
@@ -1773,6 +1815,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                 # the Set audios scan used, so a Start never re-judges against
                 # a different cap than the table the user is looking at.
                 num_frames=int(num_frames_v or MAX_FRAMES),
+                # Spark-H3 (MiniMax H3): same reason as the Acceleration
+                # fields above -- the runner reads the snapshot.
+                spark_h3=bool(accel_spark_h3_v),
+                spark_h3_ratio_percent=accel_spark_h3_ratio_v,
+                spark_h3_full_steps=accel_spark_h3_full_steps_v,
             )
 
             ok, msg = get_runner().start(snapshot, rows, api)
@@ -1828,6 +1875,11 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     # same reason as the sliders above. pi-H3 (MiniMax H3,
                     # single-only) right after it, for the same reason.
                     accel_vram16, accel_pi_h3,
+                    # Spark-H3 (MiniMax H3): the toggle and its two sliders,
+                    # here for the same reason (the Chain flow appends them
+                    # after its stage-2 window instead).
+                    accel_spark_h3, accel_spark_h3_ratio,
+                    accel_spark_h3_full_steps,
                     nag_enabled, nag_scale, nag_tau, nag_alpha,
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
@@ -2311,8 +2363,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # APPENDED at the very end of the chain inputs list below, in that
         # order (attention_backend, accel_prefetch, accel_keep_resident,
         # accel_fused_dequant, accel_vae, accel_keep_resident_embeddings),
-        # followed by the Output embed-mp4-metadata checkbox and,
-        # LAST, the chain-only stage-2 window dropdown.
+        # followed by the Output embed-mp4-metadata checkbox, the
+        # chain-only stage-2 window dropdown and, LAST, the MiniMax H3
+        # Spark-H3 toggle and its two sliders.
         # generate_chain keeps
         # ``src_audio`` as its last POSITIONAL parameter (never wired from this
         # tab, and relied on positionally by tests/test_gradio_v2v_a2v.py's
@@ -2324,15 +2377,18 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
         # ALL of them (and the ``args[:-N]`` slice) by one -- a silent
         # mis-wiring otherwise. tests/test_gradio_ui.py locks the order.
         def chain_dispatch(*args):
-            yield from chain_generate(*args[:-8],
-                                      attention_backend=args[-8],
-                                      block_swap_prefetch=args[-7],
-                                      keep_resident=args[-6],
-                                      fused_gguf_dequant_kernel=args[-5],
-                                      vae_mode=args[-4],
-                                      keep_resident_embeddings=args[-3],
-                                      embed_mp4_metadata=args[-2],
-                                      stage2_window=args[-1])
+            yield from chain_generate(*args[:-11],
+                                      attention_backend=args[-11],
+                                      block_swap_prefetch=args[-10],
+                                      keep_resident=args[-9],
+                                      fused_gguf_dequant_kernel=args[-8],
+                                      vae_mode=args[-7],
+                                      keep_resident_embeddings=args[-6],
+                                      embed_mp4_metadata=args[-5],
+                                      stage2_window=args[-4],
+                                      spark_h3=bool(args[-3]),
+                                      spark_h3_ratio_percent=args[-2],
+                                      spark_h3_full_steps=args[-1])
 
         chain_generate_btn.click(
             on_generate_btn_start, inputs=lang_state, outputs=chain_generate_btn,
@@ -2352,8 +2408,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             # the VAE radio (PrunaVAED, VERIFICATION_LOG §52) AND the
             # keep-resident-embeddings checkbox, then the Output
             # embed-mp4-metadata checkbox, then the stage-2 window
-            # dropdown, are APPENDED last (in that order) and reach
-            # the handler as keywords via chain_dispatch above.
+            # dropdown, then the Spark-H3 toggle and its two sliders, are
+            # APPENDED last (in that order) and reach the handler as
+            # keywords via chain_dispatch above.
             inputs=[prompt, negative, chain_width, chain_height,
                     chain_crop_enabled, chain_crop_w, chain_crop_h, chain_fps, chain_seed,
                     chain_overlap, chain_overlap_strength,
@@ -2364,7 +2421,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
                     nag_method, vsf_scale, attention_backend, accel_prefetch,
                     accel_keep_resident, accel_fused_dequant, accel_vae,
                     accel_keep_resident_embeddings, output_embed_mp4_metadata,
-                    chain_stage2_window],
+                    chain_stage2_window,
+                    accel_spark_h3, accel_spark_h3_ratio,
+                    accel_spark_h3_full_steps],
             outputs=[chain_progress, chain_job, chain_video],
         ).then(
             make_generate_btn_restore("btn_concat"),
@@ -2606,6 +2665,9 @@ def build_ui(base_url: str, api_key: str | None = None) -> gr.Blocks:
             "accel_keep_resident_embeddings": accel_keep_resident_embeddings,
             "accel_vram16": accel_vram16,
             "accel_pi_h3": accel_pi_h3,
+            "accel_spark_h3": accel_spark_h3,
+            "accel_spark_h3_ratio": accel_spark_h3_ratio,
+            "accel_spark_h3_full_steps": accel_spark_h3_full_steps,
             "accel_fused_dequant": accel_fused_dequant,
             # Each keyframe slot's strength slider, as kf_strength_<slot>.
             **{f"kf_strength_{slot_n}": slot[3]

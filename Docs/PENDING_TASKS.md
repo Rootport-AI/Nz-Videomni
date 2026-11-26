@@ -21,6 +21,15 @@
 - **判断材料**: 暫定の線の値は快適上限表 [`COMFORT_LIMIT_TABLE.md`](COMFORT_LIMIT_TABLE.md) §1.1、概算の前提と印の位置は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §222、概算と実機 1 点（1280×768×73）との照合は同 §221.9。線の決まり（実測で快適だった最も大きい総行数にちょうど置く）は快適上限表 §17.5 と設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 94。
 - **出典**: オーナー裁定 2026-11-22（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 105・裁定 106）。
 
+### 1-303. MiniMax H3 のテキストエンコーダーの先読み（起票：2026-11-26）
+
+- **概要**: MiniMax H3 のテキストエンコーダー（50 層）は、いまは 1 層ずつ、計算の直前にファイルから GPU へ読み込み、計算が済むと捨てている。先読みの仕組みは無い。ある程度先読みして処理すれば、動画の生成の時間を短くできる可能性がある。
+- **分かっていること**: 1 回の通しは約 20 秒で、短いプロンプトでは、その大部分がファイルからの読み込みと GPU への転送で、計算はわずかである。連結では、クリップごとに約 24GiB の重みをディスクから読み直している（メインメモリに入りきらず、OS のキャッシュが効いていない）。この段の VRAM は 8GB に収まっている。テキストエンコーダーの条件付けのキャッシュ（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-298・1-299）に当たれば、この段はまるごと省かれるが、キャッシュを作る最初の回には必ず走る。内訳・切り分け・見積もりは調査ノート [`H3_TE_READ_NOTES.md`](H3_TE_READ_NOTES.md)。
+- **いまの状態**: 方向 A の最初の段（OS のキャッシュを通さない読み方と、使い回す約 128MiB のピン留めの置き場。1 本の流れのまま）は、開発機の確認に合格し、main へ取り込んだ（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-304）。出力は今までの読み方と一致し、連結の中で段はクリップごとに約 20 秒から約 6〜10 秒になり、VRAM の山は変わらなかった（設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 114・§4、記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §240）。見込みから外れた点と、確かめていないこと（遅いディスクの機械で遅くなる可能性を含む）は、調査ノート §9。検証用の別の機械で `unbuffered_read` を見る分は、§2 の 1-301 の一覧に入っている。
+- **方針（オーナー裁定 2026-11-26）**: まず、約 20 秒の内訳（ディスクの読み込み・GPU への転送・待ち）を開発機で測る。速くする方向は 2 つあり、分けて設計する——方向 A は 1 回の読み込みを速くする（先読み）、方向 B は読み込みの回数を減らす（連結の最初に、全クリップのプロンプトを 1 回の読み込みで処理する）。いまテキストエンコーダーの工程が VRAM 8GB に収まっているなら、将来の VRAM 8GB への対応を損なわないよう A と B を分けて設計する（B は VRAM の消費を増やしうる）。すでに 8GB に収まっていないなら、今回は無理に 8GB に収めない。計測のあとの裁定（2026-11-26）: 方向 A から進める。まず「読み方と置き場を変える」（1 本の流れのまま）を作り、そのあとで「読み込み・転送・計算を重ねて進める先読み」に進むかを、効果を見て決める。方向 B は、方向 A の結果を見てから、別に設計するかを決める（調査ノート §10）。
+- **これからすること**: 先読み（読み込み・転送・計算を重ねて進める形）に進むかどうかと、方向 B をどうするかを決める（着手はオーナーの指示で）。
+- **出典**: オーナー指示 2026-11-26。計測の結果は調査ノート [`H3_TE_READ_NOTES.md`](H3_TE_READ_NOTES.md)、方向 A の最初の段の裁定は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) 裁定 114。
+
 ## 2. 実装済み・ユーザーのテスト待ち
 
 実装は済んでいて、オーナー本人の実機・目視・実GPUテストが未了のもの。各項目は「何を操作して確認するか → どうなれば合格か」のチェックリストで書く。全項目が合格して空になったら、本節は見出しごと削除する。
@@ -28,22 +37,25 @@
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
 - **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。Sol-H3-VAE（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-295。2026-11-24 にクローズ）の重みの取得の確認も、ここにまとめた。
-- **これからすること**: 検証用の別の機械で、下のインストーラーの確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
-- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。本節が実機確認の項目の正本。
+- **これからすること**: 検証用の別の機械で、1-301 の「検証用の別の機械」の一覧を行う（本項の分も、そこに入っている）。本項は、その一覧の次の 3 つが合格したら閉じる——「インストーラー」の表の `pi_h3_4steps`・`pi_h3_2steps`・`h3_sol_vae` の 3 行が `PASS`、「生成 1 本目」の mp4 info に `"sol_vae_used": "on"`、「生成 2 本目」の mp4 info に `pi_h3_used` の欄。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
+- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。実機確認の項目の正本は 1-301 の「検証用の別の機械」。
 
-#### インストーラー（main へ取り込んだあと、検証用の別の機械で）
+### 1-301. MiniMax H3 の Spark-H3（注意の計算を間引く高速化）の実機での確認（起票：2026-11-26）
 
-前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3・Sol-H3-VAE のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
+- **概要**: Spark-H3 を、エンジン・サーバー・インストーラー・操作パネル・Gradio・MCP に足した。開発機の GPU での確認と、オーナーの開発機での実機の確認は済み、main へ取り込んだ（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §239）。残るのは、オーナーが後日、検証用の別の機械で行う確認だけ（オーナー指示 2026-11-26）。
+- **これからすること**: 検証用の別の機械で、下の確認を行う。合格したら、本項と 1-294 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、README の Spark-H3 の対応 GPU の RTX 30 シリーズを「確認済み」に直す。1-294 に当たるのは「インストーラー」「生成 1 本目」「生成 2 本目」の各項（どの欄を見るかは 1-294）。
+- **出典**: 作りは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11、裁定は同 裁定 113、実験の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238。一覧から外した項目と、それを固定しているテスト・確認の対応は記録簿 §239.9、Spark-H3 ありの組み合わせの機械の確認は同 §239.10、開発機での実機の確認の結果は同 §239.11。本節が実機確認の項目の正本（1-294 の分を含む）。
+- 結果の見方: 「mp4 info」は、できた mp4 を Toolbox の mp4 info に落としたときの表示。`unbuffered_read` は、単発では `h3` → `phases` → `encode` → `te` の中にある。
 
-- [ ] `install-MiniMaxH3.bat` を実行する → 最後の表で `pi_h3_4steps` と `pi_h3_2steps` の 2 行が `PASS` になる。
-- [ ] （続き）`models\MiniMaxH3\VAE\pi-H3\` を見る → `pi_h3_4step_dwd_adapter_int8_convrot.safetensors` と `pi_h3_2step_dwd_adapter_int8_convrot.safetensors` の 2 本があり、どちらも 2,192,176,240 バイト。
-- [ ] （続き）PowerShell で 2 本の SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §18.2 の値と一致する。
-- [ ] （続き）`install-MiniMaxH3.bat` の最後の表（1 つ目の項目で見た表）で、`h3_sol_vae` の行が `PASS` になっている。
-- [ ] （続き）`models\MiniMaxH3\VAE\Sol\` を見る → `minimax_h3_sol_vae_int8_convrot.safetensors` があり、大きさが設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.8 の「重みと取得」のバイト数と一致する。
-- [ ] （続き）PowerShell でこのファイルの SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 設計正本 §6.8 の「重みと取得」の値と一致する。
-- [ ] その機械で、操作パネルか Gradio のどちらかで「Fast VAE」を pi-H3_4s にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
-- [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
-- 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
+#### 検証用の別の機械（RTX 30 シリーズ。インストーラー 1 回と生成 2 本。1-294 を兼ねる。`unbuffered_read` の欄も、ここで見る）
+
+前提: その機械で、main を取り込み（`git pull`）、`setup.bat` を済ませておく。pi-H3 と Sol-H3-VAE のファイルが無い機械なら、インストーラーがこの実行で取得する（すでにある機械では、表はそのファイルを見る）。時間は、その機械の生成の速さと取得するファイルの量によるので、見積もっていない。
+
+- [ ] **インストーラー**: `install-MiniMaxH3.bat` を実行する → Spark-H3 の段に「GPU の系統: 8.6（sm86）」と「Spark-H3 の部品を入れました（…）」の行が出る。最後の表で、`pi_h3_4steps`・`pi_h3_2steps`・`h3_sol_vae` の 3 行が `PASS`。
+- [ ] **生成 1 本目**（Sol と Spark-H3）: 操作パネルの Single で、Turbo LoRA の 4 ステップ・Spark-H3 あり（割合 20%・フル演算するステップ数 1）・Fast VAE を Sol・大きさ 1280×768・フレーム数 56 以上・今まで使っていないプロンプトで生成する → 完走し、絵と音が崩れていない。mp4 info に `"spark_h3_used": "on"`・`"sol_vae_used": "on"`・`"unbuffered_read": "on"` がある。
+- [ ] **生成 2 本目**（pi-H3 と Spark-H3）: Turbo LoRA を外し、Fast VAE を pi-H3_4s に替えて、ほかは 1 本目と同じで生成する → 完走し、絵と音が崩れていない。mp4 info に `"spark_h3_used": "on"` と `pi_h3_used` の欄がある。
+- 補足: プロンプトを今まで使っていないものにするのは、テキストエンコーダーの条件付けのキャッシュが on で、プロンプトが前回と同じだと、テキストエンコーダーの段が省かれて `unbuffered_read` の欄が出ないため。2 本目で Turbo LoRA を外すのは、pi-H3 と Turbo LoRA の併用が非推奨（設計正本 裁定 107）のため。
+- 補足: 生成が完走したのに、`spark_h3_used`・`sol_vae_used`・`unbuffered_read` のどれかが `"on"` でなかった場合（`"on->off"` など）は、その欄の値と、理由の欄（`reason`・`unbuffered_read_reason`）の文を監督に伝える（使えない環境で今までの動きに戻るのは作りのとおりなので、理由を見て判断する）。
 
 ## 3. 将来の研究課題
 
@@ -186,6 +198,7 @@
   - MiniMax H3 の pi-H3 の Retake で、冒頭と末尾の凍結部分に、ちらつくブロックノイズが出た（オーナーの実機での確認 2026-11-23。裁定は「今回は直さず記録する」）。事実と関連の記録は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「知られている性質」。原因は調べていません。
   - MiniMax H3 のサーバーのログで、テキストエンコーダーの段（encode）の進捗が「6/5」「5/4」のように、番号が総数を超えて表示される（オーナーが以前から見ていた症状で、実害が少ないため放置していた。オーナー指示 2026-11-25）。単発（`generate text encode`）は「3/5 → 4/5 → 5/5 → 6/5」や「3/4 → 4/4 → 5/4」、連結（`chain text encode`）は「3/4 → 4/4 → 5/4」と、段の最後の行だけが総数を 1 超えます（段の最初の行は「1/N」で、0 ではなく 1 から始まります）。キャッシュの ON／OFF にかかわらず出ており（1-298 の GPU での確認のログ `Docs/Outputs-archive/h3-tecache-gates-2026-11-25/logs/server.stderr.log` の単発の 6/5 と連結の 5/4、`Docs/Outputs-archive/h3-refcache-gates-2026-11-24/logs/server.console.excerpt.log` の 1-297 の確認の 5/4）、1-298 の変更で起きたものではありません。判断材料として、番号と総数を出している場所は、worker 側が `engine_h3/pipeline_h3.py` の `_encode`（`self._progress("encode", index, total)`。総数は `encode_steps`）、ログの行を組み立てる側が `services/engines/ltx/adapter.py` の `_log_stage_progress` を呼ぶ手前（`done = idx if is_step else idx + 1`。`encode` は `_STEP_STAGES` に入っていないので `idx + 1` の側を通る）です。worker 側の最後の呼び出し（`self._progress("encode", 3 + int(has_neg), total)` など）は番号に総数と同じ値を渡すので、`+ 1` された行が総数を超える、というところまでは読み取れましたが、原因としては確かめていません（原因は未調査）。実害の範囲: `encode` の段の進捗の番号は、操作パネルの進捗の帯の位置の計算に使われていません（`_progress_frac` は `encode` で番号を読まない。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §235.3 の棚卸し）。ログの見た目だけの症状です。
   - ベースモデルを切り替えて戻すと、戻った側の重みの選択が `default` になる（設計の文書の記述と、仕様書・実装が食い違っている）。`POST /pipeline/load` を `base_model` だけ指定して呼ぶと、切り替え先の選択は全部のカテゴリが `default` から始まります（`api/pipeline.py` の `carried = pm.active_models if not base_changed else {}` と、その次の `effective` の行）。読み込みが成功すると、その選択が状態ファイル（`state.json`）のそのベースモデルの欄に書かれ（`services/pipeline_manager.py` の `_remember` → `services/runtime_state.py` の `save`）、前に選んでいた名前は上書きされます。仕様書 [`../Videomni_Backend_Specification.md`](../Videomni_Backend_Specification.md) §6.1 の呼び方の表の「`base_model` のみ」の行は、実装と同じことを書いています。一方、設計 [`MULTI_ENGINE_DESIGN.md`](MULTI_ENGINE_DESIGN.md) §6.3 は「2 回目以降は、`state.json` が覚えている、そのベースモデルで最後に使った組み合わせ」と書いており、`webui/src/shell/useBaseModels.ts` のベースモデルの切り替えの所のコメントと、`services/runtime_state.py` の `save` の説明文も、覚えている選択が戻る前提で書いてあります。覚えている選択が実際に使われるのは、サーバーの起動のときだけです（`api/context.py` の `_restore_selection`）。操作パネルのヘッダーのベースモデルの切り替えは、選択を空にしてベースモデルだけを送るので（`useBaseModels.ts` の `client.loadPipeline({}, id)`）、コードの上では同じ動きになります（実機では未確認）。観測は、[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-299 の GPU での確認で、MCP の `load_pipeline` を `base_model` だけで呼んで MiniMax H3 へ戻したとき、H3 の変換器の選択が `default` になったこと（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §236）。**決めること**: 実装を設計 §6.3（覚えている選択へ戻す）に寄せるか、文書を仕様書（`default` から始まる）に寄せるか。オーナーの判断が要ります。
+  - MiniMax H3 で、ワーカーが立ち上がって最初のジョブのテキストエンコーダーの段に、読み込みと計算の外の約 13 秒が乗ることがある。オーナーが操作パネルで流した連結 2 本（2026-11-26。どちらも、記録の上では立ち上がって最初のジョブ）のうち 1 本で観測し、もう 1 本では起きませんでした。数字は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §240.9。過去の記録にも「起動して最初のジョブでだけ、段が 14〜18 秒長い」という観測があります（調査ノート [`H3_TE_READ_NOTES.md`](H3_TE_READ_NOTES.md) §3）が、同じものかは確かめていません。原因は確かめていません。
 - **前提**: 症状は門の台本（一時サーバーと MCP の stdio クライアント）で繰り返し観測しました。操作パネルや Gradio で同じ症状が出るかは未確認です。
 - **留意**: 調べるときは仮説を立てて順番に潰す（先行の設計変更へ跳ばない）。新しい件が見つかったら本項に足し、別番号を立てません。
 - **出典**: オーナー指示 2026-11-11。記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §206.11。
@@ -365,13 +378,6 @@
 - **概要**: ホスト（`webview_host.cpp`）には `NavigationStarting` が無く、初回の読み込みより後にトップレベルの遷移が起きると、成功すればページ自体が置き換わり（操作パネルが消える）、ダウンロード以外の理由で失敗すれば Chromium のエラーページで止まる（どちらも再読み込みの経路が無い）。いまこの遷移を起こすのは `💾`（透過つき動画のダウンロード。遷移がダウンロードに化けるのでページは残る）だけで、実害は無い。直すなら「初回以外の遷移は取り消す、ただしバックエンドの origin へのダウンロードは通す」と「失敗したら `index.html` へ戻す」の 2 点。
 - **出典**: 第 3 弾の目視 G5 の手直し（[`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §157.7）。
 - **状態**: 将来の改修項目。
-
-#### 3-247. MiniMax H3 の Sparse Attention（注意の疎化）の導入調査（起票：2026-10-21）
-
-- **概要**: Attention を間引いて 1 ステップを速くする方式（Sol-Attn・VSA・SpargeAttn・Cube／SubBlock Sparse）。Turbo と原理的に併用できる。
-- **判断材料**: 各方式の特徴・外部の実測・未確認の点は研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。H3・VRAM 16GB mode・現行のヘッド分割に合うかと、実装の費用は確かめていない。外部のベンチマークは本製品の実測値として扱わない（同 §14.6）。
-- **出典**: 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §14.4。
-- **状態**: 将来の研究課題（着手時期未定）。
 
 #### 3-248. MiniMax H3 の Cross-step Cache（ステップ間の再利用）の研究（低優先度）（起票：2026-10-21）
 

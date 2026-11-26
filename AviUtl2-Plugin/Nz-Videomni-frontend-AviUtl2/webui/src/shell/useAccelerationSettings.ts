@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  SPARK_H3_FULL_STEPS_MAX,
+  SPARK_H3_FULL_STEPS_MIN,
+  SPARK_H3_TOPK_PERCENT_MAX,
+  SPARK_H3_TOPK_PERCENT_MIN,
   effectiveAcceleration,
   fastVaeSettings,
   readStoredAcceleration,
@@ -68,6 +72,16 @@ export interface UseAccelerationSettingsResult {
   /** Write-through to `localStorage`, same rationale as
    * {@link setKeepReferenceLatents} (台帳 §1-298). INDEPENDENT of it. */
   setKeepTextConditioning: (value: boolean) => void;
+  /** Write-through to `localStorage`, same rationale as {@link setVaeMode}
+   * (裁定 113): Spark-H3 on / off. The two slider values below are kept
+   * while it is off. */
+  setSparkH3: (value: boolean) => void;
+  /** Write-through: Spark-H3's full-attention ratio in whole percent, rounded
+   * and clamped into 1-50. */
+  setSparkH3TopkPercent: (value: number) => void;
+  /** Write-through: Spark-H3's full-attention steps, rounded and clamped into
+   * 0-10. */
+  setSparkH3FullSteps: (value: number) => void;
   /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
    * panel's Output row — whether finished mp4s carry their generation
    * conditions. A standing preference, persisted like the rows above. */
@@ -104,7 +118,8 @@ export interface UseAccelerationSettingsResult {
  * Output row that shares this store; it too was persisted from its first day,
  * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), `piH3` (ruling 107,
  * 2026-11-23), `solVae` (Sol-H3-VAE, 2026-11-24) and
- * `keepReferenceLatents` (台帳 §1-297) and `keepTextConditioning` (台帳 §1-298).
+ * `keepReferenceLatents` (台帳 §1-297) and `keepTextConditioning` (台帳 §1-298),
+ * and the three Spark-H3 fields (裁定 113).
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -143,6 +158,9 @@ export function useAccelerationSettings(
       solVae: stored.solVae,
       keepReferenceLatents: stored.keepReferenceLatents,
       keepTextConditioning: stored.keepTextConditioning,
+      sparkH3: stored.sparkH3,
+      sparkH3TopkPercent: stored.sparkH3TopkPercent,
+      sparkH3FullSteps: stored.sparkH3FullSteps,
       embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
@@ -163,6 +181,9 @@ export function useAccelerationSettings(
       solVae: acceleration.solVae,
       keepReferenceLatents: acceleration.keepReferenceLatents,
       keepTextConditioning: acceleration.keepTextConditioning,
+      sparkH3: acceleration.sparkH3,
+      sparkH3TopkPercent: acceleration.sparkH3TopkPercent,
+      sparkH3FullSteps: acceleration.sparkH3FullSteps,
       embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
@@ -177,6 +198,9 @@ export function useAccelerationSettings(
     acceleration.solVae,
     acceleration.keepReferenceLatents,
     acceleration.keepTextConditioning,
+    acceleration.sparkH3,
+    acceleration.sparkH3TopkPercent,
+    acceleration.sparkH3FullSteps,
     acceleration.embedMp4Metadata,
   ]);
 
@@ -220,6 +244,23 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, keepTextConditioning: value }));
   }, []);
 
+  const setSparkH3 = useCallback((value: boolean) => {
+    setAcceleration((prev) => ({ ...prev, sparkH3: value }));
+  }, []);
+
+  // The two sliders' values are stored as whole numbers inside their range, so
+  // a hand-typed fraction or an out-of-range value never reaches the store
+  // (`readStoredAcceleration` would read it back as the default).
+  const setSparkH3TopkPercent = useCallback((value: number) => {
+    const next = Math.min(SPARK_H3_TOPK_PERCENT_MAX, Math.max(SPARK_H3_TOPK_PERCENT_MIN, Math.round(value)));
+    setAcceleration((prev) => ({ ...prev, sparkH3TopkPercent: next }));
+  }, []);
+
+  const setSparkH3FullSteps = useCallback((value: number) => {
+    const next = Math.min(SPARK_H3_FULL_STEPS_MAX, Math.max(SPARK_H3_FULL_STEPS_MIN, Math.round(value)));
+    setAcceleration((prev) => ({ ...prev, sparkH3FullSteps: next }));
+  }, []);
+
   const setEmbedMp4Metadata = useCallback((value: boolean) => {
     setAcceleration((prev) => ({ ...prev, embedMp4Metadata: value }));
   }, []);
@@ -255,6 +296,9 @@ export function useAccelerationSettings(
     setFastVae,
     setKeepReferenceLatents,
     setKeepTextConditioning,
+    setSparkH3,
+    setSparkH3TopkPercent,
+    setSparkH3FullSteps,
     setEmbedMp4Metadata,
     resetToServerDefaults,
   };

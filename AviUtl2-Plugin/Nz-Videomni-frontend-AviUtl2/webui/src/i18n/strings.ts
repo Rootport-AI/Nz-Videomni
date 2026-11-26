@@ -2472,6 +2472,14 @@ export const en = {
     unsupportedImage: "Unsupported file type. Please drop an image file (.png, .jpg, .jpeg, .webp).",
     resolveFailed: "Could not resolve the dropped file. Please use the button above instead.",
   },
+  /** 裁定 113: Spark-H3's two notes under the Generate button (Single, Chained,
+   * Edit's Retake / Inpainting / Outpainting) — informational only, Generate
+   * stays enabled. Their rules are `shell/accelerationSettings.ts`'s
+   * `sparkH3StepsTooFew` / `sparkH3VideoTooShort`. */
+  sparkH3Notes: {
+    stepsTooFew: 'Too few steps for Spark-H3 to take effect. Lower "Full-attention steps" in Settings.',
+    videoTooShort: "Spark-H3 has no effect on short videos.",
+  },
   /** M7b: connection settings panel (gear icon in the header). Bridge
    * contract v4's `settings.get`/`settings.set` (see `bridge/types.ts`). */
   settings: {
@@ -2539,11 +2547,25 @@ export const en = {
     /** Tooltip on the sage button while `GET /status` explicitly reports
      * SageAttention as missing (never shown while availability is unknown). */
     accelSageUnavailableTooltip: "SageAttention is not installed on the server, so it cannot be selected.",
+    /** 裁定 113: the "off / Spark-H3" row under the Attention row (MiniMax H3
+     * only). The buttons' own labels are technical names, not translated
+     * (`SettingsPanel.tsx`'s `SPARK_H3_OPTIONS`); this is the row's accessible
+     * name. */
+    accelSparkH3Label: "Spark-H3",
+    /** Tooltip on the Spark-H3 button while `GET /status` explicitly reports it
+     * as unusable (never shown while availability is unknown). */
+    accelSparkH3UnavailableTooltip: "Spark-H3 is not available in this environment.",
+    /** The two sliders shown while Spark-H3 is selected. */
+    accelSparkH3TopkLabel: "Full-attention ratio",
+    /** Tooltip on the ratio slider's two markers (10% and 20%). */
+    accelSparkH3TopkMarkerTitle: "Recommended range (10–20%)",
+    accelSparkH3FullStepsLabel: "Full-attention steps",
+    accelSparkH3FullStepsNote: "For \"Full-attention steps\", about 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).",
     /** Shown under the attention row while sage is selected. Both halves
      * matter: identical seeds no longer reproduce identical output down to
      * the last detail, and the payoff is roughly 1.2-1.6x. */
     accelSageNote:
-      "Fine details of the output change even with the same seed (the numeric precision differs). Speed is about 1.2-1.6x.",
+      "With sage attention, fine details of the output change even with the same seed (the numeric precision differs). Speed is about 1.2-1.6x.",
     /** Acceleration (2026-08-01, backend §44): block-swap prefetch. */
     accelPrefetchLabel: "Block-swap prefetch",
     accelPrefetchOn: "ON",
@@ -4131,6 +4153,10 @@ export const ja: Strings = {
     unsupportedImage: "対応していないファイル形式です。画像ファイル（.png、.jpg、.jpeg、.webp）をドロップしてください。",
     resolveFailed: "ドロップされたファイルを解決できませんでした。上のボタンから選択し直してください。",
   },
+  sparkH3Notes: {
+    stepsTooFew: "Stepsが少ないため、Spark-H3が効きません。Settings画面で「フル演算するステップ数」を下げてください。",
+    videoTooShort: "短い動画ではSpark-H3が効きません。",
+  },
   settings: {
     title: "設定",
     closeDialogAriaLabel: "設定を閉じる",
@@ -4158,7 +4184,13 @@ export const ja: Strings = {
     accelVaeNote:
       "枝刈りした復元処理で映像の書き出しを高速化します。出力品質がわずかに低下する可能性があります。サーバー側に枝刈り版が入っていない場合は自動的に通常の処理に切り替わり、生成そのものには影響しません。",
     accelSageUnavailableTooltip: "サーバーにSageAttentionが導入されていないため選択できません",
-    accelSageNote: "同じシードでも生成結果の細部が変わります（数値精度が異なるため）。速度は約1.2〜1.6倍",
+    accelSparkH3Label: "Spark-H3",
+    accelSparkH3UnavailableTooltip: "この環境では Spark-H3 を使えません。",
+    accelSparkH3TopkLabel: "フルで演算する割合",
+    accelSparkH3TopkMarkerTitle: "推奨の範囲（10〜20%）",
+    accelSparkH3FullStepsLabel: "フル演算するステップ数",
+    accelSparkH3FullStepsNote: "フル演算するステップ数は、総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）",
+    accelSageNote: "sage attentionでは、同じシードでも生成結果の細部が変わります（数値精度が異なるため）。速度は約1.2〜1.6倍",
     accelPrefetchLabel: "Block swapの先読み",
     accelPrefetchOn: "ON",
     accelPrefetchOff: "OFF",

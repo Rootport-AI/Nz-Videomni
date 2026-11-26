@@ -450,8 +450,13 @@ def test_chain_stage2_window_is_the_last_chain_input():
             if getattr(d.fn, "__name__", "") == "chain_dispatch"]
     assert len(deps) == 1
     ins = list(deps[0].inputs)
-    assert ins[-1] is dd
-    assert ins[-2].label == LABELS["en"]["output_lbl_embed_mp4_metadata"]
+    # The last chain-only input; only the three Spark-H3 controls (appended
+    # after it) follow.
+    assert ins[-4] is dd
+    assert ins[-5].label == LABELS["en"]["output_lbl_embed_mp4_metadata"]
+    assert [c.label for c in ins[-3:]] == [
+        LABELS["en"]["accel_lbl_spark_h3"], LABELS["en"]["accel_lbl_spark_h3_ratio"],
+        LABELS["en"]["accel_lbl_spark_h3_full_steps"]]
 
 
 def test_chain_dispatch_forwards_the_trailing_values_as_keywords():
@@ -464,10 +469,13 @@ def test_chain_dispatch_forwards_the_trailing_values_as_keywords():
 
     demo.api._client = httpx.Client(transport=httpx.MockTransport(handler))
     # _chain_args minus the positional src_audio (ui.py never wires it), then
-    # the 8 keyword-forwarded trailing values in wiring order.
+    # the 11 keyword-forwarded trailing values in wiring order.
     args = _chain_args()[:-1] + ["sage", False, True, False, "prune_vaed", True,
-                                 False, "w61"]
+                                 False, "w61", True, 13, 1]
     list(demo.chain_dispatch(*args))
+    assert captured["spark_h3"] is True
+    assert captured["spark_h3_topk_ratio"] == 0.13
+    assert captured["spark_h3_full_steps"] == 1
     assert captured["attention_backend"] == "sage"
     assert captured["block_swap_prefetch"] is False
     assert captured["keep_resident"] is True

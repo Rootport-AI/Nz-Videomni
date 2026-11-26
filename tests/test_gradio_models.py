@@ -546,6 +546,45 @@ def test_refresh_shows_pi_h3_on_h3():
     assert "value" not in update
 
 
+_SPARK_H3_CONTROLS = ("accel_spark_h3", "accel_spark_h3_ratio",
+                      "accel_spark_h3_full_steps")
+
+
+def test_refresh_hides_spark_h3_on_ltx_and_resets_the_toggle_and_sliders():
+    # Both LTX families name spark_h3: the toggle AND its two sliders are
+    # hidden, the toggle back to off (the handlers send the three keys only
+    # when it is on) and the sliders back to their defaults (20 %, 2 steps).
+    assert hidden_controls(["spark_h3"]) == set(_SPARK_H3_CONTROLS)
+    assert (RESET_VALUES["accel_spark_h3"], RESET_VALUES["accel_spark_h3_ratio"],
+            RESET_VALUES["accel_spark_h3_full_steps"]) == (False, 20, 2)
+    updates = _refresh_with(_models_json_with(
+        "LTX23", ["keep_resident_embeddings", "alpha_gen", "vram16_mode",
+                  "pi_h3", "sol_vae", "spark_h3"]))
+    for control in _SPARK_H3_CONTROLS:
+        update = _gated_update(updates, control)
+        assert update["visible"] is False, control
+        assert update["value"] == RESET_VALUES[control], control
+
+
+def test_refresh_shows_spark_h3_and_both_sliders_on_h3():
+    # MiniMax H3 does not publish spark_h3: all three show (the sliders do
+    # not wait for the toggle) and keep the user's values.
+    models_json = dict(SAMPLE_MODELS_MULTI, active_base_model="MiniMaxH3",
+                       base_models=[
+                           {"id": "LTX23", "display_name": "LTX 2.3",
+                            "active": False, "unsupported_features": ["spark_h3"]},
+                           {"id": "MiniMaxH3", "display_name": "MiniMax H3",
+                            "active": True,
+                            "unsupported_features": ["keyframe_strength",
+                                                     "prune_vaed"]},
+                       ])
+    updates = _refresh_with(models_json)
+    for control in _SPARK_H3_CONTROLS:
+        update = _gated_update(updates, control)
+        assert update["visible"] is True, control
+        assert "value" not in update, control
+
+
 _KF_STRENGTH_CONTROLS = [f"kf_strength_{i}" for i in range(1, KF_MAX_SLOTS + 1)]
 
 

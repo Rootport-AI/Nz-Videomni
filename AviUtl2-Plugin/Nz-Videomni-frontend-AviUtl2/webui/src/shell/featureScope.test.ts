@@ -49,6 +49,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "sol_vae",
         "keep_reference_latents",
         "keep_text_conditioning",
+        "spark_h3",
         "fused_gguf_dequant_kernel",
       ].sort(),
     );
@@ -186,6 +187,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["chain", "retake", "two_stage_hq"])).toEqual({
@@ -195,6 +197,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -207,6 +210,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["keep_resident_embeddings"])).toEqual({
@@ -216,6 +220,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["vram16_mode"])).toEqual({
@@ -225,6 +230,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
     expect(settingsRowsHiddenFor(["fused_gguf_dequant_kernel"])).toEqual({
@@ -234,6 +240,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: true,
     });
   });
@@ -247,6 +254,7 @@ describe("settingsRowsHiddenFor", () => {
         fastVae: true,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        sparkH3: false,
         fusedGgufDequantKernel: false,
       });
     }
@@ -260,6 +268,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: true,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -272,6 +281,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: true,
+      sparkH3: false,
       fusedGgufDequantKernel: false,
     });
   });
@@ -288,6 +298,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      sparkH3: false,
       fusedGgufDequantKernel: true,
     });
   });

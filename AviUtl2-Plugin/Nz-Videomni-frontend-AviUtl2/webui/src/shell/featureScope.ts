@@ -58,6 +58,7 @@ export type UiTarget =
   | "settingsRow.fastVae"
   | "settingsRow.keepReferenceLatents"
   | "settingsRow.keepTextConditioning"
+  | "settingsRow.sparkH3"
   | "settingsRow.fusedGgufDequantKernel"
   | "chainPanel.startImageStrength";
 
@@ -190,6 +191,11 @@ interface FeatureUiEntry {
  *    a `resets` too, but MiniMax H3, LTX 2.3 and LTX 2.5 all take it, so
  *    today's server publishes the name for none of them and the row always
  *    shows. The entry stays for an older server that still refuses it on LTX.
+ *  - **spark_h3** (裁定 113 / MINIMAX_H3_DESIGN §6.11) is the "off / Spark-H3"
+ *    row under the Attention row, scoped like `vram16_mode` (MiniMax H3 only,
+ *    so LTX 2.3 / 2.5 publish the name). Only the on/off choice is written
+ *    back (to `false`); the two slider values stay stored, as they do while
+ *    the row shows "off".
  *
  * Note what is NOT here. `single` and `inventory` have no row and never will:
  * Single IS the baseline any engine must serve, and Inventory only browses
@@ -231,6 +237,7 @@ export const FEATURE_UI = {
     disables: ["settingsRow.keepTextConditioning"],
     resets: "keepTextConditioning",
   },
+  spark_h3: { disables: ["settingsRow.sparkH3"], resets: "sparkH3" },
   fused_gguf_dequant_kernel: {
     disables: ["settingsRow.fusedGgufDequantKernel"],
     resets: "fusedGgufDequantKernel",
@@ -498,6 +505,10 @@ export interface SettingsRowsHidden {
   /** The "Text encoder conditioning cache" row and its ON-only note
    * (`keep_text_conditioning`). */
   keepTextConditioning: boolean;
+  /** MiniMax H3's "off / Spark-H3" row with its two sliders (`spark_h3`). The
+   * generate-button notes need no flag of their own: they read `sparkH3`, which
+   * the write-back has already turned off wherever this row is hidden. */
+  sparkH3: boolean;
   /** The Fused GGUF Dequantization Kernel row and its ON-only note
    * (`fused_gguf_dequant_kernel`). */
   fusedGgufDequantKernel: boolean;
@@ -521,6 +532,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     fastVae: disabled.has("settingsRow.fastVae"),
     keepReferenceLatents: disabled.has("settingsRow.keepReferenceLatents"),
     keepTextConditioning: disabled.has("settingsRow.keepTextConditioning"),
+    sparkH3: disabled.has("settingsRow.sparkH3"),
     fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };
 }

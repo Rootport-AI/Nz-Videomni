@@ -76,4 +76,55 @@ describe("FloatSliderField", () => {
     expect(screen.getByRole("slider")).toBeDisabled();
     expect(screen.getByRole("spinbutton")).toBeDisabled();
   });
+
+  it("without markers the label holds the two inputs directly (no wrapper, no line)", () => {
+    const { container } = render(
+      <FloatSliderField label="x" value={5} min={1} max={20} step={1} disabled={false} onChange={vi.fn()} />,
+    );
+    const label = container.querySelector("label")!;
+    expect(Array.from(label.children).map((child) => child.tagName)).toEqual(["SPAN", "INPUT", "INPUT"]);
+    expect(container.querySelector(".size-slider-wrap")).toBeNull();
+    expect(container.querySelector("[data-size-marker]")).toBeNull();
+  });
+
+  it("an empty markers list draws nothing either", () => {
+    const { container } = render(
+      <FloatSliderField label="x" value={5} min={1} max={20} step={1} disabled={false} onChange={vi.fn()} markers={[]} />,
+    );
+    expect(container.querySelector(".size-slider-wrap")).toBeNull();
+  });
+
+  it("markers: comfort-style lines over the range input, at their positions, out-of-range ones dropped (裁定 113)", () => {
+    const { container } = render(
+      <FloatSliderField
+        label="x"
+        value={20}
+        min={1}
+        max={50}
+        step={1}
+        disabled={false}
+        onChange={vi.fn()}
+        markers={[
+          { value: 10, title: "ten" },
+          { value: 20, title: "twenty" },
+          { value: 60, title: "outside" },
+        ]}
+      />,
+    );
+    const wrap = container.querySelector(".size-slider-wrap.size-slider-wrap-marked")!;
+    expect(wrap).not.toBeNull();
+    expect(wrap.querySelector('input[type="range"]')).not.toBeNull();
+    const markers = Array.from(wrap.querySelectorAll<HTMLElement>("[data-size-marker]"));
+    expect(markers.map((m) => [m.dataset.markerValue, m.title])).toEqual([
+      ["10", "ten"],
+      ["20", "twenty"],
+    ]);
+    for (const marker of markers) {
+      expect(marker).toHaveClass("size-marker", "size-marker-comfort");
+      expect(marker).toHaveAttribute("aria-hidden", "true");
+    }
+    expect(markers[0]!.style.getPropertyValue("--marker-pos")).toBe(String(9 / 49));
+    // The number input stays outside the wrapper, as without markers.
+    expect(wrap.querySelector('input[type="number"]')).toBeNull();
+  });
 });

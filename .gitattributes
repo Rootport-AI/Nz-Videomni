@@ -2,3 +2,7 @@
 # so keep git from normalising them.
 *.bat text eol=crlf
 put_*_here.txt text eol=crlf
+# Spark-H3's files are copied byte for byte from the author's release and their
+# SHA-256 is pinned (engine_h3/third_party/spark_h3/README.md): no line-ending
+# conversion on checkout or commit.
+engine_h3/third_party/spark_h3/** -text

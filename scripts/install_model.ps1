@@ -355,6 +355,10 @@ try {
         Write-Info '回線速度により、1 時間前後から数時間かかります。途中で閉じても、再実行で続きから再開します。'
         Write-Info 'スリープすると通信が止まるので、電源設定でスリープを「なし」にしてください。'
         Write-Info 'すでに揃っているファイルは取り直しません。'
+        # Spark-H3 の部品（install_ltx.ps1 の Install-SparkH3Kitchen）。
+        if ($plan.Id -eq 'MiniMaxH3') {
+            Write-Info 'あわせて、GPU の系統に合う Spark-H3 の部品を、作者の GitHub の Releases から取得して、専用の Python 環境に入れます。'
+        }
         Write-Host ''
 
         # MiniMax H3 だけの注意（オーナー裁定 36）。表示するだけで、同意の入力は

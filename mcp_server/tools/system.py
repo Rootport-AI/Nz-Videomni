@@ -35,6 +35,11 @@ async def backend_status() -> dict[str, Any]:
             ``status.state``（パイプラインの状態。``unloaded`` / ``loading``
             / ``ready`` / ``running`` / ``error``）と ``status.base_model``
             （現在選択中のベースモデルのid。例: ``"LTX23"`` / ``"LTX25"``）。
+            ``status.acceleration`` には高速化を使えるかどうかが入ります
+            （例: ``sage_available``、MiniMax H3 の Spark-H3 の
+            ``spark_h3_available``。使えないときに ``submit_generate`` /
+            ``submit_chain`` の ``spark_h3=True`` を送っても断られず、Spark-H3
+            なしで完走します）。
         error: 接続できなかった場合のみ、エラーの説明。
     """
     client = get_client()

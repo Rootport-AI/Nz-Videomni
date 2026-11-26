@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+from .handlers import SPARK_H3_FULL_STEPS_DEFAULT, SPARK_H3_RATIO_PERCENT_DEFAULT
 from .presets import KF_MAX_SLOTS, KF_STRENGTH_DEFAULT
 
 #: Feature name -> the control id(s) it closes. Control ids are defined here
@@ -40,6 +41,11 @@ FEATURE_UI: dict[str, tuple[str, ...]] = {
     # The same radio carries Sol-H3-VAE (the "Fast VAE" row); both LTX
     # families name ``sol_vae`` too.
     "sol_vae": ("accel_pi_h3",),
+    # MiniMax H3 only: both LTX families name ``spark_h3``. The toggle and its
+    # two sliders (the sliders are shown whenever the toggle's row is, on or
+    # off).
+    "spark_h3": ("accel_spark_h3", "accel_spark_h3_ratio",
+                 "accel_spark_h3_full_steps"),
     # Published by the family without GGUF weights (MiniMax H3). The server
     # ignores the value rather than 422-ing it; it is hidden because the
     # control can do nothing there.
@@ -66,6 +72,12 @@ RESET_VALUES: dict[str, str | bool | float] = {
     # Reset to "off" (the server default): the handler sends the key only
     # when it is not "off", so a hidden radio puts nothing on the wire.
     "accel_pi_h3": "off",
+    # Reset to off (the server default): the handlers send the three Spark-H3
+    # keys only when the toggle is on. The sliders go back to their defaults
+    # (the ratio slider is a percent) so they show those again on H3.
+    "accel_spark_h3": False,
+    "accel_spark_h3_ratio": SPARK_H3_RATIO_PERCENT_DEFAULT,
+    "accel_spark_h3_full_steps": SPARK_H3_FULL_STEPS_DEFAULT,
     # Reset to the default (on): the handlers send the key only when the box
     # is OFF, so a hidden box puts nothing on the wire.
     "accel_fused_dequant": True,

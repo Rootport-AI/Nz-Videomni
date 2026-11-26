@@ -450,6 +450,52 @@ describe("EditScreen — Outpainting（MiniMax H3）の pi-H3（裁定 107）", 
     expect(body).toMatchObject({ num_inference_steps: 20, shift_video: 12, shift_audio: 3 });
   });
 
+  // 裁定 113: pi-H3 2 steps with full-attention steps 2 — Spark-H3's steps note
+  // shows under Generate, which stays pressable, and the three keys ride along.
+  it("Spark-H3: pi-H3 のステップ数で注意文 A が出て、Generate は押せ、3 つの欄が飛ぶ", async () => {
+    const user = userEvent.setup();
+    const { panel, request } = renderPi({ ...ACCELERATION_DEFAULTS, piH3: "2steps", sparkH3: true, sparkH3FullSteps: 2 });
+    const note = await screen.findByText(en.sparkH3Notes.stepsTooFew);
+    expect(note).toHaveClass("warning-banner", "warning-banner-mild");
+    await attach(panel, user);
+    setPads(panel, { left: 12, right: 20, bottom: 48 });
+    await pressGenerate(panel, user);
+    await waitFor(() => expect(generateBody(request)).toBeDefined());
+    expect(generateBody(request)).toMatchObject({ spark_h3: true, spark_h3_topk_ratio: 0.2, spark_h3_full_steps: 2 });
+  });
+
+  it("Spark-H3: 小さい素材の動画で注意文 B が出て、Generate は押せ、3 つの欄が飛ぶ", async () => {
+    const user = userEvent.setup();
+    // 256x256（素材の下限）に 32 の余白: 尺が上限の 481 でも系列の見積もりが
+    // 12,288 に届かない。
+    const { panel, request } = renderPi(
+      { ...ACCELERATION_DEFAULTS, sparkH3: true },
+      { media: { durationSec: 8, width: 256, height: 256 } },
+    );
+    expect(screen.queryByText(en.sparkH3Notes.videoTooShort)).toBeNull();
+    await attach(panel, user);
+    setPads(panel, { left: 32 });
+    expect(await screen.findByText(en.sparkH3Notes.videoTooShort)).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(screen.queryByText(en.sparkH3Notes.stepsTooFew)).toBeNull();
+    await pressGenerate(panel, user);
+    await waitFor(() => expect(generateBody(request)).toBeDefined());
+    expect(generateBody(request)).toMatchObject({ spark_h3: true, spark_h3_topk_ratio: 0.2, spark_h3_full_steps: 2 });
+  });
+
+  it("Spark-H3: 1280x720 の素材では注意文 B は出ない", async () => {
+    const user = userEvent.setup();
+    const { panel } = renderPi({ ...ACCELERATION_DEFAULTS, sparkH3: true });
+    await attach(panel, user);
+    setPads(panel, { left: 12, right: 20, bottom: 48 });
+    await waitFor(() => expect(panel.getByRole("button", { name: /^generate$/i })).toBeEnabled());
+    expect(screen.queryByText(en.sparkH3Notes.videoTooShort)).toBeNull();
+  });
+
+  it("Spark-H3: pi-H3 4 steps（4 > 2）では注意文 A は出ない", () => {
+    renderPi({ ...ACCELERATION_DEFAULTS, piH3: "4steps", sparkH3: true, sparkH3FullSteps: 2 });
+    expect(screen.queryByText(en.sparkH3Notes.stepsTooFew)).toBeNull();
+  });
+
   it("受付で断られたとき、サーバーの detail の文が code と message の下に 3 行目として出る", async () => {
     const user = userEvent.setup();
     const detail = "pi-H3 のファイルがありません（pi-H3/pi-h3-4steps.safetensors）。";

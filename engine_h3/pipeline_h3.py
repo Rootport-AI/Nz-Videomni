@@ -283,6 +283,20 @@ class H3SolVaeInput:
     path: str
 
 
+@dataclass(frozen=True)
+class H3SparkInput:
+    """Spark-H3 (``engine_h3.spark_h3``; Docs/MINIMAX_H3_DESIGN.md §6.11): the job's two values.
+
+    ``topk_ratio``: handed to the author's ``ComfySparkConfig`` as given (its range is
+    the author's: a ValueError when the clip's ``SparkClip`` is made). ``full_steps``:
+    how many first steps of each clip are computed densely, an integer of 0 or more
+    (:func:`validate_request`).
+    """
+
+    topk_ratio: float
+    full_steps: int
+
+
 def ordered_references(refs) -> list:
     """The references in the order the engine uses everywhere: pictures, videos,
     then audios, each kind by ascending ``slot`` (stable)."""
@@ -450,6 +464,9 @@ class H3GenerateRequest:
     #: Keep the text encoder's conditioning (positive and negative apart) for the next
     #: job (台帳 §1-298); off = the encode and the record as before.
     keep_text_conditioning: bool = False
+    #: Spark-H3 (Docs/MINIMAX_H3_DESIGN.md §6.11): ``None`` = as before (the attention,
+    #: the DiT's calls and the record of every other job are unchanged).
+    spark_h3: H3SparkInput | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -529,6 +546,12 @@ def validate_request(req: H3GenerateRequest, *, dit_path: str | None = None) -> 
                 f"合わない所が {len(problems)} か所ありました: " + "；".join(problems[:5])
                 + (f"；ほか {len(problems) - 5} か所" if len(problems) > 5 else "")
             )
+    spark = req.spark_h3
+    if spark is not None:
+        # Only the step count here; the ratio's range is the author's ComfySparkConfig's.
+        full = spark.full_steps
+        if isinstance(full, bool) or not isinstance(full, int) or full < 0:
+            raise ValueError(f"Spark-H3 のフル演算するステップ数は 0 以上の整数にしてください（{full!r}）")
     audio = req.source_audio
     if audio is not None:
         if not str(audio.path or "").strip():
@@ -671,6 +694,85 @@ def sol_record(entry: dict) -> tuple[str, dict]:
     if entry.get("vae_source") == "sol":
         return "on", {"used": "on", **entry.get("sol", {})}
     return "on->off", {"used": "on->off", **entry.get("sol_fallback", {})}
+
+
+#: ``h3.spark_h3.reason`` of a job whose process cannot run Spark-H3 (``spark_h3.probe``).
+SPARK_UNAVAILABLE = "unavailable"
+
+
+def spark_start(req: H3GenerateRequest) -> dict | None:
+    """Spark-H3's decision at the job's start (once, after :func:`validate_request` and before
+    the text encoder; the :func:`sol_start` idiom).
+
+    None for a job without ``spark_h3`` (``engine_h3.spark_h3`` is then not imported). Else
+    ``{"topk_ratio", "full_steps", "unavailable"}``: ``unavailable`` is ``spark_h3.probe()``'s
+    reason (the job then runs without Spark-H3, every clip's attention as before, and its
+    record says "on->off"), None when this process can run it (each clip's ``_denoise``
+    then makes its ``SparkClip``)."""
+    sp = req.spark_h3
+    if sp is None:
+        return None
+    from engine_h3 import spark_h3 as SPK  # noqa: PLC0415
+
+    return {"topk_ratio": sp.topk_ratio, "full_steps": sp.full_steps, "unavailable": SPK.probe()}
+
+
+def _spark_clip_teardown(clip, log) -> dict:
+    """A clip's ``SparkClip`` at the end of its denoise: ``record()`` first, then ``close()``.
+    Neither raises out of here (the ``finally`` of ``_denoise`` must reach its other
+    teardown, and a teardown never fails a job): a failure is logged. When the record
+    cannot be taken, what the clip knows without its controller stands in for it:
+    ``sparse_evaluations``, ``reason`` (as ``record()`` gives it) and ``record_error``
+    (no ``kernel_calls``: the kernel's count is the controller's)."""
+    try:
+        rec = clip.record()
+    except Exception as exc:  # noqa: BLE001 -- teardown must never fail a job
+        log(f"denoise: Spark-H3 record failed (ignored): {exc!r}")
+        n = int(clip.sparse_evaluations)
+        rec = {"sparse_evaluations": n, "reason": None if n else clip.reason(), "record_error": repr(exc)}
+    try:
+        clip.close()
+    except Exception as exc:  # noqa: BLE001 -- teardown must never fail a job
+        log(f"denoise: Spark-H3 close failed (ignored): {exc!r}")
+    return rec
+
+
+#: The keys of a clip's own size and run (``SparkClip.record()``) that a chain's whole
+#: ``h3.spark_h3`` leaves to ``chain.clips[i].spark_h3``.
+SPARK_CLIP_FACTS = ("steps", "sequence_tokens", "video_tokens", "grid", "backend", "record_error")
+
+
+def spark_record(start: dict, clips: list[dict], *, whole_chain: bool = False) -> tuple[str, dict]:
+    """``(spark_h3_used, h3.spark_h3)`` of a ``spark_h3`` job: a single job (``clips`` its one
+    clip), one clip of a chain (``chain.clips[i].spark_h3``) or, with ``whole_chain``, a whole
+    chain (``h3.spark_h3``).
+
+    ``start``: :func:`spark_start`'s; ``clips``: each clip's ``SparkClip.record()`` (or what
+    :func:`_spark_clip_teardown` gave in its place; not read when ``start`` says unavailable).
+    "on" when any clip ran a sparse evaluation, else "on->off". The record: ``used``, the
+    settings (``topk_ratio``, ``full_steps``, ``min_tokens``, ``kitchen_version``), the clip's
+    own facts (not for ``whole_chain``: :data:`SPARK_CLIP_FACTS` differ per clip), the counts
+    ``sparse_evaluations`` and ``kernel_calls`` summed over ``clips`` (``kernel_calls`` None
+    when a clip's record could not be taken), and, for "on->off" only, ``reason``:
+    :data:`SPARK_UNAVAILABLE` (with ``detail``, the probe's reason) or the first clip's
+    (``spark_h3.FALLBACK_FEW_STEPS`` / ``FALLBACK_SHORT_SEQUENCE``)."""
+    from engine_h3 import spark_h3 as SPK  # noqa: PLC0415
+
+    out = {"used": "on->off", "topk_ratio": start["topk_ratio"], "full_steps": start["full_steps"],
+           "min_tokens": SPK.MIN_TOKENS, "kitchen_version": SPK.kitchen_version()}
+    if start["unavailable"] is not None:
+        return "on->off", {**out, "reason": SPARK_UNAVAILABLE, "detail": start["unavailable"]}
+    sparse = sum(int(c["sparse_evaluations"]) for c in clips)
+    used = "on" if sparse else "on->off"
+    out["used"] = used
+    if not whole_chain:
+        out.update({k: v for k, v in clips[0].items() if k != "reason"})
+    calls = [c.get("kernel_calls") for c in clips]
+    out["sparse_evaluations"] = sparse
+    out["kernel_calls"] = None if None in calls else sum(int(c) for c in calls)
+    if not sparse:
+        out["reason"] = clips[0]["reason"]
+    return used, out
 
 
 def require_fp32_matmul() -> None:
@@ -1110,6 +1212,8 @@ class H3Pipeline:
         inpaint_rec: dict = {}
         pi = req.pi_h3
         pi_record: dict = {}
+        spark = None
+        spark_clip_record: dict = {}   # Spark-H3: the clip's SparkClip.record(), filled by _denoise
         try:
             # Inside the try: a job refused here is a failed job and releases
             # what is kept, like any other. Still before the text encoder, so a
@@ -1124,6 +1228,11 @@ class H3Pipeline:
             self._te_conditioning.begin(text_conditioning_heads([req], keep_te))
             # Sol-H3-VAE: decided once here (None for every other job).
             sol = sol_start(req, self.device)
+            # Spark-H3: decided once here (None for every other job).
+            spark = spark_start(req)
+            if spark is not None and spark["unavailable"] is not None:
+                self._log("spark_h3: not available in this process, the job runs without it "
+                          "(the reason is in h3.spark_h3.detail)")
             # Ascending frame order (stable): the condition rows and the vision
             # tower's pictures follow it (first frame then last frame, as in the
             # official FL2VA).
@@ -1362,13 +1471,15 @@ class H3Pipeline:
                 # Only a pi-H3 job passes the keys (the same way).
                 pi_capture: dict = {}
                 pi_kw = {"pi_capture": pi_capture, "pi_record": pi_record} if pi is not None else {}
+                # Only a Spark-H3 job passes the keys (the same way).
+                spark_kw = {"spark": spark, "spark_clip_record": spark_clip_record} if spark is not None else {}
                 with phases.phase("denoise") as entry:
                     video_lat, audio_lat, prefetch_used = self._denoise(
                         req, text_hidden, text_tags, phases, entry,
                         cond_clean=cond_clean, cond_frame_idx=cond_frame_idx, keep=keep,
                         lora_report=lora_report, audio_fix=audio_fix, refs=ref_rows,
                         negative_hidden=negative_hidden, vsf_scale=float(req.vsf_scale), vsf_report=vsf_report,
-                        **op_kw, **pi_kw,
+                        **op_kw, **pi_kw, **spark_kw,
                     )
                 if op is not None:
                     OH.check_outpaint_fixed(video_lat, video_fix, audio_lat, audio_fix, op_strength, op_te_a)
@@ -1474,6 +1585,9 @@ class H3Pipeline:
         if req.sol_vae is not None:
             # only for a sol_vae job, the same way
             extra["sol_vae_used"], h3["sol_vae"] = sol_record(phases.data.get("decode", {}))
+        if spark is not None:
+            # only for a spark_h3 job, the same way
+            extra["spark_h3_used"], h3["spark_h3"] = spark_record(spark, [spark_clip_record])
         return {
             "seed_used": int(req.seed),
             "sampler": self.sampler,
@@ -2128,6 +2242,7 @@ class H3Pipeline:
         audio_fix=None, video_fix=None, refs=None, video_inject_clean: float | None = None,
         negative_hidden=None, vsf_scale: float = 1.5, vsf_report: dict | None = None,
         pi_capture: dict | None = None, pi_record: dict | None = None,
+        spark: dict | None = None, spark_clip_record: dict | None = None,
     ):
         """The step loop. ``audio_fix`` / ``video_fix``: ``(clean latent, mask
         values)`` for a stream whose rows are (partly) kept
@@ -2167,7 +2282,16 @@ class H3Pipeline:
         the DWD head's inputs to ``pi_capture["features"]``
         (``dwd.DWDFeatures``, on the CPU). ``pi_record``: filled with the
         choice, the file, the adapter's record, the LoRA's and the initial
-        state's."""
+        state's.
+
+        Spark-H3 (``spark``: :func:`spark_start`'s, None = none, and the job is
+        the same as before): when the process can run it, the clip's
+        ``spark_h3.SparkClip`` is made once the layout and the coordinates
+        exist, each evaluation hands ``for_evaluation(i)`` to the DiT
+        (``spark=``; None = the dense sdpa / sage), and it is closed first thing
+        in the ``finally`` (before the decode, also after a failure), its
+        ``record()`` going to ``spark_clip_record``. A chain calls this per clip, so
+        each clip makes its own and counts its steps from 0."""
         from engine_h3.denoise_mask import (  # noqa: PLC0415
             AUDIO_TIME_CAP,
             VIDEO_TIME_CAP,
@@ -2254,6 +2378,7 @@ class H3Pipeline:
         n_blocks = int(self.options.blocks_on_gpu)
         vram16 = vram16_entry = counters0 = None
         cap_set = False
+        spark_clip = None
         try:
             if req.loras:
                 # Attached on the CPU before the placement, so the block swap
@@ -2310,6 +2435,16 @@ class H3Pipeline:
             )
             rope_cos, rope_sin = rope_tables(coords, dit.rope_inv_freq)
             rope_cos, rope_sin = rope_cos.to(dev), rope_sin.to(dev)
+            if spark is not None and spark["unavailable"] is None:
+                # Spark-H3: this clip's state, closed first in the finally below.
+                from engine_h3 import spark_h3 as _SPK  # noqa: PLC0415
+
+                spark_clip = _SPK.SparkClip(
+                    layout, (t_lat, gh, gw), steps=steps, topk_ratio=spark["topk_ratio"],
+                    full_steps=spark["full_steps"], device=dev, coords=coords,
+                )
+                self._log(f"denoise: Spark-H3 topk_ratio={spark['topk_ratio']} full_steps={spark['full_steps']} "
+                          f"sequence={layout.total} (min {_SPK.MIN_TOKENS}) steps={steps}")
             modality = modality_rows(layout, text_tags.to(dev))
             vsf = H3Vsf(slice(L_pos, L), float(vsf_scale)) if n_neg else None
             vsf_probe = (
@@ -2413,6 +2548,8 @@ class H3Pipeline:
                     box, tokens = [tokens], None
                 # pi-H3: the last evaluation hands over the DWD head's inputs (only then the key).
                 cap_kw = {"capture": {}} if (pi is not None and i == steps - 1) else {}
+                # Spark-H3: only such a job passes the key (None = this evaluation is dense).
+                spark_kw = {"spark": spark_clip.for_evaluation(i)} if spark_clip is not None else {}
                 v_video_rows, v_audio_rows = dit(
                     tokens,
                     layout=layout,
@@ -2427,6 +2564,7 @@ class H3Pipeline:
                     vsf=vsf,
                     vsf_probe=vsf_probe if i == 0 else None,
                     **cap_kw,
+                    **spark_kw,
                 )
                 del tokens
                 if cap_kw:
@@ -2485,6 +2623,16 @@ class H3Pipeline:
                 raise
             raise RuntimeError(VRAM16_OOM_MESSAGE) from exc
         finally:
+            # Spark-H3 first: nothing of the clip's state may outlive the denoise (the decode's VRAM).
+            # The record is taken before the close. Neither may fail the job or skip the
+            # teardown below (a failure is logged and the job goes on).
+            if spark_clip is not None:
+                clip_record = _spark_clip_teardown(spark_clip, self._log)
+                if spark_clip_record is not None:
+                    spark_clip_record.update(clip_record)
+                self._log(f"denoise: Spark-H3 sparse evaluations {clip_record['sparse_evaluations']}/{steps} "
+                          f"kernel calls {clip_record.get('kernel_calls')} reason={clip_record['reason']}")
+                spark_clip = None
             if vram16_entry is not None:
                 self._vram16_finish(dev, cap_set, counters0, vram16_entry)
                 entry["vram16"] = vram16_entry

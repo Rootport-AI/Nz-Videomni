@@ -377,6 +377,21 @@ export interface GenerateRequest {
    * `keep_text_conditioning` in `unsupported_features`. Mirrored on
    * {@link GenerateChainRequest}. */
   keep_text_conditioning?: boolean;
+  /** Acceleration (裁定 113): Spark-H3, MiniMax H3's sparse attention, layered
+   * on top of `attention_backend`. Built exclusively by
+   * `shell/accelerationSettings.ts`'s `accelerationRequestFields` and spread in
+   * — the three keys ride along together, only while it is on (so `spark_h3`
+   * only ever appears as `true`), and none of them while it is off. LTX 2.3 /
+   * 2.5 publish `spark_h3` in `unsupported_features` and 422 a `true`. Where
+   * the environment cannot run it the server generates without it and records
+   * `spark_h3_used: "on->off"`. Mirrored on {@link GenerateChainRequest}. */
+  spark_h3?: boolean;
+  /** 裁定 113: Spark-H3's full-attention ratio, 0.01-0.5 (the Settings
+   * slider's whole percent / 100). Sent only with `spark_h3: true`. */
+  spark_h3_topk_ratio?: number;
+  /** 裁定 113: the steps of each clip that run full attention, 0-10. Sent only
+   * with `spark_h3: true`. */
+  spark_h3_full_steps?: number;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
@@ -635,6 +650,12 @@ export interface GenerateChainRequest {
    * "sent only as `true`" rule; it lets the clips of a Chained job and the next
    * job skip the text encoder. */
   keep_text_conditioning?: boolean;
+  /** Spark-H3 (裁定 113): mirrors {@link GenerateRequest.spark_h3} and its two
+   * values — same single builder, same "all three only while on" rule; the
+   * step count restarts at 0 for every clip (Chained, V2V, Retake). */
+  spark_h3?: boolean;
+  spark_h3_topk_ratio?: number;
+  spark_h3_full_steps?: number;
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;
@@ -986,6 +1007,13 @@ export interface StatusResponse {
      * by `shell/accelerationSettings.ts`'s `blockSwapPrefetchAvailability`,
      * same as a missing `sage_available`. */
     block_swap_prefetch_available?: boolean;
+    /** Optional (裁定 113): whether this environment can run Spark-H3 (the
+     * worker's check once a model is loaded, the H3 environment's files
+     * before that; always `false` on the server's mock backend). Absent from
+     * every older backend; treated as "unknown" by
+     * `shell/accelerationSettings.ts`'s `sparkH3Availability`, same as a
+     * missing `sage_available`. */
+    spark_h3_available?: boolean;
   };
   /** Optional (defensive): the object-tracking capability block (§3-54,
    * 2026-09-11). Absent from every backend older than that change — and, unlike

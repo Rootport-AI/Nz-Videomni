@@ -12,6 +12,8 @@ import { RetakePanel } from "./RetakePanel";
 import { bridge as defaultBridge } from "../../bridge";
 import type { NativeBridge } from "../../bridge";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { sparkH3StepsTooFew, sparkH3VideoTooShort } from "../../shell/accelerationSettings";
+import { SparkH3Notes } from "../../shell/SparkH3Notes";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { useToasts } from "../../shell/ToastContext";
 import { useStrings } from "../../i18n/LanguageContext";
@@ -646,6 +648,12 @@ export function EditScreen({
                   </div>
                 ))}
               <GenerateReasonsNote reasons={retakeForm.validityReasons} messages={retakeReasonMessages} />
+              {/* 裁定 113: informational, in Single's order (after the reasons) —
+                  never a reason to disable Generate. */}
+              <SparkH3Notes
+                stepsTooFew={sparkH3StepsTooFew(acceleration, retakeForm.sampling, retakeForm.fixedSampling)}
+                videoTooShort={sparkH3VideoTooShort(acceleration, [retakeForm.sequenceRows])}
+              />
             </>
           )}
           {subMode === "outpainting" && (
@@ -672,6 +680,10 @@ export function EditScreen({
                   </div>
                 ))}
               <GenerateReasonsNote reasons={outpaintForm.validityReasons} messages={outpaintReasonMessages} />
+              <SparkH3Notes
+                stepsTooFew={sparkH3StepsTooFew(acceleration, outpaintForm.sampling, outpaintForm.fixedSampling)}
+                videoTooShort={sparkH3VideoTooShort(acceleration, [outpaintForm.sequenceRows])}
+              />
             </>
           )}
           {/* Inpainting は Retake と違って**常に**生成群を出す —— 右クリックが
@@ -706,6 +718,10 @@ export function EditScreen({
                   </div>
                 ))}
               <GenerateReasonsNote reasons={inpaintForm.validityReasons} messages={inpaintReasonMessages} />
+              <SparkH3Notes
+                stepsTooFew={sparkH3StepsTooFew(acceleration, inpaintForm.sampling, inpaintForm.fixedSampling)}
+                videoTooShort={sparkH3VideoTooShort(acceleration, [inpaintForm.sequenceRows])}
+              />
             </>
           )}
           {subMode === "alphaGen" && (

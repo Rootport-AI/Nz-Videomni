@@ -2036,6 +2036,10 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           keepReferenceLatentsUnsupported={settingsRowsHidden.keepReferenceLatents}
           onKeepTextConditioningChange={accelerationControls.setKeepTextConditioning}
           keepTextConditioningUnsupported={settingsRowsHidden.keepTextConditioning}
+          onSparkH3Change={accelerationControls.setSparkH3}
+          onSparkH3TopkPercentChange={accelerationControls.setSparkH3TopkPercent}
+          onSparkH3FullStepsChange={accelerationControls.setSparkH3FullSteps}
+          sparkH3Unsupported={settingsRowsHidden.sparkH3}
           onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
           // §3-166: the same base-model state and handler the header dropdown
           // uses — one `useBaseModels()` call, two views of it.

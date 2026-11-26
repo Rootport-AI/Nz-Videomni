@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockBridge } from "../bridge/mockBridge";
@@ -71,6 +71,7 @@ function Harness({
   serverStatus,
   engineFamily,
   fastVaeUnsupported,
+  sparkH3Unsupported,
 }: {
   bridge: ReturnType<typeof createMockBridge>;
   onSaved: () => void;
@@ -78,6 +79,7 @@ function Harness({
   serverStatus: ServerStatusState;
   engineFamily: string;
   fastVaeUnsupported: boolean;
+  sparkH3Unsupported: boolean;
 }) {
   const accelerationControls = useAccelerationSettings();
   return (
@@ -130,6 +132,12 @@ function Harness({
       // 台帳 §1-298 / §1-299: hidden only where a server publishes `keep_text_conditioning`
       // (an older server, on LTX); covered in `AppShell.featureScope.test.tsx`.
       keepTextConditioningUnsupported={false}
+      onSparkH3Change={accelerationControls.setSparkH3}
+      onSparkH3TopkPercentChange={accelerationControls.setSparkH3TopkPercent}
+      onSparkH3FullStepsChange={accelerationControls.setSparkH3FullSteps}
+      // 裁定 113: hidden on an engine that publishes `spark_h3` (LTX 2.3 / 2.5);
+      // `false` unless a test asks for the hidden case.
+      sparkH3Unsupported={sparkH3Unsupported}
       onEmbedMp4MetadataChange={accelerationControls.setEmbedMp4Metadata}
       // §3-166: the base-model dropdown is fed by `AppShell` in production;
       // these direct-render tests hand it an empty list (its placeholder). The
@@ -155,6 +163,7 @@ function renderPanel(
   serverStatus: ServerStatusState = { kind: "online", status: statusWithSage(true) },
   engineFamily = "",
   fastVaeUnsupported = false,
+  sparkH3Unsupported = false,
 ) {
   const rendered = render(
     // N8: `SettingsPanel` now also calls `useTheme()` (theme toggle, next to
@@ -179,6 +188,7 @@ function renderPanel(
                 serverStatus={serverStatus}
                 engineFamily={engineFamily}
                 fastVaeUnsupported={fastVaeUnsupported}
+                sparkH3Unsupported={sparkH3Unsupported}
               />
             </JobsProvider>
           </ToastProvider>
@@ -413,6 +423,9 @@ describe("SettingsPanel", () => {
         solVae: false,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: true,
       });
     });
@@ -528,6 +541,9 @@ describe("SettingsPanel", () => {
         solVae: false,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: true,
       });
     });
@@ -620,6 +636,9 @@ describe("SettingsPanel", () => {
         solVae: false,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: true,
       });
     });
@@ -744,6 +763,9 @@ describe("SettingsPanel", () => {
         solVae: false,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: true,
       });
     });
@@ -788,6 +810,9 @@ describe("SettingsPanel", () => {
         solVae: false,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: true,
       });
     });
@@ -826,6 +851,9 @@ describe("SettingsPanel", () => {
         solVae: false,
         keepReferenceLatents: true,
         keepTextConditioning: false,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: true,
       });
     });
@@ -1229,5 +1257,171 @@ describe("SettingsPanel", () => {
     await user.click(closeButton);
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** 裁定 113: the "off / Spark-H3" row under the Attention row and its two
+ * sliders (MINIMAX_H3_DESIGN §6.11). */
+describe("SettingsPanel — Spark-H3", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem(LANG_STORAGE_KEY);
+    window.localStorage.removeItem(ACCELERATION_STORAGE_KEY);
+  });
+
+  function statusWithSpark(available: boolean | undefined): StatusResponse {
+    return {
+      ...statusWithSage(true),
+      acceleration: {
+        attention_backends: ["sdpa", "sage"],
+        sage_available: true,
+        ...(available === undefined ? {} : { spark_h3_available: available }),
+      },
+    };
+  }
+
+  async function open(
+    status: ServerStatusState = { kind: "online", status: statusWithSpark(true) },
+    sparkH3Unsupported = false,
+  ) {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const rendered = renderPanel(bridge, vi.fn(), vi.fn(), status, "", false, sparkH3Unsupported);
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    return rendered;
+  }
+
+  const NOTE_EN = "About 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).";
+
+  it("shows the row with off selected and no sliders by default", async () => {
+    await open();
+    const row = within(screen.getByRole("group", { name: "Spark-H3" }));
+    expect(row.getByRole("button", { name: "off" })).toHaveAttribute("aria-pressed", "true");
+    expect(row.getByRole("button", { name: "Spark-H3" })).toHaveAttribute("aria-pressed", "false");
+    expect(row.getByRole("button", { name: "Spark-H3" })).toBeEnabled();
+    expect(screen.queryByRole("slider", { name: /^Full-attention ratio/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: /^Full-attention steps/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(NOTE_EN)).not.toBeInTheDocument();
+  });
+
+  it("sits right under the sdpa / sage attention row, inside the same Attention field", async () => {
+    await open();
+    const attention = screen.getByRole("group", { name: "Attention" });
+    const spark = screen.getByRole("group", { name: "Spark-H3" });
+    expect(attention.nextElementSibling).toBe(spark);
+    expect(spark.parentElement).toBe(attention.parentElement);
+  });
+
+  it("an unusable environment greys the button but keeps a stored Spark-H3 on (selected, sliders shown)", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ sparkH3: true }));
+    await open({ kind: "online", status: statusWithSpark(false) });
+    const spark = within(screen.getByRole("group", { name: "Spark-H3" })).getByRole("button", { name: "Spark-H3" });
+    expect(spark).toBeDisabled();
+    expect(spark).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("slider", { name: /^Full-attention ratio/ })).toBeInTheDocument();
+    expect(readStoredAcceleration().sparkH3).toBe(true);
+  });
+
+  it("is hidden outright on an engine that publishes spark_h3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ sparkH3: true }));
+    await open(undefined, true);
+    expect(screen.queryByRole("group", { name: "Spark-H3" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: /^Full-attention ratio/ })).not.toBeInTheDocument();
+  });
+
+  it("greys the Spark-H3 button with a tooltip only on an explicit spark_h3_available:false", async () => {
+    await open({ kind: "online", status: statusWithSpark(false) });
+    const row = within(screen.getByRole("group", { name: "Spark-H3" }));
+    const spark = row.getByRole("button", { name: "Spark-H3" });
+    expect(spark).toBeDisabled();
+    expect(spark).toHaveAttribute("title", "Spark-H3 is not available in this environment.");
+    expect(row.getByRole("button", { name: "off" })).toBeEnabled();
+  });
+
+  it("leaves the Spark-H3 button usable while there is no status yet", async () => {
+    await open({ kind: "checking" });
+    const spark = within(screen.getByRole("group", { name: "Spark-H3" })).getByRole("button", { name: "Spark-H3" });
+    expect(spark).toBeEnabled();
+    expect(spark).not.toHaveAttribute("title");
+  });
+
+  it("leaves the Spark-H3 button usable against a backend with no spark_h3_available field", async () => {
+    await open({ kind: "online", status: statusWithSpark(undefined) });
+    const spark = within(screen.getByRole("group", { name: "Spark-H3" })).getByRole("button", { name: "Spark-H3" });
+    expect(spark).toBeEnabled();
+    expect(spark).not.toHaveAttribute("title");
+  });
+
+  it("selecting Spark-H3 shows the two sliders (ranges, defaults, markers, note) and persists", async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(within(screen.getByRole("group", { name: "Spark-H3" })).getByRole("button", { name: "Spark-H3" }));
+
+    const ratio = screen.getByRole("slider", { name: /^Full-attention ratio/ });
+    expect(ratio).toHaveAttribute("min", "1");
+    expect(ratio).toHaveAttribute("max", "50");
+    expect(ratio).toHaveAttribute("step", "1");
+    expect(ratio).toHaveValue("20");
+    const steps = screen.getByRole("slider", { name: /^Full-attention steps/ });
+    expect(steps).toHaveAttribute("min", "0");
+    expect(steps).toHaveAttribute("max", "10");
+    expect(steps).toHaveAttribute("step", "1");
+    expect(steps).toHaveValue("2");
+
+    // Two markers, both on the ratio slider, at 10 and 20, drawn like the
+    // comfort marker; none on the steps slider.
+    const markers = Array.from(document.querySelectorAll<HTMLElement>("[data-size-marker]"));
+    expect(markers.map((m) => m.dataset.markerValue)).toEqual(["10", "20"]);
+    for (const marker of markers) {
+      expect(marker).toHaveClass("size-marker", "size-marker-comfort");
+      expect(marker).toHaveAttribute("title", "Recommended range (10–20%)");
+      expect(ratio.closest("label")).toContainElement(marker);
+    }
+    expect(steps.closest("label")?.querySelector("[data-size-marker]")).toBeNull();
+    expect(screen.getByText(NOTE_EN)).toBeInTheDocument();
+    await waitFor(() => expect(readStoredAcceleration().sparkH3).toBe(true));
+  });
+
+  it("selecting off hides the sliders and keeps their values stored", async () => {
+    window.localStorage.setItem(
+      ACCELERATION_STORAGE_KEY,
+      JSON.stringify({ sparkH3: true, sparkH3TopkPercent: 13, sparkH3FullSteps: 4 }),
+    );
+    const user = userEvent.setup();
+    await open();
+    expect(screen.getByRole("slider", { name: /^Full-attention ratio/ })).toHaveValue("13");
+    expect(screen.getByRole("slider", { name: /^Full-attention steps/ })).toHaveValue("4");
+    await user.click(within(screen.getByRole("group", { name: "Spark-H3" })).getByRole("button", { name: "off" }));
+    expect(screen.queryByRole("slider", { name: /^Full-attention ratio/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: /^Full-attention steps/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(NOTE_EN)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(readStoredAcceleration()).toMatchObject({ sparkH3: false, sparkH3TopkPercent: 13, sparkH3FullSteps: 4 }),
+    );
+  });
+
+  it("moving a slider persists the whole number", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ sparkH3: true }));
+    await open();
+    fireEvent.change(screen.getByRole("slider", { name: /^Full-attention ratio/ }), { target: { value: "15" } });
+    fireEvent.change(screen.getByRole("slider", { name: /^Full-attention steps/ }), { target: { value: "1" } });
+    await waitFor(() =>
+      expect(readStoredAcceleration()).toMatchObject({ sparkH3TopkPercent: 15, sparkH3FullSteps: 1 }),
+    );
+  });
+
+  it("reads the owner's Japanese wording in Japanese", async () => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, "ja");
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ sparkH3: true }));
+    await open({ kind: "online", status: statusWithSpark(false) });
+    expect(
+      within(screen.getByRole("group", { name: "Spark-H3" })).getByRole("button", { name: "Spark-H3" }),
+    ).toHaveAttribute("title", "この環境では Spark-H3 を使えません。");
+    expect(screen.getByRole("slider", { name: /^フルで演算する割合/ })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: /^フル演算するステップ数/ })).toBeInTheDocument();
+    expect(
+      screen.getByText("総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）"),
+    ).toBeInTheDocument();
+    for (const marker of document.querySelectorAll("[data-size-marker]")) {
+      expect(marker).toHaveAttribute("title", "推奨の範囲（10〜20%）");
+    }
   });
 });

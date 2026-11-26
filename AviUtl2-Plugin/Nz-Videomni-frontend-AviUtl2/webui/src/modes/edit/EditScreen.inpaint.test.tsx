@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeBridge } from "../../bridge";
@@ -20,6 +20,8 @@ import {
   rollbackReservedPlacement,
 } from "../../timeline/provisionalReservation";
 import { EditScreen } from "./EditScreen";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 
 /**
  * 台帳 §3-55 Inpainting の通し（画面側）。右クリック 2 種でサブタブが開き →
@@ -90,6 +92,8 @@ interface BridgeOptions {
   generateResponse?: { status: number; body: unknown };
   /** マスク描画を失敗させるコード。 */
   maskError?: string;
+  /** プロジェクト（＝部分フィルタとマスク）の解像度。既定は 1920x1080。 */
+  project?: { width: number; height: number };
 }
 
 function createBridge(options: BridgeOptions = {}) {
@@ -97,11 +101,12 @@ function createBridge(options: BridgeOptions = {}) {
     status: 202,
     body: { job_id: "job-1", status: "queued", created_at: "2026-09-14T00:00:00Z" },
   };
+  const project = options.project ?? { width: 1920, height: 1080 };
   const request = vi.fn(async (method: string, params: unknown): Promise<unknown> => {
     if (method === "getEditInfo") {
       return {
-        width: 1920,
-        height: 1080,
+        width: project.width,
+        height: project.height,
         rate: 30,
         scale: 1,
         sampleRate: 44100,
@@ -121,7 +126,7 @@ function createBridge(options: BridgeOptions = {}) {
         const { BridgeError } = await import("../../bridge");
         throw new BridgeError(options.maskError, "forced");
       }
-      return { filePath: MASK_FILE, width: 1920, height: 1080, frameCount: 241 };
+      return { filePath: MASK_FILE, width: project.width, height: project.height, frameCount: 241 };
     }
     if (method === "timeline.getSelection") return makeSelection();
     if (method === "timeline.insertProvisional") {
@@ -561,7 +566,7 @@ describe("EditScreen — Inpainting（MiniMax H3・台帳 §1-124 弾 2）", () 
     },
   });
 
-  function renderH3(options: BridgeOptions = {}) {
+  function renderH3(options: BridgeOptions = {}, acceleration?: AccelerationSettings) {
     const nativeBridge = createBridge(options);
     const onJobSubmitted = vi.fn();
     render(
@@ -575,6 +580,7 @@ describe("EditScreen — Inpainting（MiniMax H3・台帳 §1-124 弾 2）", () 
             engineLabel="MiniMax H3"
             constraints={H3}
             loraAudioHidden
+            {...(acceleration ? { acceleration } : {})}
           />
           <Toasts />
         </ToastProvider>
@@ -582,6 +588,53 @@ describe("EditScreen — Inpainting（MiniMax H3・台帳 §1-124 弾 2）", () 
     );
     return { request: nativeBridge.request as ReturnType<typeof vi.fn>, onJobSubmitted };
   }
+
+  // 裁定 113: Spark-H3's steps note shows under Generate, which stays pressable.
+  it("Spark-H3: 小さい対象の動画で注意文 B が出て、Generate は押せ、3 つの欄が飛ぶ", async () => {
+    // 480x352 の対象・209 フレームは系列の見積もりが 12,288 に届かない
+    // （プロジェクトも同じ解像度にして、解像度の不一致の理由を出さない）。
+    seedBothSlots(makeItem({ mediaWidth: 480, mediaHeight: 352 }));
+    const { request, onJobSubmitted } = renderH3(
+      { project: { width: 480, height: 352 } },
+      { ...ACCELERATION_DEFAULTS, sparkH3: true },
+    );
+    const button = screen.getByRole("button", { name: en.edit.inpainting.generateButton });
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(await screen.findByText(en.sparkH3Notes.videoTooShort)).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(screen.queryByText(en.sparkH3Notes.stepsTooFew)).toBeNull();
+    await userEvent.setup().click(button);
+    await waitFor(() => expect(onJobSubmitted).toHaveBeenCalledWith("job-1"));
+    expect(generateBody(request)).toMatchObject({ spark_h3: true, spark_h3_topk_ratio: 0.2, spark_h3_full_steps: 2 });
+  });
+
+  it("Spark-H3: 1920x1080 の対象では注意文 B は出ない", async () => {
+    seedBothSlots();
+    renderH3({}, { ...ACCELERATION_DEFAULTS, sparkH3: true });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: en.edit.inpainting.generateButton })).not.toBeDisabled(),
+    );
+    expect(screen.queryByText(en.sparkH3Notes.videoTooShort)).toBeNull();
+  });
+
+  it("Spark-H3: Steps がフル演算するステップ数以下で注意文 A が出て、Generate は押せ、3 つの欄が飛ぶ", async () => {
+    seedBothSlots();
+    const { request, onJobSubmitted } = renderH3({}, { ...ACCELERATION_DEFAULTS, sparkH3: true, sparkH3FullSteps: 3 });
+    const button = screen.getByRole("button", { name: en.edit.inpainting.generateButton });
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.queryByText(en.sparkH3Notes.stepsTooFew)).toBeNull();
+    const steps = document
+      .querySelector(".inpaint-panel")!
+      .querySelector<HTMLInputElement>('input[type="range"][max="50"]')!;
+    fireEvent.change(steps, { target: { value: "3" } });
+    expect(await screen.findByText(en.sparkH3Notes.stepsTooFew)).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(button).not.toBeDisabled();
+    await userEvent.setup().click(button);
+    await waitFor(() => expect(onJobSubmitted).toHaveBeenCalledWith("job-1"));
+    const generate = request.mock.calls.find(
+      ([method, params]) => method === "backend.request" && (params as { path: string }).path.endsWith("/generate"),
+    ) as [string, { body: Record<string, unknown> }] | undefined;
+    expect(generate?.[1].body).toMatchObject({ spark_h3: true, spark_h3_topk_ratio: 0.2, spark_h3_full_steps: 3 });
+  });
 
   it("マスク描画 → アップロード → 席（24fps の枚数）→ 送信 の順に動き、H3 の形の body が飛ぶ", async () => {
     seedBothSlots();

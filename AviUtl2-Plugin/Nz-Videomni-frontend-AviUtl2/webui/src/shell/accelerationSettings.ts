@@ -144,6 +144,19 @@
  *    LTX 2.3 and LTX 2.5 all take it. Only a server that still refuses it on
  *    LTX publishes `keep_text_conditioning` in `unsupported_features`; then
  *    `AppShell` hides the row and writes a leftover `true` back to `false`.
+ *  - `sparkH3` / `sparkH3TopkPercent` / `sparkH3FullSteps` — REAL (裁定 113,
+ *    MINIMAX_H3_DESIGN §6.11). Spark-H3: MiniMax H3's sparse attention, layered
+ *    on top of sdpa / Sage. It changes the output (part of the attention is
+ *    approximated), so it is opt-in: the server default is `false`, and the
+ *    three keys `spark_h3` / `spark_h3_topk_ratio` / `spark_h3_full_steps`
+ *    ride along only while it is ON (all three or none). The ratio is stored as
+ *    a whole percent (1-50) and sent as `percent / 100`. `/status` publishes
+ *    `acceleration.spark_h3_available` (three-valued, the Sage shape —
+ *    {@link sparkH3Availability}). Scope: LTX 2.3 / 2.5 publish `spark_h3` in
+ *    `unsupported_features`, and `AppShell` hides the row and writes a
+ *    leftover `true` back to `false` (the two numbers stay stored). The two
+ *    generate-button notes it adds are {@link sparkH3StepsTooFew} and
+ *    {@link sparkH3VideoTooShort}.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -244,6 +257,19 @@ export interface AccelerationSettings {
    * the server defaults to `false`. A server that still refuses it on LTX
    * publishes the name in `unsupported_features`; the row is hidden there. */
   keepTextConditioning: boolean;
+  /** REAL (裁定 113, MINIMAX_H3_DESIGN §6.11): Spark-H3 — MiniMax H3 only.
+   * Sent as `spark_h3: true` (with the two values below) — but only while ON,
+   * since the server defaults to `false`. LTX 2.3 / 2.5 publish the name in
+   * `unsupported_features`, so the row is hidden there. */
+  sparkH3: boolean;
+  /** Spark-H3's "full-attention ratio" in whole percent (1-50). Sent as
+   * `spark_h3_topk_ratio: sparkH3TopkPercent / 100`, only while
+   * {@link sparkH3} is on. Kept while the row shows "off". */
+  sparkH3TopkPercent: number;
+  /** Spark-H3's "full-attention steps" (0-10): the first steps of each clip
+   * that run without Spark-H3. Sent as `spark_h3_full_steps`, only while
+   * {@link sparkH3} is on. Kept while the row shows "off". */
+  sparkH3FullSteps: number;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -343,6 +369,27 @@ export const KEEP_REFERENCE_LATENTS_SERVER_DEFAULT = false;
  * publishes the name in `unsupported_features`, and then the row is hidden and
  * the stored value is reset to this default. */
 export const KEEP_TEXT_CONDITIONING_SERVER_DEFAULT = false;
+/** Server default for `spark_h3` (裁定 113): `false`. Direction matches
+ * `keep_resident`: the keys ride along only while the user turns it ON. On LTX
+ * the row is hidden and the stored value is reset to this default. */
+export const SPARK_H3_SERVER_DEFAULT = false;
+/** The "full-attention ratio" slider's range and default, in whole percent
+ * (裁定 113: 1-50%, 1% steps, default 20%). Fixed values the panel owns, like
+ * the other Settings choices. */
+export const SPARK_H3_TOPK_PERCENT_MIN = 1;
+export const SPARK_H3_TOPK_PERCENT_MAX = 50;
+export const SPARK_H3_TOPK_PERCENT_DEFAULT = 20;
+/** Where the ratio slider's two markers sit (the recommended 10-20% range). */
+export const SPARK_H3_TOPK_PERCENT_MARKERS: readonly number[] = [10, 20];
+/** The "full-attention steps" slider's range and default (裁定 113: 0-10,
+ * default 2). */
+export const SPARK_H3_FULL_STEPS_MIN = 0;
+export const SPARK_H3_FULL_STEPS_MAX = 10;
+export const SPARK_H3_FULL_STEPS_DEFAULT = 2;
+/** The sequence length below which the engine runs full attention instead of
+ * Spark-H3 — the same gate as the author's ComfyUI version (MINIMAX_H3_DESIGN
+ * §6.11). {@link sparkH3VideoTooShort} compares the panel's estimate with it. */
+export const SPARK_H3_MIN_TOKENS = 12288;
 
 /** `localStorage` key every Acceleration choice is persisted under — all FIVE
  * as of 2026-08-05, when `vaeMode` stopped being a mock. The key is named for the section
@@ -372,6 +419,9 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   solVae: SOL_VAE_SERVER_DEFAULT,
   keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+  sparkH3: SPARK_H3_SERVER_DEFAULT,
+  sparkH3TopkPercent: SPARK_H3_TOPK_PERCENT_DEFAULT,
+  sparkH3FullSteps: SPARK_H3_FULL_STEPS_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
@@ -447,6 +497,11 @@ export function withServerDefaults(
     keepTextConditioning: at("keepTextConditioning")
       ? ACCELERATION_DEFAULTS.keepTextConditioning
       : acceleration.keepTextConditioning,
+    sparkH3: at("sparkH3") ? ACCELERATION_DEFAULTS.sparkH3 : acceleration.sparkH3,
+    sparkH3TopkPercent: at("sparkH3TopkPercent")
+      ? ACCELERATION_DEFAULTS.sparkH3TopkPercent
+      : acceleration.sparkH3TopkPercent,
+    sparkH3FullSteps: at("sparkH3FullSteps") ? ACCELERATION_DEFAULTS.sparkH3FullSteps : acceleration.sparkH3FullSteps,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -474,6 +529,10 @@ export interface StoredAcceleration {
   keepReferenceLatents: boolean;
   /** 台帳 §1-298: text encoder conditioning cache, persisted from its first day. */
   keepTextConditioning: boolean;
+  /** 裁定 113: Spark-H3 and its two slider values, persisted from their first day. */
+  sparkH3: boolean;
+  sparkH3TopkPercent: number;
+  sparkH3FullSteps: number;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -490,8 +549,17 @@ const STORED_DEFAULTS: StoredAcceleration = {
   solVae: SOL_VAE_SERVER_DEFAULT,
   keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+  sparkH3: SPARK_H3_SERVER_DEFAULT,
+  sparkH3TopkPercent: SPARK_H3_TOPK_PERCENT_DEFAULT,
+  sparkH3FullSteps: SPARK_H3_FULL_STEPS_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
+
+/** A stored whole number inside `[min, max]`, else `fallback` (a missing key,
+ * a fraction, or a value out of range all read back as the default). */
+function storedInt(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+}
 
 /** Reads the persisted acceleration choices. Wrapped in a `try` since
  * `localStorage` can throw in some restricted embeddings (e.g. a WebView2
@@ -507,6 +575,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
  *     "fusedGgufDequantKernel":...,"vaeMode":...,
  *     "keepResidentEmbeddings":...,"vram16Mode":...,"piH3":...,
  *     "solVae":...,"keepReferenceLatents":...,"keepTextConditioning":...,
+ *     "sparkH3":...,"sparkH3TopkPercent":...,"sparkH3FullSteps":...,
  *     "embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
@@ -516,8 +585,10 @@ const STORED_DEFAULTS: StoredAcceleration = {
  * one (no `keepResidentEmbeddings`), or a pre-§3-164 one (no
  * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`), or a pre-ruling-107
  * one (no `piH3`), or a pre-Sol one (no `solVae`), or a pre-§1-297 one (no
- * `keepReferenceLatents`), or a pre-§1-298 one (no `keepTextConditioning`) — read back
- * cleanly. `solVae` is also normalized against `piH3` (a pi-H3 choice other
+ * `keepReferenceLatents`), or a pre-§1-298 one (no `keepTextConditioning`), or a
+ * pre-Spark-H3 one (no `sparkH3` / `sparkH3TopkPercent` / `sparkH3FullSteps`) — read back
+ * cleanly. The two Spark-H3 numbers also fall back when they are not whole
+ * numbers inside their slider's range. `solVae` is also normalized against `piH3` (a pi-H3 choice other
  * than off wins and Sol reads back off). EVERY field added to
  * {@link StoredAcceleration} needs its own line here: without one, the
  * whole-object write below would persist an `undefined` that reads back as
@@ -543,6 +614,9 @@ export function readStoredAcceleration(): StoredAcceleration {
       solVae: SOL_VAE_SERVER_DEFAULT,
       keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
       keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+      sparkH3: SPARK_H3_SERVER_DEFAULT,
+      sparkH3TopkPercent: SPARK_H3_TOPK_PERCENT_DEFAULT,
+      sparkH3FullSteps: SPARK_H3_FULL_STEPS_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -583,6 +657,19 @@ export function readStoredAcceleration(): StoredAcceleration {
         typeof rec.keepTextConditioning === "boolean"
           ? rec.keepTextConditioning
           : KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+      sparkH3: typeof rec.sparkH3 === "boolean" ? rec.sparkH3 : SPARK_H3_SERVER_DEFAULT,
+      sparkH3TopkPercent: storedInt(
+        rec.sparkH3TopkPercent,
+        SPARK_H3_TOPK_PERCENT_MIN,
+        SPARK_H3_TOPK_PERCENT_MAX,
+        SPARK_H3_TOPK_PERCENT_DEFAULT,
+      ),
+      sparkH3FullSteps: storedInt(
+        rec.sparkH3FullSteps,
+        SPARK_H3_FULL_STEPS_MIN,
+        SPARK_H3_FULL_STEPS_MAX,
+        SPARK_H3_FULL_STEPS_DEFAULT,
+      ),
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -616,6 +703,17 @@ export function writeStoredAcceleration(value: StoredAcceleration): void {
  * working feature from anyone whose /status poll hasn't landed yet. */
 export function sageAvailability(status: StatusResponse | null | undefined): boolean | null {
   const available = status?.acceleration?.sage_available;
+  return typeof available === "boolean" ? available : null;
+}
+
+/** Whether the server reports Spark-H3 as usable, read off `GET /status`'s
+ * `acceleration.spark_h3_available` (裁定 113). Same three-valued shape and
+ * same "disable on explicit `false` only, never on `null`" rule as
+ * {@link sageAvailability}: the server runs the job without Spark-H3 on its own
+ * when it cannot use it (recording `spark_h3_used: "on->off"`), so greying the
+ * button out is a courtesy, not a safety gate. */
+export function sparkH3Availability(status: StatusResponse | null | undefined): boolean | null {
+  const available = status?.acceleration?.spark_h3_available;
   return typeof available === "boolean" ? available : null;
 }
 
@@ -704,6 +802,13 @@ export interface AccelerationRequestFields {
    * `/generate/chain` (MiniMax H3, LTX 2.3, LTX 2.5), and `/generate/alpha`.
    * Never sent as `false`. */
   keep_text_conditioning?: boolean;
+  /** 裁定 113: Spark-H3 — `/generate` and `/generate/chain` (MiniMax H3
+   * only). Never sent as `false`; the two keys below ride along with it. */
+  spark_h3?: boolean;
+  /** 裁定 113: the full-attention ratio, 0.01-0.5 (`sparkH3TopkPercent / 100`). */
+  spark_h3_topk_ratio?: number;
+  /** 裁定 113: the full-attention steps, 0-10. */
+  spark_h3_full_steps?: number;
 }
 
 /**
@@ -742,7 +847,7 @@ export interface AccelerationRequestFields {
 export function effectiveAccelerationFields(
   acceleration: AccelerationSettings,
   sageAvailable: boolean | null,
-): Required<AccelerationRequestFields> {
+): Required<Omit<AccelerationRequestFields, "spark_h3_topk_ratio" | "spark_h3_full_steps">> {
   return {
     attention_backend: acceleration.attentionBackend === "sage" && sageAvailable !== false ? "sage" : "sdpa",
     block_swap_prefetch: acceleration.blockSwapPrefetch,
@@ -760,6 +865,12 @@ export function effectiveAccelerationFields(
     keep_reference_latents: acceleration.keepReferenceLatents,
     // Likewise no served row's `requires` names it.
     keep_text_conditioning: acceleration.keepTextConditioning,
+    // Likewise no served row's `requires` names it (Spark-H3 adds only
+    // 10-130MB of VRAM, so it does not move the comfort line — 裁定 113); it is
+    // here to satisfy the type and takes no part in the match. Its two number
+    // keys are left out of the return type: a `requires` value is a string or
+    // a boolean, never a number.
+    spark_h3: acceleration.sparkH3,
   };
 }
 
@@ -881,6 +992,16 @@ export function accelerationRequestFields(
   if (acceleration.keepTextConditioning !== KEEP_TEXT_CONDITIONING_SERVER_DEFAULT) {
     out.keep_text_conditioning = acceleration.keepTextConditioning;
   }
+  // 裁定 113: Spark-H3. The server default is `false`, so the three keys appear
+  // only while it is ON, and then all three together; while OFF not one key is
+  // added, so the body stays exactly what it was before Spark-H3 existed. The
+  // ratio goes out as a fraction (`percent / 100`), unrounded beyond that. The
+  // scope half is `AppShell`'s, as for `sol_vae`.
+  if (acceleration.sparkH3) {
+    out.spark_h3 = true;
+    out.spark_h3_topk_ratio = acceleration.sparkH3TopkPercent / 100;
+    out.spark_h3_full_steps = acceleration.sparkH3FullSteps;
+  }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order
   // reason as the rows above.
@@ -888,4 +1009,52 @@ export function accelerationRequestFields(
     out.embed_mp4_metadata = false;
   }
   return out;
+}
+
+/**
+ * Spark-H3's first generate-button note (裁定 113 ③, MINIMAX_H3_DESIGN §6.11):
+ * Spark-H3 is on and the screen's total step count is at or below
+ * "full-attention steps", so every step runs full attention and Spark-H3 never
+ * acts. Equal counts too: then not one step is left for it.
+ *
+ * The total is what the screen shows: `fixedSampling` (the steps the Fast VAE
+ * row's pi-H3 choice fixes, `samplingValues.ts`'s `piH3FixedSampling`) when it
+ * is set, else the sampling sliders' `sampling`. `null` for both (an engine
+ * with no step slider) = no note. "Full-attention steps" 0 never shows it:
+ * the step count is at least 1 (the served `num_inference_steps.min`, and
+ * pi-H3's 4 / 2), so the comparison alone already answers false.
+ *
+ * Scope is not checked here: on an engine that hides the row (LTX), `AppShell`
+ * has already written `sparkH3` back to `false`. Whether this environment can
+ * run Spark-H3 (`spark_h3_available`) is deliberately not part of the rule.
+ * Informational only — never a reason to disable Generate.
+ */
+export function sparkH3StepsTooFew(
+  acceleration: AccelerationSettings | undefined,
+  sampling: { numInferenceSteps: number } | null,
+  fixedSampling: { numInferenceSteps: number } | null,
+): boolean {
+  if (!acceleration?.sparkH3) return false;
+  const totalSteps = (fixedSampling ?? sampling)?.numInferenceSteps;
+  return totalSteps !== undefined && totalSteps <= acceleration.sparkH3FullSteps;
+}
+
+/**
+ * Spark-H3's second generate-button note (裁定 113 ③, MINIMAX_H3_DESIGN §6.11):
+ * Spark-H3 is on and at least one of `rows` — the sequence estimate of the job,
+ * or of each clip of a Chained job (`shell/h3SequenceRows.ts`'s
+ * `h3SequenceRows`) — is shorter than {@link SPARK_H3_MIN_TOKENS}, below which
+ * the engine runs full attention. A `null` entry (a size or frame count the
+ * estimate cannot read) counts as no answer and never shows the note.
+ *
+ * The estimate leaves out the prompt's own tokens, so right at the line the
+ * note can show while the engine still runs Spark-H3 (MINIMAX_H3_DESIGN §6.11).
+ * Same scope and availability remarks as {@link sparkH3StepsTooFew}.
+ */
+export function sparkH3VideoTooShort(
+  acceleration: AccelerationSettings | undefined,
+  rows: readonly ({ total: number } | null)[],
+): boolean {
+  if (!acceleration?.sparkH3) return false;
+  return rows.some((row) => row !== null && row.total < SPARK_H3_MIN_TOKENS);
 }

@@ -16,6 +16,8 @@ import {
 } from "../../timeline/provisionalReservation";
 import { resolveGenerationConstraints } from "../../shell/generationConstraints";
 import { EditScreen } from "./EditScreen";
+import { ACCELERATION_DEFAULTS } from "../../shell/accelerationSettings";
+import type { AccelerationSettings } from "../../shell/accelerationSettings";
 import { clearRetakeCarryOver } from "./useRetakeForm";
 
 /**
@@ -580,7 +582,7 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
     retake: { audio_strength: { min: 0, max: 1, step: 0.05, default: 0.5 } },
   });
 
-  function renderH3(options: BridgeOptions = {}) {
+  function renderH3(options: BridgeOptions = {}, acceleration?: AccelerationSettings) {
     const nativeBridge = createBridge(options);
     render(
       <LanguageProvider>
@@ -593,6 +595,7 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
             engineLabel="MiniMax H3"
             constraints={H3}
             loraAudioHidden
+            {...(acceleration ? { acceleration } : {})}
           />
         </ToastProvider>
       </LanguageProvider>,
@@ -654,6 +657,47 @@ describe("EditScreen — Retake（MiniMax H3・§1-123）", () => {
     expect(body).not.toHaveProperty("overlap_strength");
     expect(body).not.toHaveProperty("stage2_window");
     expect(body.retake).not.toHaveProperty("regenerate_audio");
+  });
+
+  // 裁定 113: Spark-H3 の 2 つの注意文。出すだけで、Generate は押せるまま。
+  it("Spark-H3: Steps がフル演算するステップ数以下で注意文 A、小さい画面で注意文 B。Generate は押せて、3 つの欄が飛ぶ", async () => {
+    const user = userEvent.setup();
+    const { request } = renderH3({}, { ...ACCELERATION_DEFAULTS, sparkH3: true, sparkH3FullSteps: 2 });
+    const button = await screen.findByRole("button", { name: "Redo the selected range" });
+    await waitFor(() => expect(button).toBeEnabled());
+    const numberIn = (label: string) =>
+      within(panelOf()).getByText(label, { selector: ".field-label" }).closest("label")!.querySelector<HTMLInputElement>(
+        'input[type="number"]',
+      )!;
+    // Steps 20 > 2: no note. 2 = 2: note A.
+    expect(screen.queryByText(en.sparkH3Notes.stepsTooFew)).toBeNull();
+    fireEvent.change(numberIn(en.single.sampling.steps), { target: { value: "2" } });
+    const stepsNote = await screen.findByText(en.sparkH3Notes.stepsTooFew);
+    expect(stepsNote).toHaveClass("warning-banner", "warning-banner-mild");
+    // 1280x720 at the 107-frame window is long enough; 512x384 is not.
+    expect(screen.queryByText(en.sparkH3Notes.videoTooShort)).toBeNull();
+    fireEvent.change(numberIn(en.single.size.width), { target: { value: "512" } });
+    fireEvent.change(numberIn(en.single.size.height), { target: { value: "384" } });
+    expect(await screen.findByText(en.sparkH3Notes.videoTooShort)).toHaveClass("warning-banner", "warning-banner-mild");
+    expect(button).toBeEnabled();
+    await user.click(button);
+    await waitFor(() => expect(chainBody(request)).toBeDefined());
+    expect(chainBody(request)).toMatchObject({ spark_h3: true, spark_h3_topk_ratio: 0.2, spark_h3_full_steps: 2 });
+  });
+
+  it("Spark-H3 が off なら、同じ条件でも注意文は出ず、body に欄は 1 つも無い", async () => {
+    const user = userEvent.setup();
+    const { request } = renderH3({}, { ...ACCELERATION_DEFAULTS, sparkH3FullSteps: 10 });
+    const button = await screen.findByRole("button", { name: "Redo the selected range" });
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByText(en.sparkH3Notes.stepsTooFew)).toBeNull();
+    expect(screen.queryByText(en.sparkH3Notes.videoTooShort)).toBeNull();
+    await user.click(button);
+    await waitFor(() => expect(chainBody(request)).toBeDefined());
+    const body = chainBody(request)!;
+    expect(body).not.toHaveProperty("spark_h3");
+    expect(body).not.toHaveProperty("spark_h3_topk_ratio");
+    expect(body).not.toHaveProperty("spark_h3_full_steps");
   });
 
   it("422 RETAKE_VIDEO_NO_AUDIO では Strength 版の黄色の注意を出す", async () => {

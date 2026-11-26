@@ -16,6 +16,7 @@ import { formatFps } from "../../jobs/fpsConvert";
 import type { ControlLoraSelection } from "../../lora/controlLoras";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { sparkH3StepsTooFew, sparkH3VideoTooShort } from "../../shell/accelerationSettings";
 import { useToasts } from "../../shell/ToastContext";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { BatchSection } from "../batch/BatchSection";
@@ -25,7 +26,8 @@ import {
   resolveSequenceRowsBudget,
   singleLegacySpillTable,
 } from "../../shell/comfortTable";
-import { H3_NO_CONDITIONING, h3ComfortFrames } from "../../shell/h3SequenceRows";
+import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
+import { SparkH3Notes } from "../../shell/SparkH3Notes";
 import type { H3SequenceShape } from "../../shell/h3SequenceRows";
 import type { SingleSectionsDisabled, SingleSectionsHidden } from "../../shell/featureScope";
 import { fixedFrameRate, frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
@@ -621,6 +623,16 @@ function SingleScreenBody({
     (tag: string) => onPromptChange?.((prev) => appendReferenceTag(prev, tag)),
     [onPromptChange],
   );
+  // 裁定 113: Spark-H3's two notes under Generate. The sequence estimate is the
+  // comfort marker's: the form's size and frame count with its composition
+  // (`sequenceShape`).
+  const sparkH3StepsNote = sparkH3StepsTooFew(acceleration, form.values.sampling, form.fixedSampling);
+  const sparkH3ShortNote = sparkH3VideoTooShort(acceleration, [
+    h3SequenceRows(
+      { width: form.values.width, height: form.values.height, ...sequenceShape },
+      form.values.numFrames,
+    ),
+  ]);
 
   // §6-2: replace the `prefillMaterial` receipt with the missing-material note
   // if the material's upload failed. The handler records what it attached
@@ -1470,6 +1482,9 @@ function SingleScreenBody({
               {strings.single.reference.notices[code]}
             </p>
           ))}
+          {/* 裁定 113: informational like the notes above — never one of
+              `generateReasonCodes`. */}
+          <SparkH3Notes stepsTooFew={sparkH3StepsNote} videoTooShort={sparkH3ShortNote} />
           {submitState.phase === "error" && (
             <div className="card card-error">
               <p className="error-code">{submitState.code}</p>

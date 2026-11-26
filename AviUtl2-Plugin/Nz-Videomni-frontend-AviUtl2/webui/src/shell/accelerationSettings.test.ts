@@ -39,6 +39,9 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     solVae: false,
     keepReferenceLatents: false,
     keepTextConditioning: false,
+    sparkH3: false,
+    sparkH3TopkPercent: 20,
+    sparkH3FullSteps: 2,
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -63,6 +66,8 @@ describe("effectiveAccelerationFields", () => {
       keep_reference_latents: false,
       // 台帳 §1-298: likewise named by no row.
       keep_text_conditioning: false,
+      // 裁定 113: likewise named by no row (its two number keys are left out).
+      spark_h3: false,
     });
   });
 
@@ -81,6 +86,7 @@ describe("effectiveAccelerationFields", () => {
       "keep_text_conditioning",
       "pi_h3",
       "sol_vae",
+      "spark_h3",
       "vae_mode",
       "vram16_mode",
     ]);
@@ -96,6 +102,7 @@ describe("effectiveAccelerationFields", () => {
       sol_vae: false,
       keep_reference_latents: false,
       keep_text_conditioning: false,
+      spark_h3: false,
     });
   });
 

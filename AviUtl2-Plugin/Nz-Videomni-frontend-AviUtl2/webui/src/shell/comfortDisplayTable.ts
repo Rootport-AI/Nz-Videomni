@@ -154,6 +154,10 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
   keepReferenceLatents: false,
   // 台帳 §1-298: a memory cache, no row's `requires` names it.
   keepTextConditioning: false,
+  // 裁定 113: Spark-H3 — no row's `requires` names it (it does not move the line).
+  sparkH3: false,
+  sparkH3TopkPercent: 20,
+  sparkH3FullSteps: 2,
   // Output setting sharing the store (§3-164); the comfort matcher ignores it.
   embedMp4Metadata: true,
 };

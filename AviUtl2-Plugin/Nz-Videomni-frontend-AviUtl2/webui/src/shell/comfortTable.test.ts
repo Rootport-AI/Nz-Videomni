@@ -35,6 +35,9 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     solVae: false,
     keepReferenceLatents: false,
     keepTextConditioning: false,
+    sparkH3: false,
+    sparkH3TopkPercent: 20,
+    sparkH3FullSteps: 2,
     embedMp4Metadata: true,
     ...overrides,
   };

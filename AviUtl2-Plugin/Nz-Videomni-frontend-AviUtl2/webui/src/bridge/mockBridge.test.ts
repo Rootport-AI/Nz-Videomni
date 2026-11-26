@@ -1019,6 +1019,8 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
       "pi_h3",
       // 2026-11-24: MiniMax H3's Sol-H3-VAE.
       "sol_vae",
+      // 裁定 113: MiniMax H3's Spark-H3 (right after `sol_vae`, the server's order).
+      "spark_h3",
       // 台帳 §1-297: MiniMax H3's keep-reference-latents-resident row.
       "keep_reference_latents",
       // 台帳 §1-299: `keep_text_conditioning` is NOT here — LTX takes it.
@@ -1033,7 +1035,7 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // from. Spelt out rather than counted so a rename on either side shows up.
     // 台帳 §1-101: `vram16_mode` joined — VRAM 16GB mode is MiniMax H3's own.
     expect(features).toEqual(
-      expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio", "references", "pi_h3", "sol_vae", "keep_reference_latents"]),
+      expect.arrayContaining(["two_stage_hq", "prune_vaed", "vram16_mode", "source_audio", "references", "pi_h3", "sol_vae", "spark_h3", "keep_reference_latents"]),
     );
     expect(features).not.toContain("keep_text_conditioning");
     // §3-102 (LTX 2.5 Chained, first stage): `chain` is GONE — the engine
@@ -1100,8 +1102,9 @@ describe("GET /models — unsupported_features (§3-98 P5)", () => {
     // Ruling 107 made it six: `pi_h3` (MiniMax H3's pi-H3). Sol-H3-VAE
     // (2026-11-24) made it seven: `sol_vae`. 台帳 §1-297 made it eight:
     // `keep_reference_latents`. (台帳 §1-298 added a ninth,
-    // `keep_text_conditioning`, and 台帳 §1-299 took it out again.)
-    expect(features).toHaveLength(8);
+    // `keep_text_conditioning`, and 台帳 §1-299 took it out again.) 裁定 113
+    // made it nine: `spark_h3`.
+    expect(features).toHaveLength(9);
   });
 
   it("declares LTX 2.5 as its own engine family", async () => {

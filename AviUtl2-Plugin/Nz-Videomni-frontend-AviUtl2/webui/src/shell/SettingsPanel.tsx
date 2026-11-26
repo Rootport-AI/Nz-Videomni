@@ -17,14 +17,21 @@ import type { Theme } from "./ThemeContext";
 import { usePrefillPolicy } from "./PrefillPolicyContext";
 import type { PrefillResolutionPolicy } from "./PrefillPolicyContext";
 import {
+  SPARK_H3_FULL_STEPS_MAX,
+  SPARK_H3_FULL_STEPS_MIN,
+  SPARK_H3_TOPK_PERCENT_MARKERS,
+  SPARK_H3_TOPK_PERCENT_MAX,
+  SPARK_H3_TOPK_PERCENT_MIN,
   blockSwapPrefetchAvailability,
   blockSwapPrefetchEffective,
   fastVaeChoice,
   keepResidentEffective,
   sageAvailability,
+  sparkH3Availability,
 } from "./accelerationSettings";
 import type { AccelerationSettings, AttentionBackend, FastVaeChoice, VaeMode } from "./accelerationSettings";
 import { comfortDisplayTableFor, resolveComfortCell } from "./comfortDisplayTable";
+import { FloatSliderField } from "../modes/single/FloatSliderField";
 import type { ServerStatusState } from "../modes/single/useServerStatus";
 import "./SettingsPanel.css";
 
@@ -42,6 +49,13 @@ const LANGUAGE_OPTIONS: ReadonlyArray<{ lang: Lang; label: string }> = [
 const ATTENTION_OPTIONS: ReadonlyArray<{ backend: AttentionBackend; label: string }> = [
   { backend: "sdpa", label: "sdpa" },
   { backend: "sage", label: "sage attention" },
+];
+
+/** Acceleration → Attention's second row (裁定 113): "off / Spark-H3". Not
+ * translated, for {@link ATTENTION_OPTIONS}' reason — technical names. */
+const SPARK_H3_OPTIONS: ReadonlyArray<{ on: boolean; label: string }> = [
+  { on: false, label: "off" },
+  { on: true, label: "Spark-H3" },
 ];
 
 export interface SettingsPanelProps {
@@ -136,6 +150,18 @@ export interface SettingsPanelProps {
    * from a base-model id. Same HIDE-don't-grey treatment as
    * {@link keepReferenceLatentsUnsupported}. */
   keepTextConditioningUnsupported: boolean;
+  /** Acceleration (裁定 113): the "off / Spark-H3" row under the Attention row
+   * and its two sliders (MiniMax H3 only). The ratio slider's value is the
+   * stored whole percent. The Spark-H3 button is greyed out only on an explicit
+   * `spark_h3_available: false` in `GET /status` (the Sage rule). */
+  onSparkH3Change: (value: boolean) => void;
+  onSparkH3TopkPercentChange: (value: number) => void;
+  onSparkH3FullStepsChange: (value: number) => void;
+  /** Whether the LOADED base model's engine refuses `spark_h3` — derived by
+   * `AppShell` from `GET /models`' `unsupported_features`, never from a
+   * base-model id. HIDES the row and its sliders; it is LTX 2.3 / 2.5 that
+   * publish the name. */
+  sparkH3Unsupported: boolean;
   /** Output (§3-164, 2026-09-24): whether finished mp4s get the generation
    * conditions written into their `comment` tag. Stored alongside the
    * acceleration choices (`acceleration.embedMp4Metadata`). */
@@ -196,6 +222,10 @@ export function SettingsPanel({
   keepReferenceLatentsUnsupported,
   onKeepTextConditioningChange,
   keepTextConditioningUnsupported,
+  onSparkH3Change,
+  onSparkH3TopkPercentChange,
+  onSparkH3FullStepsChange,
+  sparkH3Unsupported,
   onEmbedMp4MetadataChange,
   baseModelOptions,
   baseModelValue,
@@ -234,6 +264,8 @@ export function SettingsPanel({
   // a safety gate (see `sageAvailability`'s own doc comment).
   const statusBody = serverStatus.kind === "online" || serverStatus.kind === "busy" ? serverStatus.status : null;
   const sageDisabled = sageAvailability(statusBody) === false;
+  // Spark-H3 (裁定 113): the same "explicit false only" rule as sage.
+  const sparkH3Disabled = sparkH3Availability(statusBody) === false;
   // Block-swap prefetch (2026-08-01, backend §44): same "explicit false only"
   // disabling rule as sage — see `blockSwapPrefetchAvailability`'s own doc
   // comment.
@@ -488,7 +520,56 @@ export function SettingsPanel({
               );
             })}
           </div>
+          {/* 裁定 113: Spark-H3, layered on top of the choice above — a second
+              row of buttons inside the same field, with no heading of its own.
+              Hidden (with its sliders) on an engine that publishes `spark_h3`. */}
+          {!sparkH3Unsupported && (
+            <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelSparkH3Label}>
+              {SPARK_H3_OPTIONS.map(({ on, label }) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={`mode-tab${acceleration.sparkH3 === on ? " mode-tab--active" : ""}`}
+                  aria-pressed={acceleration.sparkH3 === on}
+                  disabled={on && sparkH3Disabled}
+                  title={on && sparkH3Disabled ? strings.settings.accelSparkH3UnavailableTooltip : undefined}
+                  onClick={() => onSparkH3Change(on)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+        {/* The two sliders show only while Spark-H3 is selected; their values
+            stay stored while it is off. */}
+        {!sparkH3Unsupported && acceleration.sparkH3 && (
+          <>
+            <FloatSliderField
+              label={strings.settings.accelSparkH3TopkLabel}
+              value={acceleration.sparkH3TopkPercent}
+              min={SPARK_H3_TOPK_PERCENT_MIN}
+              max={SPARK_H3_TOPK_PERCENT_MAX}
+              step={1}
+              disabled={false}
+              onChange={onSparkH3TopkPercentChange}
+              markers={SPARK_H3_TOPK_PERCENT_MARKERS.map((value) => ({
+                value,
+                title: strings.settings.accelSparkH3TopkMarkerTitle,
+              }))}
+            />
+            <FloatSliderField
+              label={strings.settings.accelSparkH3FullStepsLabel}
+              value={acceleration.sparkH3FullSteps}
+              min={SPARK_H3_FULL_STEPS_MIN}
+              max={SPARK_H3_FULL_STEPS_MAX}
+              step={1}
+              disabled={false}
+              onChange={onSparkH3FullStepsChange}
+            />
+            <p className="field-hint">{strings.settings.accelSparkH3FullStepsNote}</p>
+          </>
+        )}
         {/* The one piece of copy the owner asked to be unmissable: sage is not
             bit-identical to sdpa, so a fixed seed no longer reproduces the
             exact same frames. Shown only while sage is actually selected. */}

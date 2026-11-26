@@ -16,12 +16,15 @@ import { useShowNote } from "../../shell/NoteArea";
 import { useToasts } from "../../shell/ToastContext";
 import type { NagSettings } from "../../shell/nagSettings";
 import type { AccelerationSettings } from "../../shell/accelerationSettings";
+import { sparkH3StepsTooFew, sparkH3VideoTooShort } from "../../shell/accelerationSettings";
 import { usePrefillPolicy } from "../../shell/PrefillPolicyContext";
 import { usePromptTokenCounts } from "../../shell/usePromptTokenCounts";
 import { resolveSequenceRowsBudget } from "../../shell/comfortTable";
 import type { GenerationConstraints } from "../../shell/generationConstraints";
 import { frameLimitsFor, LTX_GENERATION_CONSTRAINTS } from "../../shell/generationConstraints";
-import { H3_NO_CONDITIONING, h3ComfortFrames } from "../../shell/h3SequenceRows";
+import { H3_NO_CONDITIONING, h3ComfortFrames, h3SequenceRows } from "../../shell/h3SequenceRows";
+import type { H3SequenceInput } from "../../shell/h3SequenceRows";
+import { SparkH3Notes } from "../../shell/SparkH3Notes";
 import { omitLoraAudioStrength } from "../../lora/loraTags";
 import { isChainStage1OverBudget } from "../../shell/tokenBudget";
 import { STAGE2_WINDOW_OPTIONS } from "../../shell/tokenBudget";
@@ -690,47 +693,47 @@ function ChainedScreenBody({
   // and the Reference cards the clip uses only while References is on (exactly
   // what `buildSubmission` sends). Derived, not stored — no state, no effect.
   // Empty (no marker) when the engine serves no rows line (LTX).
+  //
+  // 裁定 113: the per-clip composition is built once (`clipSequenceInputs`) and
+  // read by both the comfort marker and Spark-H3's "short video" note below,
+  // so the two can never count a clip differently.
   const clipFrameMin = form.clipFrameLimits.min;
   const clipFrameMax = form.clipFrameLimits.max;
   const { width: commonWidth, height: commonHeight } = form.common;
   const startFrameItems = form.startFrame.items;
-  const clipComfort = useMemo(() => {
-    const comfort: Record<string, number | null> = {};
+  const clipSequenceInputs = useMemo(() => {
     const openingImage = startFrameItems.some((item) => item.status === "ready" || item.status === "uploading");
-    clips.forEach((clip, index) => {
-      const budget = resolveSequenceRowsBudget(config.limits, engineFamily, transformerQuantClass);
-      if (budget === null) return;
+    return clips.map((clip, index): { clip: (typeof clips)[number]; input: H3SequenceInput } => {
       const entry = usedReferences[clip.id];
-      comfort[clip.id] = h3ComfortFrames(
-        {
+      return {
+        clip,
+        input: {
           width: commonWidth,
           height: commonHeight,
           keyframeCount: index === 0 && !hasSourceVideo && openingImage ? 1 : 0,
           references:
             isH3 && referencesOn && entry ? sequenceReferences(entry.summary, entry.slots, role, isH3) : [],
         },
-        budget,
-        clipFrameMin,
-        clipFrameMax,
-      );
+      };
+    });
+  }, [clips, commonWidth, commonHeight, hasSourceVideo, startFrameItems, referencesOn, usedReferences, role, isH3]);
+  const clipComfort = useMemo(() => {
+    const comfort: Record<string, number | null> = {};
+    clipSequenceInputs.forEach(({ clip, input }) => {
+      const budget = resolveSequenceRowsBudget(config.limits, engineFamily, transformerQuantClass);
+      if (budget === null) return;
+      comfort[clip.id] = h3ComfortFrames(input, budget, clipFrameMin, clipFrameMax);
     });
     return comfort;
-  }, [
-    clips,
-    commonWidth,
-    commonHeight,
-    hasSourceVideo,
-    startFrameItems,
-    referencesOn,
-    usedReferences,
-    role,
-    isH3,
-    config.limits,
-    engineFamily,
-    transformerQuantClass,
-    clipFrameMin,
-    clipFrameMax,
-  ]);
+  }, [clipSequenceInputs, config.limits, engineFamily, transformerQuantClass, clipFrameMin, clipFrameMax]);
+  // 裁定 113: Spark-H3's two notes under Generate. The steps note reads the
+  // chain's one step count (pi-H3's when it fixes it); the short-video note
+  // shows when ANY clip's sequence is short.
+  const sparkH3StepsNote = sparkH3StepsTooFew(acceleration, form.sampling, form.fixedSampling);
+  const sparkH3ShortNote = sparkH3VideoTooShort(
+    acceleration,
+    clipSequenceInputs.map(({ clip, input }) => h3SequenceRows(input, clip.numFrames)),
+  );
   /** A card that will be sent is still uploading: Generate waits (Create's rule). */
   const referenceUploading = isH3 && referencesOn && referenceView.uploading;
   /** Ruling: the "no references" notice shows only when EVERY clip has no
@@ -2028,6 +2031,9 @@ function ChainedScreenBody({
             {strings.single.reference.notices[code]}
           </p>
         ))}
+        {/* 裁定 113: informational like the notes above — never a reason to
+            disable Generate. */}
+        <SparkH3Notes stepsTooFew={sparkH3StepsNote} videoTooShort={sparkH3ShortNote} />
         {submitState.phase === "error" && (
           <div className="card card-error">
             <p className="error-code">{submitState.code}</p>

@@ -40,6 +40,9 @@ describe("useAccelerationSettings", () => {
       solVae: SOL_VAE_SERVER_DEFAULT,
       keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
       keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+      sparkH3: false,
+      sparkH3TopkPercent: 20,
+      sparkH3FullSteps: 2,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     });
   });
@@ -79,6 +82,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -98,6 +104,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -124,6 +133,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -143,6 +155,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -191,6 +206,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -210,6 +228,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -305,6 +326,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -381,6 +405,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -429,6 +456,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -514,6 +544,9 @@ describe("useAccelerationSettings", () => {
         solVae: SOL_VAE_SERVER_DEFAULT,
         keepReferenceLatents: KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
         keepTextConditioning: KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+        sparkH3: false,
+        sparkH3TopkPercent: 20,
+        sparkH3FullSteps: 2,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });

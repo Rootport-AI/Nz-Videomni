@@ -37,112 +37,51 @@
 ### 1-294. MiniMax H3 の pi-H3 の段 4（Gradio・MCP・インストーラーでの取得の確認・文書・台帳）（起票：2026-11-23）
 
 - **概要**: Gradio の Settings に pi-H3 の切り替え（Generate タブの単発だけ）、MCP の `submit_generate`・`submit_chain` に引数 `pi_h3`、インストーラーに pi-H3 の案内を足した（dev の `0917e48a`・`941860c4`・`afb1f11d`・`9ab8cc56`）。機械の確認、MCP の実機の確認、Gradio の実機での確認、アプリの試験の全件は済み、main へ取り込んだ。残るのは、オーナーが後日、検証用の別の機械で行うインストーラーの確認だけ（オーナー指示 2026-11-23）。Sol-H3-VAE（[`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-295。2026-11-24 にクローズ）の重みの取得の確認も、ここにまとめた。
-- **これからすること**: 検証用の別の機械で、下のインストーラーの確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
-- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。本節が実機確認の項目の正本。
-
-#### インストーラー（main へ取り込んだあと、検証用の別の機械で）
-
-前提: その機械で main を取り込み（`git pull`）、`setup.bat` を済ませておく。その機械には、H3 の Python の環境や pi-H3・Sol-H3-VAE のファイルが、すでにあるとは限らない（無ければ、この確認の中で作られ、取得される）。
-
-- [ ] `install-MiniMaxH3.bat` を実行する → 最後の表で `pi_h3_4steps` と `pi_h3_2steps` の 2 行が `PASS` になる。
-- [ ] （続き）`models\MiniMaxH3\VAE\pi-H3\` を見る → `pi_h3_4step_dwd_adapter_int8_convrot.safetensors` と `pi_h3_2step_dwd_adapter_int8_convrot.safetensors` の 2 本があり、どちらも 2,192,176,240 バイト。
-- [ ] （続き）PowerShell で 2 本の SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 研究ノート [`MINIMAX_H3_RESEARCH_NOTES.md`](MINIMAX_H3_RESEARCH_NOTES.md) §18.2 の値と一致する。
-- [ ] （続き）`install-MiniMaxH3.bat` の最後の表（1 つ目の項目で見た表）で、`h3_sol_vae` の行が `PASS` になっている。
-- [ ] （続き）`models\MiniMaxH3\VAE\Sol\` を見る → `minimax_h3_sol_vae_int8_convrot.safetensors` があり、大きさが設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.8 の「重みと取得」のバイト数と一致する。
-- [ ] （続き）PowerShell でこのファイルの SHA-256 を `Get-FileHash -Algorithm SHA256 <ファイルのパス>` で出す → 設計正本 §6.8 の「重みと取得」の値と一致する。
-- [ ] その機械で、操作パネルか Gradio のどちらかで「Fast VAE」を pi-H3_4s にし、MiniMax H3 で短い動画を生成する → ジョブが完了する。
-- [ ] その機械で、操作パネルの「Fast VAE」を Sol にし、MiniMax H3 で短い動画を生成して、できた mp4 を Toolbox の mp4 info に落とす → ジョブが完了し、表示の中に `"sol_vae_used": "on"` がある。
-- 補足: pi-H3 や Sol-H3-VAE がすでにある機械で取得そのものを確かめたい場合は、`models\MiniMaxH3\VAE\pi-H3` と `models\MiniMaxH3\VAE\Sol` のフォルダを `models` の外へ移してから実行する（確かめたら、移したフォルダを消す）。
+- **これからすること**: 検証用の別の機械で、1-301 の「検証用の別の機械」の一覧を行う（本項の分も、そこに入っている）。本項は、その一覧の次の 3 つが合格したら閉じる——「インストーラー」の表の `pi_h3_4steps`・`pi_h3_2steps`・`h3_sol_vae` の 3 行が `PASS`、「生成 1 本目」の mp4 info に `"sol_vae_used": "on"`、「生成 2 本目」の mp4 info に `pi_h3_used` の欄。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移す。
+- **出典**: 作りと採った選択は設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.7 の「Gradio と MCP（段 4）」、裁定は同 裁定 107、機械の確認と実機の確認の結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §227。段 3 までは [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) 1-293。Sol-H3-VAE の重みと取得は設計正本 §6.8 の「重みと取得」、裁定は同 裁定 108 ⑪。実機確認の項目の正本は 1-301 の「検証用の別の機械」。
 
 ### 1-301. MiniMax H3 の Spark-H3（注意の計算を間引く高速化）の実機での確認（起票：2026-11-26）
 
 - **概要**: Spark-H3 を、エンジン・サーバー・インストーラー・操作パネル・Gradio・MCP に足した（dev）。開発機の GPU での確認は済み（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §239）。操作パネルは、開発機の AviUtl2 に配置済み。
-- **これからすること**: 下の確認を行う。合格したら、本項と §3-247 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、main への取り込みを伺う。検証用の別の機械（RTX 30 シリーズ）の確認に合格したら、README の Spark-H3 の対応 GPU の RTX 30 シリーズを「確認済み」に直す。
-- **出典**: 作りは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11、裁定は同 裁定 113、実験の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238。本節が実機確認の項目の正本。
-- 結果の見方: 「mp4 info」は、できた mp4 を Toolbox の mp4 info に落としたときの表示。
+- **これからすること**:
+  - 下の確認を行う。生成は、開発機で 1 本、検証用の別の機械で 2 本。
+  - 監督の側で、Spark-H3 ありでまだ生成していない組み合わせ（先頭のフレームに画像を置いた単発・音声を付けた単発・Ref2VA の重みと Reference つきの単発・Edit の Inpainting・Fast VAE の pi-H3_4s と Sol）を、開発機の GPU で流して確かめる。オーナーの確認の項目ではない。まだ行っていない（結果は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §239 に足す）。
+  - 合格したら、本項と §3-247 を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、main への取り込みを伺う。検証用の別の機械（RTX 30 シリーズ）の確認に合格したら、README の Spark-H3 の対応 GPU の RTX 30 シリーズを「確認済み」に直す。
+  - 同じ確認で閉じる番号: 1-304 は、開発機の「ふだんの使い方で 1 本」と、検証用の別の機械の「生成 1 本目」で閉じる。1-294 は、検証用の別の機械の「インストーラー」「生成 1 本目」「生成 2 本目」で閉じる（どの欄を見るかは各項）。
+- **出典**: 作りは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11、裁定は同 裁定 113、実験の数値は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §238。一覧から外した項目と、それを固定しているテスト・確認の対応は記録簿 §239.9。本節が実機確認の項目の正本（1-294・1-304 の分を含む）。
+- 結果の見方: 「mp4 info」は、できた mp4 を Toolbox の mp4 info に落としたときの表示。テキストエンコーダーの欄（`unbuffered_read` と `seconds`）は、単発では `h3` → `phases` → `encode` の中（`unbuffered_read` はその中の `te`）、Chained では `h3` → `phases` → `clips` の各クリップの `encode` の中にある。
 
-#### インストーラー（開発機）
+#### 開発機（生成 1 本・全部で約 15 分。うち生成は約 7 分）
 
-- [ ] `install-MiniMaxH3.bat` を実行する → Spark-H3 の段で「GPU の系統: 8.9（sm89）」の行と、「Spark-H3 の部品を入れました（…）」か「Spark-H3 の部品は入っています（spark-h3-kitchen 0.2.37+spark.h3.sm89.cu130.1）」の行が出る。「入れました」の回は、その前に「SHA-256 が一致しました: ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm89-cu130.zip」の行も出る。
-- [ ] （続き）もう一度実行する → Spark-H3 の段は「Spark-H3 の部品は入っています（…）」で終わり、最後のまとめに Spark-H3 の注意文が出ない。
+Settings の操作パネルの 6 項目は、2026-11-26 に合格した。
 
-#### Settings（開発機・操作パネル）
+- [x] MiniMax H3 を選んで Settings を開くと、「sdpa / sage attention」の行のすぐ下に「off / Spark-H3」の行があり、「Spark-H3」のボタンは押せる。
+- [x] 「Spark-H3」を押すと、スライダー 2 本（「フルで演算する割合」は 20% で、10% と 20% に白い印と「推奨の範囲（10〜20%）」の表示。「フル演算するステップ数」は 2）と、ステップ数の下の説明文が出る（説明文の文言は、下の「文言」の項目で見る）。
+- [x] スライダーの両端は、割合が 1% と 50%、ステップ数が 0 と 10。
+- [x] 「off」でスライダーが消え、もう一度「Spark-H3」を押すと、変えた値のまま出る。
+- [x] ベースモデルを LTX 2.3 に切り替えると行とスライダーが消え、MiniMax H3 に戻すと行は「off」で、「Spark-H3」を押すと値は残っている。
+- [x] AviUtl2 を起動し直しても、「Spark-H3」の選択と値が残っている。
 
-- [ ] ベースモデルに MiniMax H3 を選び、Settings を開く → 「生成の高速化」の「Attention機構の実装」の欄で、「sdpa / sage attention」の行のすぐ下に「off / Spark-H3」の行がある。「Spark-H3」のボタンは押せる。
-- [ ] 「Spark-H3」を押す → その下にスライダーが 2 本出る。「フルで演算する割合」は 20% で、10% と 20% の位置に白い印があり、印にマウスを乗せると「推奨の範囲（10〜20%）」と出る。「フル演算するステップ数」は 2 で、下に「総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）」と出る。
-- [ ] （続き）割合のスライダーを左端と右端まで動かす → 1% と 50% になる。ステップ数のスライダーを左端と右端まで動かす → 0 と 10 になる。
-- [ ] 割合を 15%、ステップ数を 1 にしてから「off」を押す → スライダーが消える。もう一度「Spark-H3」を押す → 15% と 1 のまま出る。
-- [ ] （続き）「Spark-H3」を選んだまま、ベースモデルを LTX 2.3 に切り替える → 「off / Spark-H3」の行とスライダーが消える。MiniMax H3 に戻す → 行は「off」になっている。「Spark-H3」を押す → 15% と 1 のまま出る。
-- [ ] （続き）AviUtl2 を起動し直し、Settings を開く → 「Spark-H3」が選ばれていて、15% と 1 のまま。
+- [ ] **文言**（文言を直した操作パネルを開発機の AviUtl2 に配置したあと・生成なし）: Settings で「sage attention」と「Spark-H3」を選ぶ → 「フル演算するステップ数」のスライダーの下の説明文が「フル演算するステップ数は、総ステップ数の 2 割が目安です（…）」で始まり、その下の注意文が「sage attentionでは、同じシードでも生成結果の細部が変わります（…）」で始まる。
+- [ ] **注意文の見え方**（生成なし）: Settings で「フル演算するステップ数」を 2 にし、Single の Steps を 2 にする → 生成ボタンの下に黄色で「Stepsが少ないため、Spark-H3が効きません。Settings画面で「フル演算するステップ数」を下げてください。」と出て、生成ボタンは灰色にならない。
+- [ ] （続き）Steps を 4 に戻し、大きさを 1280×768・フレーム数を 39 にし、キーフレームと Reference のカードを付けない → 生成ボタンの下に黄色で「短い動画ではSpark-H3が効きません。」と出る。
+- [ ] **ふだんの使い方で 1 本**（1-304 を兼ねる）: Chained で、Turbo LoRA の 4 ステップ・クリップ 3 本（クリップごとに、今まで使っていないプロンプト）・Spark-H3 あり（割合 20%・フル演算するステップ数 1）・ほかの設定はふだんどおりで生成する → 完走し、絵と音が実用の範囲。mp4 info に `"spark_h3_used": "on"` があり、3 本のクリップの `encode` の `te` のどれにも `"unbuffered_read": "on"` があり、2 本目と 3 本目のクリップの `encode` の `seconds` がどちらも 10 秒未満。
 
-#### 生成（開発機・操作パネル）
+#### 検証用の別の機械（RTX 30 シリーズ。インストーラー 1 回と生成 2 本。1-294・1-304 を兼ねる）
 
-ここでの「ふだんの条件」は、Turbo LoRA の 4 ステップ（Steps 4）・Attention は sage attention・VRAM 16GB mode は on・Fast VAE は off。Spark-H3 は「Spark-H3」・割合 20%・フル演算するステップ数 1。動画の大きさを変えた最初の 1 本は、部品の組み立ての時間が余分にかかる（README の Spark-H3 の節）ので、時間を比べるのは 2 本目以降にする。
+前提: その機械で、dev を取り込み（`git pull`）、`setup.bat` を済ませておく。pi-H3 と Sol-H3-VAE のファイルが無い機械なら、インストーラーがこの実行で取得する（すでにある機械では、表はそのファイルを見る）。時間は、その機械の生成の速さと取得するファイルの量によるので、見積もっていない。
 
-- [ ] Single で、ふだんの条件で生成する → 完走する。生成ボタンの下に Spark-H3 の注意文は出ない。mp4 info に `"spark_h3_used": "on"` がある。
-- [ ] （続き）同じシード・同じ条件で、Spark-H3 だけを off にして生成する → Spark-H3 のほうが短い時間で終わる。2 本を見比べて、Spark-H3 のほうの絵と音が実用の範囲か見る。
-- [ ] Single で、フル演算するステップ数を 2 にし、Steps を 2 にする → 生成ボタンの下に黄色で「Stepsが少ないため、Spark-H3が効きません。Settings画面で「フル演算するステップ数」を下げてください。」と出て、生成ボタンは押せる。生成する → 完走し、mp4 info に `"spark_h3_used": "on->off"` と `"reason": "few_steps"` がある。
-- [ ] （続き）Steps を 3 にする → 注意文が消える。
-- [ ] （続き）フル演算するステップ数は 2 のまま、Fast VAE を pi-H3_2s にする → 同じ注意文が出る。pi-H3_4s にする → 注意文が消える。pi-H3_4s のまま生成する → 完走し、絵と音が崩れていない。
-- [ ] Single をふだんの条件に戻し（Fast VAE は off・Steps 4・フル演算するステップ数 1）、大きさを 1280×768・フレーム数を 39 にし、キーフレームと Reference のカードを付けない → 生成ボタンの下に黄色で「短い動画ではSpark-H3が効きません。」と出て、生成ボタンは押せる。生成する → 完走し、mp4 info に `"spark_h3_used": "on->off"` と `"reason": "short_sequence"` がある。
-- [ ] （続き）フレーム数を 56 にする → 注意文が消える。
-- [ ] Chained で、大きさを 1280×768 にし、冒頭の画像を置かず、Reference をオフにして、クリップを 2 本（39 フレームと 124 フレーム）にする → 「短い動画ではSpark-H3が効きません。」と出る。39 フレームのクリップを 124 フレームにする → 注意文が消える。
-- [ ] Edit の Retake・Inpainting・Outpainting のそれぞれで、Steps を 1 にする（フル演算するステップ数は 1）→ 3 つの画面とも「Stepsが少ないため…」の注意文が出て、生成ボタンは押せる。
-- [ ] Edit の Retake で、区間を最短の 73 フレームにし、生成の大きさを 640×384 にする → 「短い動画ではSpark-H3が効きません。」と出る。生成の大きさを 1280×768 にする → 注意文が消える。
-- [ ] VRAM 16GB mode を off にし、Single の大きさを 832×480・フレーム数を 124 にして、ほかはふだんの条件で、Spark-H3 ありで 1 本生成する → 完走し、mp4 info に `"spark_h3_used": "on"` がある。絵と音が崩れていない。確かめたら、VRAM 16GB mode を on に戻す。
-- 補足: 大きさを 832×480 にするのは、VRAM 溢れが起きない条件で確かめるため。1280×768・124 フレームで VRAM 16GB mode を off にすると、開発機では Spark-H3 が無くても VRAM 溢れが起き、Spark-H3 ありでは 1 本に 30 分近くかかる（記録簿 §239.6）。この大きさでは Spark-H3 のありとなしの時間の差が数秒しかないので、時間は比べない。
-- [ ] Chained で、ふだんの条件で 4〜5 本のクリップをつないで生成する → 完走し、mp4 info に `"spark_h3_used": "on"` がある。つなぎ目を見る。
-- [ ] ふだんの条件で、次の 4 本を 1 本ずつ生成する: 先頭のフレームに画像を置いた Single／音声を付けた Single（A2V）／Ref2VA の重みを読み込んで Reference のカードを付けた Single／Edit の Inpainting → 4 本とも完走し、mp4 info に `"spark_h3_used": "on"` があり、絵と音が崩れていない（実験で試していない組み合わせ）。
-
-#### Gradio と MCP（開発機）
-
-- [ ] Gradio の Settings タブで MiniMax H3 を読み込む → 「生成の高速化」の区画の Attention のすぐ下に、「Spark-H3」のチェックボックスと、2 本のスライダー（20 と 2）が出る。LTX 2.3 を読み込む → 3 つとも消える。
-- [ ] （続き）MiniMax H3 に戻し、チェックを入れて、Generate タブで単発を 1 本生成する → 完走し、mp4 info に `"spark_h3_used": "on"` がある。
-- [ ] MCP の `submit_generate` に `spark_h3=True` を付けて、MiniMax H3 で 1 本生成し、出力の mp4 を `get_mp4_info` で読む → 完走し、`spark_h3_used` が `"on"`。
-
-#### 使えない環境の動き（開発機で、部品を一時的に外す）
-
-前提: `run.bat` のサーバーを止め、`.venv-engine-h3\Lib\site-packages\spark_h3_kitchen` のフォルダーを `.venv-engine-h3` の外へ移す。
-
-- [ ] `run.bat` でサーバーを起動し、操作パネルで MiniMax H3 を選んで Settings を開く → 「Spark-H3」のボタンが灰色で押せず、マウスを乗せると「この環境では Spark-H3 を使えません。」と出る。
-- [ ] （続き）MCP の `submit_generate` に `spark_h3=True` を付けて、MiniMax H3 で 1 本生成し、出力の mp4 を `get_mp4_info` で読む → 完走し、`spark_h3_used` が `"on->off"`、`h3.spark_h3.reason` が `"unavailable"`。
-- [ ] （続き）サーバーを止め、移したフォルダーを元の場所へ戻して、サーバーを起動し直す → 「Spark-H3」のボタンが押せる。
-- 補足: 移したフォルダーは、`install-MiniMaxH3.bat` では戻らない（部品の版の記録が残っているので、「入っています」と判定する）。必ず手で元の場所へ戻す。
-
-#### 検証用の別の機械（RTX 30 シリーズ）
-
-前提: その機械で、この変更（dev）を取り込み（`git pull`）、`setup.bat` を済ませておく。
-
-- [ ] `install-MiniMaxH3.bat` を実行する → Spark-H3 の段で「GPU の系統: 8.6（sm86）」・「SHA-256 が一致しました: ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm86-cu130.zip」・「Spark-H3 の部品を入れました（spark_h3_kitchen-0.2.37+spark.h3.sm86.cu130.1-cp312-abi3-win_amd64.whl）」の行が出る。
-- [ ] 操作パネルで MiniMax H3 を選んで Settings を開く → 「Spark-H3」のボタンが押せる。
-- [ ] 開発機の「生成」の最初の 2 項目と同じく、ふだんの条件で Spark-H3 のありとなしを 1 本ずつ生成する → どちらも完走し、Spark-H3 のほうの mp4 info に `"spark_h3_used": "on"` がある。かかった時間を比べる。
-
-#### オーナー判断待ち
-
-- [ ] Settings で「sage attention」と「Spark-H3」を両方選ぶ → Sage の注意書き「同じシードでも生成結果の細部が変わります（…）」が、Spark-H3 の 2 本のスライダーと説明文の下に出る。Attention の行から離れたこの位置で読みやすいか、判断する（設計正本 §6.11 の「既知の限界」）。
+- [ ] **インストーラー**: `install-MiniMaxH3.bat` を実行する → Spark-H3 の段に「GPU の系統: 8.6（sm86）」と「Spark-H3 の部品を入れました（…）」の行が出る。最後の表で、`pi_h3_4steps`・`pi_h3_2steps`・`h3_sol_vae` の 3 行が `PASS`。
+- [ ] **生成 1 本目**（Sol と Spark-H3）: 操作パネルの Single で、Turbo LoRA の 4 ステップ・Spark-H3 あり（割合 20%・フル演算するステップ数 1）・Fast VAE を Sol・大きさ 1280×768・フレーム数 56 以上・今まで使っていないプロンプトで生成する → 完走し、絵と音が崩れていない。mp4 info に `"spark_h3_used": "on"`・`"sol_vae_used": "on"`・`"unbuffered_read": "on"` がある。
+- [ ] **生成 2 本目**（pi-H3 と Spark-H3）: Turbo LoRA を外し、Fast VAE を pi-H3_4s に替えて、ほかは 1 本目と同じで生成する → 完走し、絵と音が崩れていない。mp4 info に `"spark_h3_used": "on"` と `pi_h3_used` の欄がある。
+- 補足: プロンプトを今まで使っていないものにするのは、テキストエンコーダーの条件付けのキャッシュが on で、プロンプトが前回と同じだと、テキストエンコーダーの段が省かれて `unbuffered_read` の欄が出ないため。2 本目で Turbo LoRA を外すのは、pi-H3 と Turbo LoRA の併用が非推奨（設計正本 裁定 107）のため。
+- 補足: 生成が完走したのに、`spark_h3_used`・`sol_vae_used`・`unbuffered_read` のどれかが `"on"` でなかった場合（`"on->off"` など）は、その欄の値と、理由の欄（`reason`・`unbuffered_read_reason`）の文を監督に伝える（使えない環境で今までの動きに戻るのは作りのとおりなので、理由を見て判断する）。
 
 ### 1-304. MiniMax H3 のテキストエンコーダーの読み方（OS のキャッシュを通さない読み方）の実機での確認（起票：2026-11-26）
 
-- **概要**: MiniMax H3 のテキストエンコーダーの読み込みを、OS のキャッシュを通さない読み方と、使い回す約 128MiB のピン留めの置き場に替えた（dev。§1-303 の方向 A の最初の段）。変わったのはサーバーの側だけで、操作パネル・Gradio・MCP・設定の項目は変わらない。開発機の GPU での確認は済み（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §240）。
-- **これからすること**: 下の確認を行う。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、main への取り込みと、§1-303 の次（先読みに進むか・方向 B）を伺う。
-- **出典**: 作りは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §4、裁定は同 裁定 114、開発機での確認の数字は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §240。本節が実機確認の項目の正本。
-- 結果の見方: 「mp4 info」は、できた mp4 を Toolbox の mp4 info に落としたときの表示。見る欄は、単発では `h3` → `phases` → `encode` の中、Chained では `h3` → `phases` → `clips` の各クリップの `encode` の中にある。
-- 共通の前提: Settings の「テキストエンコーダーの条件付けのキャッシュ」を off にしておく（on でプロンプトが前回と同じだと、テキストエンコーダーの段が省かれて、見る欄が出ない）。確認が済んだら、この設定を元に戻す。
-
-#### 開発機
-
-前提: dev の変更を入れた `run.bat` のサーバーを起動し直しておく。
-
-- [ ] MiniMax H3 で、Single でプロンプトを書いて 1 本生成し、mp4 info を見る → 完走し、`encode` の `te` の中に `"unbuffered_read": "on"` があり、`unbuffered_read_reason` は無い。
-- [ ] Chained で、Turbo LoRA の 4 ステップ、3 クリップすべてでプロンプトを変えて生成し、mp4 info を見る → 完走し、どのクリップの `encode` の `te` にも `"unbuffered_read": "on"` がある。2 本目以降のクリップの `encode` の `seconds`（テキストエンコーダーの段の秒）が、どれも 10 秒未満（更新の前は約 20 秒。開発機の確認では約 6.3 秒）。
-
-#### 検証用の別の機械
-
-前提: **dev を取り込む前に**、その機械で、MiniMax H3 の Single を同じプロンプト・同じ条件で 2 本続けて生成し、2 本目の mp4 を残しておく（比べる相手。dev を取り込んだあとでは作れない）。この機械では 1-301 の確認も行うので、1-301 の確認のために dev を取り込むより前に、この 2 本を作っておく。そのあと、dev を取り込み（`git pull`）、`setup.bat` を済ませて、サーバーを起動し直す。
-
-- [ ] 更新の前と同じプロンプト・同じ条件で、Single を 1 本生成し、mp4 info を見る → 完走し、`encode` の `te` の中に `"unbuffered_read": "on"` がある。`"on->off"` だった場合も、完走していれば合格とし、`unbuffered_read_reason` の文を監督に伝える。
-- [ ] （続き）同じ条件で、もう 1 本生成し、mp4 info の `encode` の `seconds` を、更新の前の 2 本目の mp4 の同じ欄と比べる → 更新の前より長くない。長い場合は、2 つの値と、その機械のメインメモリの量を監督に伝える（ファイルが OS のキャッシュに残る機械で、ディスクが遅いと、遅くなる可能性がある〔監督の推定。記録簿 §240.6〕）。
-- 補足: 更新のあとの 1 本目は、切り替えて最初の 1 回の上乗せ（開発機で約 1.4 秒）が乗りうるので、比べるのは 2 本目どうしにする。
+- **概要**: MiniMax H3 のテキストエンコーダーの読み込みを、OS のキャッシュを通さない読み方と、使い回す約 128MiB のピン留めの置き場に替えた（dev。§1-303 の方向 A の最初の段）。変わったのはサーバーの側だけで、操作パネル・Gradio・MCP・設定の項目は変わらない。開発機の GPU での確認は済み（記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §240）。遅いディスクの機械で遅くなる可能性（監督の推定）は、検証しない（オーナー裁定 2026-11-26。理由は調査ノート [`H3_TE_READ_NOTES.md`](H3_TE_READ_NOTES.md) §9）。
+- **これからすること**: 本項に自前の生成は無い。1-301 の一覧の、開発機の「ふだんの使い方で 1 本」と、検証用の別の機械の「生成 1 本目」の mp4 info で一緒に見る（本項に当たるのは、`unbuffered_read` と、2 本目以降のクリップの `encode` の `seconds`）。合格したら、本項を [`PENDING_TASKS_CLOSED.md`](PENDING_TASKS_CLOSED.md) へ移し、main への取り込みと、§1-303 の次（先読みに進むか・方向 B）を伺う。
+- **出典**: 作りは設計正本 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §4、裁定は同 裁定 114、開発機での確認の数字は記録簿 [`VERIFICATION_LOG.md`](VERIFICATION_LOG.md) §240。実機確認の項目の正本は 1-301。
 
 ## 3. 将来の研究課題
 

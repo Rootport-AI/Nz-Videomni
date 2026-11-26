@@ -28065,6 +28065,39 @@ LTX 2.3 の記録には段の秒数が無いので、ワーカーのログの、
 
 - オーナーの実機での確認（台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-301）。合格したら、台帳 §3-247 を閉じ、main への取り込みを伺います（裁定 113 ⑧）。
 
+### 239.9 実機での確認の一覧から外した項目と、それを固定しているもの（2026-11-26）
+
+- **結論を先に**: オーナーの指摘（「検証項目が多すぎる」「MCP で合格になっているものは、実機で確認する価値が薄い」「メタデータは、ほかの確認のついでに読めばよい」。2026-11-26）を受けて、台帳 [`PENDING_TASKS.md`](PENDING_TASKS.md) §2 の 1-301・1-304・1-294 の一覧を作り直しました。オーナーにお願いする生成は、開発機で 1 本、検証用の別の機械で 2 本です。一覧の正本は台帳 1-301 で、本節には写しません。
+- 外した項目は、下の表のどれかで固定されています。テストの名前は、ファイルを検索して実在を確かめたものです（2026-11-26 の時点の名前）。テストのうち、操作パネルのものは `AviUtl2-Plugin/Nz-Videomni-frontend-AviUtl2/webui/src/` の下、Python のものは `tests/` の下です。
+
+**外した項目と、固定しているもの**:
+
+| 外した項目 | 固定しているもの |
+|---|---|
+| Single の注意文が、Steps・pi-H3・フレーム数で出たり消えたりすること | `shell/sparkH3.test.ts` の `sparkH3StepsTooFew`・`sparkH3VideoTooShort` の各テスト、`shell/AppShell.sparkH3.test.tsx` の「Single: the steps note follows pi-H3's steps, …」 |
+| Chained の注意文 | `shell/AppShell.sparkH3.test.tsx` の「Chained: the steps note shows under Generate and Generate stays enabled」（39 フレームのクリップで短い動画の注意文も見る） |
+| Edit の Retake・Inpainting・Outpainting の注意文 | `modes/edit/EditScreen.retake.test.tsx` の「Spark-H3: Steps がフル演算するステップ数以下で注意文 A、小さい画面で注意文 B。…」、`modes/edit/EditScreen.inpaint.test.tsx` と `modes/edit/OutpaintingPanel.h3.test.tsx` の「Spark-H3: …」の各テスト、`shell/AppShell.sparkH3.test.tsx` の「Edit (…): the steps note shows under that sub-tab's Generate」 |
+| 部品が無いときの「Spark-H3」のボタン | `shell/SettingsPanel.test.tsx` の「greys the Spark-H3 button with a tooltip only on an explicit spark_h3_available:false」 |
+| 部品が無いときの判定と、サーバーの知らせ | `test_h3_spark_engine.py::test_probe_reasons`、`test_h3_spark_wiring.py::test_worker_ready_carries_spark_h3_available_after_the_load`、`test_smoke.py::test_spark_h3_available_truth_table` |
+| 記録が `on->off` になる 3 つの場合（ステップが少ない・動画が短い・部品が無い） | `test_h3_spark_wiring.py` の `test_clip_without_a_sparse_evaluation_is_on_to_off`（`few_steps`・`short_sequence`）・`test_unavailable_runs_without_spark_and_says_why`・`test_spark_record_function`・`test_chain_records_each_clip_and_the_whole`、`test_h3_spark_api.py::test_the_engine_spark_records_ride_through`。`few_steps` は開発機の GPU でも確認済み（239.5 の G3） |
+| Gradio の表示（チェックボックスと 2 本のスライダーの出し分け） | `test_gradio_models.py` の `test_refresh_shows_spark_h3_and_both_sliders_on_h3`・`test_refresh_hides_spark_h3_on_ltx_and_resets_the_toggle_and_sliders` |
+| Gradio からの生成 | 値の受け渡しは `test_gradio_ui.py::test_dispatch_forwards_the_spark_h3_values_to_generate` と `test_gradio_handlers.py::test_generate_handler_spark_h3_rides_last_only_when_on`。サーバーを通した生成は 239.5 の G6 |
+| MCP の引数と生成 | 引数は `test_mcp_tools_generate.py` の `test_both_tools_expose_the_spark_h3_arguments_last_with_the_server_defaults`・`test_spark_h3_keys_ride_together_only_when_true`。サーバーを通した生成は 239.5 の G6 |
+| 開発機のインストーラー | 239.4 |
+| VRAM 16GB mode を off にした 832×480 | 239.6 |
+| Spark-H3 のありとなしの見比べ | 構図と人物の崩れは、実験のときのオーナーの目視の判定（§238.9）。速さは 239.5（G1 と G2 の 1 ステップの秒） |
+| 試していない組み合わせ（先頭の画像・音声つき・Reference つき・Inpainting）と、pi-H3_4s との組み合わせ | 監督の側の機械の確認へ移しました。**まだ行っていません。** 行ったあと、結果を本節とは別の小節に足します |
+| 1-304 の検証用の別の機械の「更新の前後の見比べ」 | 外しました（オーナーの裁定 2026-11-26。遅いディスクの件は検証しない。調査ノート [`H3_TE_READ_NOTES.md`](H3_TE_READ_NOTES.md) §9） |
+| 1-294 の、ファイルの大きさと SHA-256 を手で見る項目 | 外しました（オーナーの裁定 2026-11-26）。固定しているものはありません（下の「どこでも確かめていないもの」） |
+| sage の注意文の位置（オーナー判断待ち） | 文の頭に「sage attentionでは、」を付ける修正で解決（設計書 [`MINIMAX_H3_DESIGN.md`](MINIMAX_H3_DESIGN.md) §6.11 の「既知の限界」） |
+
+**どこでも確かめていないもの**（外したことで、どこでも行わなくなったものを含む）:
+
+- 部品が無い実物の環境で、端から端まで通す確認。部品ごと（判定・サーバーの知らせ・灰色のボタン・記録）には、上の表のテストで固定しています。
+- Edit の Retake と Outpainting を、Spark-H3 ありで実際に生成したこと。監督の側の機械の確認では、Inpainting で代表させます（Inpainting と同じ道を通る作りのため）。
+- Gradio の画面の実際の見え方。テストが見ているのは、部品の構成と値までです。
+- pi-H3 と Sol-H3-VAE のファイルの中身が、1 ビットまで正しいこと。インストーラーの最後の表の `PASS` は、「ファイルがあり、大きさが `scripts/manifests/40-minimaxh3.json` の `min` 以上」だけを見ています（`scripts/install_ltx.ps1` の検証の表を作る箇所）。インストーラーが SHA-256 を照合する `Test-KnownWeightHashes` の対象は、記述子の `known_weights` にある FL2VA と Ref2VA の 2 本だけで、pi-H3 と Sol-H3-VAE は入っていません。検証用の別の機械の生成 2 本が完走し、記録が `on` になれば、取得したファイルが使えることは分かります。
+
 ## 240. MiniMax H3 のテキストエンコーダーの読み込み: 内訳の計測と、OS のキャッシュを通さない読み方の実装・開発機での確認（2026-11-26）
 
 ### 240.1 結論
@@ -28187,7 +28220,7 @@ LTX 2.3 の記録には段の秒数が無いので、ワーカーのログの、
 
 **監督の推定（測っていない）**:
 
-- 新しい読み方で開くと、ファイルが OS のキャッシュから消えます（240.5 の G5 の観測）。メインメモリに余裕があって、いまはファイルが OS のキャッシュに残っていて、しかもディスクが開発機（1 秒あたり約 5.4GiB。調査ノート §4）よりかなり遅い機械では、今までより遅くなる可能性があります。開発機では確かめられないので、サブマシンでの確認（台帳 §2 の 1-304）で見ます。
+- 新しい読み方で開くと、ファイルが OS のキャッシュから消えます（240.5 の G5 の観測）。メインメモリに余裕があって、いまはファイルが OS のキャッシュに残っていて、しかもディスクが開発機（1 秒あたり約 5.4GiB。調査ノート §4）よりかなり遅い機械では、今までより遅くなる可能性があります。この推定は検証しません（オーナーの裁定 2026-11-26。Videomni の推奨の構成〔VRAM 16GB 以上・メインメモリ 64GB 以上・Ampere 世代以上〕の機械が、古い SSD を積んでいる可能性は低いため）。
 
 **確かめていないこと**:
 

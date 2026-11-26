@@ -7364,3 +7364,47 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 187.6 実機の門
 
 - 実機への配置と、オーナーの実機での確認は未了です。確認の項目の正本は、起票されたあとのバックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 です。
+
+## 188. Settings の文言 2 か所に主語を足す — Spark-H3 の「フル演算するステップ数」の説明文と、sage attention の注意文・Gradio も同じ文にそろえる・注意文の位置は変えない（設計正本 §6.11。2026-11-26）
+
+### 188.1 結論
+
+- **オーナーの指示（2026-11-26）で、Settings の 2 つの文の頭に主語を足しました。** 英語と日本語の両方です。動きと、文の出る位置は変えていません。
+  - 「フル演算するステップ数」のスライダーの下の説明文: 頭に「フル演算するステップ数は、」を足しました。
+  - sage attention の注意文: 頭に「sage attentionでは、」を足しました。sage attention と Spark-H3 を両方選ぶと、この注意文は Spark-H3 のスライダーと説明文の下に出て、Attention の行から離れます。主語を付けて、どの選択の注意かが分かるようにしました（位置は変えない。設計正本 [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) §6.11 の「既知の限界」）。
+- **Gradio の同じ 2 つの文も、同じ文にそろえました**（バックエンドの `gradio_ui/i18n.py`）。Gradio では sage の文が Attention の欄の説明として、sdpa を選んでいるときも出ているので、主語が付くと意味がはっきりします。
+- 日本語の文は `i18n/strings.ts` が正本です（ステップ数の説明文は、設計正本 §6.11 にも引用があり、合わせて直しました）。MCP の説明文と README は、主語のある別の言い回しで書いているので、変えていません。
+- 本節より前の記録（§55 の sage の注意文など）は、当時の文のまま残します。
+
+### 188.2 英語の文
+
+| キー | 新しい英語の文 |
+|---|---|
+| `accelSparkH3FullStepsNote` | `For "Full-attention steps", about 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).` |
+| `accelSageNote` | `With sage attention, fine details of the output change even with the same seed (the numeric precision differs). Speed is about 1.2-1.6x.` |
+
+- ステップ数の文の主語は、英語のスライダーの表示名 `Full-attention steps` を、既存の文と同じく引用符で囲んで使いました。
+- Gradio の `accel_info_attention` も、`accelSageNote` と同じ英語の文です。
+
+### 188.3 変えたファイル
+
+置き場所は `webui/src/`。
+
+| ファイル | 要旨 |
+|---|---|
+| `i18n/strings.ts` | `accelSparkH3FullStepsNote` と `accelSageNote` の英語と日本語 |
+| `shell/SettingsPanel.test.tsx` | 文を期待値にしている 4 か所（sage の英語の書き出しの正規表現 2 か所、ステップ数の英語の定数、日本語の全文） |
+
+- `shell/SettingsPanel.tsx` の並びと、注意文の位置は変えていません。
+- バックエンドの側は、`gradio_ui/i18n.py`（`accel_info_attention`・`accel_info_spark_h3_full_steps` の英語と日本語を、操作パネルと同じ文に）と、`tests/test_gradio_ui.py`・`tests/test_gradio_handlers.py`（期待値と、sage の文の主語を確かめる 2 行）です。
+
+### 188.4 機械の門と配置
+
+- 型検査（`npm run typecheck`）は、エラーがありませんでした。
+- 操作パネルの試験の全件（`npx vitest run --exclude "**/backend.integration.test.ts"`）は、212 ファイル・4,211 件がすべて合格しました。
+- Gradio の試験（`tests/test_gradio_ui.py`・`tests/test_gradio_handlers.py`）は、352 件が合格しました。
+- `build.ps1` で作り直し、配布用の写し（`AviUtl2-Plugin/NzVideomni.aux2`）を更新しました。開発機の AviUtl2 への配置は、AviUtl2 が開いていたので、まだ行っていません（閉じたときに `deploy.ps1` で行う）。
+
+### 188.5 実機の門
+
+- オーナーの実機での確認の項目は、バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-301 の「文言」です。まだ行っていません。

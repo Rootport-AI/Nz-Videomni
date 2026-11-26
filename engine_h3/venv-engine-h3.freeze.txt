@@ -41,6 +41,8 @@
 # the H3 path never imports it), diffsynth (its H3 model code was ported into
 # engine_h3/ instead; `import diffsynth` drags in modelscope, pandas, ...),
 # accelerate, gguf, ltx-core / ltx-pipelines (LTX-only).
+# NOT LISTED ON PURPOSE: spark-h3-kitchen (Spark-H3's GPU-specific kernel wheel,
+# on no index) is installed by Install-SparkH3Kitchen in scripts/install_ltx.ps1.
 annotated-doc==0.0.5
 anyio==4.15.1
 av==18.1.0

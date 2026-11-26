@@ -40,7 +40,8 @@ audio"), ``references`` (``{kind, path, slot, max_sec?}``; Ref2VA only — an
 absent key is "no references"), ``nag`` (``{negative_prompt, method,
 vsf_scale}``; VSF only), ``pi_h3`` (``{steps, path}``; a pi-H3 job only —
 an absent key is off), ``sol_vae`` (``{path}``; a Sol-H3-VAE job only — an
-absent key is off), ``keep_reference_latents`` (the bool ``True``; only
+absent key is off), ``spark_h3`` (``{topk_ratio, full_steps}``; a Spark-H3
+job only — an absent key is off), ``keep_reference_latents`` (the bool ``True``; only
 when asked for — an absent key is off), ``keep_text_conditioning`` (the bool
 ``True``; only when asked for — an absent key is off) and ``keep_resident`` (only when asked for — an
 absent key is the release request, the LTX contract). The progress stages are LTX's single-stage
@@ -169,6 +170,12 @@ PI_H3_ASSETS: dict[str, str] = {
 #: a missing file is the engine's fallback to the stock video decoder
 #: (``sol_vae_used="on->off"``), so nothing here checks that it exists.
 SOL_VAE_ASSET = "sol_vae_path"
+
+#: Spark-H3 (``request.spark_h3``): the mock backend's ``spark_h3_used``. The
+#: mock runs no kernel (its ``/status`` reports ``spark_h3_available`` false),
+#: so a Spark-H3 job finishes without it, as the real worker does where the
+#: kit is unusable.
+MOCK_SPARK_H3_USED = "on->off"
 
 
 def sol_vae_path(config: AppConfig, descriptor) -> str:
@@ -389,6 +396,11 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
         # the worker as the ``sol_vae`` payload key, only when it is true
         # (:func:`prefill_request` refuses it with pi_h3).
         "sol_vae",
+        # Spark-H3 (the sparse attention): the ratio and the full steps reach
+        # the worker as the ``spark_h3`` payload key, only when it is true.
+        "spark_h3",
+        "spark_h3_topk_ratio",
+        "spark_h3_full_steps",
         # keep_reference_latents: the worker's ``keep_reference_latents`` payload
         # key (the bool ``True``), only when it is true.
         "keep_reference_latents",
@@ -510,6 +522,11 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
         # Sol-H3-VAE: the single path's ``sol_vae`` payload key ({path}), only
         # when it is true.
         "sol_vae",
+        # Spark-H3: the single path's ``spark_h3`` payload key ({topk_ratio,
+        # full_steps}), only when it is true.
+        "spark_h3",
+        "spark_h3_topk_ratio",
+        "spark_h3_full_steps",
         # keep_reference_latents: the single path's payload key (``True``),
         # only when it is true.
         "keep_reference_latents",
@@ -1353,6 +1370,13 @@ class _RealBackendH3(_RealBackend):
         # sol_vae: only for a Sol-H3-VAE job (an absent key = off), {path}.
         if request.sol_vae:
             payload["sol_vae"] = self._sol_vae_payload()
+        # spark_h3: only for a Spark-H3 job (an absent key = off),
+        # {topk_ratio, full_steps}; the ratio as given, not rounded.
+        if request.spark_h3:
+            payload["spark_h3"] = {
+                "topk_ratio": float(request.spark_h3_topk_ratio),
+                "full_steps": int(request.spark_h3_full_steps),
+            }
         # keep_reference_latents: only when true (an absent key = off).
         if request.keep_reference_latents:
             payload["keep_reference_latents"] = True
@@ -1410,6 +1434,8 @@ class _RealBackendH3(_RealBackend):
             pi_h3_used=event.get("pi_h3_used"),
             # A Sol-H3-VAE job only ("on" / "on->off"); absent otherwise -> None.
             sol_vae_used=event.get("sol_vae_used"),
+            # A Spark-H3 job only ("on" / "on->off"); absent otherwise -> None.
+            spark_h3_used=event.get("spark_h3_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=_h3_block(event),
         )
@@ -1589,6 +1615,14 @@ class _RealBackendH3(_RealBackend):
         # single op's {path}.
         if chain.sol_vae:
             payload["sol_vae"] = self._sol_vae_payload()
+        # spark_h3: only for a Spark-H3 chain (an absent key = off), the
+        # single op's {topk_ratio, full_steps}; the worker counts the full
+        # steps again in every clip.
+        if chain.spark_h3:
+            payload["spark_h3"] = {
+                "topk_ratio": float(chain.spark_h3_topk_ratio),
+                "full_steps": int(chain.spark_h3_full_steps),
+            }
         # keep_reference_latents: only when true (an absent key = off).
         if chain.keep_reference_latents:
             payload["keep_reference_latents"] = True
@@ -1641,6 +1675,8 @@ class _RealBackendH3(_RealBackend):
             pi_h3_used=event.get("pi_h3_used"),
             # A Sol-H3-VAE chain only ("on" / "on->off"); absent otherwise -> None.
             sol_vae_used=event.get("sol_vae_used"),
+            # A Spark-H3 chain only ("on" / "on->off"); absent otherwise -> None.
+            spark_h3_used=event.get("spark_h3_used"),
             peak_vram_reserved_mb=event.get("peak_vram_reserved_mb"),
             h3=h3_facts,
         )
@@ -1854,6 +1890,10 @@ class _MockBackendH3(_MockBackend):
     reports ``sol_vae_used`` "on" when the descriptor's asset names a file
     that is there (:func:`sol_vae_path`) and "on->off" otherwise (the size of
     the clip, which only the engine judges, is not looked at).
+
+    A Spark-H3 job (``request.spark_h3`` true) gets the same clip; the mock
+    always reports ``spark_h3_used`` "on->off" (:data:`MOCK_SPARK_H3_USED`:
+    it runs no kernel, and its ``/status`` says ``spark_h3_available`` false).
     """
 
     #: The base model whose ``assets`` a Sol-H3-VAE job's file comes from
@@ -1926,6 +1966,9 @@ class _MockBackendH3(_MockBackend):
             )
         if request.sol_vae:
             outcome = dataclasses.replace(outcome, sol_vae_used=self._mock_sol_vae_used())
+        if request.spark_h3:
+            # The mock has no Spark-H3 kernel (its /status says unavailable).
+            outcome = dataclasses.replace(outcome, spark_h3_used=MOCK_SPARK_H3_USED)
         if request.source_audio is None:
             return outcome
         if source_audio_path is None:
@@ -2160,6 +2203,7 @@ class _MockBackendH3(_MockBackend):
             chain_metadata=chain_metadata,
             pi_h3_used=chain.pi_h3 if chain.pi_h3 != "off" else None,
             sol_vae_used=self._mock_sol_vae_used() if chain.sol_vae else None,
+            spark_h3_used=MOCK_SPARK_H3_USED if chain.spark_h3 else None,
         )
 
 

@@ -787,17 +787,20 @@ def _wiring_inputs(dep):
     the canaries below strip that trailing run first and keep the same negative
     index meaning the same thing on the Generate and Chain deps alike.
 
-    The Chain flow likewise has ONE chain-only input appended after the
-    shared block -- the stage-2 window dropdown (§3-165), which the Generate
-    flow does not have -- so it is stripped too (its own position is pinned by
-    ``tests/test_gradio_stage2_window.py::test_chain_stage2_window_is_the_last_chain_input``).
+    The Chain flow likewise has inputs appended after the shared block -- the
+    stage-2 window dropdown (§3-165), which the Generate flow does not have,
+    and after it the three Spark-H3 controls (which the Generate flow takes
+    ahead of the NAG block instead) -- so those four are stripped too (their
+    positions are pinned by
+    ``tests/test_gradio_stage2_window.py::test_chain_stage2_window_is_the_last_chain_input``
+    and the Spark-H3 tests below).
     """
     ins = list(dep.inputs)
     name = getattr(dep.fn, "__name__", "")
     if name == "dispatch":
         ins = ins[:-4 * KF_MAX_SLOTS]
     elif name == "chain_dispatch":
-        ins = ins[:-1]
+        ins = ins[:-4]
     return ins
 
 
@@ -1480,7 +1483,7 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
     dep = next(d for d in demo.fns.values()
                if getattr(d.fn, "__name__", "") == "dispatch")
     rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
-    # The 47 scalar positionals in ui.py's dispatch() order (no keyframe tail).
+    # The 50 scalar positionals in ui.py's dispatch() order (no keyframe tail).
     args = [
         "prompt <lora:x:1.0>", "",          # prompt_v, negative_v
         500, 320, False, 0, 0,              # width..crop_h (width not ÷64)
@@ -1492,12 +1495,13 @@ def test_batch_dispatch_rejects_non_64_width_with_zero_api_calls():
         {}, 8, 12.0, 3.0,                   # gen_scope, steps, shift x2
         True,                               # accel_vram16 (single-only)
         "off",                              # accel_pi_h3 (single-only)
+        False, 20, 2,                       # Spark-H3 toggle, ratio %, steps
         False, 11.0, 2.5, 0.25,             # nag_enabled, scale, tau, alpha
         "nag", 1.0, "sdpa", False,          # method, vsf, attention, prefetch
         False, False, "default", False,     # keep_resident..keep_res_embeds
         False,                              # embed_mp4_metadata
     ]
-    assert len(args) == 47
+    assert len(args) == 50
     out = list(dep.fn(*args))
     assert out == [(LABELS["en"]["msg_bad_dimension"], "", None)]
     assert calls["n"] == 0  # not even list_loras for the <lora:> token
@@ -1662,7 +1666,8 @@ def test_fast_vae_radio_is_split_into_pi_h3_and_sol_vae_by_dispatch(monkeypatch)
         "p", "", 640, 384, False, 0, 0, 124, 24.0, -1, "none", 1.0, 1.0, 1.0, None, {},
         "en", 1.0, 60.0, None, False, [], "", "same", "", "add", "", True, {}, 20, 12.0, 3.0, True,
     ]
-    tail = [False, 11.0, 2.5, 0.25, "nag", 1.0, "sdpa", False, False, False, "default", False, False]
+    tail = [False, 20, 2,  # Spark-H3 toggle, ratio %, steps
+            False, 11.0, 2.5, 0.25, "nag", 1.0, "sdpa", False, False, False, "default", False, False]
     for value in ("off", "4steps", "2steps", "sol", None):
         list(dep.fn(*base, value, *tail))
     assert seen == [("off", False), ("4steps", False), ("2steps", False), ("off", True), ("off", False)]
@@ -1682,3 +1687,182 @@ def test_pi_h3_texts_switch_language_with_the_owners_wording():
         "Generation is faster, but video quality is reduced.")
     assert LABELS["ja"]["cap_pi_h3_lock"] == "Settings の pi-H3 が有効のため固定"
     assert LABELS["en"]["cap_pi_h3_lock"] == "Fixed because pi-H3 is enabled in Settings"
+
+
+# --------------------------------------------------------------------------- #
+# Spark-H3 (MiniMax H3): the Settings toggle and its two sliders.
+# --------------------------------------------------------------------------- #
+def _spark_h3_parts(demo):
+    en = LABELS["en"]
+
+    def _one(cls, key):
+        found = [c for c in demo.blocks.values()
+                 if isinstance(c, cls) and c.label == en[key]]
+        assert len(found) == 1, key
+        return found[0]
+
+    return (_one(gr.Checkbox, "accel_lbl_spark_h3"),
+            _one(gr.Slider, "accel_lbl_spark_h3_ratio"),
+            _one(gr.Slider, "accel_lbl_spark_h3_full_steps"))
+
+
+def test_spark_h3_controls_defaults_ranges_and_hidden_at_build():
+    demo = _demo()
+    en = LABELS["en"]
+    toggle, ratio, steps = _spark_h3_parts(demo)
+    assert toggle.label == "Spark-H3" and toggle.value is False
+    assert (ratio.minimum, ratio.maximum, ratio.step, ratio.value) == (1, 50, 1, 20)
+    assert (steps.minimum, steps.maximum, steps.step, steps.value) == (0, 10, 1, 2)
+    # Built INVISIBLE (the /models pull decides); not locked by availability.
+    for c in (toggle, ratio, steps):
+        assert c.visible is False
+        assert c.interactive is not False
+    assert toggle.info == en["accel_info_spark_h3"]
+    assert ratio.info == en["accel_info_spark_h3_ratio"]
+    assert steps.info == en["accel_info_spark_h3_full_steps"]
+    # Right under the attention radio on screen.
+    radio = next(c for c in demo.blocks.values()
+                 if isinstance(c, gr.Radio) and c.label == en["accel_lbl_attention"])
+    ids = list(demo.blocks.keys())
+    assert ids.index(toggle._id) > ids.index(radio._id)
+
+
+def test_spark_h3_texts_in_both_languages():
+    en, ja = LABELS["en"], LABELS["ja"]
+    assert en["accel_lbl_spark_h3_ratio"] == "Full-attention ratio"
+    assert en["accel_lbl_spark_h3_full_steps"] == "Full-attention steps"
+    assert en["accel_info_spark_h3_ratio"] == "Recommended range: 10–20%."
+    assert en["accel_info_spark_h3_full_steps"] == (
+        "About 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).")
+    assert en["accel_info_spark_h3"] == (
+        'Has no effect when the total steps are at or below "Full-attention steps", '
+        "or on short videos.")
+    assert ja["accel_lbl_spark_h3"] == "Spark-H3"
+    assert ja["accel_lbl_spark_h3_ratio"] == "フルで演算する割合"
+    assert ja["accel_lbl_spark_h3_full_steps"] == "フル演算するステップ数"
+    assert ja["accel_info_spark_h3_full_steps"] == (
+        "総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）")
+    assert "10〜20%" in ja["accel_info_spark_h3_ratio"]
+    assert ja["accel_info_spark_h3"] == (
+        "総ステップ数が「フル演算するステップ数」以下のときと、短い動画では効きません。")
+
+
+def test_spark_h3_labels_switch_language():
+    demo = _demo()
+    registry = demo.label_registry
+    updates = demo.switch_language("ja", {})
+    for key, attr in (("accel_lbl_spark_h3", "label"), ("accel_info_spark_h3", "info"),
+                      ("accel_lbl_spark_h3_ratio", "label"),
+                      ("accel_info_spark_h3_ratio", "info"),
+                      ("accel_lbl_spark_h3_full_steps", "label"),
+                      ("accel_info_spark_h3_full_steps", "info")):
+        idx = next(i for i, (_c, k, a) in enumerate(registry) if k == key and a == attr)
+        assert updates[idx][attr] == LABELS["ja"][key]
+
+
+def test_spark_h3_controls_are_wired_into_generate_and_chain():
+    # Every flow that sends attention_backend: the Generate dispatch (single,
+    # A2V and the A2V batch) takes them right after the Fast VAE radio, the
+    # Chain flow appends them after its stage-2 window.
+    demo = _demo()
+    en = LABELS["en"]
+    parts = list(_spark_h3_parts(demo))
+    pi_h3 = next(c for c in demo.blocks.values()
+                 if isinstance(c, gr.Radio) and c.label == en["accel_lbl_pi_h3"])
+    for c in parts:
+        names = sorted(getattr(d.fn, "__name__", "")
+                       for d in demo.fns.values() if c in getattr(d, "inputs", []))
+        assert names == ["chain_dispatch", "dispatch"], names
+    dispatch_dep = next(d for d in demo.fns.values()
+                        if getattr(d.fn, "__name__", "") == "dispatch")
+    ins = list(dispatch_dep.inputs)
+    i = ins.index(pi_h3)
+    assert ins[i + 1:i + 4] == parts
+    chain_dep = next(d for d in demo.fns.values()
+                     if getattr(d.fn, "__name__", "") == "chain_dispatch")
+    assert list(chain_dep.inputs)[-3:] == parts
+
+
+def _dispatch_args(*, spark, batch_rows=None, wav_dir=""):
+    """dispatch()'s 50 scalar positionals (no keyframe tail) for an H3-shaped
+    single request; ``spark`` is the (toggle, ratio %, steps) triple."""
+    return [
+        "p", "", 640, 384, False, 0, 0, 124, 24.0, -1, "none", 1.0, 1.0, 1.0, None, {},
+        "en", 1.0, 60.0, None, batch_rows is not None, batch_rows or [], wav_dir,
+        "same", "", "add", "", True, {}, 20, 12.0, 3.0, True, "off",
+        *spark,
+        False, 11.0, 2.5, 0.25, "nag", 1.0, "sdpa", False, False, False, "default",
+        False, False,
+    ]
+
+
+def test_dispatch_forwards_the_spark_h3_values_to_generate(monkeypatch):
+    import gradio_ui.ui as ui_mod
+
+    seen = []
+    real = ui_mod.make_generate_handler
+
+    def spy_factory(api):
+        def gen(*a, **k):
+            seen.append((k["spark_h3"], k["spark_h3_ratio_percent"],
+                         k["spark_h3_full_steps"]))
+            yield ("", "", None)
+        return gen
+
+    monkeypatch.setattr(ui_mod, "make_generate_handler", spy_factory)
+    demo = _demo()
+    monkeypatch.setattr(ui_mod, "make_generate_handler", real)
+    dep = next(d for d in demo.fns.values() if getattr(d.fn, "__name__", "") == "dispatch")
+    for spark in ((False, 20, 2), (True, 13, 1)):
+        args = _dispatch_args(spark=spark)
+        assert len(args) == 50
+        list(dep.fn(*args))
+    assert seen == [(False, 20, 2), (True, 13, 1)]
+
+
+@pytest.mark.parametrize("spark_on", [False, True])
+def test_spark_h3_rides_the_batch_payload_only_when_on(tmp_path, spark_on):
+    import wave
+
+    from gradio_ui.batch import BatchRunner, BatchSnapshot, prepare_batch_rows
+    from gradio_ui.manifest import STAT_WAITING, BatchRow
+
+    wav_dir = tmp_path / "wavs"
+    wav_dir.mkdir()
+    with wave.open(str(wav_dir / "a.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(100)
+        w.writeframes(b"\x00\x00" * 100)
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/upload/audio"):
+            return httpx.Response(200, json={"audio_id": "aud-spark"})
+        if path.endswith("/generate/chain"):
+            captured.update(json.loads(request.content))
+            return httpx.Response(202, json={"job_id": "job-batch-spark"})
+        if "/jobs/" in path:
+            return httpx.Response(200, json={"status": "completed"})
+        return httpx.Response(404, json={"error": "unexpected"})
+
+    snap = BatchSnapshot(
+        wav_dir=str(wav_dir), out_dir=str(tmp_path / "out"),
+        prompt_common="base", negative="", prompt_mode="add",
+        width=512, height=320, crop_output=None, frame_rate=24.0, seed=7,
+        shared_images=[], use_adapter=False, ref_video_path=None,
+        control_adherence=1.0, reference_strength=1.0,
+        poll_interval=0.0, poll_timeout_s=30.0,
+        spark_h3=spark_on, spark_h3_ratio_percent=10, spark_h3_full_steps=1,
+    )
+    rows = [BatchRow(queue=1, wav="a.wav", image="", stat=STAT_WAITING, frames=49)]
+    assert prepare_batch_rows(rows, snap.prompt_common, snap.prompt_mode, ()) is None
+    started, _ = BatchRunner().start(snap, rows, _make_client(handler), sync=True)
+    assert started is True
+    spark_keys = ["spark_h3", "spark_h3_topk_ratio", "spark_h3_full_steps"]
+    if spark_on:
+        assert list(captured.keys())[-3:] == spark_keys
+        assert (captured["spark_h3_topk_ratio"], captured["spark_h3_full_steps"]) == (0.1, 1)
+    else:
+        assert not set(spark_keys) & set(captured)

@@ -102,9 +102,12 @@
     ($h3DirectPins; triton-windows from engine_h3/venv-engine-h3.freeze.txt).
     SDPA stays the default at generation time; sage is opt-in per job via
     `attention_backend`. Blackwell needs an R570+ driver for the LTX venvs;
-    the H3 venv (CUDA 13) needs R580+ on every arch. Because nothing here
-    is arch-dependent, this installer does not detect or take a GPU
-    architecture at all.
+    the H3 venv (CUDA 13) needs R580+ on every arch. None of the above is
+    arch-dependent. The one arch-dependent package is the MiniMax H3 venv's
+    Spark-H3 kernel (spark-h3-kitchen): Install-SparkH3Kitchen asks that
+    venv's torch for the GPU's compute capability and installs the matching
+    build, or none when no build exists for it or CUDA is unavailable (it
+    never stops the install). There is no switch to pick an arch by hand.
 
 .EXAMPLE
     ./scripts/install_ltx.ps1                       # full install
@@ -542,12 +545,14 @@ Write-Ok "-BaseModel: downloads + verification limited to $($foundIds -join ', '
 # 1) Prerequisites
 #
 #    This step does not probe nvidia-smi and does not abort when no NVIDIA GPU
-#    can be seen. The packages installed here are the same on every GPU arch,
-#    so there is no attention backend to pick at install time. Neither the
-#    venvs nor the model downloads care about the GPU -- it is first needed at
-#    generation time -- so install succeeds on a box with no driver / no
-#    nvidia-smi (e.g. a build agent), and a wrong or missing GPU surfaces when
-#    you actually run the engine.
+#    can be seen. The venvs' frozen packages and the model downloads are the
+#    same on every GPU arch, so there is no attention backend to pick at install
+#    time, and install succeeds on a box with no driver / no nvidia-smi (e.g. a
+#    build agent); a wrong or missing GPU surfaces when you actually run the
+#    engine. The single exception is the MiniMax H3 venv's Spark-H3 kernel:
+#    Install-SparkH3Kitchen (after that venv is built) asks its torch for the
+#    GPU's compute capability, and when there is no matching build or CUDA is
+#    unavailable it installs nothing and carries on.
 # ----------------------------------------------------------------------------
 Write-Step "Checking prerequisites"
 Require-Cmd git
@@ -1313,7 +1318,8 @@ $utilsStateFile = "$ProjectRoot\.venv-utils\.nz-engine-state"
 # when -BaseModel selects MiniMaxH3), and a DIFFERENT torch from the two LTX
 # stacks: the int8 ConvRot matmul runs on comfy-kitchen's CUDA extension, which
 # needs a CUDA 13 torch, so this stack is torch 2.13.0+cu130 (needs NVIDIA
-# driver R580+; the installer does not check the GPU). Exact versions and the
+# driver R580+; the venv itself is built without checking the GPU -- only
+# Install-SparkH3Kitchen, run after it, looks at the GPU). Exact versions and the
 # reasons: engine_h3/venv-engine-h3.freeze.txt (applied) and
 # engine_h3/engine_h3-venv-pyproject.toml (the hand-run recipe, never applied
 # here; it is only the source of the sageattention URL below).
@@ -1573,7 +1579,192 @@ if ($foundIds -contains 'UETrack') {
 # install-MiniMaxH3.bat (it SKIPs when the venv already matches).
 # It is built BEFORE the weight downloads below, one after the other, so the
 # ~1.9 GB torch wheel never shares the line with the ~50 GB of weights.
+#
+# Right after the venv, Install-SparkH3Kitchen adds the Spark-H3 kernel package
+# (below). It runs on every install-MiniMaxH3.bat run, so an existing H3 install
+# gets the package by simply re-running that batch.
 # ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# Spark-H3 kernel package (spark-h3-kitchen) into .venv-engine-h3
+#
+# The sparse attention of engine_h3/spark_h3.py runs on this prebuilt CUDA
+# wheel. It is the ONE arch-dependent package of this installer: the author
+# ships one build per GPU generation, so this asks the H3 venv's torch for the
+# compute capability and looks it up in $sparkH3Zips -- exact match, the same
+# three the author's install.py knows and engine_h3/spark_h3.py ARCHITECTURES
+# checks at load time.
+#
+# Source: the author's GitHub release, fetched directly (never re-hosted). Each
+# ZIP carries a wheelhouse/; the RTX 30 / 50 series ZIPs hold a 0.2.37 AND a
+# 0.2.39 wheel, the RTX 40 series ZIP only 0.2.37. The engine uses 0.2.37 (the
+# author's installer default; engine_h3/spark_h3.py KITCHEN_VERSION), so exactly
+# one wheel is picked by its full version prefix. SHA-256 values are the
+# release's SHA256SUMS.txt (Windows rows).
+#
+# Nothing here ever stops the install (H3 works without Spark-H3; the engine's
+# probe reports why it is unavailable):
+#   * no build for this GPU / CUDA unavailable / probe failed -> one line, go on.
+#   * download, unpack or uv failure                          -> WARN, go on.
+#   * SHA-256 mismatch -> WARN and STILL install, exactly like
+#     Test-KnownWeightHashes; the warning is returned so the summary after the
+#     verification table can show it again.
+#
+# Deliberately NOT part of the venv's state: neither in .nz-engine-state (the
+# Get-EngineStateHash payload) nor in engine_h3/venv-engine-h3.freeze.txt. The
+# wheel is on no index, and a later freeze re-apply (`uv pip install -r`) does
+# not remove a package it does not list, so the two never fight. "Already
+# installed" is decided from the installed version alone: it must start with
+# 0.2.37+spark.h3.sm<this GPU>.cu130. -- the GPU tag is part of it, so after a
+# GPU swap a re-run replaces the package with the matching build.
+#
+# Native commands inside are captured or piped to Out-Host: the function's
+# pipeline output is its return value (the SHA-256 warnings).
+# ----------------------------------------------------------------------------
+$sparkH3ReleaseUrl = 'https://github.com/zechengtang/Spark-H3/releases/download/comfyui-v0.2.0'
+$sparkH3KitchenVersion = '0.2.37'
+# compute capability (major.minor) -> the build's tag, ZIP name and SHA-256.
+$sparkH3Zips = @{
+    '8.6'  = @{ Arch = 'sm86';  Zip = 'ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm86-cu130.zip';  Sha256 = '83e2455162ff7e9550c6fdcbda5534c7768dbecf60593cbb3223deeb7fe6c5d1' }
+    '8.9'  = @{ Arch = 'sm89';  Zip = 'ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm89-cu130.zip';  Sha256 = 'd610d19859fffe0eda69f0075749c4b4c1f5cd0ff0bc4967cbfac3466e007391' }
+    '12.0' = @{ Arch = 'sm120'; Zip = 'ComfyUI-Spark-H3-0.2.0-windows-x86_64-sm120-cu130.zip'; Sha256 = '87034b19523bd02090bb54f7fae1f872ff5edbff9b60ec8ae1de93938ef8ca23' }
+}
+
+# The version prefix of the build for one GPU tag, e.g. "0.2.37+spark.h3.sm89.cu130.".
+# Both the "already installed" test and the wheel pick use it.
+function Get-SparkH3VersionPrefix([string] $Arch) {
+    return "$sparkH3KitchenVersion+spark.h3.$Arch.cu130."
+}
+
+# The unpacked ZIP's wheels of that build (the caller wants exactly one).
+function Find-SparkH3Wheels([string] $Dir, [string] $Arch) {
+    $namePrefix = "spark_h3_kitchen-" + (Get-SparkH3VersionPrefix $Arch)
+    $wheels = @(Get-ChildItem -LiteralPath $Dir -Recurse -File -Filter '*.whl' |
+        Where-Object { $_.Name.StartsWith($namePrefix) })
+    return $wheels
+}
+
+function Install-SparkH3Kitchen {
+    param([Parameter(Mandatory)] [string] $PythonPath)
+    Write-Step "Spark-H3 kernel package (spark-h3-kitchen into .venv-engine-h3)"
+    # Invoke-WebRequest's progress bar slows PowerShell 5.1 down badly (setup.ps1).
+    $ProgressPreference = 'SilentlyContinue'
+    $warnings = @()
+
+    # 1) The GPU's compute capability, from the H3 venv's torch ("none" = no CUDA).
+    Write-Do "GPU の系統を調べています（.venv-engine-h3 の torch）"
+    $capability = ''
+    try {
+        $out = & $PythonPath -P -c "import torch; print('%d.%d' % torch.cuda.get_device_capability(0) if torch.cuda.is_available() else 'none')"
+        if ($LASTEXITCODE -eq 0 -and @($out).Count -gt 0) { $capability = ([string] @($out)[-1]).Trim() }
+    } catch {
+        Write-Warn "GPU の系統を調べられませんでした（$($_.Exception.Message)）。Spark-H3 の部品は入れません。"
+        return @($warnings)
+    }
+    if ($capability -eq '') {
+        Write-Warn "GPU の系統を調べられませんでした（.venv-engine-h3 の torch が値を返しませんでした）。Spark-H3 の部品は入れません。"
+        return @($warnings)
+    }
+    if ($capability -eq 'none') {
+        Write-Warn "CUDA が使えないため、Spark-H3 の部品は入れません。"
+        return @($warnings)
+    }
+    if (-not $sparkH3Zips.ContainsKey($capability)) {
+        Write-Skip "この GPU（系統 $capability）向けの Spark-H3 の配布物はありません。Spark-H3 の部品は入れません。"
+        return @($warnings)
+    }
+    $entry = $sparkH3Zips[$capability]
+    $arch = $entry.Arch
+    $wantPrefix = Get-SparkH3VersionPrefix $arch
+    Write-Ok "GPU の系統: $capability（$arch）"
+
+    # 2) Already installed for THIS GPU?
+    $installed = ''
+    try {
+        $out = & $PythonPath -P -c "from importlib.metadata import distributions; print(next((d.version for d in distributions(name='spark-h3-kitchen')), ''))"
+        if ($LASTEXITCODE -eq 0 -and @($out).Count -gt 0) { $installed = ([string] @($out)[-1]).Trim() }
+    } catch {
+        # Not knowing the installed version only costs a re-install of the same wheel.
+        Write-Warn "入っている Spark-H3 の部品の版を調べられませんでした（$($_.Exception.Message)）。部品を入れる手順へ進みます。"
+        $installed = ''
+    }
+    if ($installed.StartsWith($wantPrefix)) {
+        Write-Skip "Spark-H3 の部品は入っています（spark-h3-kitchen $installed）"
+        return @($warnings)
+    }
+    if ($installed -ne '') {
+        Write-Do "入っている Spark-H3 の部品（spark-h3-kitchen $installed）を、$wantPrefix のものに入れ替えます"
+    }
+
+    # 3) Fetch -> check -> unpack -> install, in a scratch folder removed at the end.
+    # $ErrorActionPreference is "Stop", so ANY cmdlet below (New-Item, Get-FileHash,
+    # Get-ChildItem, ...) can throw; the outer catch turns that into a WARN and a
+    # return, so this step never stops the H3 install.
+    $stage = ''
+    try {
+        $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("nz-spark-h3.{0}" -f ([guid]::NewGuid().ToString("N")))
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        $zip = Join-Path $stage $entry.Zip
+        $url = "$sparkH3ReleaseUrl/$($entry.Zip)"
+        Write-Do "取得しています: $url"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+        } catch {
+            Write-Warn "Spark-H3 の部品を取得できませんでした（$($_.Exception.Message)）。Spark-H3 の部品は入れずに先へ進みます。"
+            return @($warnings)
+        }
+        if (-not (Test-Path -LiteralPath $zip)) {
+            Write-Warn "Spark-H3 の部品を取得できませんでした（ファイルができていません: $($entry.Zip)）。Spark-H3 の部品は入れずに先へ進みます。"
+            return @($warnings)
+        }
+
+        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+        $expected = $entry.Sha256
+        if ($actual -eq $expected) {
+            Write-Ok "SHA-256 が一致しました: $($entry.Zip)"
+        } else {
+            $w = "SHA-256 が記録の値と一致しません: $($entry.Zip)（期待 $expected／実際 $actual）。Spark-H3 の部品の導入は、そのまま進めます。"
+            Write-Warn $w
+            $warnings += $w
+        }
+
+        $unpack = Join-Path $stage 'unpack'
+        try {
+            Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
+        } catch {
+            Write-Warn "Spark-H3 の ZIP を展開できませんでした（$($_.Exception.Message)）。Spark-H3 の部品は入れずに先へ進みます。"
+            return @($warnings)
+        }
+
+        $wheels = @(Find-SparkH3Wheels -Dir $unpack -Arch $arch)
+        if ($wheels.Count -ne 1) {
+            Write-Warn "ZIP の中に spark_h3_kitchen-$wantPrefix* の wheel が $($wheels.Count) 本ありました（1 本のときだけ入れます）。Spark-H3 の部品は入れずに先へ進みます。"
+            return @($warnings)
+        }
+        $wheel = $wheels[0]
+
+        # --no-deps: the wheel declares no dependencies; this keeps uv from
+        # touching anything else in the venv.
+        Write-Do "uv pip install --no-deps $($wheel.Name)"
+        $global:LASTEXITCODE = 0
+        uv pip install --python $PythonPath --no-deps $wheel.FullName | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Spark-H3 の部品の導入に失敗しました（uv の終了コード $LASTEXITCODE）。Spark-H3 の部品は入れずに先へ進みます。"
+            return @($warnings)
+        }
+        Write-Ok "Spark-H3 の部品を入れました（$($wheel.Name)）"
+    } catch {
+        Write-Warn "Spark-H3 の部品を入れる途中で失敗しました（$($_.Exception.Message)）。Spark-H3 の部品は入れずに先へ進みます。"
+        return @($warnings)
+    } finally {
+        if ($stage -and (Test-Path -LiteralPath $stage)) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    return @($warnings)
+}
+
+# SHA-256 warnings from Install-SparkH3Kitchen, re-shown with the weights' ones
+# after the verification table.
+$SparkH3HashWarnings = @()
 if ($foundIds -contains 'MiniMaxH3') {
     Ensure-EngineVenv -VenvPath $h3Venv -PythonPath $h3Py `
         -StateFile $h3StateFile -FreezeFile $h3FreezeSrc `
@@ -1583,6 +1774,7 @@ if ($foundIds -contains 'MiniMaxH3') {
         -IndexUrl "https://download.pytorch.org/whl/cu130" `
         -StackLabel "torch cu130 stack" `
         -IgnoreSkipVenv
+    $SparkH3HashWarnings = @(Install-SparkH3Kitchen -PythonPath $h3Py)
 }
 
 # The downloader is the engine venv's huggingface_hub run as a MODULE
@@ -1758,7 +1950,9 @@ function Test-KnownWeightHashes {
     return @($warnings)
 }
 
-$HashWarnings = @()
+# Starts with the Spark-H3 ZIP's SHA-256 warning (Install-SparkH3Kitchen, step 5),
+# so the summary after the verification table re-shows it with the weights' ones.
+$HashWarnings = @($SparkH3HashWarnings)
 
 if ($SkipModels) {
     Write-Step "Model downloads"
@@ -1964,8 +2158,8 @@ foreach ($row in $rows) {
     Write-Host $line -ForegroundColor $color
 }
 
-# Re-show the SHA-256 warnings from step 6 (they scrolled past during the
-# download); they never change the exit code.
+# Re-show the SHA-256 warnings from step 6 and from Install-SparkH3Kitchen (they
+# scrolled past during the download); they never change the exit code.
 if ($HashWarnings.Count -gt 0) {
     Write-Host ""
     foreach ($hw in $HashWarnings) { Write-Warn $hw }

@@ -155,6 +155,9 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
     # MiniMax H3 only (the Sol-H3-VAE decoder). The field's default is False.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (the Spark-H3 sparse attention). The field's default is
+    # False; its two numbers are governed by it (:data:`GOVERNED_FIELDS`).
+    ("spark_h3", "spark_h3", lambda r: r.spark_h3),
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
@@ -318,7 +321,13 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 #: empty loop passes, which is the honest answer when nothing is governed), and
 #: keeping the name means the day a NEW sub-parameter appears behind a NEW 422
 #: there is somewhere obvious to put it.
-GOVERNED_FIELDS: dict[str, str] = {}
+#:
+#: The two Spark-H3 numbers (MiniMax H3's) are the rows: inert without
+#: ``spark_h3``, which the table above refuses, so sent alone they pass.
+GOVERNED_FIELDS: dict[str, str] = {
+    "spark_h3_topk_ratio": "spark_h3",
+    "spark_h3_full_steps": "spark_h3",
+}
 
 # --------------------------------------------------------------------------- #
 # chain feature scope
@@ -364,6 +373,10 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (the Sol-H3-VAE decoder), the single path's row on the
     # chain schema. The field's default is False. LAST, for the same reason.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (the Spark-H3 sparse attention), the single path's row
+    # on the chain schema. The field's default is False. LAST, for the same
+    # reason.
+    ("spark_h3", "spark_h3", lambda r: r.spark_h3),
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False. LAST, for the same reason.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
@@ -511,7 +524,11 @@ CHAIN_HONOURED_FIELDS: frozenset[str] = frozenset(
 #: Kept even when empty, for the same reasons as :data:`GOVERNED_FIELDS` — the
 #: audit reads it by name, the governor test's loop passes when it is empty,
 #: and a future sub-parameter behind a future 422 has an obvious home.
-CHAIN_GOVERNED_FIELDS: dict[str, str] = {}
+#: The rows are the single path's: the two Spark-H3 numbers.
+CHAIN_GOVERNED_FIELDS: dict[str, str] = {
+    "spark_h3_topk_ratio": "spark_h3",
+    "spark_h3_full_steps": "spark_h3",
+}
 
 
 #: Everything GET /models publishes as this engine's ``unsupported_features``.

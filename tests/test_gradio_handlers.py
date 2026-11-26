@@ -4598,6 +4598,54 @@ def test_generate_handler_pi_h3_without_served_values_is_todays_request():
     assert captured == _captured_generate()
 
 
+# --------------------------------------------------------------------------- #
+# Spark-H3 (MiniMax H3): the three keys ride together, last, only when the
+# toggle is on; the ratio slider's percent is sent divided by 100.
+# --------------------------------------------------------------------------- #
+_SPARK_KEYS = ["spark_h3", "spark_h3_topk_ratio", "spark_h3_full_steps"]
+
+
+def test_spark_h3_payload_is_empty_when_off_and_three_keys_when_on():
+    from gradio_ui.handlers import spark_h3_payload
+
+    assert spark_h3_payload(False, 13, 1) == {}
+    assert spark_h3_payload(True, 20, 2) == {
+        "spark_h3": True, "spark_h3_topk_ratio": 0.2, "spark_h3_full_steps": 2}
+    # A slider may hand over a float; the percent is divided, not rounded.
+    out = spark_h3_payload(True, 13.0, 0.0)
+    assert out["spark_h3_topk_ratio"] == 0.13 and out["spark_h3_full_steps"] == 0
+    assert isinstance(out["spark_h3_full_steps"], int)
+
+
+def test_generate_handler_spark_h3_rides_last_only_when_on():
+    off = _captured_h3_generate()
+    assert not set(_SPARK_KEYS) & set(off)
+    # Off with moved sliders is still today's request.
+    assert _captured_h3_generate(spark_h3=False, spark_h3_ratio_percent=10,
+                                 spark_h3_full_steps=1) == off
+    on = _captured_h3_generate(spark_h3=True, spark_h3_ratio_percent=10,
+                               spark_h3_full_steps=1, sol_vae=True)
+    assert list(on.keys())[-3:] == _SPARK_KEYS
+    assert (on["spark_h3"], on["spark_h3_topk_ratio"], on["spark_h3_full_steps"]) == (
+        True, 0.1, 1)
+    assert on["sol_vae"] is True
+
+
+def test_build_a2v_chain_payload_spark_h3_rides_last_only_when_on():
+    from gradio_ui.handlers import build_a2v_chain_payload
+
+    kwargs = dict(audio_id="aud-1", num_frames=113, prompt="a cat",
+                  negative_prompt="", width=512, height=512, crop_output=None,
+                  frame_rate=24.0, seed=7)
+    off = build_a2v_chain_payload(**kwargs)
+    assert build_a2v_chain_payload(**kwargs, spark_h3=False,
+                                   spark_h3_ratio_percent=10,
+                                   spark_h3_full_steps=1) == off
+    on = build_a2v_chain_payload(**kwargs, embed_mp4_metadata=False, spark_h3=True)
+    assert list(on.keys())[-4:] == ["embed_mp4_metadata", *_SPARK_KEYS]
+    assert (on["spark_h3_topk_ratio"], on["spark_h3_full_steps"]) == (0.2, 2)
+
+
 def test_generate_handler_a2v_never_carries_pi_h3(tmp_path):
     aud = tmp_path / "a.wav"
     aud.write_bytes(b"RIFF....WAVEfmt ")

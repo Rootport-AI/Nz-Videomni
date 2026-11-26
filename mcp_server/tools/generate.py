@@ -61,8 +61,15 @@ LTX では ``True`` が 422。``submit_chain`` には出さない（H3 の連結
 ``sol_vae`` の後ろに置き、``True`` のときだけ送る。LTX では ``True`` が 422。
 
 ``keep_text_conditioning``（テキストエンコーダーの条件付けの保持。真偽値）は
-引数の並びのいちばん後ろに置き、``True`` のときだけ送る。送る前の検査はしない。MiniMax H3・
+``spark_h3`` の前に置き、``True`` のときだけ送る。送る前の検査はしない。MiniMax H3・
 LTX 2.3・LTX 2.5 で使える。
+
+``spark_h3``（MiniMax H3 の高速化 Spark-H3。真偽値）と、その 2 つの数
+``spark_h3_topk_ratio``・``spark_h3_full_steps`` は引数の並びのいちばん後ろに置き、
+``spark_h3`` が ``True`` のときだけ 3 つをまとめて送る（``False`` ならどれも送らない）。
+範囲の検査はサーバーの 422 に任せる。LTX では ``True`` が 422。使えない環境・
+ステップが足りない・短い動画では、サーバーが Spark-H3 なしで完走させ、
+``spark_h3_used`` が ``"on->off"`` になる（``Docs/MCP_SERVER_DESIGN.md`` §2 の D44）。
 
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
@@ -267,6 +274,9 @@ async def submit_generate(
     keep_reference_latents: bool = False,
     references: list[ReferenceArg] | None = None,
     keep_text_conditioning: bool = False,
+    spark_h3: bool = False,
+    spark_h3_topk_ratio: float = 0.2,
+    spark_h3_full_steps: int = 2,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -277,7 +287,7 @@ async def submit_generate(
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
     ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True``・
-    ``keep_reference_latents=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
+    ``spark_h3=True``・``keep_reference_latents=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -737,6 +747,27 @@ async def submit_generate(
             生成結果は変わりません。メインメモリを使います。この引数が ``False`` の
             ジョブが来ると、保持した分は消えます。MiniMax H3 の ``keep_reference_latents``
             とは別の機能で、同時に使えます。
+        spark_h3: MiniMax H3 の高速化 Spark-H3（ノイズ除去の本体の注意の計算を
+            間引く疎な注意。``attention_backend`` の sdpa／sage に重ねて使います）。
+            既定の ``False`` なら、3 つの ``spark_h3*`` のキーはどれも送られません。
+            ``True`` のときだけ、``spark_h3_topk_ratio`` と ``spark_h3_full_steps``
+            と一緒に送ります。**Spark-H3 をオンにすると、オフのときと出力が
+            変わります。** **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を
+            指定すると 422 FEATURE_UNSUPPORTED になります。** 使えない環境
+            （部品が無い・GPU の系統が合わない）、総ステップ数が
+            ``spark_h3_full_steps`` 以下のとき、短い動画では、生成は Spark-H3
+            なしで完走し、メタデータの ``spark_h3_used`` が ``"on->off"`` に
+            なります（間引いて計算したときは ``"on"``。``spark_h3`` のジョブに
+            だけ入ります）。使えるかどうかは ``backend_status`` の
+            ``status.acceleration.spark_h3_available`` で分かります。
+        spark_h3_topk_ratio: Spark-H3 の「フルで演算する割合」（0.01〜0.5。既定
+            0.2）。推奨の範囲は 0.1〜0.2 です。範囲の検査はサーバーが行います
+            （範囲外は 422）。``spark_h3`` が ``False`` のときは送りません。
+        spark_h3_full_steps: Spark-H3 の「フル演算するステップ数」（0〜10。既定 2）。
+            最初のこの数のステップは間引かずに計算します。総ステップ数の 2 割が
+            目安です（4 ステップなら 1、8 ステップなら 2、20 ステップなら 4）。
+            ``pi_h3`` を選んでいるときの総ステップ数は、その選択の値（4 か 2）です。
+            ``spark_h3`` が ``False`` のときは送りません。
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -878,6 +909,13 @@ async def submit_generate(
     # server's default is False).
     if keep_text_conditioning:
         payload["keep_text_conditioning"] = True
+    # spark_h3 (MiniMax H3): the three keys together, only when True (the
+    # server's default is False; an off call carries none of them). Range
+    # checks are the server's 422.
+    if spark_h3:
+        payload["spark_h3"] = True
+        payload["spark_h3_topk_ratio"] = spark_h3_topk_ratio
+        payload["spark_h3_full_steps"] = spark_h3_full_steps
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -1076,6 +1114,9 @@ async def submit_chain(
     shift_video: float | None = None,
     shift_audio: float | None = None,
     keep_text_conditioning: bool = False,
+    spark_h3: bool = False,
+    spark_h3_topk_ratio: float = 0.2,
+    spark_h3_full_steps: int = 2,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -1099,7 +1140,7 @@ async def submit_chain(
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
     ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です
-    （``sol_vae=True``・``keep_reference_latents=True`` も同じです）。
+    （``sol_vae=True``・``spark_h3=True``・``keep_reference_latents=True`` も同じです）。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -1480,6 +1521,24 @@ async def submit_chain(
             この引数が ``False`` のジョブが来ると、保持した分は消えます。
             MiniMax H3 の ``keep_reference_latents`` とは別の機能で、同時に使えます。
             LTX 2.5 は、そのジョブが渡す文字列の並びの全体が同じときだけ使い回します。
+        spark_h3: submit_generate と同じ意味（MiniMax H3 の高速化 Spark-H3。既定の
+            ``False`` なら、3 つの ``spark_h3*`` のキーはどれも送りません。``True``
+            のときだけ 3 つをまとめて送ります）。連結・V2V・撮り直しの全クリップに
+            1 つの指定が効き、「フル演算するステップ数」はクリップごとに数え直します。
+            **Spark-H3 をオンにすると、オフのときと出力が変わります。**
+            **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
+            FEATURE_UNSUPPORTED になります。** 使えない環境（部品が無い・GPU の
+            系統が合わない）、総ステップ数が ``spark_h3_full_steps`` 以下のとき、
+            短い動画では、生成は Spark-H3 なしで完走し、メタデータの
+            ``spark_h3_used`` が ``"on->off"`` になります（1 クリップでも間引いて
+            計算したときは ``"on"``）。使えるかどうかは ``backend_status`` の
+            ``status.acceleration.spark_h3_available`` で分かります。
+        spark_h3_topk_ratio: submit_generate と同じ意味（「フルで演算する割合」。
+            0.01〜0.5・既定 0.2・推奨の範囲は 0.1〜0.2。``spark_h3`` が ``False``
+            のときは送りません）。
+        spark_h3_full_steps: submit_generate と同じ意味（「フル演算するステップ数」。
+            0〜10・既定 2。総ステップ数の 2 割が目安。``spark_h3`` が ``False``
+            のときは送りません）。
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1592,6 +1651,12 @@ async def submit_chain(
     # keep_text_conditioning: same rule as submit_generate (sent only when True).
     if keep_text_conditioning:
         payload["keep_text_conditioning"] = True
+    # spark_h3: same rule as submit_generate (the three keys together, only
+    # when True).
+    if spark_h3:
+        payload["spark_h3"] = True
+        payload["spark_h3_topk_ratio"] = spark_h3_topk_ratio
+        payload["spark_h3_full_steps"] = spark_h3_full_steps
     # stage2_window: same rule as vae_mode (sent only when it differs from the
     # server default "standard"). No pre-check here: the server's 422 is the
     # single source of truth (full_length shape / V2V context / retake window).

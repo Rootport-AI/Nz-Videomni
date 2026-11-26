@@ -222,13 +222,12 @@ def test_the_published_unsupported_features_are_unchanged():
         rows = [row for row in adapter.CHAIN_REJECT_TABLE if row[1] == "source_audio"]
         assert len(rows) == 1 and rows[0][0] == "clips"
         # added last at the time; pi-H3's row (pi_h3) came after it, then
-        # Sol-H3-VAE's (sol_vae), then keep_reference_latents (the last row:
-        # keep_text_conditioning's row came and went when the LTX engines
-        # learned it, 台帳 §1-299).
-        assert adapter.CHAIN_REJECT_TABLE[-4][1] == "source_audio"
-        assert adapter.CHAIN_REJECT_TABLE[-3][1] == "pi_h3"
-        assert adapter.CHAIN_REJECT_TABLE[-2][1] == "sol_vae"
-        assert adapter.CHAIN_REJECT_TABLE[-1][1] == "keep_reference_latents"
+        # Sol-H3-VAE's (sol_vae), then Spark-H3's (spark_h3, next to sol_vae),
+        # then keep_reference_latents (the last row: keep_text_conditioning's
+        # row came and went when the LTX engines learned it, 台帳 §1-299).
+        assert [feat for _f, feat, _p in adapter.CHAIN_REJECT_TABLE[-5:]] == [
+            "source_audio", "pi_h3", "sol_vae", "spark_h3", "keep_reference_latents",
+        ]
 
 
 def test_constraints_publish_the_clip_strength_for_h3_only():

@@ -3033,8 +3033,9 @@ def test_both_tools_expose_keep_text_conditioning_as_an_optional_bool_defaulting
         prop = schema["properties"]["keep_text_conditioning"]
         assert prop["type"] == "boolean" and prop["default"] is False, name
         assert "keep_text_conditioning" not in set(schema.get("required", [])), name
-        # the LAST argument, so no earlier call's positional order moves.
-        assert list(schema["properties"])[-1] == "keep_text_conditioning", name
+        # Appended at the end, so no earlier call's positional order moves;
+        # only the three Spark-H3 arguments (D44) come after it.
+        assert list(schema["properties"])[-4] == "keep_text_conditioning", name
     assert GenerateRequest.model_fields["keep_text_conditioning"].default is False
     assert GenerateChainRequest.model_fields["keep_text_conditioning"].default is False
 
@@ -3064,3 +3065,70 @@ def test_keep_text_conditioning_sent_only_when_true():
         generate.submit_chain, "p", clips, keep_text_conditioning=True, keep_reference_latents=True))
     assert captured["body"]["keep_text_conditioning"] is True
     assert captured["body"]["keep_reference_latents"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Spark-H3 (MiniMax H3, D44): spark_h3 + its two numbers, the last three
+# arguments of both tools; the three keys ride together, only when True.
+# --------------------------------------------------------------------------- #
+_SPARK_KEYS = ("spark_h3", "spark_h3_topk_ratio", "spark_h3_full_steps")
+
+
+def test_both_tools_expose_the_spark_h3_arguments_last_with_the_server_defaults():
+    from api.models import GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        schema = tools[name].inputSchema
+        assert list(schema["properties"])[-3:] == list(_SPARK_KEYS), name
+        assert not set(_SPARK_KEYS) & set(schema.get("required", [])), name
+        props = schema["properties"]
+        assert props["spark_h3"]["type"] == "boolean" and props["spark_h3"]["default"] is False
+        assert props["spark_h3_topk_ratio"]["type"] == "number"
+        assert props["spark_h3_full_steps"]["type"] == "integer"
+        description = tools[name].description
+        for needle in ("spark_h3_used", "spark_h3_available", "FEATURE_UNSUPPORTED"):
+            assert needle in description, (name, needle)
+        for model in (GenerateRequest, GenerateChainRequest):
+            for key in _SPARK_KEYS:
+                assert props[key]["default"] == model.model_fields[key].default, (name, key)
+
+
+def test_spark_h3_keys_ride_together_only_when_true():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+
+    set_client(_client_for_handler(handler))
+    clips = [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+    for tool, args in ((generate.submit_generate, ("p",)),
+                       (generate.submit_chain, ("p", clips))):
+        anyio.run(functools.partial(tool, *args))
+        baseline = captured["body"]
+        assert not set(_SPARK_KEYS) & set(baseline)
+        # False with non-default numbers: still nothing, the same body as today.
+        anyio.run(functools.partial(tool, *args, spark_h3=False,
+                                    spark_h3_topk_ratio=0.1, spark_h3_full_steps=1))
+        assert captured["body"] == baseline
+        anyio.run(functools.partial(tool, *args, spark_h3=True))
+        assert {k: captured["body"][k] for k in _SPARK_KEYS} == {
+            "spark_h3": True, "spark_h3_topk_ratio": 0.2, "spark_h3_full_steps": 2}
+        anyio.run(functools.partial(tool, *args, spark_h3=True,
+                                    spark_h3_topk_ratio=0.13, spark_h3_full_steps=0))
+        body = captured["body"]
+        assert (body["spark_h3_topk_ratio"], body["spark_h3_full_steps"]) == (0.13, 0)
+        # Everything else is the off body unchanged.
+        assert {k: v for k, v in body.items() if k not in _SPARK_KEYS} == baseline
+
+
+def test_instructions_mention_spark_h3():
+    from mcp_server.server import INSTRUCTIONS
+
+    for needle in ("spark_h3", "spark_h3_used", "spark_h3_available"):
+        assert needle in INSTRUCTIONS, needle

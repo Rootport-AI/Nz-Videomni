@@ -148,6 +148,18 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_warn_pi_h3": ("<strong>pi-H3 is not recommended when using Turbo LoRA or Turbo models.</strong> "
                              "Generation is faster, but video quality is reduced."),
         "cap_pi_h3_lock": "Fixed because pi-H3 is enabled in Settings",
+        # Spark-H3 (MiniMax H3 only; the toggle and its two sliders are hidden
+        # on LTX, whose unsupported_features name spark_h3). The label is the
+        # technical name. Gradio sliders cannot carry markers, so the
+        # recommended range is written in the ratio slider's info line.
+        "accel_lbl_spark_h3": "Spark-H3",
+        "accel_info_spark_h3": ('Has no effect when the total steps are at or below '
+                                '"Full-attention steps", or on short videos.'),
+        "accel_lbl_spark_h3_ratio": "Full-attention ratio",
+        "accel_info_spark_h3_ratio": "Recommended range: 10–20%.",
+        "accel_lbl_spark_h3_full_steps": "Full-attention steps",
+        "accel_info_spark_h3_full_steps": ("About 20% of the total steps is a good guide "
+                                           "(1 for 4 denoising steps, 2 for 8, 4 for 20)."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
         "qmode_hq": "High quality (two_stage_hq) — backend support pending",
@@ -719,6 +731,15 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_warn_pi_h3": ("<strong>pi-H3はTurbo LoRAやTurboモデルとの併用は非推奨です。</strong>"
                              "生成が高速になる代わりに、動画の品質は劣化します。"),
         "cap_pi_h3_lock": "Settings の pi-H3 が有効のため固定",
+        "accel_lbl_spark_h3": "Spark-H3",
+        "accel_info_spark_h3": ("総ステップ数が「フル演算するステップ数」以下のときと、"
+                                "短い動画では効きません。"),
+        "accel_lbl_spark_h3_ratio": "フルで演算する割合",
+        "accel_info_spark_h3_ratio": "推奨の範囲は10〜20%です。",
+        "accel_lbl_spark_h3_full_steps": "フル演算するステップ数",
+        "accel_info_spark_h3_full_steps": ("総ステップ数の 2 割が目安です"
+                                           "（デノイズ4 stepsなら 1、8 stepsなら 2、"
+                                           "20 stepsなら 4）"),
         "lbl_qmode": "品質モード",
         "qmode_fast": "高速 (distilled) — 8ステップ / CFG 1.0",
         "qmode_hq": "高品質 (two_stage_hq) — バックエンド未対応",

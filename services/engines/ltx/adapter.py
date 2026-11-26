@@ -150,6 +150,9 @@ REJECT_TABLE: tuple[tuple[str, str, Callable[[GenerateRequest], bool]], ...] = (
     ("pi_h3", "pi_h3", lambda r: r.pi_h3 != "off"),
     # MiniMax H3 only (the Sol-H3-VAE decoder). The field's default is False.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (the Spark-H3 sparse attention). The field's default is
+    # False; its two numbers are governed by it (:data:`GOVERNED_FIELDS`).
+    ("spark_h3", "spark_h3", lambda r: r.spark_h3),
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
@@ -164,6 +167,7 @@ H3_ONLY_REFUSALS: dict[str, str] = {
     "references": "参照素材（Ref2VA）は MiniMax H3 専用です。",
     "pi_h3": "pi-H3 は MiniMax H3 専用です。LTX では使えません。",
     "sol_vae": "Sol-H3-VAE は MiniMax H3 専用です。LTX では使えません。",
+    "spark_h3": "Spark-H3 は MiniMax H3 専用です。LTX では使えません。",
     "keep_reference_latents": "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
 }
 
@@ -248,10 +252,12 @@ HONOURED_FIELDS: frozenset[str] = frozenset(
 )
 
 #: ``field -> the field that governs it``: sub-parameters inert unless a
-#: refused governor is non-default. Empty, and KEPT empty rather than absent for
-#: the reason the 2.5 adapter keeps its own: the audit reads it by name, and the
-#: next sub-parameter behind a 422 needs an obvious place to go.
-GOVERNED_FIELDS: dict[str, str] = {}
+#: refused governor is non-default. The two Spark-H3 numbers (MiniMax H3's):
+#: inert without ``spark_h3`` (refused above), so sent alone they pass.
+GOVERNED_FIELDS: dict[str, str] = {
+    "spark_h3_topk_ratio": "spark_h3",
+    "spark_h3_full_steps": "spark_h3",
+}
 
 #: The chain schema's own table, same shape and same discipline as
 #: :data:`REJECT_TABLE`. A SECOND table rather than a reuse of the first, for
@@ -281,6 +287,10 @@ CHAIN_REJECT_TABLE: tuple[
     # MiniMax H3 only (the Sol-H3-VAE decoder), the single path's row on the
     # chain schema. The field's default is False. LAST, for the same reason.
     ("sol_vae", "sol_vae", lambda r: r.sol_vae),
+    # MiniMax H3 only (the Spark-H3 sparse attention), the single path's row
+    # on the chain schema. The field's default is False. LAST, for the same
+    # reason.
+    ("spark_h3", "spark_h3", lambda r: r.spark_h3),
     # MiniMax H3 only (keeping the encoded reference latents). The field's
     # default is False. LAST, for the same reason.
     ("keep_reference_latents", "keep_reference_latents", lambda r: r.keep_reference_latents),
@@ -738,6 +748,13 @@ class GenerationOutcome:
     # ``sol_vae`` job only (the H3 mock decides it from the asset's file). None
     # for every other job, and then metadata.json carries no ``sol_vae_used``.
     sol_vae_used: str | None = None
+    # Acceleration, MiniMax H3 ONLY: whether Spark-H3 thinned any evaluation
+    # ("on") or none ("on->off": the kit was unusable, the full steps covered
+    # every step, or the sequence was short), reported by the worker's ``done``
+    # event for a ``spark_h3`` job only (the H3 mock always says "on->off").
+    # None for every other job, and then metadata.json carries no
+    # ``spark_h3_used``.
+    spark_h3_used: str | None = None
     # Acceleration: torch.cuda.max_memory_reserved() in MB, reported alongside
     # peak_vram_mb (which is max_memory_allocated-based and cannot see
     # allocator-reserved-but-unallocated growth from stream-separate pools).
@@ -829,6 +846,8 @@ class LTXRunner:
         # Acceleration capability probe result (see ``sage_available``); None
         # until the first read, then cached for the process lifetime.
         self._sage_probe_cache: bool | None = None
+        # The same for Spark-H3 (see ``spark_h3_available``).
+        self._spark_h3_probe_cache: bool | None = None
 
     @property
     def descriptor(self) -> BaseModelDescriptor:
@@ -1191,6 +1210,46 @@ class LTXRunner:
         if backend is None or not backend.loaded:
             return None
         value = getattr(backend, "sage_available", None)
+        return None if value is None else bool(value)
+
+    # ------------------------------------------- acceleration (Spark-H3)
+
+    @property
+    def spark_h3_available(self) -> bool:
+        """Pre-load capability probe: is the Spark-H3 kit installed in the
+        ENGINE venv? (MiniMax H3's; Docs/MINIMAX_H3_DESIGN.md §6.11.)
+
+        The same discipline as :attr:`sage_available`: a pure FILE-EXISTENCE
+        check of ``<venv>/Lib/site-packages/spark_h3_kitchen`` that never
+        imports anything, evaluated once and cached for the process lifetime.
+        The venv is this runner's engine's (an LTX runner's venv has no kit,
+        so it answers False). Once the H3 worker is up, its own probe on the
+        ``ready`` event is authoritative (:attr:`worker_spark_h3_available`).
+        """
+        if self._spark_h3_probe_cache is None:
+            self._spark_h3_probe_cache = self._probe_spark_h3_files()
+        return self._spark_h3_probe_cache
+
+    def _probe_spark_h3_files(self) -> bool:
+        try:
+            engine_python = self._REAL_BACKEND_CLS._engine_python_value(self.config)
+            if not engine_python:
+                return False
+            venv_root = self.config._abs(engine_python).parent.parent
+            return (venv_root / "Lib" / "site-packages" / "spark_h3_kitchen").is_dir()
+        except Exception:
+            return False
+
+    @property
+    def worker_spark_h3_available(self) -> bool | None:
+        """The LOADED worker's OWN Spark-H3 probe result, or None when unknown
+        (no backend, an unloaded/dead backend, the mock, or a worker whose
+        ``ready`` event omits ``spark_h3_available`` — every LTX worker).
+        Callers fall back to the file-existence :attr:`spark_h3_available`."""
+        backend = self._backend
+        if backend is None or not backend.loaded:
+            return None
+        value = getattr(backend, "spark_h3_available", None)
         return None if value is None else bool(value)
 
     @property
@@ -1917,6 +1976,10 @@ class _RealBackend:
         # from the ``ready`` event. None until a worker reports it (and again
         # after unload) — see LTXRunner.worker_sage_available.
         self.sage_available: bool | None = None
+        # Acceleration, MiniMax H3 only: the worker's own Spark-H3 probe, taken
+        # from the ``ready`` event the same way. LTX workers never send it, so
+        # it stays None there — see LTXRunner.worker_spark_h3_available.
+        self.spark_h3_available: bool | None = None
 
     @property
     def loaded(self) -> bool:
@@ -2265,7 +2328,14 @@ class _RealBackend:
             # falls back to LTXRunner's file-existence probe.
             raw_sage = event.get("sage_available")
             self.sage_available = None if raw_sage is None else bool(raw_sage)
-            logger.info("LTX worker ready. sage_available=%s", self.sage_available)
+            # The same for the MiniMax H3 worker's Spark-H3 probe (absent on
+            # LTX workers -> None, and the app falls back to the file probe).
+            raw_spark = event.get("spark_h3_available")
+            self.spark_h3_available = None if raw_spark is None else bool(raw_spark)
+            logger.info(
+                "LTX worker ready. sage_available=%s spark_h3_available=%s",
+                self.sage_available, self.spark_h3_available,
+            )
             return
         if kind == "error":
             detail = event.get("detail", "")
@@ -2307,6 +2377,7 @@ class _RealBackend:
             # /status must fall back to the file probe rather than keep quoting
             # a dead process (the engine venv may have changed meanwhile).
             self.sage_available = None
+            self.spark_h3_available = None
             safe_memory_cleanup()
 
     # -------------------------------------------------------------- generate

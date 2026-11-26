@@ -114,6 +114,28 @@ EMBED_MP4_METADATA_DEFAULT = True
 # never carries the key.
 VRAM16_MODE_DEFAULT_H3 = True
 
+# Acceleration: MiniMax H3's Spark-H3 (sparse attention; design source
+# Docs/MINIMAX_H3_DESIGN.md §6.11). The two sliders' defaults, in the units the
+# sliders show: the ratio is a PERCENT (1-50) and is sent divided by 100, so
+# the default 20 mirrors api/models.py's spark_h3_topk_ratio default 0.2, and
+# the step count mirrors spark_h3_full_steps' default 2. The toggle's default
+# is off (the server's spark_h3 default is False).
+SPARK_H3_RATIO_PERCENT_DEFAULT = 20
+SPARK_H3_FULL_STEPS_DEFAULT = 2
+
+
+def spark_h3_payload(spark_h3, ratio_percent, full_steps) -> dict:
+    """The Spark-H3 request keys: all three when the toggle is on, none when
+    it is off (an off job carries no Spark-H3 key at all). The ratio slider's
+    percent is divided by 100 and not rounded further; range checks are the
+    server's 422. The one builder every generation path that sends
+    ``attention_backend`` uses (single, A2V, batch and chain)."""
+    if not spark_h3:
+        return {}
+    return {"spark_h3": True,
+            "spark_h3_topk_ratio": float(ratio_percent) / 100,
+            "spark_h3_full_steps": int(full_steps)}
+
 
 # MCPサーバー側 mcp_server/batch_planning.py に写経あり。変更時は両方＋パリティテストを更新
 def _wav_duration_seconds(path) -> float | None:
@@ -531,6 +553,9 @@ def build_a2v_chain_payload(
     keep_resident_embeddings=KEEP_RESIDENT_EMBEDDINGS_DEFAULT,
     chunked_upsample: bool | None = None,
     embed_mp4_metadata=EMBED_MP4_METADATA_DEFAULT,
+    spark_h3=False,
+    spark_h3_ratio_percent=SPARK_H3_RATIO_PERCENT_DEFAULT,
+    spark_h3_full_steps=SPARK_H3_FULL_STEPS_DEFAULT,
 ):
     """Assemble the A2V ``POST /generate/chain`` body: a single ChainClip
     carrying ``num_frames`` + any keyframe ``conditioning_images``, the frozen
@@ -593,6 +618,8 @@ def build_a2v_chain_payload(
     ``embed_mp4_metadata`` (the Settings-tab Output checkbox, VERIFICATION_LOG
     §115) is appended after it, LAST, same "differs from the default" rule,
     against ``EMBED_MP4_METADATA_DEFAULT`` (direction: see its definition).
+    The Spark-H3 keys (MiniMax H3) follow it, all three only when
+    ``spark_h3`` is on (:func:`spark_h3_payload`).
 
     ``chunked_upsample`` is the ONE key here that is neither unconditional nor
     "differs from the default": it is TRI-STATE. ``None`` (the default) emits
@@ -689,6 +716,10 @@ def build_a2v_chain_payload(
     # rule against EMBED_MP4_METADATA_DEFAULT (direction: see its definition).
     if embed_mp4_metadata != EMBED_MP4_METADATA_DEFAULT:
         chain_payload["embed_mp4_metadata"] = bool(embed_mp4_metadata)
+    # Spark-H3 (MiniMax H3, additive, conditional): appended last, the three
+    # keys only when on (spark_h3_payload).
+    chain_payload.update(spark_h3_payload(
+        spark_h3, spark_h3_ratio_percent, spark_h3_full_steps))
     return chain_payload
 
 
@@ -762,7 +793,15 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                  # Acceleration (keyword, last): Sol-H3-VAE, the Fast VAE
                  # radio's "sol" (split off by ui.py's dispatch(); False on
                  # LTX). Single /generate only, as pi_h3.
-                 sol_vae=False):
+                 sol_vae=False,
+                 # Acceleration (keyword, last): the Settings-tab MiniMax H3
+                 # Spark-H3 toggle and its two sliders (hidden, off and at
+                 # the defaults on LTX). Unlike pi_h3 / sol_vae they ride on
+                 # every path that sends attention_backend, the A2V branch
+                 # below included.
+                 spark_h3=False,
+                 spark_h3_ratio_percent=SPARK_H3_RATIO_PERCENT_DEFAULT,
+                 spark_h3_full_steps=SPARK_H3_FULL_STEPS_DEFAULT):
         # Runtime language + polling cadence come from Settings-tab gr.State
         # inputs. They are optional, so a call that omits them (e.g. a unit
         # test) falls back to the build-time default language and
@@ -992,6 +1031,9 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                 vae_mode=vae_mode,
                 keep_resident_embeddings=keep_resident_embeddings,
                 embed_mp4_metadata=embed_mp4_metadata,
+                spark_h3=spark_h3,
+                spark_h3_ratio_percent=spark_h3_ratio_percent,
+                spark_h3_full_steps=spark_h3_full_steps,
             )
             try:
                 resp = api.generate_chain(chain_payload)
@@ -1124,6 +1166,10 @@ def make_generate_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         # pi_h3, only when on (never together: one radio feeds both).
         if sol_vae:
             payload["sol_vae"] = True
+        # Spark-H3 (MiniMax H3, additive, conditional): appended last, the
+        # three keys only when on (spark_h3_payload).
+        payload.update(spark_h3_payload(
+            spark_h3, spark_h3_ratio_percent, spark_h3_full_steps))
         try:
             resp = api.generate(payload)
         except Exception as exc:
@@ -1260,7 +1306,14 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
                        # the chain tab's window dropdown, forwarded as a
                        # KEYWORD by ui.py's chain_dispatch. ``None`` / the
                        # default ("standard") keeps the key off the payload.
-                       stage2_window=None):
+                       stage2_window=None,
+                       # Acceleration (keyword, last): the Settings-tab
+                       # MiniMax H3 Spark-H3 toggle and its two sliders,
+                       # forwarded as KEYWORDS by ui.py's chain_dispatch
+                       # (appended after the stage-2 window).
+                       spark_h3=False,
+                       spark_h3_ratio_percent=SPARK_H3_RATIO_PERCENT_DEFAULT,
+                       spark_h3_full_steps=SPARK_H3_FULL_STEPS_DEFAULT):
         # Runtime language + poll cadence from Settings; optional so callers
         # that stop at ``config`` keep working (None -> the factory's language
         # and _resolve_poll's fallbacks).
@@ -1632,6 +1685,10 @@ def make_chain_handler(api: ApiClient, lang: str = _DEFAULT_LANG):
         import chain_math   # function-local, like the other helpers here
         if stage2_window and stage2_window != chain_math.STAGE2_WINDOW_DEFAULT:
             payload["stage2_window"] = stage2_window
+        # Spark-H3 (MiniMax H3, additive, conditional): appended after the
+        # stage-2 window, the three keys only when on (spark_h3_payload).
+        payload.update(spark_h3_payload(
+            spark_h3, spark_h3_ratio_percent, spark_h3_full_steps))
 
         try:
             resp = api.generate_chain(payload)

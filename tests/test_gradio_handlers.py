@@ -3071,6 +3071,8 @@ def test_accel_i18n_keys_present_in_both_languages():
     # The sage caveat must actually say the output changes + name the speedup.
     assert "1.2-1.6x" in LABELS["en"]["accel_info_attention"]
     assert "1.2〜1.6倍" in LABELS["ja"]["accel_info_attention"]
+    assert LABELS["en"]["accel_info_attention"].startswith("With sage attention,")
+    assert LABELS["ja"]["accel_info_attention"].startswith("sage attentionでは、")
 
 
 def test_build_a2v_chain_payload_sage_appends_attention_backend_last():

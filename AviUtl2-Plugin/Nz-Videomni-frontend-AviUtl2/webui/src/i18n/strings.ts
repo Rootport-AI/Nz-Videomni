@@ -2560,12 +2560,12 @@ export const en = {
     /** Tooltip on the ratio slider's two markers (10% and 20%). */
     accelSparkH3TopkMarkerTitle: "Recommended range (10–20%)",
     accelSparkH3FullStepsLabel: "Full-attention steps",
-    accelSparkH3FullStepsNote: "About 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).",
+    accelSparkH3FullStepsNote: "For \"Full-attention steps\", about 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).",
     /** Shown under the attention row while sage is selected. Both halves
      * matter: identical seeds no longer reproduce identical output down to
      * the last detail, and the payoff is roughly 1.2-1.6x. */
     accelSageNote:
-      "Fine details of the output change even with the same seed (the numeric precision differs). Speed is about 1.2-1.6x.",
+      "With sage attention, fine details of the output change even with the same seed (the numeric precision differs). Speed is about 1.2-1.6x.",
     /** Acceleration (2026-08-01, backend §44): block-swap prefetch. */
     accelPrefetchLabel: "Block-swap prefetch",
     accelPrefetchOn: "ON",
@@ -4189,8 +4189,8 @@ export const ja: Strings = {
     accelSparkH3TopkLabel: "フルで演算する割合",
     accelSparkH3TopkMarkerTitle: "推奨の範囲（10〜20%）",
     accelSparkH3FullStepsLabel: "フル演算するステップ数",
-    accelSparkH3FullStepsNote: "総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）",
-    accelSageNote: "同じシードでも生成結果の細部が変わります（数値精度が異なるため）。速度は約1.2〜1.6倍",
+    accelSparkH3FullStepsNote: "フル演算するステップ数は、総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）",
+    accelSageNote: "sage attentionでは、同じシードでも生成結果の細部が変わります（数値精度が異なるため）。速度は約1.2〜1.6倍",
     accelPrefetchLabel: "Block swapの先読み",
     accelPrefetchOn: "ON",
     accelPrefetchOff: "OFF",

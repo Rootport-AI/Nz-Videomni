@@ -92,9 +92,10 @@ LABELS: dict[str, dict[str, str]] = {
                                      "implementation on its own when it cannot "
                                      "run."),
         "accel_lbl_attention": "Attention",
-        "accel_info_attention": ("Changes fine details of the output even with "
-                                 "the same seed (different numerical "
-                                 "precision). Roughly 1.2-1.6x faster."),
+        "accel_info_attention": ("With sage attention, fine details of the "
+                                 "output change even with the same seed "
+                                 "(the numeric precision differs). "
+                                 "Speed is about 1.2-1.6x."),
         "accel_lbl_vae": "VAE",
         "accel_info_vae": ("PrunaVAED is a pruned decoder that speeds up video "
                            "reconstruction. Output quality may be slightly reduced."),
@@ -158,7 +159,8 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_spark_h3_ratio": "Full-attention ratio",
         "accel_info_spark_h3_ratio": "Recommended range: 10–20%.",
         "accel_lbl_spark_h3_full_steps": "Full-attention steps",
-        "accel_info_spark_h3_full_steps": ("About 20% of the total steps is a good guide "
+        "accel_info_spark_h3_full_steps": ("For \"Full-attention steps\", about 20% of the total "
+                                           "steps is a good guide "
                                            "(1 for 4 denoising steps, 2 for 8, 4 for 20)."),
         "lbl_qmode": "Quality mode",
         "qmode_fast": "Fast (distilled) — 8 steps / CFG 1.0",
@@ -694,7 +696,7 @@ LABELS: dict[str, dict[str, str]] = {
                                      "だけが変わります。実行できない環境では"
                                      "自動的に従来の実装へ戻ります。"),
         "accel_lbl_attention": "Attention（注意機構）の実装",
-        "accel_info_attention": ("同じシードでも生成結果の細部が変わります"
+        "accel_info_attention": ("sage attentionでは、同じシードでも生成結果の細部が変わります"
                                  "（数値精度が異なるため）。速度は約1.2〜1.6倍"),
         "accel_lbl_vae": "VAE（潜在表現と映像を相互変換する部品）",
         "accel_info_vae": ("枝刈り版（PrunaVAED）を選ぶと映像の復元が速くなります。"
@@ -737,7 +739,7 @@ LABELS: dict[str, dict[str, str]] = {
         "accel_lbl_spark_h3_ratio": "フルで演算する割合",
         "accel_info_spark_h3_ratio": "推奨の範囲は10〜20%です。",
         "accel_lbl_spark_h3_full_steps": "フル演算するステップ数",
-        "accel_info_spark_h3_full_steps": ("総ステップ数の 2 割が目安です"
+        "accel_info_spark_h3_full_steps": ("フル演算するステップ数は、総ステップ数の 2 割が目安です"
                                            "（デノイズ4 stepsなら 1、8 stepsなら 2、"
                                            "20 stepsなら 4）"),
         "lbl_qmode": "品質モード",

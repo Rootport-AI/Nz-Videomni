@@ -366,7 +366,7 @@ describe("SettingsPanel", () => {
     expect(attention.getByRole("button", { name: "sage attention" })).toBeEnabled();
     // The "same seed no longer reproduces the same details" note only shows
     // while sage is actually selected.
-    expect(screen.queryByText(/Fine details of the output change/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/fine details of the output change/)).not.toBeInTheDocument();
 
     // §1-11: the fused-dequant row is REAL — it sits where the old mock did,
     // defaults to On since 2026-08-04 (backend §51 flipped the server default
@@ -463,7 +463,7 @@ describe("SettingsPanel", () => {
       expect(attention.getByRole("button", { name: "sage attention" })).toHaveAttribute("aria-pressed", "true");
     });
     expect(attention.getByRole("button", { name: "sdpa" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText(/Fine details of the output change/)).toBeInTheDocument();
+    expect(screen.getByText(/With sage attention, fine details of the output change/)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).attentionBackend).toBe("sage");
@@ -1289,7 +1289,7 @@ describe("SettingsPanel — Spark-H3", () => {
     return rendered;
   }
 
-  const NOTE_EN = "About 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).";
+  const NOTE_EN = 'For "Full-attention steps", about 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).';
 
   it("shows the row with off selected and no sliders by default", async () => {
     await open();
@@ -1418,7 +1418,7 @@ describe("SettingsPanel — Spark-H3", () => {
     expect(screen.getByRole("slider", { name: /^フルで演算する割合/ })).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: /^フル演算するステップ数/ })).toBeInTheDocument();
     expect(
-      screen.getByText("総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）"),
+      screen.getByText("フル演算するステップ数は、総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）"),
     ).toBeInTheDocument();
     for (const marker of document.querySelectorAll("[data-size-marker]")) {
       expect(marker).toHaveAttribute("title", "推奨の範囲（10〜20%）");

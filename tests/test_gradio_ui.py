@@ -1733,7 +1733,8 @@ def test_spark_h3_texts_in_both_languages():
     assert en["accel_lbl_spark_h3_full_steps"] == "Full-attention steps"
     assert en["accel_info_spark_h3_ratio"] == "Recommended range: 10–20%."
     assert en["accel_info_spark_h3_full_steps"] == (
-        "About 20% of the total steps is a good guide (1 for 4 denoising steps, 2 for 8, 4 for 20).")
+        'For "Full-attention steps", about 20% of the total steps is a good guide '
+        "(1 for 4 denoising steps, 2 for 8, 4 for 20).")
     assert en["accel_info_spark_h3"] == (
         'Has no effect when the total steps are at or below "Full-attention steps", '
         "or on short videos.")
@@ -1741,7 +1742,7 @@ def test_spark_h3_texts_in_both_languages():
     assert ja["accel_lbl_spark_h3_ratio"] == "フルで演算する割合"
     assert ja["accel_lbl_spark_h3_full_steps"] == "フル演算するステップ数"
     assert ja["accel_info_spark_h3_full_steps"] == (
-        "総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）")
+        "フル演算するステップ数は、総ステップ数の 2 割が目安です（デノイズ4 stepsなら 1、8 stepsなら 2、20 stepsなら 4）")
     assert "10〜20%" in ja["accel_info_spark_h3_ratio"]
     assert ja["accel_info_spark_h3"] == (
         "総ステップ数が「フル演算するステップ数」以下のときと、短い動画では効きません。")

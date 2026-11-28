@@ -7408,3 +7408,58 @@ vitest **147ファイル・2,974件**（`npx vitest run --exclude '**/backend.in
 ### 188.5 実機の門
 
 - オーナーの実機での確認（台帳 1-301 の「文言」）は合格しました（2026-11-26）。Settings で sage attention と Spark-H3 を選ぶと、説明文が「フル演算するステップ数は、…」、注意文が「sage attentionでは、…」で始まっていました。結果の正本は記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §239.11 です。
+
+## 189. MiniMax H3 のテキストエンコーダーのまとめ読みを操作パネルに足す — Settings の「テキストエンコーダーの条件付けのキャッシュ」のすぐ下の ON／OFF の行・ON のときだけ説明と注釈を 1 つの段落で・保存の欄 1 つ・ON のときだけ `te_combined_read: true` を送る（設計正本 裁定 115・§6.12。2026-11-28）
+
+### 189.1 結論
+
+- **Settings の「生成の高速化」の欄の、「テキストエンコーダーの条件付けのキャッシュ」の行のすぐ下に、行「テキストエンコーダーのまとめ読み」（英語は「Text encoder combined read」）を置きました。** ほかの行と同じ ON／OFF の 2 つのボタンで、既定は OFF です。ベースモデルが MiniMax H3 のときだけ出ます（LTX 2.3・2.5 は `unsupported_features` に `te_combined_read` を載せるので、行と説明をまとめて隠し、保存の値を OFF へ書き戻す）。
+- **ON のあいだだけ、行の下の 1 つの段落に、説明と注釈を出します**（注釈は改行して 2 行目）。日本語の文は、説明「プロンプトが複数あるとき（Chained の各クリップ・ネガティブプロンプト）、テキストエンコーダーの 1 回の読み込みでまとめて処理します。生成結果は変わりません。」、注釈「※実験的機能：RTX 4070 ti SUPERでのみ実機検証しています。」（注釈はオーナーの裁定の表記のまま）。英語は「When there is more than one prompt (each clip of a Chained job, a negative prompt), the text encoder processes them together in one load. The output does not change.」と「* Experimental: verified only on an RTX 4070 Ti SUPER.」です。
+- **ON のときだけ、要求に `te_combined_read: true` を載せます。** OFF のときは鍵を送らず、要求の本体は今までと同じです。
+- 動き・文言・条件の正本はバックエンド [`MINIMAX_H3_DESIGN.md`](../../../Docs/MINIMAX_H3_DESIGN.md) 裁定 115・§6.12 で、本節には写しません（文言の正本は `i18n/strings.ts`）。**本節は実装の形と、将来の改修者への注意（189.4）の正本です。**
+- 同じテーマで、エンジン・サーバー・MCP は別の担当が並行で変えています。本節は操作パネルだけです。
+
+### 189.2 変えたファイル
+
+置き場所は `webui/src/`。テストのファイルは 189.5 に書きます。
+
+| ファイル | 要旨 |
+|---|---|
+| `shell/accelerationSettings.ts` | 設定 `teCombinedRead`（既定の定数 `TE_COMBINED_READ_SERVER_DEFAULT`＝`false`）。保存と読み戻し（欄が無い・真偽でない値は既定）。`withServerDefaults`。`effectiveAccelerationFields` に `te_combined_read`（快適上限の表の `requires` はこの名前を使わないので、照合には加わらない）。`accelerationRequestFields` は ON のときだけ `te_combined_read: true` |
+| `shell/useAccelerationSettings.ts` | 書き換えの関数 `setTeCombinedRead` と、保存の `useEffect` の依存の配列 |
+| `shell/SettingsPanel.tsx`・`shell/AppShell.tsx` | 行・説明・注釈（説明と注釈は 1 つの `<p className="field-hint">` に入れ、注釈の前で改行）。行を隠す条件 `teCombinedReadUnsupported` |
+| `shell/featureScope.ts` | `FEATURE_UI` の `te_combined_read`（隠すのは `settingsRow.teCombinedRead`、書き戻すのは `teCombinedRead`）、`SettingsRowsHidden.teCombinedRead` |
+| `i18n/strings.ts` | `accelTeCombinedReadLabel`・`accelTeCombinedReadOn`・`accelTeCombinedReadOff`・`accelTeCombinedReadNote`・`accelTeCombinedReadExperimental`（英語と日本語） |
+| `api/types.ts` | 単発と連結の要求の `te_combined_read` |
+| `bridge/mockBridge.ts` | 開発用の模擬に、LTX の `unsupported_features` の `te_combined_read`（拒否の表と同じく最後）、LTX の拒否（単発と連結。`true` のときだけ） |
+| `shell/comfortDisplayTable.ts` | 設定の型に足した欄に合わせた 1 行（快適上限マーカーの計算は変えていない） |
+
+### 189.3 採った選択と理由
+
+- **(a) 説明と注釈は、1 つの段落に入れました。** `<p>` を 2 つにすると、あいだが広く空くためです（先例は同じファイルの別の行の、改行を含む説明）。
+- **(b) 行の見た目と、隠し方・書き戻し方は、既存の行の型をそのまま使いました**（ボタンの形は「テキストエンコーダーの条件付けのキャッシュ」、隠す仕掛けは「参照素材の潜在の常駐（MiniMax H3）」と同じ）。新しい仕掛けは作っていません。
+- **(c) 送る規則は `accelerationRequestFields` の 1 か所だけです。** 単発・連結・バッチ・Edit の各画面は、その結果を展開しているだけなので、個別の画面は変えていません。
+
+### 189.4 将来の改修者への注意
+
+- **(a)** この欄は、共通の関数 `accelerationRequestFields` から、単発・連結・バッチ・Edit の全部の要求へ同じ規則で載ります。Alpha Gen の送信（`useAlphaGenForm.ts`）は欄を 1 つずつ書き出す作りで、この欄は載せていません（Alpha Gen は LTX 2.5 専用で、LTX はこの欄を断る）。
+- **(b)** LTX では行が隠れ、`teCombinedRead` は `false` へ戻ります。行の出し分けだけを変えて書き戻しを外すと、LTX の要求に `te_combined_read: true` が載って 422 になります。
+- **(c)** 注釈の文は、オーナーの裁定の表記のまま（「RTX 4070 ti SUPERでのみ」）です。表記をそろえる直しをしないこと。
+
+### 189.5 テスト
+
+- `shell/teCombinedRead.paths.test.ts`（新設）: ON のとき、どの送信の経路の本文にも `te_combined_read: true` が載ること。OFF（サーバーの既定）のとき、どの経路の本文にも鍵が無いこと。各経路の本文が、共通の関数の結果と一致すること（`keepReferenceLatents.paths.test.ts` の型）。
+- `shell/SettingsPanel.test.tsx`: 行が「テキストエンコーダーの条件付けのキャッシュ」のすぐ下にあり、既定が OFF で説明が出ないこと。ON で説明と注釈が 1 つの段落に出て、選択が保存されること。日本語の文言と、保存した ON の読み戻し。
+- `shell/AppShell.featureScope.test.tsx`: LTX 2.3・2.5 で行と説明が隠れ、MiniMax H3 で出ること。LTX 2.3 で、残っていた ON が OFF へ書き戻されること。
+- `bridge/mockBridge.h3.test.ts`: 模擬の LTX の `unsupported_features` に `te_combined_read` があり、MiniMax H3 には無いこと。LTX が単発と連結の `te_combined_read: true` を 422 `FEATURE_UNSUPPORTED` で断り、`false` は通すこと。MiniMax H3 は単発と連結で受けること。
+- `shell/accelerationSettings.test.ts`: 既定が OFF、OFF では鍵を送らない（`false` も送らない）、ON では `te_combined_read: true` だけを送る、「テキストエンコーダーの条件付けのキャッシュ」と独立、`withServerDefaults` の書き戻し、保存と読み戻し（ON の往復・鍵の無い古い保存・古い文字列の形・壊れた値は OFF）。
+- `shell/useAccelerationSettings.test.ts`: `setTeCombinedRead` の書き換えと保存、`resetToServerDefaults(["teCombinedRead"])` の書き戻し。`shell/featureScope.test.ts`: `te_combined_read` が自分の行だけに結び付くこと。
+- ほかに、設定の型と模擬の一覧に欄が増えたことに合わせた既存の試験の期待値の更新（`mockBridge.test.ts`・`useBaseModels.test.ts`・`comfortTable.test.ts`・`useGenerationForm.test.ts`・`prefillSeed.test.ts`・`sparkH3.test.ts`）。
+
+### 189.6 機械の門・配置・実機の門
+
+- 型検査（`npm run typecheck`）は、エラーがありませんでした。
+- 操作パネルの試験の全件は、213 ファイル・4,234 件がすべて合格しました（件数は、試験を回した担当の報告による）。
+- バックエンドの自動テストと、開発機の GPU での確認の結果は、記録簿 [`VERIFICATION_LOG.md`](../../../Docs/VERIFICATION_LOG.md) §244 です。
+- 操作パネルを作り直し（`scripts\build.ps1`）、AviUtl2 の実機と、配布用の写し（`AviUtl2-Plugin\NzVideomni.aux2`）に配置しました（`scripts\deploy.ps1`）。配布用の写しに、注釈の文言が入っていることを確かめました。
+- オーナーの実機での確認は未了です。確認の項目の正本は、バックエンド台帳 [`PENDING_TASKS.md`](../../../Docs/PENDING_TASKS.md) §2 の 1-305 です。

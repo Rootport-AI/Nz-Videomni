@@ -670,6 +670,56 @@ def test_chain_failed_clip_drops_what_the_chain_put(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# a chain with the combined read on (te_combined_read, 台帳 1-303 方向 B)
+# --------------------------------------------------------------------------- #
+
+def test_chain_combined_with_the_cache_combines_the_misses_once(monkeypatch, tmp_path):
+    """Cache on: clip 0's turn looks every clip up once (the later clips' turns call no
+    ``get``), the same key is computed once and is a hit after the first, only the misses
+    go through the one ``encode_many``, and everything stays held after the chain."""
+    refs = [("picture", 1, None), ("audio", 1, None)]
+    kw = dict(prompts=["a", "b", "b"], negative_prompt="cars", te_combined_read=True)
+    first, te_calls, _p, _kw, builds = _chain(monkeypatch, tmp_path, [[], refs, refs], **kw)
+    assert _clip_caches(first) == [{"positive": "miss", "negative": "miss"}, {"positive": "miss"},
+                                   {"positive": "hit"}]
+    assert [[c["prompt"] for c in m] for m in builds["many"]] == [["a", "b", "cars"]]
+    pipe = builds["pipe"]
+    assert len(pipe._te_conditioning) == 3
+    clip0 = first["h3"]["phases"]["clips"][0]["encode"]
+    assert clip0["te_combined"]["items"] == 3
+    shas = [p["encode"]["conditioning_sha256"] for p in first["h3"]["phases"]["clips"]]
+    assert shas[2] == shas[1]
+    # Clip 0 changed: only it misses; one item goes through encode, not encode_many.
+    looked = []
+    real_get = pipe._te_conditioning.get
+    monkeypatch.setattr(pipe._te_conditioning, "get", lambda key: looked.append(key[0][:2]) or real_get(key))
+    done, te_calls, _p, _kw, builds = _chain(monkeypatch, tmp_path, [[], refs, refs], pipe=pipe,
+                                            **{**kw, "prompts": ["c", "b", "b"]})
+    assert _clip_caches(done) == [{"positive": "miss", "negative": "hit"}, {"positive": "hit"}, {"positive": "hit"}]
+    assert builds["many"] == [] and [c["prompt"] for c in te_calls] == ["c"]
+    assert looked == [("positive", "c"), ("positive", "b"), ("negative", "cars")]   # all on clip 0's turn
+    assert "te_combined" not in done["h3"]["phases"]["clips"][0]["encode"]
+    # The same chain again: all held, no text encoder.
+    del looked[:]
+    done, te_calls, _p, _kw, builds = _chain(monkeypatch, tmp_path, [[], refs, refs], pipe=pipe,
+                                            **{**kw, "prompts": ["c", "b", "b"]})
+    assert _clip_caches(done) == [{"positive": "hit", "negative": "hit"}, {"positive": "hit"}, {"positive": "hit"}]
+    assert te_calls == [] and builds["te_built"] == 0
+    assert all("te" not in p["encode"] for p in done["h3"]["phases"]["clips"])
+
+
+def test_chain_combined_cache_off_then_on(monkeypatch, tmp_path):
+    """Cache off, on: nothing held after the chain; the same chain with the cache on misses."""
+    done, _te, _p, _kw, builds = _chain(monkeypatch, tmp_path, [[]] * 3, keep_text_conditioning=False,
+                                        te_combined_read=True)
+    pipe = builds["pipe"]
+    assert len(pipe._te_conditioning) == 0 and len(builds["many"]) == 1
+    assert all("te_cache" not in p["encode"] for p in done["h3"]["phases"]["clips"])
+    done, _te, _p, _kw, builds = _chain(monkeypatch, tmp_path, [[]] * 3, pipe=pipe, te_combined_read=True)
+    assert _clip_caches(done) == [{"positive": "miss"}] * 3 and len(pipe._te_conditioning) == 3
+
+
+# --------------------------------------------------------------------------- #
 # the worker's key
 # --------------------------------------------------------------------------- #
 

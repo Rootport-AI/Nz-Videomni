@@ -600,6 +600,7 @@ describe("useGenerationForm", () => {
       sparkH3: false,
       sparkH3TopkPercent: 20,
       sparkH3FullSteps: 2,
+      teCombinedRead: false,
       embedMp4Metadata: true,
     };
 

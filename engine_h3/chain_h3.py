@@ -365,6 +365,24 @@ def _load_key_frames(req: P.H3GenerateRequest):
     return canvases, cond_frame_idx, source_size
 
 
+def _combined_text_items(pipe: P.H3Pipeline, requests, keep_te: bool) -> list:
+    """The later clips' text encoder inputs for clip 0's combined read (te_combined_read,
+    台帳 1-303 方向 B), in clip order: each clip's references read as its own turn reads
+    them (``_read_references``; a file that cannot be used is refused here, with its
+    path), kept only as the text encoder takes them (``RefMedia``; a video's frames and
+    an audio's waveform go at once), and its conditioning key (``keep_te`` only). A later
+    clip has no key frames (``_check_spec``)."""
+    items = []
+    for req in requests:
+        media = pipe._read_references(req)
+        key = None
+        if keep_te:
+            key = P.te_positive_key(req, media, P.te_frame_identities(P.te_key_frames(req)))
+        items.append(P.H3TextItem(prompt=req.prompt, images=(), refs=tuple(pipe._te_references(media)), key=key))
+        del media
+    return items
+
+
 def _read_retake_window(retake: H3ChainRetake, base: P.H3GenerateRequest, layout: H3ChainLayout, log):
     """The retake window, read on the CPU before any model: ``(frames, wave, info)``.
 
@@ -490,6 +508,12 @@ def run_chain_h3(
     v2v_runtime: dict = {}
     retake = spec.retake
     retake_runtime: dict = {}
+    # te_combined_read (台帳 1-303 方向 B): the later clips' text encoder inputs while clip 0's
+    # encode runs, and the conditioning it made for them, each let go at its clip's turn; held
+    # here only (never on ``pipe``), emptied in the ``finally``.
+    te_others: list = []
+    te_prepared: list = []
+    combined = bool(base.te_combined_read)
     try:
         _check_spec(spec)
         layout = compute_h3_chain_layout(
@@ -636,11 +660,26 @@ def run_chain_h3(
                         P.te_positive_key(req, media, frame_ids),
                         P.te_negative_key(req.negative_prompt) if has_neg_i else None,
                     )} if keep_te else {}
+                    # Only a te_combined_read chain passes ``others`` (clip 0: every later clip's
+                    # text encoder input, read here, before clip 0's encode) or ``prepared``
+                    # (a later clip: what clip 0's call made for it) (台帳 1-303 方向 B).
+                    combined_kw: dict = {}
+                    if combined and i == 0:
+                        te_others[:] = _combined_text_items(pipe, requests[1:], keep_te)
+                        combined_kw = {"others": tuple(te_others)}
+                    elif combined:
+                        combined_kw = {"prepared": te_prepared[i]}
+                        te_prepared[i] = None
                     with phases.phase("encode") as entry:
                         encoded = pipe._encode(
                             req.prompt, phases, images=vision_images, has_cond=has_cond,
-                            refs=pipe._te_references(media), **neg_kw, **audio_kw, **te_kw,
+                            refs=pipe._te_references(media), **neg_kw, **audio_kw, **te_kw, **combined_kw,
                         )
+                        if "others" in combined_kw:
+                            te_prepared[:] = [None, *encoded[-1]]
+                            encoded = encoded[:-1]
+                            te_others.clear()   # the later clips' references: read again at their turn
+                        combined_kw = None
                         if has_neg_i:
                             hidden, tags, negative_hidden = encoded
                         else:
@@ -866,6 +905,8 @@ def run_chain_h3(
         del video_cat, audio_cat, decode_kw
         ok = True
     finally:
+        te_others.clear()
+        te_prepared.clear()
         # First, so a raise below cannot skip it; a clip that failed fails the whole chain.
         pipe._ref_latents.end(ok)
         pipe._te_conditioning.end(ok)

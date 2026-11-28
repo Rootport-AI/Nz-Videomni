@@ -157,6 +157,14 @@
  *    leftover `true` back to `false` (the two numbers stay stored). The two
  *    generate-button notes it adds are {@link sparkH3StepsTooFew} and
  *    {@link sparkH3VideoTooShort}.
+ *  - `teCombinedRead` — REAL (台帳 §1-303). When a job has more than one prompt
+ *    (the clips of a Chained job, a negative prompt), MiniMax H3's text encoder
+ *    processes them in one load; the output does not change. Sent as
+ *    `te_combined_read`; the server default is `false`, so the key rides along
+ *    only while it is ON (the `keep_resident` direction). Independent of every
+ *    other row. Scope: LTX 2.3 / 2.5 publish `te_combined_read` in
+ *    `unsupported_features`, and `AppShell` hides the row and writes a leftover
+ *    `true` back to `false`.
  */
 import type { StatusResponse } from "../api/types";
 
@@ -270,6 +278,13 @@ export interface AccelerationSettings {
    * that run without Spark-H3. Sent as `spark_h3_full_steps`, only while
    * {@link sparkH3} is on. Kept while the row shows "off". */
   sparkH3FullSteps: number;
+  /** REAL (台帳 §1-303): "Text encoder combined read" — MiniMax H3 only. When a
+   * job has more than one prompt (the clips of a Chained job, a negative
+   * prompt), the text encoder processes them in one load; the output does not
+   * change. Sent as `te_combined_read` — but only while ON, since the server
+   * defaults to `false`. LTX 2.3 / 2.5 publish the name in
+   * `unsupported_features`, so the row is hidden there. */
+  teCombinedRead: boolean;
   /** Output setting (§3-164, 2026-09-24), not an acceleration knob — it lives
    * in this object because this is the Settings panel's per-job store (see the
    * note at the top of this file). Whether the finished output.mp4 /
@@ -373,6 +388,11 @@ export const KEEP_TEXT_CONDITIONING_SERVER_DEFAULT = false;
  * `keep_resident`: the keys ride along only while the user turns it ON. On LTX
  * the row is hidden and the stored value is reset to this default. */
 export const SPARK_H3_SERVER_DEFAULT = false;
+/** Server default for `te_combined_read` as of 台帳 §1-303: `false`. Direction
+ * matches `keep_reference_latents`: the key rides along only while the user
+ * turns it ON. On LTX the row is hidden and the stored value is reset to this
+ * default. */
+export const TE_COMBINED_READ_SERVER_DEFAULT = false;
 /** The "full-attention ratio" slider's range and default, in whole percent
  * (裁定 113: 1-50%, 1% steps, default 20%). Fixed values the panel owns, like
  * the other Settings choices. */
@@ -422,6 +442,7 @@ export const ACCELERATION_DEFAULTS: Readonly<AccelerationSettings> = Object.free
   sparkH3: SPARK_H3_SERVER_DEFAULT,
   sparkH3TopkPercent: SPARK_H3_TOPK_PERCENT_DEFAULT,
   sparkH3FullSteps: SPARK_H3_FULL_STEPS_DEFAULT,
+  teCombinedRead: TE_COMBINED_READ_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 });
 
@@ -502,6 +523,7 @@ export function withServerDefaults(
       ? ACCELERATION_DEFAULTS.sparkH3TopkPercent
       : acceleration.sparkH3TopkPercent,
     sparkH3FullSteps: at("sparkH3FullSteps") ? ACCELERATION_DEFAULTS.sparkH3FullSteps : acceleration.sparkH3FullSteps,
+    teCombinedRead: at("teCombinedRead") ? ACCELERATION_DEFAULTS.teCombinedRead : acceleration.teCombinedRead,
     // No feature-scope row resets the Output setting, so it is carried over as is.
     embedMp4Metadata: acceleration.embedMp4Metadata,
   };
@@ -533,6 +555,8 @@ export interface StoredAcceleration {
   sparkH3: boolean;
   sparkH3TopkPercent: number;
   sparkH3FullSteps: number;
+  /** 台帳 §1-303: text encoder combined read, persisted from its first day. */
+  teCombinedRead: boolean;
   /** §3-164 (2026-09-24): the Output row, persisted from its first day. */
   embedMp4Metadata: boolean;
 }
@@ -552,6 +576,7 @@ const STORED_DEFAULTS: StoredAcceleration = {
   sparkH3: SPARK_H3_SERVER_DEFAULT,
   sparkH3TopkPercent: SPARK_H3_TOPK_PERCENT_DEFAULT,
   sparkH3FullSteps: SPARK_H3_FULL_STEPS_DEFAULT,
+  teCombinedRead: TE_COMBINED_READ_SERVER_DEFAULT,
   embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
 };
 
@@ -576,7 +601,7 @@ function storedInt(value: unknown, min: number, max: number, fallback: number): 
  *     "keepResidentEmbeddings":...,"vram16Mode":...,"piH3":...,
  *     "solVae":...,"keepReferenceLatents":...,"keepTextConditioning":...,
  *     "sparkH3":...,"sparkH3TopkPercent":...,"sparkH3FullSteps":...,
- *     "embedMp4Metadata":...}`
+ *     "teCombinedRead":...,"embedMp4Metadata":...}`
  * Any unrecognized/malformed value inside falls back to its own default —
  * same defensive posture as `ThemeContext.tsx`'s `readStoredTheme`. The
  * per-field fallback is what lets a JSON blob written by a pre-§48 build
@@ -586,7 +611,8 @@ function storedInt(value: unknown, min: number, max: number, fallback: number): 
  * `embedMp4Metadata`), or a pre-§1-101 one (no `vram16Mode`), or a pre-ruling-107
  * one (no `piH3`), or a pre-Sol one (no `solVae`), or a pre-§1-297 one (no
  * `keepReferenceLatents`), or a pre-§1-298 one (no `keepTextConditioning`), or a
- * pre-Spark-H3 one (no `sparkH3` / `sparkH3TopkPercent` / `sparkH3FullSteps`) — read back
+ * pre-Spark-H3 one (no `sparkH3` / `sparkH3TopkPercent` / `sparkH3FullSteps`), or a
+ * pre-§1-303 one (no `teCombinedRead`) — read back
  * cleanly. The two Spark-H3 numbers also fall back when they are not whole
  * numbers inside their slider's range. `solVae` is also normalized against `piH3` (a pi-H3 choice other
  * than off wins and Sol reads back off). EVERY field added to
@@ -617,6 +643,7 @@ export function readStoredAcceleration(): StoredAcceleration {
       sparkH3: SPARK_H3_SERVER_DEFAULT,
       sparkH3TopkPercent: SPARK_H3_TOPK_PERCENT_DEFAULT,
       sparkH3FullSteps: SPARK_H3_FULL_STEPS_DEFAULT,
+      teCombinedRead: TE_COMBINED_READ_SERVER_DEFAULT,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
   }
@@ -670,6 +697,7 @@ export function readStoredAcceleration(): StoredAcceleration {
         SPARK_H3_FULL_STEPS_MAX,
         SPARK_H3_FULL_STEPS_DEFAULT,
       ),
+      teCombinedRead: typeof rec.teCombinedRead === "boolean" ? rec.teCombinedRead : TE_COMBINED_READ_SERVER_DEFAULT,
       embedMp4Metadata:
         typeof rec.embedMp4Metadata === "boolean" ? rec.embedMp4Metadata : EMBED_MP4_METADATA_SERVER_DEFAULT,
     };
@@ -809,6 +837,9 @@ export interface AccelerationRequestFields {
   spark_h3_topk_ratio?: number;
   /** 裁定 113: the full-attention steps, 0-10. */
   spark_h3_full_steps?: number;
+  /** 台帳 §1-303: text encoder combined read — `/generate` and
+   * `/generate/chain` (MiniMax H3 only). Never sent as `false`. */
+  te_combined_read?: boolean;
 }
 
 /**
@@ -871,6 +902,9 @@ export function effectiveAccelerationFields(
     // keys are left out of the return type: a `requires` value is a string or
     // a boolean, never a number.
     spark_h3: acceleration.sparkH3,
+    // Likewise no served row's `requires` names it (the output does not
+    // change), so it takes no part in the match.
+    te_combined_read: acceleration.teCombinedRead,
   };
 }
 
@@ -1001,6 +1035,13 @@ export function accelerationRequestFields(
     out.spark_h3 = true;
     out.spark_h3_topk_ratio = acceleration.sparkH3TopkPercent / 100;
     out.spark_h3_full_steps = acceleration.sparkH3FullSteps;
+  }
+  // 台帳 §1-303: text encoder combined read. Same direction and same scope half
+  // as `keep_reference_latents`: the key only ever appears as `true`, and
+  // `AppShell` hides the row and writes the stored choice back to `false` on
+  // LTX. INDEPENDENT of every other row.
+  if (acceleration.teCombinedRead !== TE_COMBINED_READ_SERVER_DEFAULT) {
+    out.te_combined_read = acceleration.teCombinedRead;
   }
   // §3-164 (2026-09-24): the Output row. The server default is `true`, so the
   // key only ever appears as `false`. Emitted last, for the same key-order

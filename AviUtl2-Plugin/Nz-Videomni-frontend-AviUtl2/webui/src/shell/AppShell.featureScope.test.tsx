@@ -812,6 +812,54 @@ describe("AppShell — base-model feature scope", () => {
     await waitFor(() => expect(readStoredAcceleration().keepReferenceLatents).toBe(false));
   });
 
+  // -- 台帳 §1-303: Text encoder combined read, MiniMax H3's own row -----------
+  //
+  // Scoped like Keep reference latents (both LTX engines publish
+  // `te_combined_read`), default OFF — so the write-back lands on `false`, and
+  // the note shows only while ON.
+
+  function teCombinedReadRow() {
+    return screen.queryByRole("group", { name: /^Text encoder combined read$/ });
+  }
+
+  function teCombinedReadNote() {
+    return screen.queryByText(/^When there is more than one prompt \(each clip of a Chained job, a negative prompt\)/);
+  }
+
+  it("hides the Text encoder combined read row AND its note on LTX 2.3 and 2.5, and shows them on MiniMax H3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ teCombinedRead: true }));
+    const { select } = await renderApp(AS_LTX25);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(teCombinedReadRow()).toBeNull();
+    expect(teCombinedReadNote()).toBeNull();
+
+    await switchToLtx25(select);
+    await waitFor(() => expect(select.value).toBe("LTX25"));
+    expect(teCombinedReadRow()).toBeNull();
+    expect(teCombinedReadNote()).toBeNull();
+
+    await user.selectOptions(select, "MiniMaxH3");
+    await waitFor(() => expect(select.value).toBe("MiniMaxH3"));
+    await waitFor(() => expect(teCombinedReadRow()).toBeInTheDocument());
+    // The leftover ON was written back to off on LTX, and stays off on H3.
+    expect(within(teCombinedReadRow()!).getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    expect(teCombinedReadNote()).toBeNull();
+    await user.click(within(teCombinedReadRow()!).getByRole("button", { name: "ON" }));
+    await waitFor(() => expect(teCombinedReadNote()).toBeInTheDocument());
+  });
+
+  it("writes a leftover Text encoder combined read ON back to off on LTX 2.3", async () => {
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ teCombinedRead: true }));
+    expect(readStoredAcceleration().teCombinedRead).toBe(true);
+    const { select } = await renderApp(AS_LTX25);
+    // LTX 2.3 is the active base model (it publishes `te_combined_read`).
+    expect(select.value).toBe("LTX23");
+
+    await waitFor(() => expect(readStoredAcceleration().teCombinedRead).toBe(false));
+  });
+
   // -- 台帳 §1-298 / §1-299: Text encoder conditioning cache --------------------
   //
   // MiniMax H3, LTX 2.3 and LTX 2.5 all take it now (§1-299), so the fixture's

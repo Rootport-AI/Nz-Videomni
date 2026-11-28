@@ -4,6 +4,7 @@ import {
   ACCELERATION_STORAGE_KEY,
   KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+  TE_COMBINED_READ_SERVER_DEFAULT,
   accelerationRequestFields,
   readStoredAcceleration,
   writeStoredAcceleration,
@@ -42,6 +43,7 @@ function makeAllOn(overrides: Partial<AccelerationSettings> = {}): AccelerationS
     sparkH3: false,
     sparkH3TopkPercent: 20,
     sparkH3FullSteps: 2,
+    teCombinedRead: false,
     embedMp4Metadata: true,
     ...overrides,
   };
@@ -68,6 +70,8 @@ describe("effectiveAccelerationFields", () => {
       keep_text_conditioning: false,
       // 裁定 113: likewise named by no row (its two number keys are left out).
       spark_h3: false,
+      // 台帳 §1-303: likewise named by no row.
+      te_combined_read: false,
     });
   });
 
@@ -87,6 +91,7 @@ describe("effectiveAccelerationFields", () => {
       "pi_h3",
       "sol_vae",
       "spark_h3",
+      "te_combined_read",
       "vae_mode",
       "vram16_mode",
     ]);
@@ -103,6 +108,7 @@ describe("effectiveAccelerationFields", () => {
       keep_reference_latents: false,
       keep_text_conditioning: false,
       spark_h3: false,
+      te_combined_read: false,
     });
   });
 
@@ -447,6 +453,76 @@ describe("keepTextConditioning (§1-298)", () => {
     it("reads a malformed value as off", () => {
       window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ keepTextConditioning: "yes" }));
       expect(readStoredAcceleration().keepTextConditioning).toBe(false);
+    });
+  });
+});
+
+/** 台帳 §1-303: text encoder combined read (MiniMax H3). */
+describe("teCombinedRead (§1-303)", () => {
+  it("defaults to off, matching the server default", () => {
+    expect(ACCELERATION_DEFAULTS.teCombinedRead).toBe(false);
+    expect(TE_COMBINED_READ_SERVER_DEFAULT).toBe(false);
+  });
+
+  it("sends nothing while off — not even te_combined_read: false", () => {
+    expect(accelerationRequestFields(ACCELERATION_DEFAULTS)).toEqual({});
+    expect(accelerationRequestFields(makeAllOn())).not.toHaveProperty("te_combined_read");
+  });
+
+  it("sends te_combined_read: true only while on, and nothing else", () => {
+    expect(accelerationRequestFields({ ...ACCELERATION_DEFAULTS, teCombinedRead: true })).toEqual({
+      te_combined_read: true,
+    });
+  });
+
+  it("is independent of keepTextConditioning in the request fields", () => {
+    expect(
+      accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepTextConditioning: true, teCombinedRead: true }),
+    ).toEqual({ keep_text_conditioning: true, te_combined_read: true });
+    expect(
+      accelerationRequestFields({ ...ACCELERATION_DEFAULTS, keepTextConditioning: true, teCombinedRead: false }),
+    ).toEqual({ keep_text_conditioning: true });
+  });
+
+  it("withServerDefaults writes it back to off (the feature-scope reset on LTX)", () => {
+    const after = withServerDefaults(makeAllOn({ teCombinedRead: true }), ["teCombinedRead"]);
+    expect(after.teCombinedRead).toBe(false);
+    expect(after).toEqual(makeAllOn());
+  });
+
+  it("withServerDefaults leaves it alone when another field is the one reset", () => {
+    const before = makeAllOn({ teCombinedRead: true, keepTextConditioning: true });
+    expect(withServerDefaults(before, ["keepTextConditioning"]).teCombinedRead).toBe(true);
+    expect(withServerDefaults(before, ["teCombinedRead"]).keepTextConditioning).toBe(true);
+  });
+
+  describe("localStorage round trip", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    it("writes and reads back an on value", () => {
+      writeStoredAcceleration({ ...ACCELERATION_DEFAULTS, teCombinedRead: true });
+      expect(readStoredAcceleration().teCombinedRead).toBe(true);
+    });
+
+    it("reads a JSON blob without the key (written before §1-303) as off, keeping the other value", () => {
+      window.localStorage.setItem(
+        ACCELERATION_STORAGE_KEY,
+        JSON.stringify({ attentionBackend: "sage", keepTextConditioning: true }),
+      );
+      expect(readStoredAcceleration().teCombinedRead).toBe(false);
+      expect(readStoredAcceleration().keepTextConditioning).toBe(true);
+    });
+
+    it("reads the pre-2026-08-01 bare string form as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, "sdpa");
+      expect(readStoredAcceleration().teCombinedRead).toBe(false);
+    });
+
+    it("reads a malformed value as off", () => {
+      window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ teCombinedRead: "yes" }));
+      expect(readStoredAcceleration().teCombinedRead).toBe(false);
     });
   });
 });

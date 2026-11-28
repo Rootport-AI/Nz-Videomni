@@ -3034,8 +3034,9 @@ def test_both_tools_expose_keep_text_conditioning_as_an_optional_bool_defaulting
         assert prop["type"] == "boolean" and prop["default"] is False, name
         assert "keep_text_conditioning" not in set(schema.get("required", [])), name
         # Appended at the end, so no earlier call's positional order moves;
-        # only the three Spark-H3 arguments (D44) come after it.
-        assert list(schema["properties"])[-4] == "keep_text_conditioning", name
+        # only the three Spark-H3 arguments (D44) and te_combined_read come
+        # after it.
+        assert list(schema["properties"])[-5] == "keep_text_conditioning", name
     assert GenerateRequest.model_fields["keep_text_conditioning"].default is False
     assert GenerateChainRequest.model_fields["keep_text_conditioning"].default is False
 
@@ -3068,8 +3069,9 @@ def test_keep_text_conditioning_sent_only_when_true():
 
 
 # --------------------------------------------------------------------------- #
-# Spark-H3 (MiniMax H3, D44): spark_h3 + its two numbers, the last three
-# arguments of both tools; the three keys ride together, only when True.
+# Spark-H3 (MiniMax H3, D44): spark_h3 + its two numbers, the three arguments
+# before te_combined_read in both tools; the three keys ride together, only
+# when True.
 # --------------------------------------------------------------------------- #
 _SPARK_KEYS = ("spark_h3", "spark_h3_topk_ratio", "spark_h3_full_steps")
 
@@ -3083,7 +3085,8 @@ def test_both_tools_expose_the_spark_h3_arguments_last_with_the_server_defaults(
     tools = {t.name: t for t in anyio.run(_run)}
     for name in ("submit_generate", "submit_chain"):
         schema = tools[name].inputSchema
-        assert list(schema["properties"])[-3:] == list(_SPARK_KEYS), name
+        # Appended at the end when they came; only te_combined_read comes after.
+        assert list(schema["properties"])[-4:-1] == list(_SPARK_KEYS), name
         assert not set(_SPARK_KEYS) & set(schema.get("required", [])), name
         props = schema["properties"]
         assert props["spark_h3"]["type"] == "boolean" and props["spark_h3"]["default"] is False
@@ -3132,3 +3135,61 @@ def test_instructions_mention_spark_h3():
 
     for needle in ("spark_h3", "spark_h3_used", "spark_h3_available"):
         assert needle in INSTRUCTIONS, needle
+
+
+# --------------------------------------------------------------------------- #
+# te_combined_read (MiniMax H3, 台帳 1-303): the last argument of both tools;
+# the key rides only when True.
+# --------------------------------------------------------------------------- #
+
+
+def test_both_tools_expose_te_combined_read_last_as_an_optional_bool_defaulting_to_the_server():
+    from api.models import GenerateChainRequest, GenerateRequest
+
+    async def _run():
+        return await build_server().list_tools()
+
+    tools = {t.name: t for t in anyio.run(_run)}
+    for name in ("submit_generate", "submit_chain"):
+        schema = tools[name].inputSchema
+        prop = schema["properties"]["te_combined_read"]
+        assert prop["type"] == "boolean" and prop["default"] is False, name
+        assert "te_combined_read" not in set(schema.get("required", [])), name
+        # Appended at the end, so no earlier call's positional order moves.
+        assert list(schema["properties"])[-1] == "te_combined_read", name
+        description = tools[name].description
+        for needle in ("te_combined_read", "RTX 4070 Ti SUPER", "FEATURE_UNSUPPORTED"):
+            assert needle in description, (name, needle)
+    assert GenerateRequest.model_fields["te_combined_read"].default is False
+    assert GenerateChainRequest.model_fields["te_combined_read"].default is False
+
+
+def test_te_combined_read_sent_only_when_true():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(202, json={"job_id": "j1", "status": "queued",
+                                         "created_at": "t", "num_clips": 2})
+
+    set_client(_client_for_handler(handler))
+    clips = [ChainClipArg(num_frames=124), ChainClipArg(num_frames=124)]
+    for tool, args in ((generate.submit_generate, ("p",)),
+                       (generate.submit_chain, ("p", clips))):
+        anyio.run(functools.partial(tool, *args))
+        baseline = captured["body"]
+        assert "te_combined_read" not in baseline
+        anyio.run(functools.partial(tool, *args, te_combined_read=False))
+        assert captured["body"] == baseline
+        anyio.run(functools.partial(tool, *args, te_combined_read=True))
+        body = captured["body"]
+        assert body["te_combined_read"] is True
+        # Everything else is the off body unchanged.
+        assert {k: v for k, v in body.items() if k != "te_combined_read"} == baseline
+
+
+def test_instructions_mention_te_combined_read():
+    from mcp_server.server import INSTRUCTIONS
+
+    assert "te_combined_read" in INSTRUCTIONS
+    assert "te_combined_read=true" in INSTRUCTIONS   # the LTX 2.5 refusal lists

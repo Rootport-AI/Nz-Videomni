@@ -223,7 +223,8 @@ def test_unsupported_features_per_family():
     # 2.5 も同じく断る）。単発の A2V の ``source_audio``、Ref2VA の
     # ``references``、pi-H3 の ``pi_h3``、Sol-H3-VAE の ``sol_vae``（どれも
     # MiniMax H3 専用）と Spark-H3 の ``spark_h3`` が続く。参照素材の符号化結果の保持の
-    # ``keep_reference_latents`` が最後（これも MiniMax H3 専用）。
+    # ``keep_reference_latents``、テキストエンコーダーのまとめ読みの
+    # ``te_combined_read`` が最後（どれも MiniMax H3 専用）。
     assert engines.unsupported_features("ltx") == (
         "keep_resident_embeddings",
         "alpha_gen",
@@ -234,6 +235,7 @@ def test_unsupported_features_per_family():
         "sol_vae",
         "spark_h3",
         "keep_reference_latents",
+        "te_combined_read",
     )
     features = engines.unsupported_features("ltx25")
     # 系統ごとの一覧は「その系統のアダプタが宣言したものだけ」である。それは

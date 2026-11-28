@@ -158,6 +158,8 @@ const ALL_ON_ACCELERATION: AccelerationSettings = {
   sparkH3: false,
   sparkH3TopkPercent: 20,
   sparkH3FullSteps: 2,
+  // 台帳 §1-303: the output does not change, no row's `requires` names it.
+  teCombinedRead: false,
   // Output setting sharing the store (§3-164); the comfort matcher ignores it.
   embedMp4Metadata: true,
 };

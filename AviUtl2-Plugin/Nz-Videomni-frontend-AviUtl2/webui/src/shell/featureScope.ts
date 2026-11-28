@@ -58,6 +58,7 @@ export type UiTarget =
   | "settingsRow.fastVae"
   | "settingsRow.keepReferenceLatents"
   | "settingsRow.keepTextConditioning"
+  | "settingsRow.teCombinedRead"
   | "settingsRow.sparkH3"
   | "settingsRow.fusedGgufDequantKernel"
   | "chainPanel.startImageStrength";
@@ -191,6 +192,10 @@ interface FeatureUiEntry {
  *    a `resets` too, but MiniMax H3, LTX 2.3 and LTX 2.5 all take it, so
  *    today's server publishes the name for none of them and the row always
  *    shows. The entry stays for an older server that still refuses it on LTX.
+ *  - **te_combined_read** (台帳 §1-303) is a Settings row with a `resets`,
+ *    scoped like `keep_reference_latents` (MiniMax H3 only, so LTX 2.3 / 2.5
+ *    publish the name). Its default is OFF, so the write-back lands on
+ *    `false` — which is what an LTX request then omits.
  *  - **spark_h3** (裁定 113 / MINIMAX_H3_DESIGN §6.11) is the "off / Spark-H3"
  *    row under the Attention row, scoped like `vram16_mode` (MiniMax H3 only,
  *    so LTX 2.3 / 2.5 publish the name). Only the on/off choice is written
@@ -236,6 +241,10 @@ export const FEATURE_UI = {
   keep_text_conditioning: {
     disables: ["settingsRow.keepTextConditioning"],
     resets: "keepTextConditioning",
+  },
+  te_combined_read: {
+    disables: ["settingsRow.teCombinedRead"],
+    resets: "teCombinedRead",
   },
   spark_h3: { disables: ["settingsRow.sparkH3"], resets: "sparkH3" },
   fused_gguf_dequant_kernel: {
@@ -505,6 +514,9 @@ export interface SettingsRowsHidden {
   /** The "Text encoder conditioning cache" row and its ON-only note
    * (`keep_text_conditioning`). */
   keepTextConditioning: boolean;
+  /** MiniMax H3's "Text encoder combined read" row and its ON-only note
+   * (`te_combined_read`). */
+  teCombinedRead: boolean;
   /** MiniMax H3's "off / Spark-H3" row with its two sliders (`spark_h3`). The
    * generate-button notes need no flag of their own: they read `sparkH3`, which
    * the write-back has already turned off wherever this row is hidden. */
@@ -532,6 +544,7 @@ export function settingsRowsHiddenFor(unsupportedFeatures: readonly string[]): S
     fastVae: disabled.has("settingsRow.fastVae"),
     keepReferenceLatents: disabled.has("settingsRow.keepReferenceLatents"),
     keepTextConditioning: disabled.has("settingsRow.keepTextConditioning"),
+    teCombinedRead: disabled.has("settingsRow.teCombinedRead"),
     sparkH3: disabled.has("settingsRow.sparkH3"),
     fusedGgufDequantKernel: disabled.has("settingsRow.fusedGgufDequantKernel"),
   };

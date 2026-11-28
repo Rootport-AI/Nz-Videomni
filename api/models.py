@@ -817,6 +817,16 @@ class GenerateRequest(BaseModel):
     # （keep_reference_latents と同じ規律）。
     keep_text_conditioning: bool = False
 
+    # te_combined_read: MiniMax H3 のテキストエンコーダーのまとめ読み。プロンプト
+    # が複数あるとき（連結の各クリップ・ネガティブプロンプト）、テキスト
+    # エンコーダーの 1 回の読み込みでまとめて処理する。既定の false は今日の生成と
+    # 一切変わらない。true でも生成結果は変わらない。
+    # true のときだけワーカーへ送る加算的コントラクト。【エンジン差】H3 専用で、
+    # LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る（各アダプタの
+    # REJECT_TABLE）。連結スキーマにも同じ形で置く。GET /status には載せない
+    # （keep_reference_latents と同じ規律）。
+    te_combined_read: bool = False
+
     # 生成サイズ。倍数は選択中の系統の規約表（REQUEST_RULES。LTX は 64＝two-stage distilled、MiniMax H3 は 32）。最終表示サイズは crop_output で。
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -1561,6 +1571,11 @@ class GenerateChainRequest(BaseModel):
     # （テキストエンコーダーの条件付けの保持。MiniMax H3・LTX 2.3・LTX 2.5 で
     # 使える。既定 false は今日の連結と一切変わらない）。
     keep_text_conditioning: bool = False
+    # te_combined_read: 詳細は GenerateRequest の同名フィールドを参照
+    # （MiniMax H3 のテキストエンコーダーのまとめ読み。既定 false は今日の連結と
+    # 一切変わらない）。LTX 2.3／2.5 は true を 422 FEATURE_UNSUPPORTED で断る
+    # （各アダプタの CHAIN_REJECT_TABLE）。
+    te_combined_read: bool = False
 
     width: int = Field(512, ge=256, le=4096)
     height: int = Field(320, ge=128, le=4096)
@@ -2022,7 +2037,8 @@ class GenerateChainRequest(BaseModel):
         ``keep_reference_latents`` (MiniMax H3's;
         ``"off"`` / ``False`` on LTX, which refuses any other) and
         ``keep_text_conditioning`` (every engine's; an LTX chain forwards it
-        to the worker as the single path does).
+        to the worker as the single path does) and ``te_combined_read``
+        (MiniMax H3's; ``False`` on LTX, which refuses ``True``).
 
         ``retake`` is deliberately NOT transcribed, following the same precedent
         as ``source_video``: it has no counterpart on ``GenerateRequest``, so
@@ -2076,6 +2092,7 @@ class GenerateChainRequest(BaseModel):
             spark_h3_full_steps=self.spark_h3_full_steps,
             keep_reference_latents=self.keep_reference_latents,
             keep_text_conditioning=self.keep_text_conditioning,
+            te_combined_read=self.te_combined_read,
             width=self.width,
             height=self.height,
             crop_output=None,  # crop is applied once, on the final concat.

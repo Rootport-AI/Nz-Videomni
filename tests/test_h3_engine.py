@@ -1151,6 +1151,8 @@ GOLDEN_GENERATE_KEEP_REFERENCE_LATENTS_KEYS = ["keep_reference_latents"]
 GOLDEN_GENERATE_KEEP_TEXT_CONDITIONING_KEYS = ["keep_text_conditioning"]
 #: Spark-H3's ``spark_h3`` (Docs/MINIMAX_H3_DESIGN.md §6.11), sent only for that job.
 GOLDEN_GENERATE_SPARK_H3_KEYS = ["spark_h3"]
+#: ``te_combined_read`` (台帳 1-303), sent only when true.
+GOLDEN_GENERATE_TE_COMBINED_READ_KEYS = ["te_combined_read"]
 GOLDEN_DONE_KEYS = [
     "seed_used", "sampler", "num_inference_steps", "shift_video", "shift_audio",
     "peak_vram_mb", "peak_vram_reserved_mb", "rss_peak_gib", "commit_gib", "commit_peak_gib", "seconds",
@@ -1189,7 +1191,8 @@ def test_golden_generate_message_keys():
         GOLDEN_GENERATE_KEYS + GOLDEN_GENERATE_OPTIONAL_KEYS + GOLDEN_GENERATE_REFERENCE_KEYS
         + GOLDEN_GENERATE_NAG_KEYS + GOLDEN_GENERATE_OUTPAINT_KEYS + GOLDEN_GENERATE_INPAINT_KEYS
         + GOLDEN_GENERATE_PI_H3_KEYS + GOLDEN_GENERATE_SOL_VAE_KEYS + GOLDEN_GENERATE_KEEP_REFERENCE_LATENTS_KEYS
-        + GOLDEN_GENERATE_KEEP_TEXT_CONDITIONING_KEYS + GOLDEN_GENERATE_SPARK_H3_KEYS)
+        + GOLDEN_GENERATE_KEEP_TEXT_CONDITIONING_KEYS + GOLDEN_GENERATE_SPARK_H3_KEYS
+        + GOLDEN_GENERATE_TE_COMBINED_READ_KEYS)
     args = _selftest_args()
     args.source_audio, args.audio_strength = "a.wav", 0.5
     msg = worker._selftest_generate_message(args, "o.mp4")

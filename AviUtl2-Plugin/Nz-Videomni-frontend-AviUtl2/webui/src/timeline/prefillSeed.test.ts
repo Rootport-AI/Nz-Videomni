@@ -647,6 +647,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
     sparkH3: false,
     sparkH3TopkPercent: 20,
     sparkH3FullSteps: 2,
+    teCombinedRead: false,
     embedMp4Metadata: true,
   } as const;
 
@@ -697,6 +698,7 @@ describe("resolvePrefillSeed — smart comfort ceiling (2026-08-31)", () => {
       sparkH3: false,
       sparkH3TopkPercent: 20,
       sparkH3FullSteps: 2,
+      teCombinedRead: false,
       embedMp4Metadata: true,
     } as const;
     const withDefaults = (engineFamily: string) =>

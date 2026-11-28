@@ -2036,6 +2036,8 @@ function AppShellBody({ nativeBridge }: AppShellProps) {
           keepReferenceLatentsUnsupported={settingsRowsHidden.keepReferenceLatents}
           onKeepTextConditioningChange={accelerationControls.setKeepTextConditioning}
           keepTextConditioningUnsupported={settingsRowsHidden.keepTextConditioning}
+          onTeCombinedReadChange={accelerationControls.setTeCombinedRead}
+          teCombinedReadUnsupported={settingsRowsHidden.teCombinedRead}
           onSparkH3Change={accelerationControls.setSparkH3}
           onSparkH3TopkPercentChange={accelerationControls.setSparkH3TopkPercent}
           onSparkH3FullStepsChange={accelerationControls.setSparkH3FullSteps}

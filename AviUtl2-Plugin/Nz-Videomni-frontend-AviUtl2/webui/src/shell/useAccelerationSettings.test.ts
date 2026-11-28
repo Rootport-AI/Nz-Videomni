@@ -14,6 +14,7 @@ import {
   SOL_VAE_SERVER_DEFAULT,
   KEEP_REFERENCE_LATENTS_SERVER_DEFAULT,
   KEEP_TEXT_CONDITIONING_SERVER_DEFAULT,
+  TE_COMBINED_READ_SERVER_DEFAULT,
 } from "./accelerationSettings";
 import { useAccelerationSettings } from "./useAccelerationSettings";
 
@@ -43,6 +44,7 @@ describe("useAccelerationSettings", () => {
       sparkH3: false,
       sparkH3TopkPercent: 20,
       sparkH3FullSteps: 2,
+      teCombinedRead: false,
       embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
     });
   });
@@ -85,6 +87,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -107,6 +110,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -136,6 +140,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -158,6 +163,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -209,6 +215,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -231,6 +238,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -329,6 +337,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -408,6 +417,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -459,6 +469,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -547,6 +558,7 @@ describe("useAccelerationSettings", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: EMBED_MP4_METADATA_SERVER_DEFAULT,
       });
     });
@@ -733,6 +745,41 @@ describe("useAccelerationSettings", () => {
       const stored = JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!);
       expect(stored.keepTextConditioning).toBe(false);
       expect(stored.keepReferenceLatents).toBe(true);
+    });
+  });
+
+  // 台帳 §1-303: text encoder combined read, persisted from its first day.
+  it("setTeCombinedRead updates state, writes through, and survives a remount", async () => {
+    const { result, unmount } = renderHook(() => useAccelerationSettings());
+    expect(result.current.acceleration.teCombinedRead).toBe(TE_COMBINED_READ_SERVER_DEFAULT);
+
+    act(() => result.current.setTeCombinedRead(true));
+
+    expect(result.current.acceleration.teCombinedRead).toBe(true);
+    // Independent of the conditioning-cache row and the other H3 rows.
+    expect(result.current.acceleration.keepTextConditioning).toBe(KEEP_TEXT_CONDITIONING_SERVER_DEFAULT);
+    expect(result.current.acceleration.keepReferenceLatents).toBe(KEEP_REFERENCE_LATENTS_SERVER_DEFAULT);
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!).teCombinedRead).toBe(true);
+    });
+    unmount();
+
+    const { result: result2 } = renderHook(() => useAccelerationSettings());
+    expect(result2.current.acceleration.teCombinedRead).toBe(true);
+    expect(result2.current.acceleration.keepTextConditioning).toBe(false);
+  });
+
+  it("resetToServerDefaults([\"teCombinedRead\"]) writes it back to off, persists it, and leaves keepTextConditioning", async () => {
+    const { result } = renderHook(() => useAccelerationSettings());
+    act(() => result.current.setKeepTextConditioning(true));
+    act(() => result.current.setTeCombinedRead(true));
+    act(() => result.current.resetToServerDefaults(["teCombinedRead"]));
+    expect(result.current.acceleration.teCombinedRead).toBe(false);
+    expect(result.current.acceleration.keepTextConditioning).toBe(true);
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(ACCELERATION_STORAGE_KEY)!);
+      expect(stored.teCombinedRead).toBe(false);
+      expect(stored.keepTextConditioning).toBe(true);
     });
   });
 

@@ -544,6 +544,11 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     "keep_reference_latents",
     // 台帳 §1-299: `keep_text_conditioning` is NOT listed — LTX takes it (1-298
     // listed it; 1-299 lets LTX 2.3 / 2.5 use the cache).
+    // 台帳 §1-303: `te_combined_read` (MiniMax H3's text encoder combined read)
+    // likewise — last, after `keep_reference_latents` as in the server's
+    // REJECT_TABLE. Hides the Settings row; the chain refusal has its
+    // `MOCK_CHAIN_FEATURE_FIELDS` row below.
+    "te_combined_read",
   ],
   LTX25: [
     // Retake LEFT THIS LIST with the Retake increment: the 2.5 chain freezes
@@ -626,6 +631,8 @@ const MOCK_UNSUPPORTED_FEATURES: Record<string, readonly string[]> = {
     // 台帳 §1-297: `keep_reference_latents` — see the LTX23 entry above.
     "keep_reference_latents",
     // 台帳 §1-299: `keep_text_conditioning` is NOT listed — LTX takes it.
+    // 台帳 §1-303: `te_combined_read` — see the LTX23 entry above.
+    "te_combined_read",
   ],
   // Derived the way the real adapter derives it
   // (`services/engines/h3/adapter.py`'s `UNSUPPORTED_FEATURES`) — every feature
@@ -790,6 +797,10 @@ const MOCK_CHAIN_FEATURE_FIELDS: ReadonlyArray<{
     feature: "keep_reference_latents",
     isSet: (v) => v === true,
   },
+  // 台帳 §1-303: text encoder combined read (MiniMax H3 only — both LTX engines
+  // declare `te_combined_read`). Last, like the real LTX `CHAIN_REJECT_TABLE`
+  // row; refused only when `true`.
+  { field: "te_combined_read", feature: "te_combined_read", isSet: (v) => v === true },
 ];
 
 /** §1-120: a clip's `source_audio` shape check only (`audio_id` a non-empty
@@ -2141,6 +2152,24 @@ export function createMockBridge(options: MockBridgeOptions = {}): MockBridge {
             message:
               "'keep_reference_latents' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
             detail: "参照素材の符号化結果の保持（keep_reference_latents）は MiniMax H3 専用です。LTX では使えません。",
+          },
+        },
+      };
+    }
+
+    // 台帳 §1-303: LTX engines refuse a `true` (the server's REJECT_TABLE row).
+    if (
+      req.te_combined_read === true &&
+      (MOCK_UNSUPPORTED_FEATURES[activeBaseModel] ?? []).includes("te_combined_read")
+    ) {
+      return {
+        status: 422,
+        body: {
+          error: {
+            code: "FEATURE_UNSUPPORTED",
+            message:
+              "'te_combined_read' is not supported by the selected base model (選択中のベースモデルでは使えない機能です)",
+            detail: "テキストエンコーダーのまとめ読み（te_combined_read）は MiniMax H3 専用です。LTX では使えません。",
           },
         },
       };

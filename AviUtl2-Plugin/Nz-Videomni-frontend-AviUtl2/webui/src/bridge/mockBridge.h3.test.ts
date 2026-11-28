@@ -560,6 +560,38 @@ describe("mockBridge — MiniMax H3", () => {
     expect((await chain(chained, { keep_reference_latents: true })).status).toBe(202);
   });
 
+  // 台帳 §1-303: text encoder combined read.
+  it("publishes `te_combined_read` in both LTX engines' unsupported_features, not MiniMax H3's", async () => {
+    const blocks = await listModels(createMockBridge({ delayMs: 0 }));
+    expect(blocksFeature(blocks, "MiniMaxH3")).not.toContain("te_combined_read");
+    for (const id of ["LTX23", "LTX25"]) expect(blocksFeature(blocks, id)).toContain("te_combined_read");
+  });
+
+  it("refuses te_combined_read: true on LTX (single and chain) with 422 FEATURE_UNSUPPORTED; false passes", async () => {
+    for (const id of ["LTX23", "LTX25"]) {
+      const bridge = createMockBridge({ delayMs: 0 });
+      if (id !== "LTX23") expect((await load(bridge, id)).status).toBe(200);
+      const single = await generate(bridge, { ...BODY, num_frames: 121, width: 1280, height: 704, te_combined_read: true });
+      expect(single.status).toBe(422);
+      expect((single.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const chained = await chain(bridge, { te_combined_read: true }, [{ num_frames: 121 }]);
+      expect(chained.status).toBe(422);
+      expect((chained.body as { error: { code: string } }).error.code).toBe("FEATURE_UNSUPPORTED");
+      const offChain = await chain(bridge, { te_combined_read: false }, [{ num_frames: 121 }]);
+      expect(offChain.body).not.toMatchObject({ error: { code: "FEATURE_UNSUPPORTED" } });
+    }
+  });
+
+  it("accepts te_combined_read on MiniMax H3, single and chain", async () => {
+    // One bridge per request: the fixture runs a single job at a time (409).
+    const single = createMockBridge({ delayMs: 0 });
+    expect((await load(single, "MiniMaxH3")).status).toBe(200);
+    expect((await generate(single, { ...BODY, te_combined_read: true })).status).toBe(202);
+    const chained = createMockBridge({ delayMs: 0 });
+    expect((await load(chained, "MiniMaxH3")).status).toBe(200);
+    expect((await chain(chained, { te_combined_read: true })).status).toBe(202);
+  });
+
   // 裁定 113: Spark-H3.
   it("publishes `spark_h3` in both LTX engines' unsupported_features (right after sol_vae), not MiniMax H3's", async () => {
     const blocks = await listModels(createMockBridge({ delayMs: 0 }));

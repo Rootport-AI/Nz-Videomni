@@ -49,6 +49,7 @@ describe("FEATURE_UI (the declaration table)", () => {
         "sol_vae",
         "keep_reference_latents",
         "keep_text_conditioning",
+        "te_combined_read",
         "spark_h3",
         "fused_gguf_dequant_kernel",
       ].sort(),
@@ -187,6 +188,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -197,6 +199,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -210,6 +213,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -220,6 +224,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -230,6 +235,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -240,6 +246,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: true,
     });
@@ -254,6 +261,7 @@ describe("settingsRowsHiddenFor", () => {
         fastVae: true,
         keepReferenceLatents: false,
         keepTextConditioning: false,
+        teCombinedRead: false,
         sparkH3: false,
         fusedGgufDequantKernel: false,
       });
@@ -268,6 +276,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: true,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -281,6 +290,21 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: true,
+      teCombinedRead: false,
+      sparkH3: false,
+      fusedGgufDequantKernel: false,
+    });
+  });
+
+  it("maps te_combined_read onto its own row only (台帳 §1-303)", () => {
+    expect(settingsRowsHiddenFor(["te_combined_read"])).toEqual({
+      vae: false,
+      keepResidentEmbeddings: false,
+      vram16: false,
+      fastVae: false,
+      keepReferenceLatents: false,
+      keepTextConditioning: false,
+      teCombinedRead: true,
       sparkH3: false,
       fusedGgufDequantKernel: false,
     });
@@ -298,6 +322,7 @@ describe("settingsRowsHiddenFor", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: false,
       fusedGgufDequantKernel: true,
     });
@@ -324,6 +349,7 @@ describe("accelerationResetsFor", () => {
       "keepReferenceLatents",
       "keepTextConditioning",
     ]);
+    expect(accelerationResetsFor(["te_combined_read"])).toEqual(["teCombinedRead"]);
   });
 
   it("collects both without duplicates", () => {

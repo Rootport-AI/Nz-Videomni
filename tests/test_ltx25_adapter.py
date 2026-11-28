@@ -279,6 +279,7 @@ REQUEST_OVERRIDES: dict[str, dict] = {
     "sol_vae": {"sol_vae": True},
     "spark_h3": {"spark_h3": True},
     "keep_reference_latents": {"keep_reference_latents": True},
+    "te_combined_read": {"te_combined_read": True},
 }
 
 #: The SCHEMA-REQUIRED companion for every NAG row below: ``nag_enabled`` is the
@@ -632,8 +633,9 @@ def test_sage_attention_no_longer_names_a_published_limitation():
     # ``keep_reference_latents`` (keeping the encoded reference latents, H3 only).
     # ``keep_text_conditioning`` (台帳 §1-299) was a ninth name for a day, until
     # the engine learned it: it is honoured now, so the count is EIGHT again.
-    # NINE with ``spark_h3`` (Spark-H3, H3 only).
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 9
+    # NINE with ``spark_h3`` (Spark-H3, H3 only). TEN with ``te_combined_read``
+    # (reading the text encoder once for several prompts, H3 only).
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 10
 
 
 def test_keep_resident_no_longer_names_a_published_limitation():
@@ -769,6 +771,7 @@ def test_inpaint_is_honoured_and_says_so_in_every_table():
         "sol_vae",
         "spark_h3",
         "keep_reference_latents",
+        "te_combined_read",
     }
 
 
@@ -787,14 +790,15 @@ def test_alpha_gen_is_honoured_and_says_so_in_every_table():
     and NOT published by this engine (it is LTX 2.3 that publishes it), with
     this engine's published list at its two engine-level names plus MiniMax
     H3's ``vram16_mode``, ``source_audio``, ``references``, ``pi_h3``,
-    ``sol_vae`` and ``keep_reference_latents``."""
+    ``sol_vae``, ``spark_h3``, ``keep_reference_latents`` and
+    ``te_combined_read``."""
     assert "alpha_gen" in ltx25.HONOURED_FIELDS
     assert "alpha_gen" not in {f for f, _feat, _p in ltx25.REJECT_TABLE}
     assert "alpha_gen" not in ltx25.IGNORED_FIELDS
     assert "alpha_gen" not in ltx25.GOVERNED_FIELDS
     assert "alpha_gen" not in ltx25.UNSUPPORTED_FEATURES
     assert "alpha_gen" in ltx23.UNSUPPORTED_FEATURES
-    assert len(ltx25.UNSUPPORTED_FEATURES) == 9
+    assert len(ltx25.UNSUPPORTED_FEATURES) == 10
     # The needle the generic honoured-read audit below also relies on, named
     # here so a reader of this feature's tests sees it.
     assert "request.alpha_gen" in inspect.getsource(ltx25._RealBackend25.generate)
@@ -935,6 +939,7 @@ CHAIN_OVERRIDES: dict[str, dict] = {
     # MiniMax H3 only (Spark-H3), on the chain schema too.
     "spark_h3": {"spark_h3": True},
     "keep_reference_latents": {"keep_reference_latents": True},
+    "te_combined_read": {"te_combined_read": True},
 }
 
 
@@ -1243,10 +1248,11 @@ def test_no_chain_mode_is_refused_any_more():
     # ``vram16_mode`` is MiniMax H3's (台帳 §1-106), refused by both LTX, and
     # so is the ``clips`` row (a clip's ``references``, 台帳 §1-109), and so is
     # ``pi_h3`` (MiniMax H3's pi-H3), and so is ``sol_vae`` (its Sol-H3-VAE), and so is
-    # ``spark_h3`` (its Spark-H3), and so is ``keep_reference_latents``.
+    # ``spark_h3`` (its Spark-H3), and so is ``keep_reference_latents``, and so
+    # is ``te_combined_read``.
     assert refused == {
         "pipeline", "vae_mode", "vram16_mode", "clips", "pi_h3", "sol_vae",
-        "spark_h3", "keep_reference_latents",
+        "spark_h3", "keep_reference_latents", "te_combined_read",
     }
 
 

@@ -286,7 +286,8 @@ def test_refused_before_any_stage(monkeypatch, frames, kw, match):
 
 def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), samples=2000, seen=None, decoded=None,
                    negative_prompt="", keep_reference_latents=False, shared_files=False, pipe=None, fail_clip=None,
-                   keep_text_conditioning=False, prompts=None, clip0_images=(), video_frames=None):
+                   keep_text_conditioning=False, prompts=None, clip0_images=(), video_frames=None,
+                   te_combined_read=False):
     """``run_chain_h3`` through the REAL ``_encode`` / ``_read_references`` /
     ``_te_references`` / ``_encode_references`` with a stand-in text encoder,
     video encoder, audio encoder and loader (``samples`` long) and video reader
@@ -304,7 +305,11 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     (台帳 §1-298). ``prompts``: the clips' prompts (None = ``clip i``).
     ``clip0_images``: clip 0's key frames, ``(frame_idx, path)``. ``video_frames``:
     None = the reader's fixed 22 frames; a number = a reference video that long,
-    cut as the real reader cuts it (``min(length, num_frames)`` down to 17k + 5). Returns
+    cut as the real reader cuts it (``min(length, num_frames)`` down to 17k + 5).
+    ``te_combined_read``: the base's (台帳 1-303 方向 B); the stand-in's ``encode_many``
+    records each call in ``builds["many"]`` (the ``te_calls`` entries of its items) and
+    appends the items to ``te_calls`` as ``encode`` would; ``builds["te_built"]`` counts
+    the text encoders built. Returns
     ``(done, te_calls, encode progress, denoise kwargs per clip, builds)``."""
     import numpy as np
     from PIL import Image
@@ -318,11 +323,23 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
     te_calls, progress = [], []
     seen = [] if seen is None else seen
     decoded = [] if decoded is None else decoded
-    builds = {"video": 0, "video_encodes": 0, "audio_encodes": audio_calls["encode"]}
+    builds = {"video": 0, "video_encodes": 0, "audio_encodes": audio_calls["encode"], "many": [], "te_built": 0}
 
     class FakeTE:
         def __init__(self, *a, **k):
+            builds["te_built"] += 1
             self.read_report = {}
+
+        def encode_many(self, items):
+            outs, counts = [], []
+            first = len(te_calls)
+            for prompt, images, refs in items:
+                outs.append(self.encode(prompt, images, refs=refs or None))
+                counts.append({k: v for k, v in self.read_report.items()})
+            builds["many"].append(te_calls[first:])
+            report = {"items": len(items), "read_gib": 1.0, "read_seconds": 0.5, "layers_read": 50,
+                      "encode_seconds": 1.5, "shared": [], "not_shared": []}
+            return outs, counts, report
 
         def load(self):
             return {}
@@ -407,7 +424,7 @@ def _ref_chain_job(monkeypatch, tmp_path, clip_refs, frames=(39, 39, 39), sample
                                         references=tuple(inputs), images=images))
     base = P.H3GenerateRequest(prompt="p", seed=1, width=64, height=64, num_frames=frames[0], output_path="o.mp4",
                                negative_prompt=negative_prompt, keep_reference_latents=keep_reference_latents,
-                               keep_text_conditioning=keep_text_conditioning)
+                               keep_text_conditioning=keep_text_conditioning, te_combined_read=te_combined_read)
     done = CH.run_chain_h3(pipe, CH.H3ChainSpec(base=base, clips=tuple(clips), seed=1),
                            lambda stage, i, total, **kw: progress.append((stage, i, total, kw)), lambda m: None)
     return done, te_calls, [p for p in progress if p[0] == "encode"], seen, builds
@@ -497,6 +514,89 @@ def test_chain_clip_reference_failure_is_that_clips(monkeypatch, tmp_path):
                        seen=seen, decoded=decoded)
     assert len(seen) == 1 and seen[0]["refs"] is None     # only clip 0's denoise ran
     assert decoded == []
+
+
+# --------------------------------------------------------------------------- #
+# the text encoder's combined read (te_combined_read, 台帳 1-303 方向 B)
+# --------------------------------------------------------------------------- #
+
+def test_chain_combined_reads_every_clip_on_clip_0(monkeypatch, tmp_path):
+    """On: one text encoder, on clip 0's turn, every clip's prompt and the negative in one
+    ``encode_many``; the later clips get what it made (no text encoder, the same progress
+    lines as off); the references are still read at each clip's turn for its encode."""
+    clip_refs = [[("picture", 1, None)], [("picture", 1, None), ("audio", 1, None)], []]
+    kw = dict(frames=(39, 39, 39), negative_prompt="cars")
+    off, off_calls, off_progress, off_kw, _ob = _ref_chain_job(monkeypatch, tmp_path, clip_refs, **kw)
+    done, te_calls, progress, den_kw, builds = _ref_chain_job(monkeypatch, tmp_path, clip_refs,
+                                                             te_combined_read=True, **kw)
+    assert builds["te_built"] == 1
+    assert builds["many"] == [[
+        {"prompt": "clip 0", "images": 0, "refs": [("picture", 1)]},
+        {"prompt": "clip 1", "images": 0, "refs": [("picture", 1), ("audio", 1)]},
+        {"prompt": "clip 2", "images": 0, "refs": None},
+        {"prompt": "cars", "images": 0, "refs": None},
+    ]]
+    assert te_calls == builds["many"][0]
+    assert progress == off_progress                                       # the same lines, clip by clip
+    phases, off_phases = done["h3"]["phases"]["clips"], off["h3"]["phases"]["clips"]
+    assert [list(p) for p in phases] == [list(p) for p in off_phases]
+    enc = [p["encode"] for p in phases]
+    assert "te" in enc[0] and all("te" not in e for e in enc[1:])
+    assert enc[0]["te_combined"]["items"] == 4 and all("te_combined" not in e for e in enc[1:])
+    assert set(enc[0]) - {"te_combined"} == set(off_phases[0]["encode"])
+    # A later clip builds no text encoder: no "te" and no after_load / after_release marks.
+    assert [set(e) for e in enc[1:]] == [{k for k in p["encode"] if k != "te" and "_after_" not in k}
+                                         for p in off_phases[1:]]
+    # te_read: the numbers only, the references' too (the reference step reads them)
+    assert enc[1]["te_read"] == {"vision_tokens": 0, "references": [{"kind": "picture", "slot": 1, "vision_tokens": 5}]}
+    assert phases[1]["reference_encode"]["references"][0]["vision_tokens"] == 5
+    assert "te_read_negative" in enc[0] and "te_cache" not in enc[0]
+    assert all(k["negative_hidden"] is den_kw[0]["negative_hidden"] for k in den_kw)
+    assert [list(c["seconds"]) for c in done["chain"]["clips"]] == [list(c["seconds"]) for c in off["chain"]["clips"]]
+    assert builds["video_encodes"] == _ob["video_encodes"]                # each clip's own reference step
+
+
+def test_chain_combined_passes_others_then_prepared(monkeypatch, tmp_path):
+    """On: clip 0's ``_encode`` gets ``others`` (the later clips), each later clip ``prepared``;
+    off: neither (the calls of before)."""
+    _done, _te, _p, _kw, builds = _ref_chain_job(monkeypatch, tmp_path, [[], []], frames=(39, 39))
+    pipe = builds["pipe"]
+    passed = []
+    real = pipe._encode
+    monkeypatch.setattr(pipe, "_encode", lambda *a, **k: passed.append(k) or real(*a, **k))
+    _ref_chain_job(monkeypatch, tmp_path, [[], []], frames=(39, 39), pipe=pipe)
+    assert [set(k) for k in passed] == [{"images", "has_cond", "refs"}] * 2
+    del passed[:]
+    _ref_chain_job(monkeypatch, tmp_path, [[], []], frames=(39, 39), pipe=pipe, te_combined_read=True)
+    assert [set(k) for k in passed] == [{"images", "has_cond", "refs", "others"}, {"images", "has_cond", "refs", "prepared"}]
+    (other,) = passed[0]["others"]
+    assert isinstance(other, P.H3TextItem) and other.prompt == "clip 1" and other.key is None
+    assert isinstance(passed[1]["prepared"], P.H3PreparedText) and passed[1]["prepared"].te_cache is None
+
+
+def test_chain_combined_reads_the_references_ahead(monkeypatch, tmp_path):
+    """On: a later clip's reference that cannot be used is refused before clip 0's text
+    encoder (with its path): no denoise ran, no text encoder was built. Off it is that
+    clip's (test_chain_clip_reference_failure_is_that_clips)."""
+    seen, decoded = [], []
+    with pytest.raises(ValueError, match="参照音声が短すぎます.*audio1.bin"):
+        _ref_chain_job(monkeypatch, tmp_path, [[], [("audio", 1, None)]], frames=(124, 39), samples=640,
+                       seen=seen, decoded=decoded, te_combined_read=True)
+    assert seen == [] and decoded == []
+
+
+def test_chain_combined_cache_off_keeps_nothing_also_after_a_failure(monkeypatch, tmp_path):
+    """On, cache off: nothing is held after the chain, nor after one that fails on clip 1,
+    and the next chain with the cache on misses everywhere."""
+    _done, _te, _p, _kw, builds = _ref_chain_job(monkeypatch, tmp_path, [[], [], []], te_combined_read=True)
+    pipe = builds["pipe"]
+    assert len(pipe._te_conditioning) == 0
+    with pytest.raises(RuntimeError, match="denoise failed"):
+        _ref_chain_job(monkeypatch, tmp_path, [[], [], []], te_combined_read=True, fail_clip=1, pipe=pipe)
+    assert len(pipe._te_conditioning) == 0
+    done, _te, _p, _kw, _b = _ref_chain_job(monkeypatch, tmp_path, [[], [], []], te_combined_read=True, pipe=pipe,
+                                            keep_text_conditioning=True)
+    assert [p["encode"]["te_cache"] for p in done["h3"]["phases"]["clips"]] == [{"positive": "miss"}] * 3
 
 
 # --------------------------------------------------------------------------- #

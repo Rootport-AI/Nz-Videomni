@@ -336,7 +336,9 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
     # ``references`` (H3 only). pi-H3 added the sixth: ``pi_h3`` (H3 only).
     # Sol-H3-VAE added the seventh: ``sol_vae`` (H3 only). Keeping the encoded
     # reference latents added the eighth: ``keep_reference_latents`` (H3 only).
-    # Spark-H3 added ``spark_h3`` (H3 only), next to ``sol_vae``.
+    # Spark-H3 added ``spark_h3`` (H3 only), next to ``sol_vae``. Reading the
+    # text encoder once for several prompts added ``te_combined_read`` (H3
+    # only), last.
     assert by_id["LTX23"]["unsupported_features"] == [
         "keep_resident_embeddings",
         "alpha_gen",
@@ -347,4 +349,5 @@ def test_base_model_switch_and_listing_survive_the_round_trip(two_family_client,
         "sol_vae",
         "spark_h3",
         "keep_reference_latents",
+        "te_combined_read",
     ]

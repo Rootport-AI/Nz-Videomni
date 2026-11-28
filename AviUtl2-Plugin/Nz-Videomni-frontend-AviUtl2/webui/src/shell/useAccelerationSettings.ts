@@ -82,6 +82,9 @@ export interface UseAccelerationSettingsResult {
   /** Write-through: Spark-H3's full-attention steps, rounded and clamped into
    * 0-10. */
   setSparkH3FullSteps: (value: number) => void;
+  /** Write-through to `localStorage`, same rationale as
+   * {@link setKeepReferenceLatents} (台帳 §1-303). INDEPENDENT of it. */
+  setTeCombinedRead: (value: boolean) => void;
   /** Write-through to `localStorage` (§3-164, 2026-09-24): the Settings
    * panel's Output row — whether finished mp4s carry their generation
    * conditions. A standing preference, persisted like the rows above. */
@@ -119,7 +122,7 @@ export interface UseAccelerationSettingsResult {
  * and so was `vram16Mode` (台帳 §1-101, 2026-10-18), `piH3` (ruling 107,
  * 2026-11-23), `solVae` (Sol-H3-VAE, 2026-11-24) and
  * `keepReferenceLatents` (台帳 §1-297) and `keepTextConditioning` (台帳 §1-298),
- * and the three Spark-H3 fields (裁定 113).
+ * and the three Spark-H3 fields (裁定 113), and `teCombinedRead` (台帳 §1-303).
  *
  * The `localStorage` write itself lives in a `useEffect` keyed off the
  * persisted fields, NOT inside the setters' functional updaters — writing to
@@ -161,6 +164,7 @@ export function useAccelerationSettings(
       sparkH3: stored.sparkH3,
       sparkH3TopkPercent: stored.sparkH3TopkPercent,
       sparkH3FullSteps: stored.sparkH3FullSteps,
+      teCombinedRead: stored.teCombinedRead,
       embedMp4Metadata: stored.embedMp4Metadata,
     };
   });
@@ -184,6 +188,7 @@ export function useAccelerationSettings(
       sparkH3: acceleration.sparkH3,
       sparkH3TopkPercent: acceleration.sparkH3TopkPercent,
       sparkH3FullSteps: acceleration.sparkH3FullSteps,
+      teCombinedRead: acceleration.teCombinedRead,
       embedMp4Metadata: acceleration.embedMp4Metadata,
     });
   }, [
@@ -201,6 +206,7 @@ export function useAccelerationSettings(
     acceleration.sparkH3,
     acceleration.sparkH3TopkPercent,
     acceleration.sparkH3FullSteps,
+    acceleration.teCombinedRead,
     acceleration.embedMp4Metadata,
   ]);
 
@@ -261,6 +267,10 @@ export function useAccelerationSettings(
     setAcceleration((prev) => ({ ...prev, sparkH3FullSteps: next }));
   }, []);
 
+  const setTeCombinedRead = useCallback((value: boolean) => {
+    setAcceleration((prev) => ({ ...prev, teCombinedRead: value }));
+  }, []);
+
   const setEmbedMp4Metadata = useCallback((value: boolean) => {
     setAcceleration((prev) => ({ ...prev, embedMp4Metadata: value }));
   }, []);
@@ -299,6 +309,7 @@ export function useAccelerationSettings(
     setSparkH3,
     setSparkH3TopkPercent,
     setSparkH3FullSteps,
+    setTeCombinedRead,
     setEmbedMp4Metadata,
     resetToServerDefaults,
   };

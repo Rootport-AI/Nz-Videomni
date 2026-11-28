@@ -334,6 +334,32 @@ def _te_counts(read_report: dict) -> dict:
     return {k: read_report[k] for k in TE_COUNT_FIELDS if k in read_report}
 
 
+@dataclass(frozen=True)
+class H3TextItem:
+    """Another clip's text encoder input for a combined read (``te_combined_read``,
+    台帳 1-303 方向 B; ``H3Pipeline._encode``'s ``others``): its prompt, the vision
+    tower's images, its references (``RefMedia``) and its conditioning key (None =
+    not looked up, as a job without ``keep_text_conditioning``)."""
+
+    prompt: str
+    images: tuple = ()
+    refs: tuple = ()
+    key: tuple | None = None
+
+
+@dataclass(frozen=True)
+class H3PreparedText:
+    """A clip's conditioning made by an earlier clip's combined read (``_encode``'s
+    ``prepared``): ``hidden`` ``[L, 5120]`` bf16 and ``tags`` ``[L]`` long, both on the
+    CPU; ``te_read`` the record its ``encode`` entry gets; ``te_cache`` ``"hit"`` /
+    ``"miss"`` (None: it had no key, it was not looked up)."""
+
+    hidden: torch.Tensor
+    tags: torch.Tensor
+    te_read: dict
+    te_cache: str | None = None
+
+
 def te_key_frames(req) -> list:
     """The key frames whose canvases go to the text encoder, in ascending frame
     order: the first and the last frame only (裁定 59), none in a job with
@@ -464,6 +490,10 @@ class H3GenerateRequest:
     #: Keep the text encoder's conditioning (positive and negative apart) for the next
     #: job (台帳 §1-298); off = the encode and the record as before.
     keep_text_conditioning: bool = False
+    #: The text encoder's combined read (台帳 1-303 方向 B): the prompts of the job (a
+    #: chain's clips, the negative prompt) through one read of the weights; the values
+    #: are the same. Off = the encode and the record as before.
+    te_combined_read: bool = False
     #: Spark-H3 (Docs/MINIMAX_H3_DESIGN.md §6.11): ``None`` = as before (the attention,
     #: the DiT's calls and the record of every other job are unchanged).
     spark_h3: H3SparkInput | None = None
@@ -1368,12 +1398,18 @@ class H3Pipeline:
                 te_positive_key(req, ref_media, frame_ids),
                 te_negative_key(req.negative_prompt) if has_neg else None,
             )} if keep_te else {}
+            # Only a te_combined_read job with a negative prompt passes ``others`` (台帳 1-303
+            # 方向 B): one prompt alone has nothing to combine, and every other call is as before.
+            combined_kw = {"others": ()} if req.te_combined_read and has_neg else {}
             with torch.no_grad():
                 with phases.phase("encode") as entry:
                     encoded = self._encode(
                         req.prompt, phases, images=vision_images, has_cond=has_cond,
                         has_audio=encode_audio, refs=self._te_references(ref_media), **neg_kw, **te_kw,
+                        **combined_kw,
                     )
+                    if combined_kw:
+                        encoded = encoded[:-1]   # no other clip: its prepared list is empty
                     if has_neg:
                         text_hidden, text_tags, negative_hidden = encoded
                     else:
@@ -1626,7 +1662,7 @@ class H3Pipeline:
 
     def _encode(
         self, prompt: str, phases: _Phases, images=(), *, has_cond: bool, has_audio: bool = False,
-        refs=None, negative_prompt: str | None = None, te_keys=None,
+        refs=None, negative_prompt: str | None = None, te_keys=None, others=None, prepared=None,
     ) -> tuple[torch.Tensor, ...]:
         """The text encoder's one forward (two with a negative prompt).
         ``images``: the canvases the vision tower reads (the first / last key
@@ -1652,7 +1688,19 @@ class H3Pipeline:
         the encode record gains ``te_cache`` and ``conditioning_sha256``.
 
         The result is returned on the CPU, so no text encoder tensor stays in a
-        GPU segment; the denoise moves it with ``.to(dev)`` when it uses it."""
+        GPU segment; the denoise moves it with ``.to(dev)`` when it uses it.
+
+        ``others`` / ``prepared`` (``te_combined_read``, 台帳 1-303 方向 B; only such a
+        job passes one of them, see :meth:`_encode_combined`): ``others`` a sequence of
+        :class:`H3TextItem` (the chain's later clips; empty for a single job), and the
+        result gains a last element, the list of :class:`H3PreparedText` for them in
+        that order; ``prepared`` an :class:`H3PreparedText` made by clip 0's call, and
+        the result is ``(hidden, tags)`` as before."""
+        if others is not None or prepared is not None:
+            return self._encode_combined(
+                prompt, phases, images, has_cond=has_cond, has_audio=has_audio, refs=refs,
+                negative_prompt=negative_prompt, te_keys=te_keys, others=others, prepared=prepared,
+            )
         from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
 
         images = list(images)
@@ -1739,6 +1787,182 @@ class H3Pipeline:
         if has_neg:
             return hidden, tags, neg_hidden
         return hidden, tags
+
+    def _encode_combined(
+        self, prompt: str, phases: _Phases, images, *, has_cond: bool, has_audio: bool, refs,
+        negative_prompt: str | None, te_keys, others, prepared,
+    ) -> tuple:
+        """:meth:`_encode` with ``te_combined_read`` (台帳 1-303 方向 B).
+
+        ``others`` given (clip 0 of a chain; ``()`` for a single job): the items are
+        this call's positive, then ``others``, then the negative. Each item with a key
+        is looked up in the held conditioning (a key already seen in this call is
+        computed once, the later ones are ``"hit"``); the rest go through the text
+        encoder: two or more in one ``encode_many``, one through ``encode`` (as before),
+        none: no text encoder at all. What misses is put as :meth:`_encode` puts it.
+        ``te_read`` / ``te_read_negative``: ``encode``'s read report as before, or the
+        numbers only (:data:`TE_COUNT_FIELDS`) for a held item and for an
+        ``encode_many`` item; ``te_combined`` (only after ``encode_many``) carries the
+        read, its seconds and the share decision by clip number (0 = this call's
+        positive, ``i`` = ``others[i - 1]``; the negative is counted in ``items``
+        only). The progress lines are :meth:`_encode`'s.
+
+        ``prepared`` given (a later clip): no text encoder and no lookup; the held
+        values and their record, with the progress lines of a held job.
+        """
+        from engine_h3.text_encoder import H3TextEncoder  # noqa: PLC0415
+
+        images = list(images)
+        refs = list(refs or ())
+        has_neg = negative_prompt is not None
+        record = phases.data["encode"]
+        total = encode_steps(has_cond=has_cond, has_audio=has_audio, has_refs=bool(refs), has_neg=has_neg)
+        pos_key, neg_key = te_keys if te_keys is not None else (None, None)
+        neg_hidden = None
+        if prepared is not None:
+            if others is not None or has_neg:
+                raise RuntimeError("H3 encode: prepared conditioning comes without others and a negative prompt")
+            self._progress("encode", 0, total)
+            hidden, tags = prepared.hidden, prepared.tags
+            record["te_read"] = dict(prepared.te_read)
+            self._progress("encode", 1, total)
+            self._progress("encode", 2, total)
+            pos_state = prepared.te_cache
+            neg_state = None
+            prepared_out = None
+        else:
+            # (kind, prompt, images, refs, key) per item: this call's positive, the others, the negative.
+            entries = [("positive", prompt, images, refs, pos_key)]
+            entries += [("positive", o.prompt, list(o.images), list(o.refs), o.key) for o in others]
+            if has_neg:
+                entries.append(("negative", negative_prompt, [], [], neg_key))
+            values: list = [None] * len(entries)   # (hidden, tags or None, counts)
+            reads: list = [None] * len(entries)    # the te_read record of each
+            states: list = [None] * len(entries)   # "hit" / "miss" (None: no key)
+            compute: list[int] = []
+            first: dict = {}
+            dup: dict[int, int] = {}
+            for idx, (kind, _p, _im, _rf, key) in enumerate(entries):
+                if key is not None:
+                    if key in first:              # the same key again: computed (or held) once
+                        dup[idx] = first[key]
+                        states[idx] = "hit"
+                        continue
+                    first[key] = idx
+                    held = self._te_conditioning.get(key)
+                    if held is not None:
+                        values[idx] = (held[0], held[1], held[2]) if kind == "positive" else (held[0], None, held[1])
+                        reads[idx] = dict(values[idx][2])
+                        states[idx] = "hit"
+                        continue
+                    states[idx] = "miss"
+                compute.append(idx)
+            te_report = None
+            if compute:
+                te = H3TextEncoder(self.paths.text_encoder, self.paths.tokenizer_dir, device=self.device)
+            self._progress("encode", 0, total)
+            if compute:
+                try:
+                    info = te.load()
+                    record["te"] = info
+                    phases.mark("encode", "after_load")
+                    self._progress("encode", 1, total)
+                    if len(compute) >= 2:
+                        outs, counts, te_report = te.encode_many(
+                            [(entries[i][1], entries[i][2], entries[i][3]) for i in compute],
+                        )
+                        for i, (h, t), c in zip(compute, outs, counts):
+                            values[i] = (h, t if entries[i][0] == "positive" else None, _te_counts(c))
+                            reads[i] = _te_counts(c)
+                        del outs, counts
+                    else:
+                        i = compute[0]
+                        kind, p, im, rf, _key = entries[i]
+                        if kind == "negative":
+                            h, t = te.encode(p)
+                            h, t = h.to("cpu"), None
+                        else:
+                            h, t = te.encode(p, images=im, refs=rf) if rf else te.encode(p, images=im)
+                            h, t = h.to("cpu"), t.to("cpu")
+                        values[i] = (h, t, _te_counts(te.read_report))
+                        reads[i] = te.read_report
+                        del h, t
+                    for i in compute:
+                        key = entries[i][4]
+                        if key is not None:
+                            h, t, c = values[i]
+                            self._te_conditioning.put(key, (h, t, c) if entries[i][0] == "positive" else (h, c))
+                    self._progress("encode", 2, total)
+                    if has_neg:
+                        self._progress("encode", 3, total)
+                finally:
+                    te.release()
+                    del te
+                    _free_cuda()
+                phases.mark("encode", "after_release")
+            else:
+                # Every item held: no text encoder at all; the same progress lines.
+                self._progress("encode", 1, total)
+                self._progress("encode", 2, total)
+                if has_neg:
+                    self._progress("encode", 3, total)
+            for i, j in dup.items():
+                values[i] = values[j]
+                reads[i] = dict(values[j][2])
+            hidden, tags = values[0][0], values[0][1]
+            record["te_read"] = reads[0]
+            if has_neg:
+                neg_hidden = values[-1][0]
+                record["te_read_negative"] = reads[-1]
+            if te_report is not None:
+                # Positions in the encode_many call -> clip numbers (the negative has none).
+                clip_of = {pos: i for pos, i in enumerate(compute) if entries[i][0] == "positive"}
+                record["te_combined"] = {
+                    "items": int(te_report["items"]),
+                    "read_gib": te_report["read_gib"],
+                    "read_seconds": te_report["read_seconds"],
+                    "layers_read": te_report["layers_read"],
+                    "encode_seconds": te_report["encode_seconds"],
+                    "shared": [
+                        {"reference_rows": int(g["reference_rows"]),
+                         "clips": [clip_of[k] for k in g["items"] if k in clip_of]}
+                        for g in te_report["shared"]
+                    ],
+                    "not_shared": [
+                        {"clip": clip_of[e["item"]], "reason": e["reason"]}
+                        for e in te_report["not_shared"] if e["item"] in clip_of
+                    ],
+                }
+            pos_state = states[0]
+            neg_state = states[-1] if has_neg else None
+            n_others = len(entries) - 1 - int(has_neg)
+            prepared_out = [
+                H3PreparedText(values[i][0], values[i][1], reads[i], states[i]) for i in range(1, 1 + n_others)
+            ]
+            del values, reads
+        if te_keys is not None:
+            # A side without a key was never looked up: no entry for it (as _encode).
+            record["te_cache"] = {}
+            if pos_state is not None:
+                record["te_cache"]["positive"] = pos_state
+            record["conditioning_sha256"] = {"positive": tensor_sha256(hidden), "tags": tensor_sha256(tags)}
+            if has_neg:
+                if neg_state is not None:
+                    record["te_cache"]["negative"] = neg_state
+                record["conditioning_sha256"]["negative"] = tensor_sha256(neg_hidden)
+        self._progress("encode", 3 + int(has_neg), total)
+        self._log(
+            f"encode: {hidden.shape[0]} text tokens"
+            + (f" (with {len(images)} key frame vision block(s))" if images else "")
+            + (f" (with {len(refs)} reference(s))" if refs else "")
+            + (f" (negative prompt: {neg_hidden.shape[0]} tokens)" if has_neg else "")
+            + (f" (conditioning cache: {record['te_cache']})" if te_keys is not None else "")
+            + (f" (combined read: {record['te_combined']['items']} prompts)" if "te_combined" in record else "")
+        )
+        result = (hidden, tags, neg_hidden) if has_neg else (hidden, tags)
+        if others is None:
+            return result
+        return (*result, prepared_out)
 
     def _build_video_encoder(self):
         """The video VAE's encoder, built for this job only in float32 (never kept)."""

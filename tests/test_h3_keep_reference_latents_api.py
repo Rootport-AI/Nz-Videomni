@@ -131,9 +131,12 @@ def test_ltx_refuses_with_the_h3_only_sentence(adapter):
         reject(off)  # no raise
     assert FIELD in adapter.UNSUPPORTED_FEATURES
     # keep_text_conditioning's row came after this one, and went again when the
-    # LTX engines learned that field (台帳 §1-299).
-    assert adapter.REJECT_TABLE[-1][1] == FIELD
-    assert adapter.CHAIN_REJECT_TABLE[-1][1] == FIELD
+    # LTX engines learned that field (台帳 §1-299). te_combined_read's row comes
+    # after this one (台帳 1-303).
+    assert adapter.REJECT_TABLE[-2][1] == FIELD
+    assert adapter.CHAIN_REJECT_TABLE[-2][1] == FIELD
+    assert adapter.REJECT_TABLE[-1][1] == "te_combined_read"
+    assert adapter.CHAIN_REJECT_TABLE[-1][1] == "te_combined_read"
 
 
 @pytest.mark.parametrize("base_model", ["LTX23", "LTX25"])

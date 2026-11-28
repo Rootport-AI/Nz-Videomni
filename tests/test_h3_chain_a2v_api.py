@@ -223,10 +223,12 @@ def test_the_published_unsupported_features_are_unchanged():
         assert len(rows) == 1 and rows[0][0] == "clips"
         # added last at the time; pi-H3's row (pi_h3) came after it, then
         # Sol-H3-VAE's (sol_vae), then Spark-H3's (spark_h3, next to sol_vae),
-        # then keep_reference_latents (the last row: keep_text_conditioning's
-        # row came and went when the LTX engines learned it, 台帳 §1-299).
-        assert [feat for _f, feat, _p in adapter.CHAIN_REJECT_TABLE[-5:]] == [
+        # then keep_reference_latents (keep_text_conditioning's row came and
+        # went when the LTX engines learned it, 台帳 §1-299), then
+        # te_combined_read (the last row, 台帳 1-303).
+        assert [feat for _f, feat, _p in adapter.CHAIN_REJECT_TABLE[-6:]] == [
             "source_audio", "pi_h3", "sol_vae", "spark_h3", "keep_reference_latents",
+            "te_combined_read",
         ]
 
 

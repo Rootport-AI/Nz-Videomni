@@ -132,6 +132,11 @@ function Harness({
       // 台帳 §1-298 / §1-299: hidden only where a server publishes `keep_text_conditioning`
       // (an older server, on LTX); covered in `AppShell.featureScope.test.tsx`.
       keepTextConditioningUnsupported={false}
+      onTeCombinedReadChange={accelerationControls.setTeCombinedRead}
+      // 台帳 §1-303: hidden on an engine that publishes `te_combined_read`
+      // (LTX 2.3 / 2.5). Same "supported" case as the rows above; the hiding is
+      // covered in `AppShell.featureScope.test.tsx`.
+      teCombinedReadUnsupported={false}
       onSparkH3Change={accelerationControls.setSparkH3}
       onSparkH3TopkPercentChange={accelerationControls.setSparkH3TopkPercent}
       onSparkH3FullStepsChange={accelerationControls.setSparkH3FullSteps}
@@ -208,6 +213,10 @@ const KEEP_REFERENCE_LATENTS_NOTE_EN =
 const KEEP_TEXT_CONDITIONING_LABEL = "Text encoder conditioning cache";
 const KEEP_TEXT_CONDITIONING_NOTE_EN =
   "Caches the conditioning the text encoder outputs and reuses it to speed up generation. 64GB or more of memory recommended (because the cache is kept in main memory. LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained)";
+const TE_COMBINED_READ_LABEL = "Text encoder combined read";
+const TE_COMBINED_READ_NOTE_EN =
+  "When there is more than one prompt (each clip of a Chained job, a negative prompt), the text encoder processes them together in one load. The output does not change.";
+const TE_COMBINED_READ_EXPERIMENTAL_EN = "* Experimental: verified only on an RTX 4070 Ti SUPER.";
 
 describe("SettingsPanel", () => {
   beforeEach(() => {
@@ -426,6 +435,7 @@ describe("SettingsPanel", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: true,
       });
     });
@@ -544,6 +554,7 @@ describe("SettingsPanel", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: true,
       });
     });
@@ -639,6 +650,7 @@ describe("SettingsPanel", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: true,
       });
     });
@@ -766,6 +778,7 @@ describe("SettingsPanel", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: true,
       });
     });
@@ -813,6 +826,7 @@ describe("SettingsPanel", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: true,
       });
     });
@@ -854,6 +868,7 @@ describe("SettingsPanel", () => {
         sparkH3: false,
         sparkH3TopkPercent: 20,
         sparkH3FullSteps: 2,
+        teCombinedRead: false,
         embedMp4Metadata: true,
       });
     });
@@ -957,6 +972,68 @@ describe("SettingsPanel", () => {
     expect(conditioning.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText(KEEP_REFERENCE_LATENTS_NOTE_EN)).not.toBeInTheDocument();
     expect(screen.getByText(KEEP_TEXT_CONDITIONING_NOTE_EN)).toBeInTheDocument();
+  });
+
+  // 台帳 §1-303: "Text encoder combined read". Default OFF, note only while ON,
+  // no gate, ON persists. The note and the "experimental" remark share ONE
+  // paragraph, the remark on its own line.
+  /** The ON-only paragraph: one <p class="field-hint"> reading note, line
+   * break, remark — and no second paragraph. */
+  function expectTeCombinedReadParagraph(note: string, remark: string) {
+    const paragraph = screen.getByText((_content, element) => element?.tagName === "P" && element.textContent === `${note}${remark}`);
+    expect(paragraph).toHaveClass("field-hint");
+    expect(paragraph.querySelectorAll("br")).toHaveLength(1);
+    expect(paragraph.childNodes[0]?.textContent).toBe(note);
+    expect(paragraph.childNodes[1]?.nodeName).toBe("BR");
+    expect(paragraph.childNodes[2]?.textContent).toBe(remark);
+  }
+
+  it("Text encoder combined read sits right under the conditioning cache, defaults to OFF without its note; ON shows note and remark in one paragraph and persists", async () => {
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    const user = userEvent.setup();
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const groups = screen.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
+    expect(groups.indexOf(TE_COMBINED_READ_LABEL)).toBe(groups.indexOf(KEEP_TEXT_CONDITIONING_LABEL) + 1);
+    const row = within(screen.getByRole("group", { name: TE_COMBINED_READ_LABEL }));
+    expect(row.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText(TE_COMBINED_READ_NOTE_EN, { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText(TE_COMBINED_READ_EXPERIMENTAL_EN, { exact: false })).not.toBeInTheDocument();
+
+    await user.click(row.getByRole("button", { name: "ON" }));
+    await waitFor(() => {
+      expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expectTeCombinedReadParagraph(TE_COMBINED_READ_NOTE_EN, TE_COMBINED_READ_EXPERIMENTAL_EN);
+    await waitFor(() => {
+      expect(readStoredAcceleration().teCombinedRead).toBe(true);
+    });
+    // The conditioning-cache row is untouched by this one.
+    expect(readStoredAcceleration().keepTextConditioning).toBe(false);
+
+    await user.click(row.getByRole("button", { name: "OFF" }));
+    await waitFor(() => {
+      expect(row.getByRole("button", { name: "OFF" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.queryByText(TE_COMBINED_READ_NOTE_EN, { exact: false })).not.toBeInTheDocument();
+    expect(readStoredAcceleration().teCombinedRead).toBe(false);
+  });
+
+  it("Text encoder combined read reads the owner's Japanese wording in Japanese, and restores a stored ON", async () => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, "ja");
+    window.localStorage.setItem(ACCELERATION_STORAGE_KEY, JSON.stringify({ teCombinedRead: true }));
+    const bridge = createMockBridge({ delayMs: 0, baseUrl: "http://127.0.0.1:18620" });
+    renderPanel(bridge);
+
+    await screen.findByDisplayValue("http://127.0.0.1:18620");
+    const row = within(screen.getByRole("group", { name: "テキストエンコーダーのまとめ読み" }));
+    expect(row.getByRole("button", { name: "ON" })).toHaveAttribute("aria-pressed", "true");
+    expectTeCombinedReadParagraph(
+      "プロンプトが複数あるとき（Chained の各クリップ・ネガティブプロンプト）、テキストエンコーダーの 1 回の読み込みでまとめて処理します。生成結果は変わりません。",
+      "※実験的機能：RTX 4070 ti SUPERでのみ実機検証しています。",
+    );
   });
 
   // Ruling 107 (2026-11-23) / Sol-H3-VAE (2026-11-24): the "Fast VAE" row.

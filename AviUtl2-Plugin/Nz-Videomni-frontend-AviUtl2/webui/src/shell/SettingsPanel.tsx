@@ -150,6 +150,15 @@ export interface SettingsPanelProps {
    * from a base-model id. Same HIDE-don't-grey treatment as
    * {@link keepReferenceLatentsUnsupported}. */
   keepTextConditioningUnsupported: boolean;
+  /** Acceleration (台帳 §1-303): "Text encoder combined read" (MiniMax H3
+   * only). INDEPENDENT of every other row. */
+  onTeCombinedReadChange: (value: boolean) => void;
+  /** Whether the LOADED base model's engine refuses `te_combined_read` —
+   * derived by `AppShell` from `GET /models`' `unsupported_features`, never
+   * from a base-model id. Same HIDE-don't-grey treatment as
+   * {@link keepReferenceLatentsUnsupported}; it is LTX 2.3 / 2.5 that publish
+   * the name and hide this row (and its note). */
+  teCombinedReadUnsupported: boolean;
   /** Acceleration (裁定 113): the "off / Spark-H3" row under the Attention row
    * and its two sliders (MiniMax H3 only). The ratio slider's value is the
    * stored whole percent. The Spark-H3 button is greyed out only on an explicit
@@ -222,6 +231,8 @@ export function SettingsPanel({
   keepReferenceLatentsUnsupported,
   onKeepTextConditioningChange,
   keepTextConditioningUnsupported,
+  onTeCombinedReadChange,
+  teCombinedReadUnsupported,
   onSparkH3Change,
   onSparkH3TopkPercentChange,
   onSparkH3FullStepsChange,
@@ -876,6 +887,44 @@ export function SettingsPanel({
             </div>
             {acceleration.keepTextConditioning && (
               <p className="field-hint">{strings.settings.accelKeepTextConditioningNote}</p>
+            )}
+          </>
+        )}
+
+        {/* Text encoder combined read (台帳 §1-303) — MiniMax H3 only. Same
+            shape as the conditioning-cache row above: two buttons, default OFF,
+            note shown only while ON, hidden outright (row and note) on an
+            engine whose `unsupported_features` name `te_combined_read` (LTX
+            2.3 / 2.5). The note and its "experimental" remark share ONE
+            paragraph, the remark on its own line (two paragraphs would open a
+            wide gap between them). */}
+        {!teCombinedReadUnsupported && (
+          <>
+            <div className="field">
+              <span className="field-label">{strings.settings.accelTeCombinedReadLabel}</span>
+              <div className="settings-lang-toggle" role="group" aria-label={strings.settings.accelTeCombinedReadLabel}>
+                {[
+                  { on: true, label: strings.settings.accelTeCombinedReadOn },
+                  { on: false, label: strings.settings.accelTeCombinedReadOff },
+                ].map(({ on, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={`mode-tab${acceleration.teCombinedRead === on ? " mode-tab--active" : ""}`}
+                    aria-pressed={acceleration.teCombinedRead === on}
+                    onClick={() => onTeCombinedReadChange(on)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {acceleration.teCombinedRead && (
+              <p className="field-hint">
+                {strings.settings.accelTeCombinedReadNote}
+                <br />
+                {strings.settings.accelTeCombinedReadExperimental}
+              </p>
             )}
           </>
         )}

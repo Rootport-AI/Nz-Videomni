@@ -207,6 +207,7 @@ describe("Spark-H3 scope and availability", () => {
       fastVae: false,
       keepReferenceLatents: false,
       keepTextConditioning: false,
+      teCombinedRead: false,
       sparkH3: true,
       fusedGgufDequantKernel: false,
     });

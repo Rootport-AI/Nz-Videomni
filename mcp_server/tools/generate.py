@@ -71,6 +71,10 @@ LTX 2.3・LTX 2.5 で使える。
 ステップが足りない・短い動画では、サーバーが Spark-H3 なしで完走させ、
 ``spark_h3_used`` が ``"on->off"`` になる（``Docs/MCP_SERVER_DESIGN.md`` §2 の D44）。
 
+``te_combined_read``（MiniMax H3 のテキストエンコーダーのまとめ読み。真偽値）は
+``spark_h3_full_steps`` の後ろ（引数の並びのいちばん後ろ）に置き、``True`` のときだけ
+送る。LTX では ``True`` が 422。
+
 ``submit_generate`` と ``submit_chain`` は ``embed_mp4_metadata``（既定は
 ``EMBED_MP4_METADATA_DEFAULT``。既定と
 違うときだけ送る）を持ち、読み出しは ``outputs`` の ``get_mp4_info`` が担う
@@ -277,6 +281,7 @@ async def submit_generate(
     spark_h3: bool = False,
     spark_h3_topk_ratio: float = 0.2,
     spark_h3_full_steps: int = 2,
+    te_combined_read: bool = False,
 ) -> dict[str, Any]:
     """1本の動画生成ジョブを登録します（POST /generate、単発のT2V/I2V）。
 
@@ -287,7 +292,7 @@ async def submit_generate(
     LTX 2.5 では、このツールで使えないのは ``vae_mode``
     （既定値以外にした場合）と、MiniMax H3 専用の ``vram16_mode=True``・
     ``source_audio_id``・``pi_h3``（``"off"`` 以外）・``sol_vae=True``・
-    ``spark_h3=True``・``keep_reference_latents=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
+    ``spark_h3=True``・``keep_reference_latents=True``・``te_combined_read=True``・``references``（1件以上）だけです。**``nag_enabled``（ネガティブプロンプト。
     NAG と VSF）は LTX 2.5 でも使えます**（``negative_prompt``
     / ``nag_scale`` / ``nag_tau`` / ``nag_alpha`` / ``neg_method`` /
     ``vsf_scale`` も効きます）。**ただし ``nag_alpha=0`` に
@@ -768,6 +773,13 @@ async def submit_generate(
             目安です（4 ステップなら 1、8 ステップなら 2、20 ステップなら 4）。
             ``pi_h3`` を選んでいるときの総ステップ数は、その選択の値（4 か 2）です。
             ``spark_h3`` が ``False`` のときは送りません。
+        te_combined_read: MiniMax H3 のテキストエンコーダーのまとめ読み。既定の
+            ``False`` ならキーは送られません。``True`` にすると、プロンプトが複数ある
+            とき（このツールではポジティブとネガティブプロンプト）、テキスト
+            エンコーダーの 1 回の読み込みでまとめて処理します。生成結果は変わりません。
+            実験的な機能で、実機で確かめてあるのは RTX 4070 Ti SUPER だけです。
+            **MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると 422
+            FEATURE_UNSUPPORTED になります。**
 
     Returns:
         job_id, status, created_at, next（次に呼ぶべきツールの案内文）。
@@ -916,6 +928,10 @@ async def submit_generate(
         payload["spark_h3"] = True
         payload["spark_h3_topk_ratio"] = spark_h3_topk_ratio
         payload["spark_h3_full_steps"] = spark_h3_full_steps
+    # te_combined_read (MiniMax H3): sent only when True (the server's default
+    # is False).
+    if te_combined_read:
+        payload["te_combined_read"] = True
 
     if conditioning_images:
         payload["conditioning_images"] = [ci.model_dump() for ci in conditioning_images]
@@ -1117,6 +1133,7 @@ async def submit_chain(
     spark_h3: bool = False,
     spark_h3_topk_ratio: float = 0.2,
     spark_h3_full_steps: int = 2,
+    te_combined_read: bool = False,
 ) -> dict[str, Any]:
     """クリップチェーン生成ジョブを登録します（POST /generate/chain）。
 
@@ -1140,7 +1157,7 @@ async def submit_chain(
     なります: ``vae_mode``。これを使いたい場合は ``load_pipeline``
     で LTX 2.3 に切り替えてください。MiniMax H3 専用の ``pi_h3`` も、
     ``"off"`` 以外にすると LTX 2.3 / LTX 2.5 の両方で 422 FEATURE_UNSUPPORTED です
-    （``sol_vae=True``・``spark_h3=True``・``keep_reference_latents=True`` も同じです）。
+    （``sol_vae=True``・``spark_h3=True``・``keep_reference_latents=True``・``te_combined_read=True`` も同じです）。
     **``keep_resident`` は LTX 2.5 の連結生成でも使えます**（既定off。2.5 が
     常駐させるのはテキストエンコーダの重み1つだけです）。
     ``keep_resident_embeddings``（埋め込み処理器のジョブ間常駐）は
@@ -1539,6 +1556,13 @@ async def submit_chain(
         spark_h3_full_steps: submit_generate と同じ意味（「フル演算するステップ数」。
             0〜10・既定 2。総ステップ数の 2 割が目安。``spark_h3`` が ``False``
             のときは送りません）。
+        te_combined_read: submit_generate と同じ意味（MiniMax H3 のテキスト
+            エンコーダーのまとめ読み。既定の ``False`` ならキーは送りません）。
+            プロンプトが複数あるとき（連結の各クリップ・ネガティブプロンプト）、
+            テキストエンコーダーの 1 回の読み込みでまとめて処理します。生成結果は
+            変わりません。実験的な機能で、実機で確かめてあるのは RTX 4070 Ti SUPER
+            だけです。**MiniMax H3 専用で、LTX 2.3 / LTX 2.5 で ``True`` を指定すると
+            422 FEATURE_UNSUPPORTED になります。**
 
     Returns:
         job_id, status, created_at, num_clips, next（次に呼ぶべきツールの案内文）。
@@ -1657,6 +1681,9 @@ async def submit_chain(
         payload["spark_h3"] = True
         payload["spark_h3_topk_ratio"] = spark_h3_topk_ratio
         payload["spark_h3_full_steps"] = spark_h3_full_steps
+    # te_combined_read: same rule as submit_generate (sent only when True).
+    if te_combined_read:
+        payload["te_combined_read"] = True
     # stage2_window: same rule as vae_mode (sent only when it differs from the
     # server default "standard"). No pre-check here: the server's 422 is the
     # single source of truth (full_length shape / V2V context / retake window).

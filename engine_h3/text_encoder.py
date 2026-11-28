@@ -47,6 +47,28 @@ The reads go past the OS file cache through one reused staging buffer
 (``unbuffered_read: "on->off"``) and the buffered read (a fresh CPU buffer per
 tensor) is used. Either way the same bytes reach the same device.
 
+Combined read (te_combined_read, 台帳 1-303 方向 B)
+--------------------------------------------------
+``encode_many`` takes two or more prompts (a chain's clips, a negative prompt)
+through ONE read of the weights, and runs its own layer loop instead of HF's
+``forward``: each decoder layer is read once, every prompt's hidden state goes
+through it, one prompt at a time, and the layer is dropped. The loop copies,
+call for call, what ``Qwen3VLModel.forward`` / ``Qwen3VLTextModel.forward`` do
+for one prompt (the embeddings, one vision call per prompt, the scatter, the
+positions, the layer calls, DeepStack after the first layers, no final norm),
+so each prompt's output is ``encode``'s for it bit for bit (VERIFICATION_LOG
+§241). The waiting prompts' states stay in main memory between their turns.
+
+Prompts whose reference part (the rows in front of the prompt: the labels and
+the vision blocks) is the same share it (:func:`share_groups`): the reference
+part goes through each layer once, its key / value rows are kept, and each
+prompt's own rows go through with them in front (``blocked_causal_attention``
+with an offset). Only where the measurement gave the same bits (VERIFICATION_LOG
+§243, Docs/H3_TE_READ_NOTES.md §13): sequences of at most
+:data:`SHARE_MAX_TOKENS` tokens whose text rows fall in attention blocks of at
+least :data:`SHARE_MIN_ROWS` rows, and only prompts with a part the vision
+tower reads. ``encode`` (one prompt) and its hooks are unchanged.
+
 What H3 reads from the encoder (R2 D, R2 (3) item 10):
 
 * the hidden state AFTER decoder layer 50, BEFORE the final RMSNorm -- the
@@ -67,6 +89,7 @@ of an I2V presentation are 0 (video), as both references tag them.
 from __future__ import annotations
 
 import gc
+import hashlib
 import logging
 import time
 from collections.abc import Sequence
@@ -173,10 +196,44 @@ TEXT_ATTENTION_QUERY_BLOCK = 512
 #: setting.
 TEXT_ATTENTION_MIN_TAIL = 64
 
+#: The combined read's share (台帳 1-303 方向 B): only a sequence of at most this many tokens
+#: shares its reference part. Up to 9,216 (512 x 18) the attention's rows came out the same
+#: bits whatever the sequence was cut to; from 9,217 on they did not (VERIFICATION_LOG §243,
+#: Docs/H3_TE_READ_NOTES.md §13.3 (a), §13.5). Not a setting.
+SHARE_MAX_TOKENS = 9216
+#: ... and only when every attention block its text rows fall in has at least this many rows:
+#: blocks of 16 rows or fewer gave other bits, 17 or more the same (the same records, §13.3 (b)).
+#: Not a setting.
+SHARE_MIN_ROWS = 17
+
+
+def text_attention_blocks(n: int, block: int = TEXT_ATTENTION_QUERY_BLOCK,
+                          min_tail: int = TEXT_ATTENTION_MIN_TAIL) -> list[tuple[int, int]]:
+    """The ``(start, end)`` query blocks :func:`blocked_causal_attention` cuts ``n`` rows into,
+    in row order: ``block`` rows each, a last block shorter than ``min_tail`` folded into the one
+    before it. The one rule of the attention and of the share decision."""
+    blocks = []
+    s = 0
+    while s < n:
+        e = min(s + block, n)
+        if n - e < min_tail:         # a short tail: make this the last block (at most block + min_tail - 1 rows)
+            e = n
+        blocks.append((s, e))
+        s = e
+    return blocks
+
 
 def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_QUERY_BLOCK,
                              min_tail=TEXT_ATTENTION_MIN_TAIL):
     """Causal GQA attention, query rows in blocks of ``block`` against the full key / value.
+
+    The query rows may be the LAST ``n_q`` of the ``n_kv`` rows (the combined read's
+    share: a prompt's own rows with the shared reference part's key / value in front):
+    ``offset = n_kv - n_q``, every coordinate below is an absolute row of the ``n_kv``
+    rows, the blocks are the ``n_kv`` rows' (:func:`text_attention_blocks`), a block
+    that ends at or before the offset is skipped and the others start at
+    ``max(start, offset)``. Offset 0 (``n_q == n_kv``, every call but the share's) is
+    the blocks, the slices, the masks and the order of before.
 
     The mask slice keeps the rows' absolute positions (``is_causal=True`` on a
     block would align the triangle top-left, wrong for every block but the
@@ -191,15 +248,12 @@ def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_Q
     VERIFICATION_LOG §197). The rows' values do not depend on the order.
     """
     n_q, n_kv = query.shape[2], key.shape[2]
+    offset = n_kv - n_q
+    if offset < 0:
+        raise RuntimeError(f"H3 TE attention: {n_q} query rows for {n_kv} key rows")
     kv_idx = torch.arange(n_kv, device=query.device)
-    blocks = []                      # (s, e) in row order; the boundaries are unchanged
-    s = 0
-    while s < n_q:
-        e = min(s + block, n_q)
-        if n_q - e < min_tail:       # a short tail: make this the last block (at most block + min_tail - 1 rows)
-            e = n_q
-        blocks.append((s, e))
-        s = e
+    # (s, e) in row order, absolute rows; the boundaries are the n_kv rows', cut at the offset
+    blocks = [(max(s, offset), e) for s, e in text_attention_blocks(n_kv, block, min_tail) if e > offset]
     # Tallest block first (stable: ties keep row order). Each block's rows depend only on its own
     # q rows and the full k / v, so the order cannot change a single bit; it only decides which
     # block's temporaries the allocator carves its segments for first (台帳 §1-275, §197).
@@ -210,9 +264,142 @@ def blocked_causal_attention(query, key, value, *, scale, block=TEXT_ATTENTION_Q
             s, e = blocks[i]
             mask = torch.arange(s, e, device=query.device)[:, None] >= kv_idx[None, :]
             outs[i] = F.scaled_dot_product_attention(
-                query[:, :, s:e], key, value, attn_mask=mask, is_causal=False, enable_gqa=True, scale=scale,
+                query[:, :, s - offset:e - offset], key, value, attn_mask=mask, is_causal=False, enable_gqa=True,
+                scale=scale,
             )
     return torch.cat(outs, dim=2)
+
+
+# --------------------------------------------------------------------------- #
+# the combined read's share decision (pure: numbers only) and its run-time check
+# --------------------------------------------------------------------------- #
+
+def shared_text_heights(n: int, p: int) -> list[int]:
+    """The heights of the attention blocks a prompt's own rows ``p .. n`` are computed in when
+    its reference part (rows ``0 .. p``) is shared: the ``n`` rows' blocks cut at ``p``."""
+    return [e - max(s, p) for s, e in text_attention_blocks(n) if e > p]
+
+
+def share_facts(n: int, p: int) -> list[str]:
+    """What keeps an item of ``n`` tokens, ``p`` of them its reference part, from sharing it
+    (empty: it can): the facts as numbers and the condition, nothing more."""
+    heights = shared_text_heights(n, p)
+    if not heights:
+        raise ValueError(f"H3 TE share: no text rows ({n} tokens, reference part {p})")
+    facts = []
+    if n > SHARE_MAX_TOKENS:
+        facts.append(f"tokens {n} > {SHARE_MAX_TOKENS}")
+    low = min(heights)
+    if low < SHARE_MIN_ROWS:
+        facts.append(f"rows {low} < {SHARE_MIN_ROWS}")
+    return facts
+
+
+def share_groups(rows) -> tuple[list[list[int]], dict[int, str]]:
+    """The combined read's share decision, per item.
+
+    ``rows``: per item ``(n, p, prefix)``; ``n`` its tokens, ``p`` its reference part's
+    (the tokens in front of the prompt), ``prefix`` anything hashable that is equal
+    exactly when two items' reference parts are (their ids, tags and vision inputs), or
+    None for an item without a part the vision tower reads (it never shares).
+
+    Returns ``(groups, reasons)``: ``groups`` the lists of items (ascending) that share
+    their reference part, each of two or more, in the order of their first item;
+    ``reasons`` item -> what was found for every other item: ``"no_vision_tokens"``,
+    ``"no_same_references"``, :func:`share_facts` joined with ``"; "``, or
+    ``"others_with_same_references_not_shared"`` (it could, no other could).
+    """
+    by_prefix: dict = {}
+    reasons: dict[int, str] = {}
+    for k, (_n, _p, prefix) in enumerate(rows):
+        if prefix is None:
+            reasons[k] = "no_vision_tokens"
+        else:
+            by_prefix.setdefault(prefix, []).append(k)
+    groups: list[list[int]] = []
+    for members in by_prefix.values():
+        if len(members) < 2:
+            reasons[members[0]] = "no_same_references"
+            continue
+        able = []
+        for k in members:
+            facts = share_facts(int(rows[k][0]), int(rows[k][1]))
+            if facts:
+                reasons[k] = "; ".join(facts)
+            else:
+                able.append(k)
+        if len(able) >= 2:
+            groups.append(able)
+        else:
+            for k in able:
+                reasons[k] = "others_with_same_references_not_shared"
+    return groups, dict(sorted(reasons.items()))
+
+
+def check_shared_prefix(states, p: int) -> None:
+    """The run-time check of a share group (each state: ``h`` the embeddings, ``cos`` / ``sin``,
+    ``tpos`` the text position ids, ``vpm`` the vision rows): the reference part (rows
+    ``0 .. p``) of every member is the first member's, no member has text position ids, and
+    no vision row lies in a member's own rows. A mismatch is a bug, never a fallback: it raises."""
+    first = states[0]
+    for name, label in (("h", "embeddings"), ("cos", "cos"), ("sin", "sin")):
+        if not all(torch.equal(st[name][:, :p], first[name][:, :p]) for st in states[1:]):
+            raise RuntimeError(f"H3 TE share: the reference part's {label} differ within a group")
+    if any(st["tpos"] is not None for st in states):
+        raise RuntimeError("H3 TE share: a member has text position ids")
+    if any(st["vpm"] is not None and bool(st["vpm"][:, p:].any()) for st in states):
+        raise RuntimeError("H3 TE share: image rows in a member's own rows")
+
+
+class _KeepKeyValue:
+    """``past_key_values`` for a shared reference part: keeps the key / value the layer's
+    attention hands to ``update`` (after the rotary) and hands them back as they are."""
+
+    def __init__(self) -> None:
+        self.k = self.v = None
+
+    def update(self, key_states, value_states, layer_idx, *args, **kwargs):
+        self.k, self.v = key_states, value_states
+        return key_states, value_states
+
+
+def _like_layout(t: torch.Tensor, n_rows: int) -> torch.Tensor:
+    """An empty ``(B, H, n_rows, D)`` tensor whose memory order is ``t``'s (the attention's key /
+    value are a transposed ``(B, N, H, D)`` store; the joined ones keep that order)."""
+    perm = sorted(range(t.ndim), key=lambda d: t.stride(d), reverse=True)
+    shape = list(t.shape)
+    shape[2] = n_rows
+    base = torch.empty([shape[d] for d in perm], dtype=t.dtype, device=t.device)
+    inv = [perm.index(d) for d in range(t.ndim)]
+    return base.permute(*inv)
+
+
+class _JoinKeyValue:
+    """``past_key_values`` for a member's own rows: the kept reference part's key / value
+    (rows ``0 .. p``) in front of the member's new ones, copied into one store of the new
+    ones' memory order (not ``torch.cat``)."""
+
+    def __init__(self, k0, v0, p: int, n: int) -> None:
+        self.k0, self.v0, self.p, self.n = k0, v0, int(p), int(n)
+
+    def update(self, key_states, value_states, layer_idx, *args, **kwargs):
+        if self.p + key_states.shape[2] != self.n or self.k0.shape[2] != self.p:
+            raise RuntimeError(f"H3 TE share: {self.k0.shape[2]} + {key_states.shape[2]} rows for {self.n}")
+        out = []
+        for old, new in ((self.k0, key_states), (self.v0, value_states)):
+            buf = _like_layout(new, self.n)
+            buf[:, :, :self.p] = old
+            buf[:, :, self.p:] = new
+            out.append(buf)
+        return out[0], out[1]
+
+
+def _vision_key(pixel_values: torch.Tensor, grid: torch.Tensor) -> str:
+    """The sha256 of an item's vision inputs (pixel values and grid, CPU)."""
+    h = hashlib.sha256()
+    h.update(pixel_values.detach().contiguous().numpy().tobytes())
+    h.update(grid.detach().to(torch.long).contiguous().numpy().tobytes())
+    return h.hexdigest()
 
 
 def h3_text_attention(module, query, key, value, attention_mask, dropout=0.0, scaling=None, **kwargs):
@@ -890,6 +1077,311 @@ class H3TextEncoder:
         self.last_ids = ids
         tags = torch.tensor(tags_list, dtype=torch.long, device=self.device)
         return hidden, tags
+
+    # -- encode_many: the combined read (te_combined_read, 台帳 1-303 方向 B) ----
+
+    def encode_many(self, items) -> tuple[list[tuple[torch.Tensor, torch.Tensor]], list[dict], dict]:
+        """Two or more prompts through ONE read of the weights (module docstring).
+
+        ``items``: ``(prompt, images, refs)`` per prompt, as :meth:`encode` takes them
+        (``images`` the vision tower's canvases, ``refs`` the :class:`RefMedia`; None /
+        empty = none; both at once is refused). One prompt is :meth:`encode`'s (refused here).
+
+        Returns ``(outs, counts, report)``, per item in the given order: ``outs[k] =
+        (hidden [L, 5120] bf16, tags [L] long)``, both on the CPU, :meth:`encode`'s
+        values bit for bit; ``counts[k]`` :meth:`encode`'s read report numbers for it
+        (``tokens``, ``vision_tokens``, ``vision_tokens_per_image``, and ``references``
+        with references). ``report``: ``items`` (how many), ``read_gib`` /
+        ``read_seconds`` (the read, all items together), ``layers_read``,
+        ``encode_seconds``, ``shared`` (per share group: ``{"reference_rows": P,
+        "items": [k, ...]}``) and ``not_shared`` (``[{"item": k, "reason": str}]``, the
+        facts :func:`share_groups` found). ``read_report`` / ``last_ids`` are not touched.
+
+        Whatever fails, the embedding table, the vision tower and every layer are back on
+        meta when this returns or raises, and no state of the call is kept.
+        """
+        items = [(str(prompt), list(images or ()), list(refs or ())) for prompt, images, refs in items]
+        if len(items) < 2:
+            raise ValueError(f"H3 TE: encode_many takes two or more prompts ({len(items)}); one goes through encode")
+        if self._model is None:
+            raise RuntimeError("H3TextEncoder.encode_many before load")
+        model = self._model
+        lm = model.language_model
+        dev = self.device
+        host = torch.device("cpu")
+        cuda = dev.type == "cuda"
+        started = time.perf_counter()
+
+        def to_dev(t):
+            if t is None:
+                return None
+            t = t.to(dev)
+            if cuda:
+                torch.cuda.synchronize(dev)   # each copy is waited for (no pinned memory)
+            return t
+
+        def to_host(t):
+            return None if t is None else t.to(host)
+
+        # 1. The inputs, on the CPU (encode's steps); the vision inputs kept once per equal key.
+        entries: list[dict] = []
+        pixels: dict[str, tuple] = {}
+        for prompt, images, refs in items:
+            if refs and images:
+                raise ValueError("H3 TE: key-frame images and references cannot both be given to the text encoder")
+            ref_items = None
+            ref_report: list[dict] = []
+            image_tokens: list[int] = []
+            pv = grid = None
+            if refs:
+                ref_items, pv, grid, ref_report = self.ref_vision_inputs(refs)
+            elif images:
+                pv, grid, image_tokens = self.vision_inputs(images)
+            if pv is not None and not self._visual_plan:
+                raise RuntimeError(f"H3 TE: {self.te_path} has no vision tower (visual.*); images need it")
+            ids, tags = presentation(self._tokenizer, prompt, image_tokens, ref_items=ref_items)   # refuses an empty prompt
+            prompt_ids = self.tokenize(prompt)
+            p = len(ids) - len(prompt_ids)
+            if p < 0 or ids[p:] != prompt_ids:
+                raise RuntimeError("H3 TE: the prompt's tokens are not the presentation's last part")
+            key = None
+            if pv is not None:
+                key = _vision_key(pv, grid)
+                pixels.setdefault(key, (pv, grid))
+            del pv, grid
+            counts = {
+                "tokens": len(ids),
+                "vision_tokens": int(sum(image_tokens)),
+                "vision_tokens_per_image": [int(n) for n in image_tokens],
+            }
+            if refs:
+                counts["references"] = ref_report
+            entries.append({"ids": ids, "tags": tags, "n": len(ids), "p": p, "key": key, "counts": counts})
+
+        # 2. The share decision (numbers only).
+        groups, reasons = share_groups([
+            (e["n"], e["p"], (tuple(e["ids"][:e["p"]]), tuple(e["tags"][:e["p"]]), e["key"])
+             if e["key"] is not None and e["p"] > 0 else None)
+            for e in entries
+        ])
+        vision = bool(pixels)
+        stats = {"bytes": 0, "read_seconds": 0.0, "layers": 0}
+        states: list = [None] * len(entries)     # per item not shared: its state, in main memory
+        shared: list = []                        # per group: the reference part's state and the members'
+        deepstack_by_key: dict[str, list] = {}   # the DeepStack features, once per vision key (main memory)
+        vision_out: dict = {}
+        try:
+            with torch.no_grad():
+                # 3. The embedding table and (any vision input) the vision tower, read at the same time.
+                t0 = time.perf_counter()
+                stats["bytes"] += load_mapped_to(
+                    lm.embed_tokens, self.te_path, self._header, self._embed_plan, dev, reader=self._reader,
+                )
+                if vision:
+                    stats["bytes"] += load_mapped_to(
+                        model.visual, self.te_path, self._header, self._visual_plan, dev, reader=self._reader,
+                    )
+                    move_module_tree(model.visual.rotary_pos_emb, dev, skip=set())
+                stats["read_seconds"] += time.perf_counter() - t0
+                move_module_tree(lm.rotary_emb, dev, skip=set())
+                from transformers.masking_utils import create_causal_mask
+
+                last_use = {e["key"]: k for k, e in enumerate(entries) if e["key"] is not None}
+                # 3-4. Per item: the embedding, the vision call (once per key), the scatter, the
+                # positions and the rotary (Qwen3VLModel.forward / Qwen3VLTextModel.forward).
+                for k, e in enumerate(entries):
+                    input_ids = torch.tensor([e["ids"]], dtype=torch.long, device=dev)
+                    attention_mask = torch.ones_like(input_ids)
+                    inputs_embeds = lm.embed_tokens(input_ids)
+                    vpm = position_ids = None
+                    key = e["key"]
+                    if key is not None:
+                        if key not in vision_out:
+                            pv, grid = pixels.pop(key)
+                            model.rope_deltas = None   # never carry a previous call's M-RoPE offsets
+                            grid_dev = grid.to(dev, torch.long)
+                            out = model.get_image_features(
+                                pv.to(dev, torch.bfloat16), grid_dev, return_dict=True, use_cache=False,
+                            )
+                            vision_out[key] = (out.pooler_output, grid_dev)
+                            deepstack_by_key[key] = [to_host(d) for d in out.deepstack_features]
+                            del out, pv, grid
+                        pooled, grid_dev = vision_out[key]
+                        image_embeds = torch.cat(pooled, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+                        image_mask, _ = model.get_placeholder_mask(
+                            input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds,
+                        )
+                        inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                        vpm = image_mask[..., 0]
+                        del image_embeds, image_mask
+                        model.rope_deltas = None
+                        mm = torch.tensor([mm_token_type_ids(e["ids"])], dtype=torch.long, device=dev)
+                        position_ids = model.compute_3d_position_ids(
+                            input_ids=input_ids, image_grid_thw=grid_dev, video_grid_thw=None,
+                            inputs_embeds=inputs_embeds, attention_mask=attention_mask, past_key_values=None,
+                            mm_token_type_ids=mm,
+                        )
+                        del pooled, grid_dev, mm
+                        if last_use[key] == k:
+                            del vision_out[key]
+                    if position_ids is None:
+                        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+                        position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
+                    elif position_ids.ndim == 2:
+                        position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
+                    if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+                        tpos = position_ids[0]
+                        position_ids = position_ids[1:]
+                    else:
+                        tpos = None
+                    mask = create_causal_mask(
+                        config=lm.config, inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+                        past_key_values=None, position_ids=tpos,
+                    )
+                    if mask is not None:
+                        raise RuntimeError(f"H3 TE: create_causal_mask gave {type(mask).__name__}, None expected")
+                    cos, sin = lm.rotary_emb(inputs_embeds, position_ids)
+                    states[k] = {
+                        "h": to_host(inputs_embeds), "cos": to_host(cos), "sin": to_host(sin),
+                        "tpos": to_host(tpos), "vpm": to_host(vpm), "ds": key,
+                    }
+                    del input_ids, attention_mask, inputs_embeds, position_ids, tpos, vpm, cos, sin, mask
+                # The table and the tower go before the layers run.
+                drop_to_meta(lm.embed_tokens)
+                if vision:
+                    drop_to_meta(model.visual)
+                    model.visual.rotary_pos_emb.inv_freq = vision_inv_freq(model.visual.rotary_pos_emb.dim)
+                vision_out.clear()
+                pixels.clear()
+
+                # 5. The share groups: checked at run time, then split into the reference part and
+                # each member's own rows (the positions taken from the member's full length).
+                for members in groups:
+                    p = entries[members[0]]["p"]
+                    check_shared_prefix([states[k] for k in members], p)
+                    f0 = states[members[0]]
+                    group = {
+                        "p": p, "h": f0["h"][:, :p].clone(), "cos": f0["cos"][:, :p].clone(),
+                        "sin": f0["sin"][:, :p].clone(), "ds": f0["ds"],
+                        "vpm": None if f0["vpm"] is None else f0["vpm"][:, :p].clone(),
+                        "members": [],
+                    }
+                    for k in sorted(members, key=lambda m: entries[m]["n"], reverse=True):
+                        st = states[k]
+                        group["members"].append((k, {
+                            "h": st["h"][:, p:].clone(), "cos": st["cos"][:, p:].clone(),
+                            "sin": st["sin"][:, p:].clone(),
+                        }))
+                        states[k] = None
+                    del f0
+                    shared.append(group)
+
+                # 6. The 50 layers: each read once, every unit through it (heaviest first), dropped.
+                def weight(n):
+                    return max(e - s for s, e in text_attention_blocks(n)) * n
+
+                units = [("item", k, weight(entries[k]["n"])) for k in range(len(entries)) if states[k] is not None]
+                units += [("group", g, weight(grp["p"])) for g, grp in enumerate(shared)]
+                order = [(kind, idx) for kind, idx, _w in sorted(units, key=lambda u: u[2], reverse=True)]
+                deepstack_layers = max((len(v) for v in deepstack_by_key.values()), default=0)
+                for li, layer in enumerate(lm.layers):
+                    t0 = time.perf_counter()
+                    stats["bytes"] += load_mapped_to(
+                        layer, self.te_path, self._header, self._layer_plans[li], dev, reader=self._reader,
+                    )
+                    stats["read_seconds"] += time.perf_counter() - t0
+                    stats["layers"] += 1
+                    for kind, idx in order:
+                        if kind == "item":
+                            st = states[idx]
+                            cos, sin = to_dev(st["cos"]), to_dev(st["sin"])
+                            h = layer(
+                                to_dev(st["h"]), attention_mask=None, position_ids=to_dev(st["tpos"]),
+                                past_key_values=None, position_embeddings=(cos, sin),
+                            )
+                            del cos, sin
+                            if st["ds"] is not None and li < len(deepstack_by_key[st["ds"]]):
+                                h = lm._deepstack_process(
+                                    h, to_dev(st["vpm"]), to_dev(deepstack_by_key[st["ds"]][li]),
+                                )
+                            st["h"] = to_host(h)
+                            del h
+                            continue
+                        grp = shared[idx]
+                        keep = _KeepKeyValue()
+                        cos, sin = to_dev(grp["cos"]), to_dev(grp["sin"])
+                        out_ref = layer(
+                            to_dev(grp["h"]), attention_mask=None, position_ids=None, past_key_values=keep,
+                            position_embeddings=(cos, sin),
+                        )
+                        del cos, sin
+                        for _k, m in grp["members"]:
+                            join = _JoinKeyValue(keep.k, keep.v, grp["p"], grp["p"] + int(m["h"].shape[1]))
+                            cos, sin = to_dev(m["cos"]), to_dev(m["sin"])
+                            out = layer(
+                                to_dev(m["h"]), attention_mask=None, position_ids=None, past_key_values=join,
+                                position_embeddings=(cos, sin),
+                            )
+                            m["h"] = to_host(out)   # no DeepStack on a member's own rows (no vision row there)
+                            del out, join, cos, sin
+                        del keep
+                        if grp["ds"] is not None and li < len(deepstack_by_key[grp["ds"]]):
+                            out_ref = lm._deepstack_process(
+                                out_ref, to_dev(grp["vpm"]), to_dev(deepstack_by_key[grp["ds"]][li]),
+                            )
+                        grp["h"] = to_host(out_ref)
+                        del out_ref
+                    drop_to_meta(layer)
+                    if li + 1 == deepstack_layers:
+                        deepstack_by_key.clear()   # DeepStack is added after the first layers only
+                        for st in states:
+                            if st is not None:
+                                st["ds"] = st["vpm"] = None
+                        for grp in shared:
+                            grp["ds"] = grp["vpm"] = None
+                if stats["layers"] != len(lm.layers):
+                    raise RuntimeError(f"H3 TE: {stats['layers']} of {len(lm.layers)} decoder layers ran")
+
+                # 7. Per item: the last hidden state (no final norm), checked, on the CPU.
+                hidden_of: dict[int, torch.Tensor] = {}
+                for k, st in enumerate(states):
+                    if st is not None:
+                        hidden_of[k] = st["h"][0]
+                for grp in shared:
+                    for k, m in grp["members"]:
+                        hidden_of[k] = torch.cat([grp["h"][0], m["h"][0]], dim=0)
+                outs = []
+                for k, e in enumerate(entries):
+                    hidden = hidden_of.pop(k)
+                    if hidden.dtype != torch.bfloat16:
+                        hidden = hidden.to(torch.bfloat16)
+                    if int(hidden.shape[0]) != e["n"]:
+                        raise RuntimeError(f"H3 TE: {hidden.shape[0]} hidden rows for {e['n']} tokens")
+                    outs.append((hidden, torch.tensor(e["tags"], dtype=torch.long)))
+        finally:
+            # Whatever was reached: no weight and no state of the call outlives it.
+            drop_to_meta(lm.embed_tokens)
+            for layer in lm.layers:
+                drop_to_meta(layer)
+            if vision:
+                drop_to_meta(model.visual)
+                # The rotary buffer is computed, not read: back on the CPU (as encode).
+                model.visual.rotary_pos_emb.inv_freq = vision_inv_freq(model.visual.rotary_pos_emb.dim)
+            states = shared = None
+            deepstack_by_key.clear()
+            vision_out.clear()
+            pixels.clear()
+        report = {
+            "items": len(entries),
+            "read_gib": round(stats["bytes"] / 2**30, 2),
+            "read_seconds": round(stats["read_seconds"], 2),
+            "layers_read": stats["layers"],
+            "encode_seconds": round(time.perf_counter() - started, 2),
+            "shared": [{"reference_rows": int(entries[m[0]]["p"]), "items": list(m)} for m in groups],
+            "not_shared": [{"item": k, "reason": r} for k, r in reasons.items()],
+        }
+        logger.info("H3 TE encode_many (direct read): %s", report)
+        return outs, [e["counts"] for e in entries], report
 
     # -- release ---------------------------------------------------------------
 

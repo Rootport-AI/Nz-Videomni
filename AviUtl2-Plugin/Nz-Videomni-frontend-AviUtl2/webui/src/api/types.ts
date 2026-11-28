@@ -392,6 +392,16 @@ export interface GenerateRequest {
   /** 裁定 113: the steps of each clip that run full attention, 0-10. Sent only
    * with `spark_h3: true`. */
   spark_h3_full_steps?: number;
+  /** Acceleration (台帳 §1-303): text encoder combined read — MiniMax H3 only.
+   * When a job has more than one prompt (a negative prompt here), the text
+   * encoder processes them in one load; the output does not change. Built
+   * exclusively by `shell/accelerationSettings.ts`'s
+   * `accelerationRequestFields` and spread in — omitted entirely while the
+   * server default (`false`) is selected, so this key only ever appears as
+   * `true`. LTX 2.3 / 2.5 publish `te_combined_read` in
+   * `unsupported_features` and 422 a `true`. Mirrored on
+   * {@link GenerateChainRequest}. */
+  te_combined_read?: boolean;
   /** Output (§3-164, 2026-09-24): whether the finished output.mp4 (and a
    * later joined.mp4) gets the same JSON as metadata.json written into its
    * `comment` tag. Server default `true`, so `accelerationRequestFields` sends
@@ -656,6 +666,11 @@ export interface GenerateChainRequest {
   spark_h3?: boolean;
   spark_h3_topk_ratio?: number;
   spark_h3_full_steps?: number;
+  /** Text encoder combined read (台帳 §1-303): mirrors
+   * {@link GenerateRequest.te_combined_read} — same single builder, same
+   * "sent only as `true`" rule; the prompts of every clip (and the negative
+   * prompt) are processed in one text encoder load at the start of the chain. */
+  te_combined_read?: boolean;
   clips: ChainClip[];
   source_video?: SourceVideoSpec | null;
   source_audio?: SourceAudioSpec | null;

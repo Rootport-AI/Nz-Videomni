@@ -2662,6 +2662,17 @@ export const en = {
     /** Shown under the row while it is on: what the row does and its main-memory cost. */
     accelKeepTextConditioningNote:
       "Caches the conditioning the text encoder outputs and reuses it to speed up generation. 64GB or more of memory recommended (because the cache is kept in main memory. LTX: about 13 MB per entry; MiniMax H3: under 1 MB per entry for a prompt alone, several hundred MB with many references; held per clip in Chained)",
+    /** Acceleration (台帳 §1-303): "Text encoder combined read" — MiniMax H3
+     * only. The row is HIDDEN on the engines that publish `te_combined_read` in
+     * `unsupported_features` (LTX 2.3 / 2.5). */
+    accelTeCombinedReadLabel: "Text encoder combined read",
+    accelTeCombinedReadOn: "ON",
+    accelTeCombinedReadOff: "OFF",
+    /** Shown under the row while it is on, in ONE paragraph with
+     * {@link accelTeCombinedReadExperimental} on the next line. */
+    accelTeCombinedReadNote:
+      "When there is more than one prompt (each clip of a Chained job, a negative prompt), the text encoder processes them together in one load. The output does not change.",
+    accelTeCombinedReadExperimental: "* Experimental: verified only on an RTX 4070 Ti SUPER.",
     /** §3-164 (2026-09-24): the Output group, right after Acceleration. */
     outputHeading: "Metadata output:",
     embedMp4MetadataLabel: "Write generation conditions into the generated mp4 as metadata",
@@ -4233,6 +4244,12 @@ export const ja: Strings = {
     accelKeepTextConditioningOff: "OFF",
     accelKeepTextConditioningNote:
       "テキストエンコーダーの出力する条件付けをキャッシュして使い回すことで、生成を高速化します。メモリ64GB以上推奨（※キャッシュをメインメモリに置くため。LTX は 1 件 約 13MB。MiniMax H3 はプロンプトだけなら 1 件 1MB 未満、参照素材が多いと 1 件で数百 MB。Chained ではクリップごとに持ちます）",
+    accelTeCombinedReadLabel: "テキストエンコーダーのまとめ読み",
+    accelTeCombinedReadOn: "ON",
+    accelTeCombinedReadOff: "OFF",
+    accelTeCombinedReadNote:
+      "プロンプトが複数あるとき（Chained の各クリップ・ネガティブプロンプト）、テキストエンコーダーの 1 回の読み込みでまとめて処理します。生成結果は変わりません。",
+    accelTeCombinedReadExperimental: "※実験的機能：RTX 4070 ti SUPERでのみ実機検証しています。",
     outputHeading: "メタデータ出力:",
     embedMp4MetadataLabel: "生成したmp4に生成条件をメタデータとして書き込む",
     embedMp4MetadataOn: "ON",

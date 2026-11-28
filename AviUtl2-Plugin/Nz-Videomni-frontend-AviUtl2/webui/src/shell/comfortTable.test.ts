@@ -38,6 +38,7 @@ function allOn(overrides: Partial<AccelerationSettings> = {}): AccelerationSetti
     sparkH3: false,
     sparkH3TopkPercent: 20,
     sparkH3FullSteps: 2,
+    teCombinedRead: false,
     embedMp4Metadata: true,
     ...overrides,
   };
